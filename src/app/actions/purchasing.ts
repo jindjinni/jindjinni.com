@@ -36,6 +36,8 @@ import {
   getPurchasingBonusTiers,
   getPurchasingCustomer,
   computeAutomaticBonus,
+  getBusinessProfile,
+  resolveBusinessDocumentIdentity,
 } from "@/lib/queries";
 import { seedPurchasingProductCatalogForOrg } from "@/lib/purchasing-catalog-seed";
 import { parseSpreadsheetFile, findColumn } from "@/lib/spreadsheet-import";
@@ -938,13 +940,19 @@ export async function saveReceiptVersion(
     .where(eq(purchasingReceiptVersions.quotationId, quotationId));
   const nextVersion = (existingVersions.reduce((max, v) => Math.max(max, v.version), 0) || 0) + 1;
 
+  // Freeze the business identity shown right now -- if the profile changes
+  // later (new phone number, new logo), this saved version keeps showing
+  // what was true when it was generated (see resolveBusinessDocumentIdentity).
+  const businessProfile = await getBusinessProfile(org.organizationId);
+  const business = resolveBusinessDocumentIdentity(org.organizationName, businessProfile);
+
   await db.insert(purchasingReceiptVersions).values({
     id: newId("preceipt"),
     quotationId,
     version: nextVersion,
     generatedAt: new Date().toISOString(),
     generatedByUserId: org.userId,
-    snapshotJson: JSON.stringify({ quotation, items }),
+    snapshotJson: JSON.stringify({ quotation, items, business }),
   });
 
   revalidatePath(`/dashboard/purchasing/quotations/${quotationId}/receipt`);

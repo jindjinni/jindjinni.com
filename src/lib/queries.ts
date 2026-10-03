@@ -27,7 +27,84 @@ import {
   purchasingQuotedItems,
   purchasingAuditLog,
   purchasingReceiptVersions,
+  businessProfiles,
 } from "@/db/schema";
+
+export type BusinessProfile = typeof businessProfiles.$inferSelect;
+
+export async function getBusinessProfile(organizationId: string) {
+  const [row] = await db
+    .select()
+    .from(businessProfiles)
+    .where(eq(businessProfiles.organizationId, organizationId))
+    .limit(1);
+  return row ?? null;
+}
+
+/** The address a document should print: Shipping/Operating when distinct, otherwise the Business Address. */
+export function resolveBusinessDocumentAddress(profile: BusinessProfile | null) {
+  if (!profile) return null;
+  const useShipping = !profile.shippingSameAsBusiness;
+  const street1 = useShipping ? profile.shippingAddressStreet1 : profile.businessAddressStreet1;
+  const street2 = useShipping ? profile.shippingAddressStreet2 : profile.businessAddressStreet2;
+  const city = useShipping ? profile.shippingAddressCity : profile.businessAddressCity;
+  const state = useShipping ? profile.shippingAddressState : profile.businessAddressState;
+  const zip = useShipping ? profile.shippingAddressZip : profile.businessAddressZip;
+  const country = useShipping ? profile.shippingAddressCountry : profile.businessAddressCountry;
+  if (!street1 && !city && !state && !zip) return null;
+  return { street1, street2, city, state, zip, country };
+}
+
+export type BusinessDocumentIdentity = {
+  displayName: string;
+  showLogo: boolean;
+  logoDataUrl: string | null;
+  address: ReturnType<typeof resolveBusinessDocumentAddress>;
+  phone: string | null;
+  email: string | null;
+  website: string | null;
+};
+
+/**
+ * Everything a generated document (quotation receipt today) needs from the
+ * Business Profile, already resolved per the Document Display Settings and
+ * the Name Display preference. Used both to render the live receipt and to
+ * freeze into a receipt version's snapshotJson (see saveReceiptVersion) --
+ * the snapshot stores this resolved object verbatim so an old receipt keeps
+ * showing what was true when it was generated, even if the profile or this
+ * resolution logic changes later.
+ */
+export function resolveBusinessDocumentIdentity(
+  organizationName: string,
+  profile: BusinessProfile | null,
+): BusinessDocumentIdentity {
+  const dba = profile?.dbaName?.trim() || null;
+  const pref = profile?.nameDisplayPreference ?? "legal";
+  const showLegal = profile?.docShowLegalName ?? true;
+  const showDba = profile?.docShowDba ?? true;
+
+  let displayName = organizationName;
+  if (pref === "dba" && dba && showDba) {
+    displayName = dba;
+  } else if (pref === "both" && dba && showDba) {
+    displayName = showLegal ? `${dba} (${organizationName})` : dba;
+  } else if (!showLegal && dba && showDba) {
+    displayName = dba; // Legal name suppressed but DBA allowed -- never show a blank header.
+  } else {
+    displayName = organizationName;
+  }
+
+  return {
+    displayName,
+    showLogo: profile?.docShowLogo ?? true,
+    logoDataUrl:
+      profile?.logoData && profile?.logoContentType ? `data:${profile.logoContentType};base64,${profile.logoData}` : null,
+    address: (profile?.docShowAddress ?? true) ? resolveBusinessDocumentAddress(profile) : null,
+    phone: (profile?.docShowPhone ?? true) ? profile?.businessPhone ?? null : null,
+    email: (profile?.docShowEmail ?? true) ? profile?.businessEmail ?? null : null,
+    website: (profile?.docShowWebsite ?? false) ? profile?.website ?? null : null,
+  };
+}
 
 export async function getOrganization(organizationId: string) {
   const [row] = await db

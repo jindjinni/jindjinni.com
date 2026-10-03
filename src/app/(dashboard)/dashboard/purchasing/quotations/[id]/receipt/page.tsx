@@ -1,7 +1,12 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { requireOrg } from "@/lib/tenant";
-import { getPurchasingQuotationWithItems, getReceiptVersions } from "@/lib/queries";
+import {
+  getPurchasingQuotationWithItems,
+  getReceiptVersions,
+  getBusinessProfile,
+  resolveBusinessDocumentIdentity,
+} from "@/lib/queries";
 import { saveReceiptVersion } from "@/app/actions/purchasing";
 import { ActionButton } from "@/components/action-button";
 import { PrintButton } from "./print-button";
@@ -14,6 +19,8 @@ export default async function QuotationReceiptPage({ params }: { params: Promise
   if (!data) notFound();
   const { quotation, items } = data;
   const versions = await getReceiptVersions(id);
+  const profile = await getBusinessProfile(org.organizationId);
+  const business = resolveBusinessDocumentIdentity(org.organizationName, profile);
 
   const validUntil = new Date(quotation.quotationDate);
   validUntil.setHours(validUntil.getHours() + 72);
@@ -38,21 +45,33 @@ export default async function QuotationReceiptPage({ params }: { params: Promise
         </div>
       </div>
 
-      <p className="mb-3 rounded-md bg-amber-50 px-4 py-3 text-sm text-amber-700 print:hidden dark:bg-amber-950 dark:text-amber-400">
-        Draft layout, built from the structure you described (branding banner, product table, totals box, disclaimers,
-        72-hour validity footer). I don&rsquo;t have your reference image in front of me anymore after the context reset --
-        re-share it and I&rsquo;ll line this up pixel-for-pixel, especially the exact Hidden Damage / Packaging Damage / Lost
-        Packages wording below, which is a placeholder for now.
-      </p>
-
       <div className="mx-auto max-w-2xl rounded-lg border border-slate-200 bg-white p-8 text-slate-900 shadow-sm print:border-none print:p-0 print:shadow-none dark:border-slate-800 dark:bg-white">
         <div className="rounded-md bg-amber-400 px-4 py-2 text-center text-sm font-bold uppercase tracking-wide text-slate-900">
           Limited Time Offer!
         </div>
 
-        <div className="mt-4 flex items-center justify-between">
-          <h1 className="text-xl font-bold tracking-tight">USA Test Strips Center</h1>
-          <span className="text-sm text-slate-500">{new Date(quotation.quotationDate).toLocaleDateString()}</span>
+        <div className="mt-4 flex items-start justify-between gap-4">
+          <div className="flex items-center gap-3">
+            {business.showLogo && business.logoDataUrl && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={business.logoDataUrl} alt={business.displayName} className="h-12 w-12 object-contain" />
+            )}
+            <div>
+              <h1 className="text-xl font-bold tracking-tight">{business.displayName}</h1>
+              {business.address && (
+                <p className="text-xs text-slate-500">
+                  {[business.address.street1, business.address.street2].filter(Boolean).join(" ")}
+                  {business.address.city ? `, ${[business.address.city, business.address.state, business.address.zip].filter(Boolean).join(" ")}` : ""}
+                </p>
+              )}
+              {(business.phone || business.email || business.website) && (
+                <p className="text-xs text-slate-500">
+                  {[business.phone, business.email, business.website].filter(Boolean).join(" · ")}
+                </p>
+              )}
+            </div>
+          </div>
+          <span className="shrink-0 text-sm text-slate-500">{new Date(quotation.quotationDate).toLocaleDateString()}</span>
         </div>
 
         <p className="mt-4 text-sm font-semibold uppercase tracking-wide text-slate-500">Quotation for:</p>

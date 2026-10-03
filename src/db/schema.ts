@@ -56,6 +56,80 @@ export const organizations = sqliteTable("organizations", {
   ...timestamps,
 });
 
+/**
+ * "Who the company is" -- one row per Organization, separate from the
+ * `organizations` table so the lean tenancy anchor doesn't carry every
+ * display/branding/contact field. `organizations.name` stays the single
+ * source of truth for the Legal Business Name (set at signup); everything
+ * else a quotation receipt or future document needs lives here: DBA,
+ * logo, addresses, contact info, the Primary Contact person, optional
+ * compliance IDs, and which of these a generated document is allowed to
+ * show. The logo is stored as actual bytes (base64) + its content type,
+ * not a browser object URL, so it's a permanent reference that survives
+ * reloads and can be embedded verbatim in a receipt snapshot (see
+ * purchasingReceiptVersions.snapshotJson) even if the profile changes later.
+ */
+export const businessProfiles = sqliteTable(
+  "business_profiles",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .unique()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+
+    dbaName: text("dba_name"),
+    nameDisplayPreference: text("name_display_preference", { enum: ["legal", "dba", "both"] })
+      .notNull()
+      .default("legal"),
+
+    logoData: text("logo_data"), // base64, no data: prefix
+    logoContentType: text("logo_content_type"),
+    logoUpdatedAt: text("logo_updated_at"),
+
+    businessAddressStreet1: text("business_address_street1"),
+    businessAddressStreet2: text("business_address_street2"),
+    businessAddressCity: text("business_address_city"),
+    businessAddressState: text("business_address_state"),
+    businessAddressZip: text("business_address_zip"),
+    businessAddressCountry: text("business_address_country").notNull().default("US"),
+
+    shippingSameAsBusiness: integer("shipping_same_as_business", { mode: "boolean" }).notNull().default(true),
+    shippingAddressStreet1: text("shipping_address_street1"),
+    shippingAddressStreet2: text("shipping_address_street2"),
+    shippingAddressCity: text("shipping_address_city"),
+    shippingAddressState: text("shipping_address_state"),
+    shippingAddressZip: text("shipping_address_zip"),
+    shippingAddressCountry: text("shipping_address_country").notNull().default("US"),
+
+    businessPhone: text("business_phone"),
+    businessEmail: text("business_email"),
+    website: text("website"),
+
+    primaryContactFirstName: text("primary_contact_first_name"),
+    primaryContactLastName: text("primary_contact_last_name"),
+    primaryContactTitle: text("primary_contact_title"),
+    primaryContactEmail: text("primary_contact_email"),
+    primaryContactPhone: text("primary_contact_phone"),
+
+    taxId: text("tax_id"),
+    businessRegistrationNumber: text("business_registration_number"),
+
+    // Document Display Settings -- what a generated quotation receipt (and
+    // later documents) is allowed to pull from this profile.
+    docShowLogo: integer("doc_show_logo", { mode: "boolean" }).notNull().default(true),
+    docShowLegalName: integer("doc_show_legal_name", { mode: "boolean" }).notNull().default(true),
+    docShowDba: integer("doc_show_dba", { mode: "boolean" }).notNull().default(true),
+    docShowAddress: integer("doc_show_address", { mode: "boolean" }).notNull().default(true),
+    docShowPhone: integer("doc_show_phone", { mode: "boolean" }).notNull().default(true),
+    docShowEmail: integer("doc_show_email", { mode: "boolean" }).notNull().default(true),
+    docShowWebsite: integer("doc_show_website", { mode: "boolean" }).notNull().default(false),
+
+    ...timestamps,
+  },
+  (t) => [uniqueIndex("business_profiles_org_idx").on(t.organizationId)],
+);
+
 /** A person who can sign in. Can belong to more than one Organization. */
 export const users = sqliteTable("users", {
   id: text("id").primaryKey(),

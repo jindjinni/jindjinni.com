@@ -13,6 +13,7 @@ import {
   getPurchasingReceiptVersionsAll,
   getPurchasingAuditLog,
   purchasingCustomerName,
+  getBusinessProfile,
 } from "@/lib/queries";
 
 /**
@@ -50,6 +51,7 @@ export default async function DatabasePage({
   const { table: requestedTable } = await searchParams;
 
   const [
+    businessProfile,
     customers,
     categories,
     products,
@@ -62,6 +64,7 @@ export default async function DatabasePage({
     receiptVersions,
     auditLog,
   ] = await Promise.all([
+    getBusinessProfile(org.organizationId),
     getPurchasingCustomers(org.organizationId, { includeArchived: true }),
     getPurchasingCategories(org.organizationId, { includeInactive: true }),
     getPurchasingProducts(org.organizationId, { includeInactive: true }),
@@ -79,6 +82,27 @@ export default async function DatabasePage({
   const date = (s: string | null | undefined) => (s ? new Date(s).toLocaleString() : "—");
 
   const tables = {
+    businessProfile: {
+      label: "Business Profile",
+      ...buildTable(businessProfile ? [businessProfile] : [], [
+        { header: "Legal name", render: () => org.organizationName },
+        { header: "DBA", render: (r) => r.dbaName ?? "—" },
+        { header: "Name shown on documents", render: (r) => r.nameDisplayPreference },
+        { header: "Business phone", render: (r) => r.businessPhone ?? "—" },
+        { header: "Business email", render: (r) => r.businessEmail ?? "—" },
+        { header: "Website", render: (r) => r.website ?? "—" },
+        {
+          header: "Business address",
+          render: (r) =>
+            [r.businessAddressStreet1, r.businessAddressCity, r.businessAddressState, r.businessAddressZip]
+              .filter(Boolean)
+              .join(", ") || "—",
+        },
+        { header: "Primary contact", render: (r) => [r.primaryContactFirstName, r.primaryContactLastName].filter(Boolean).join(" ") || "—" },
+        { header: "Logo", render: (r) => (r.logoData ? "Uploaded" : "—") },
+        { header: "Updated", render: (r) => date(r.updatedAt) },
+      ]),
+    },
     customers: {
       label: "Customers",
       ...buildTable(customers, [
@@ -190,6 +214,7 @@ export default async function DatabasePage({
 
   type TableKey = keyof typeof tables;
   const order: TableKey[] = [
+    "businessProfile",
     "customers",
     "categories",
     "products",
@@ -204,7 +229,7 @@ export default async function DatabasePage({
   ];
   const activeKey: TableKey = (order as string[]).includes(requestedTable ?? "")
     ? (requestedTable as TableKey)
-    : "customers";
+    : "businessProfile";
   const active = tables[activeKey];
 
   return (
