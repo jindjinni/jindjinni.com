@@ -10,6 +10,11 @@ import {
   invoices,
   invoiceLineItems,
   buyers,
+  sellers,
+  buybackOrders,
+  buybackOrderItems,
+  receivingShipments,
+  receivedItems,
 } from "@/db/schema";
 
 /** Simple product list for <select> inputs -- no on-hand rollup needed. */
@@ -156,25 +161,182 @@ export async function getNextInvoiceSequence(organizationId: string) {
 }
 
 export async function getDashboardCounts(organizationId: string) {
-  const [[productCount], [buyerCount], [invoiceCount]] = await Promise.all([
-    db
-      .select({ count: sql<number>`count(*)` })
-      .from(products)
-      .where(eq(products.organizationId, organizationId)),
-    db
-      .select({ count: sql<number>`count(*)` })
-      .from(buyers)
-      .where(eq(buyers.organizationId, organizationId)),
-    db
-      .select({ count: sql<number>`count(*)` })
-      .from(invoices)
-      .where(
-        and(eq(invoices.organizationId, organizationId), eq(invoices.status, "DRAFT")),
-      ),
-  ]);
+  const [[productCount], [buyerCount], [invoiceCount], [openShipmentCount]] =
+    await Promise.all([
+      db
+        .select({ count: sql<number>`count(*)` })
+        .from(products)
+        .where(eq(products.organizationId, organizationId)),
+      db
+        .select({ count: sql<number>`count(*)` })
+        .from(buyers)
+        .where(eq(buyers.organizationId, organizationId)),
+      db
+        .select({ count: sql<number>`count(*)` })
+        .from(invoices)
+        .where(
+          and(eq(invoices.organizationId, organizationId), eq(invoices.status, "DRAFT")),
+        ),
+      db
+        .select({ count: sql<number>`count(*)` })
+        .from(receivingShipments)
+        .where(
+          and(
+            eq(receivingShipments.organizationId, organizationId),
+            eq(receivingShipments.accountsStatus, "IN_REVIEW"),
+          ),
+        ),
+    ]);
   return {
     products: Number(productCount?.count ?? 0),
     buyers: Number(buyerCount?.count ?? 0),
     draftInvoices: Number(invoiceCount?.count ?? 0),
+    openShipments: Number(openShipmentCount?.count ?? 0),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Buyback / receiving
+// ---------------------------------------------------------------------------
+
+export async function getSellers(organizationId: string) {
+  return db
+    .select()
+    .from(sellers)
+    .where(eq(sellers.organizationId, organizationId))
+    .orderBy(sellers.name);
+}
+
+export async function getBuybackOrders(organizationId: string) {
+  return db
+    .select({
+      id: buybackOrders.id,
+      orderReference: buybackOrders.orderReference,
+      orderDate: buybackOrders.orderDate,
+      packageStatus: buybackOrders.packageStatus,
+      quotedTotal: buybackOrders.quotedTotal,
+      sellerName: sellers.name,
+    })
+    .from(buybackOrders)
+    .innerJoin(sellers, eq(buybackOrders.sellerId, sellers.id))
+    .where(eq(buybackOrders.organizationId, organizationId))
+    .orderBy(desc(buybackOrders.createdAt));
+}
+
+/** One buyback order, its seller, and its quoted line items -- for the order detail page. */
+export async function getBuybackOrderWithItems(organizationId: string, orderId: string) {
+  const [order] = await db
+    .select()
+    .from(buybackOrders)
+    .where(and(eq(buybackOrders.id, orderId), eq(buybackOrders.organizationId, organizationId)))
+    .limit(1);
+  if (!order) return null;
+
+  const [seller] = await db.select().from(sellers).where(eq(sellers.id, order.sellerId)).limit(1);
+
+  const items = await db
+    .select({
+      id: buybackOrderItems.id,
+      lineLabel: buybackOrderItems.lineLabel,
+      productId: buybackOrderItems.productId,
+      productCodeVariant: buybackOrderItems.productCodeVariant,
+      quotedQuantity: buybackOrderItems.quotedQuantity,
+      quotedUnitPrice: buybackOrderItems.quotedUnitPrice,
+    })
+    .from(buybackOrderItems)
+    .where(eq(buybackOrderItems.orderId, orderId))
+    .orderBy(buybackOrderItems.createdAt);
+
+  const shipments = await db
+    .select({
+      id: receivingShipments.id,
+      receivingStatus: receivingShipments.receivingStatus,
+      accountsStatus: receivingShipments.accountsStatus,
+      createdAt: receivingShipments.createdAt,
+    })
+    .from(receivingShipments)
+    .where(eq(receivingShipments.orderId, orderId))
+    .orderBy(desc(receivingShipments.createdAt));
+
+  return { order, seller, items, shipments };
+}
+
+export async function getReceivingShipments(organizationId: string) {
+  return db
+    .select({
+      id: receivingShipments.id,
+      receivingStatus: receivingShipments.receivingStatus,
+      accountsDecision: receivingShipments.accountsDecision,
+      accountsStatus: receivingShipments.accountsStatus,
+      createdAt: receivingShipments.createdAt,
+      orderReference: buybackOrders.orderReference,
+      sellerName: sellers.name,
+    })
+    .from(receivingShipments)
+    .innerJoin(buybackOrders, eq(receivingShipments.orderId, buybackOrders.id))
+    .innerJoin(sellers, eq(buybackOrders.sellerId, sellers.id))
+    .where(eq(receivingShipments.organizationId, organizationId))
+    .orderBy(desc(receivingShipments.createdAt));
+}
+
+/**
+ * One receiving shipment with everything needed to work it: the order it
+ * came from, the seller, what was quoted (for comparison), and every
+ * received-item row logged so far (joined with product/condition names).
+ */
+export async function getReceivingShipmentDetail(organizationId: string, shipmentId: string) {
+  const [shipment] = await db
+    .select()
+    .from(receivingShipments)
+    .where(
+      and(
+        eq(receivingShipments.id, shipmentId),
+        eq(receivingShipments.organizationId, organizationId),
+      ),
+    )
+    .limit(1);
+  if (!shipment) return null;
+
+  const [order] = await db
+    .select()
+    .from(buybackOrders)
+    .where(eq(buybackOrders.id, shipment.orderId))
+    .limit(1);
+  const [seller] = order
+    ? await db.select().from(sellers).where(eq(sellers.id, order.sellerId)).limit(1)
+    : [undefined];
+
+  const quotedItems = order
+    ? await db
+        .select()
+        .from(buybackOrderItems)
+        .where(eq(buybackOrderItems.orderId, order.id))
+        .orderBy(buybackOrderItems.createdAt)
+    : [];
+
+  const items = await db
+    .select({
+      id: receivedItems.id,
+      quotedItemId: receivedItems.quotedItemId,
+      productId: receivedItems.productId,
+      productName: products.name,
+      conditionId: receivedItems.conditionId,
+      conditionName: conditions.name,
+      itemSource: receivedItems.itemSource,
+      wasReceived: receivedItems.wasReceived,
+      quantityReceived: receivedItems.quantityReceived,
+      expirationDate: receivedItems.expirationDate,
+      discrepancyNotes: receivedItems.discrepancyNotes,
+      returnRequired: receivedItems.returnRequired,
+      quantityToBeReturned: receivedItems.quantityToBeReturned,
+      returnStatus: receivedItems.returnStatus,
+      postedToInventory: receivedItems.postedToInventory,
+    })
+    .from(receivedItems)
+    .innerJoin(products, eq(receivedItems.productId, products.id))
+    .innerJoin(conditions, eq(receivedItems.conditionId, conditions.id))
+    .where(eq(receivedItems.shipmentId, shipmentId))
+    .orderBy(receivedItems.createdAt);
+
+  return { shipment, order, seller, quotedItems, items };
 }

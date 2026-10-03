@@ -18,7 +18,7 @@ import {
   invoices,
   invoiceLineItems,
 } from "../src/db/schema";
-import { newId } from "../src/lib/ids";
+import { newId, defaultConditionRows } from "../src/lib/ids";
 
 async function main() {
   const demoEmail = "demo@example.com";
@@ -58,13 +58,14 @@ async function main() {
     role: "owner",
   });
 
-  const conditionRows = [
-    { id: newId("cond"), organizationId: orgId, name: "Mint", sortOrder: 0 },
-    { id: newId("cond"), organizationId: orgId, name: "Dinged", sortOrder: 1 },
-    { id: newId("cond"), organizationId: orgId, name: "Damaged", sortOrder: 2 },
-  ];
+  // Same starter list every new org gets (see defaultConditionRows) so the
+  // demo org isn't a special case.
+  const conditionRows = defaultConditionRows(orgId);
   await db.insert(conditions).values(conditionRows);
-  const [mint, dinged, damaged] = conditionRows;
+  const byName = (name: string) => conditionRows.find((c) => c.name === name)!;
+  const mint = byName("Mint");
+  const dinged = byName("Dinged");
+  const damaged = byName("Damaged");
 
   const productRows = [
     { id: newId("prod"), organizationId: orgId, name: "Surgical Gloves (Box of 100)", sku: "SG-100", basePrice: 12.5 },

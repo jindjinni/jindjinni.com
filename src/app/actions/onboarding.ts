@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/db/client";
 import { organizations, memberships, conditions } from "@/db/schema";
-import { newId } from "@/lib/ids";
+import { newId, defaultConditionRows } from "@/lib/ids";
 
 /**
  * Safety-net path: a signed-in user with no organization yet (for example,
@@ -37,11 +37,7 @@ export async function createOrganization(formData: FormData): Promise<void> {
     organizationId: orgId,
     role: "owner",
   });
-  await db.insert(conditions).values([
-    { id: newId("cond"), organizationId: orgId, name: "Mint", sortOrder: 0 },
-    { id: newId("cond"), organizationId: orgId, name: "Dinged", sortOrder: 1 },
-    { id: newId("cond"), organizationId: orgId, name: "Damaged", sortOrder: 2 },
-  ]);
+  await db.insert(conditions).values(defaultConditionRows(orgId));
 
   redirect("/dashboard");
 }

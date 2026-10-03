@@ -27,6 +27,15 @@ export default async function DashboardLayout({
             <Link href="/dashboard/invoices" className="hover:text-emerald-700 dark:hover:text-emerald-400">
               Invoices
             </Link>
+            <Link href="/dashboard/sellers" className="hover:text-emerald-700 dark:hover:text-emerald-400">
+              Sellers
+            </Link>
+            <Link href="/dashboard/buyback" className="hover:text-emerald-700 dark:hover:text-emerald-400">
+              Buyback
+            </Link>
+            <Link href="/dashboard/settings/conditions" className="hover:text-emerald-700 dark:hover:text-emerald-400">
+              Settings
+            </Link>
           </nav>
         </div>
         <div className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400">

@@ -5,7 +5,7 @@ Inventory + Invoice Management System" base. See `../SPEC.md` (or the
 published "Ledger SaaS Blueprint" doc) for the full architecture and roadmap
 — this file is just how to run what's here.
 
-## What's actually built (Phase 1 + Phase 2 data-entry UI)
+## What's actually built (Phase 1 + Phase 2 data-entry UI + buyback/receiving core workflow)
 
 - Sign-up creates a brand-new **Organization** with its own login — every
   table in the app is scoped to `organizationId`, so companies can never see
@@ -28,6 +28,32 @@ published "Ledger SaaS Blueprint" doc) for the full architecture and roadmap
 - Read views: inventory on-hand broken out by condition, and an invoices
   list.
 - A seed script with example data so the app isn't empty on first run.
+- **Buyback / receiving module**, ported from the separate "USA Test Strips
+  Center / Plantarz Medical Exchange — Receiving" Airtable base and unified
+  under the same organization login as inventory + invoicing — a seller's
+  quote and a buyer's invoice post into the exact same `inventoryTransactions`
+  ledger, so there is one real source of truth, not just shared navigation:
+  - **Sellers** (`/dashboard/sellers`) — add the people/companies you buy
+    product back from.
+  - **Buyback orders / quotes** (`/dashboard/buyback`) — start a quote for a
+    seller, add quoted line items (product, quantity, unit price); the
+    quoted total computes automatically.
+  - **Receiving shipments** (`/dashboard/buyback/shipments`) — once a
+    package physically arrives, record packaging condition, log each
+    received item against a condition grade (including items that don't
+    match the quote: wrong quantity, an "extra"/unquoted item, damage,
+    wrong expiration, a required return), then **complete receiving**,
+    which posts every logged item straight into the inventory ledger
+    (type `RECEIVED`) in one transaction and flags the shipment
+    `COMPLETE` or `COMPLETE_WITH_DISCREPANCY` automatically.
+  - **Accounts workflow** on a completed shipment — mark the seller paid,
+    mark the customer notified — mirrors the Airtable base's accounts
+    hand-off, done as manual status changes for this pass.
+  - **Conditions settings** (`/dashboard/settings/conditions`) — the same
+    per-org condition list used by inventory receiving now ships with the
+    Airtable base's real 11-value grading scale (Mint, Dinged, Minor
+    Damage, Damaged, Stained, Torn, Crushed, Opened, Unsealed, Expired,
+    Other) and lets you add more.
 
 ## What's NOT built yet (see SPEC.md "Phase 2"/"Phase 3")
 
@@ -36,9 +62,17 @@ published "Ledger SaaS Blueprint" doc) for the full architecture and roadmap
   is frozen; the only move right now is voiding the whole invoice.
 - Real multi-tenant sign-up polish, team invites/roles beyond Owner, and
   Stripe billing (Phase 3).
-- The buyback/receiving-from-individual-sellers workflow (a separate
-  Airtable base, "USA Test Strips Center") is not modeled here yet —
-  planned as its own schema + UI pass.
+- **Deliberately deferred from the buyback/receiving module**, to ship the
+  core workflow first (the user's own call when scoping this pass):
+  live carrier tracking (Shippo integration — package status is a manual
+  field for now, not a live sync); automatic customer emails/texts
+  (payment confirmation, packaging-issue warning, adjustment notice —
+  "customer notified" is a manual checkbox for now); photo attachments on
+  received items; multi-lot/multi-batch expiration dates per line (one
+  expiration field per received item for now); and categorized,
+  multi-select discrepancy tagging (discrepancies are a free-text note for
+  now). All of these are additive — none of them change the ledger-posting
+  design already in place.
 
 ## Running it locally
 
@@ -82,6 +116,6 @@ src/lib/auth.ts         Auth.js config (email/password, JWT sessions)
 src/lib/tenant.ts       requireOrg() -- the one place org-scoping is enforced
 src/lib/queries.ts      data access layer; pages call these, never `db` directly
 src/app/(dashboard)/    everything behind login
-src/app/actions/        server actions (signup, login, onboarding)
+src/app/actions/        server actions (signup, login, onboarding, buyback.ts, conditions.ts)
 scripts/seed.ts         example data
 ```
