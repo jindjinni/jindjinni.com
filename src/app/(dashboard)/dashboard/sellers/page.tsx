@@ -1,5 +1,6 @@
+import Link from "next/link";
 import { requireOrg } from "@/lib/tenant";
-import { getSellers } from "@/lib/queries";
+import { getSellers, hasSellerAddress } from "@/lib/queries";
 import { AddSellerForm } from "./add-seller-form";
 
 export default async function SellersPage() {
@@ -24,13 +25,14 @@ export default async function SellersPage() {
               <th className="px-4 py-3 font-medium">Email</th>
               <th className="px-4 py-3 font-medium">Phone</th>
               <th className="px-4 py-3 font-medium">Shipping address</th>
+              <th className="px-4 py-3" />
             </tr>
           </thead>
           <tbody>
             {sellers.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-slate-400">
-                  No sellers yet. Add one above, or add them inline from a new buyback order.
+                <td colSpan={5} className="px-4 py-8 text-center text-slate-400">
+                  No sellers yet. Add one above, or add them inline from a new quote.
                 </td>
               </tr>
             )}
@@ -40,7 +42,21 @@ export default async function SellersPage() {
                 <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{s.email ?? "—"}</td>
                 <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{s.phone ?? "—"}</td>
                 <td className="px-4 py-3 text-slate-700 dark:text-slate-300">
-                  {s.shippingAddress ?? "—"}
+                  {hasSellerAddress(s) ? (
+                    `${s.addressStreet1}, ${s.addressCity}, ${s.addressState} ${s.addressZip}`
+                  ) : (
+                    <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-950 dark:text-amber-400">
+                      Missing address
+                    </span>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <Link
+                    href={`/dashboard/sellers/${s.id}`}
+                    className="text-xs font-medium text-emerald-700 hover:underline dark:text-emerald-400"
+                  >
+                    Edit
+                  </Link>
                 </td>
               </tr>
             ))}

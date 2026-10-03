@@ -15,7 +15,35 @@ import {
   buybackOrderItems,
   receivingShipments,
   receivedItems,
+  organizations,
 } from "@/db/schema";
+
+export async function getOrganization(organizationId: string) {
+  const [row] = await db
+    .select()
+    .from(organizations)
+    .where(eq(organizations.id, organizationId))
+    .limit(1);
+  return row ?? null;
+}
+
+/** True once every field a label purchase needs from the org is filled in. */
+export function hasShipFromAddress(org: Awaited<ReturnType<typeof getOrganization>>) {
+  return !!(
+    org?.shipFromName &&
+    org.shipFromStreet1 &&
+    org.shipFromCity &&
+    org.shipFromState &&
+    org.shipFromZip &&
+    org.shipFromPhone &&
+    org.shipFromEmail
+  );
+}
+
+/** True once a seller has a real structured address a label can ship to. */
+export function hasSellerAddress(seller: { addressStreet1: string | null; addressCity: string | null; addressState: string | null; addressZip: string | null } | null | undefined) {
+  return !!(seller?.addressStreet1 && seller.addressCity && seller.addressState && seller.addressZip);
+}
 
 /** Simple product list for <select> inputs -- no on-hand rollup needed. */
 export async function getProducts(organizationId: string) {
@@ -207,6 +235,15 @@ export async function getSellers(organizationId: string) {
     .orderBy(sellers.name);
 }
 
+export async function getSeller(organizationId: string, sellerId: string) {
+  const [seller] = await db
+    .select()
+    .from(sellers)
+    .where(and(eq(sellers.id, sellerId), eq(sellers.organizationId, organizationId)))
+    .limit(1);
+  return seller ?? null;
+}
+
 export async function getBuybackOrders(organizationId: string) {
   return db
     .select({
@@ -215,6 +252,9 @@ export async function getBuybackOrders(organizationId: string) {
       orderDate: buybackOrders.orderDate,
       packageStatus: buybackOrders.packageStatus,
       quotedTotal: buybackOrders.quotedTotal,
+      deductionAmount: buybackOrders.deductionAmount,
+      adjustmentEnabled: buybackOrders.adjustmentEnabled,
+      labelStatus: buybackOrders.labelStatus,
       sellerName: sellers.name,
     })
     .from(buybackOrders)
@@ -240,10 +280,14 @@ export async function getBuybackOrderWithItems(organizationId: string, orderId: 
       lineLabel: buybackOrderItems.lineLabel,
       productId: buybackOrderItems.productId,
       productCodeVariant: buybackOrderItems.productCodeVariant,
+      conditionId: buybackOrderItems.conditionId,
+      conditionName: conditions.name,
+      expirationDate: buybackOrderItems.expirationDate,
       quotedQuantity: buybackOrderItems.quotedQuantity,
       quotedUnitPrice: buybackOrderItems.quotedUnitPrice,
     })
     .from(buybackOrderItems)
+    .leftJoin(conditions, eq(buybackOrderItems.conditionId, conditions.id))
     .where(eq(buybackOrderItems.orderId, orderId))
     .orderBy(buybackOrderItems.createdAt);
 

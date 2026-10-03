@@ -34,12 +34,46 @@ export function AddSellerForm() {
           className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-emerald-600 dark:border-slate-700 dark:bg-slate-800"
         />
       </label>
-      <label className="flex flex-1 min-w-[16rem] flex-col gap-1 text-sm">
-        <span className="font-medium text-slate-700 dark:text-slate-300">Shipping address</span>
+      <label className="flex flex-1 min-w-[14rem] flex-col gap-1 text-sm">
+        <span className="font-medium text-slate-700 dark:text-slate-300">Street address</span>
         <input
-          name="shippingAddress"
+          name="addressStreet1"
+          placeholder="For the shipping label"
           className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-emerald-600 dark:border-slate-700 dark:bg-slate-800"
         />
+      </label>
+      <label className="flex flex-col gap-1 text-sm">
+        <span className="font-medium text-slate-700 dark:text-slate-300">Apt/suite</span>
+        <input
+          name="addressStreet2"
+          className="w-24 rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-emerald-600 dark:border-slate-700 dark:bg-slate-800"
+        />
+      </label>
+      <label className="flex flex-col gap-1 text-sm">
+        <span className="font-medium text-slate-700 dark:text-slate-300">City</span>
+        <input
+          name="addressCity"
+          className="w-32 rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-emerald-600 dark:border-slate-700 dark:bg-slate-800"
+        />
+      </label>
+      <label className="flex flex-col gap-1 text-sm">
+        <span className="font-medium text-slate-700 dark:text-slate-300">State</span>
+        <input
+          name="addressState"
+          maxLength={2}
+          className="w-16 rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-emerald-600 dark:border-slate-700 dark:bg-slate-800"
+        />
+      </label>
+      <label className="flex flex-col gap-1 text-sm">
+        <span className="font-medium text-slate-700 dark:text-slate-300">ZIP</span>
+        <input
+          name="addressZip"
+          className="w-20 rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-emerald-600 dark:border-slate-700 dark:bg-slate-800"
+        />
+      </label>
+      <label className="flex items-center gap-2 pb-2 text-sm text-slate-600 dark:text-slate-400">
+        <input type="checkbox" name="isResidential" defaultChecked className="h-4 w-4" />
+        Residential
       </label>
       <button
         type="submit"

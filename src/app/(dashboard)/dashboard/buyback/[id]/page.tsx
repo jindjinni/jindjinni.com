@@ -1,9 +1,19 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { requireOrg } from "@/lib/tenant";
-import { getBuybackOrderWithItems, getProducts } from "@/lib/queries";
+import {
+  getBuybackOrderWithItems,
+  getProducts,
+  getConditions,
+  getOrganization,
+  hasShipFromAddress,
+  hasSellerAddress,
+} from "@/lib/queries";
 import { removeQuotedItem, createReceivingShipment } from "@/app/actions/buyback";
 import { AddQuotedItemForm } from "./add-quoted-item-form";
+import { OrderHeaderForm } from "./order-header-form";
+import { OrderAdjustmentForm } from "./order-adjustment-form";
+import { ShippingLabelSection } from "./shipping-label-section";
 import { ActionButton } from "@/components/action-button";
 
 const shipmentStatusStyles: Record<string, string> = {
@@ -20,13 +30,17 @@ export default async function BuybackOrderDetailPage({
   const { id } = await params;
   const org = await requireOrg();
 
-  const [data, products] = await Promise.all([
+  const [data, products, conditions, orgRow] = await Promise.all([
     getBuybackOrderWithItems(org.organizationId, id),
     getProducts(org.organizationId),
+    getConditions(org.organizationId),
+    getOrganization(org.organizationId),
   ]);
   if (!data) notFound();
 
   const { order, seller, items, shipments } = data;
+  const itemsTotal = order.quotedTotal;
+  const grandTotal = order.adjustmentEnabled ? itemsTotal - order.deductionAmount : itemsTotal;
 
   return (
     <div>
@@ -39,19 +53,43 @@ export default async function BuybackOrderDetailPage({
         <div>
           <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-50">
             {seller?.name ?? "Unknown seller"}
+            {seller && !hasSellerAddress(seller) && (
+              <Link
+                href={`/dashboard/sellers/${seller.id}`}
+                className="ml-2 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 hover:underline dark:bg-amber-950 dark:text-amber-400"
+              >
+                Add shipping address
+              </Link>
+            )}
           </h1>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            {order.orderReference ? `Ref ${order.orderReference} · ` : ""}
-            {order.trackingNumber ? `Tracking ${order.trackingNumber} · ` : ""}
-            {order.packageStatus}
-          </p>
+          <OrderHeaderForm
+            orderId={order.id}
+            orderReference={order.orderReference}
+            orderDate={order.orderDate}
+            trackingNumber={order.trackingNumber}
+          />
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{order.packageStatus}</p>
         </div>
-        <p className="shrink-0 text-right">
-          <span className="block text-xs uppercase tracking-wide text-slate-400">Quoted total</span>
-          <span className="text-xl font-semibold tabular-nums text-slate-900 dark:text-slate-50">
-            ${order.quotedTotal.toFixed(2)}
+        <div className="shrink-0 text-right">
+          <span className="block text-xs uppercase tracking-wide text-slate-400">Items total</span>
+          <span className="text-lg font-medium tabular-nums text-slate-700 dark:text-slate-300">
+            ${itemsTotal.toFixed(2)}
           </span>
-        </p>
+          {order.adjustmentEnabled && (
+            <>
+              <span className="mt-1 block text-xs uppercase tracking-wide text-slate-400">
+                Deduction
+              </span>
+              <span className="text-sm tabular-nums text-red-600 dark:text-red-400">
+                −${order.deductionAmount.toFixed(2)}
+              </span>
+            </>
+          )}
+          <span className="mt-1 block text-xs uppercase tracking-wide text-slate-400">Grand total</span>
+          <span className="text-xl font-semibold tabular-nums text-slate-900 dark:text-slate-50">
+            ${grandTotal.toFixed(2)}
+          </span>
+        </div>
       </div>
 
       <div className="mt-6 overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
@@ -60,6 +98,8 @@ export default async function BuybackOrderDetailPage({
             <tr>
               <th className="px-4 py-3 font-medium">Item</th>
               <th className="px-4 py-3 font-medium">Code / variant</th>
+              <th className="px-4 py-3 font-medium">Condition</th>
+              <th className="px-4 py-3 font-medium">Expiry</th>
               <th className="px-4 py-3 text-right font-medium">Qty quoted</th>
               <th className="px-4 py-3 text-right font-medium">Unit price</th>
               <th className="px-4 py-3 text-right font-medium">Line total</th>
@@ -69,7 +109,7 @@ export default async function BuybackOrderDetailPage({
           <tbody>
             {items.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={8} className="px-4 py-8 text-center text-slate-400">
                   Nothing quoted yet. Add a line below.
                 </td>
               </tr>
@@ -79,6 +119,12 @@ export default async function BuybackOrderDetailPage({
                 <td className="px-4 py-3 text-slate-900 dark:text-slate-50">{item.lineLabel}</td>
                 <td className="px-4 py-3 text-slate-700 dark:text-slate-300">
                   {item.productCodeVariant ?? "—"}
+                </td>
+                <td className="px-4 py-3 text-slate-700 dark:text-slate-300">
+                  {item.conditionName ?? "—"}
+                </td>
+                <td className="px-4 py-3 text-slate-700 dark:text-slate-300">
+                  {item.expirationDate ?? "—"}
                 </td>
                 <td className="px-4 py-3 text-right tabular-nums text-slate-700 dark:text-slate-300">
                   {item.quotedQuantity}
@@ -103,7 +149,30 @@ export default async function BuybackOrderDetailPage({
         </table>
       </div>
 
-      <AddQuotedItemForm orderId={order.id} products={products} />
+      <AddQuotedItemForm orderId={order.id} products={products} conditions={conditions} />
+
+      <OrderAdjustmentForm
+        orderId={order.id}
+        adjustmentEnabled={order.adjustmentEnabled}
+        deductionAmount={order.deductionAmount}
+      />
+
+      <ShippingLabelSection
+        orderId={order.id}
+        sellerId={order.sellerId}
+        labelCarrier={order.labelCarrier}
+        parcelLengthIn={order.parcelLengthIn}
+        parcelWidthIn={order.parcelWidthIn}
+        parcelHeightIn={order.parcelHeightIn}
+        parcelWeightLb={order.parcelWeightLb}
+        labelStatus={order.labelStatus}
+        labelUrl={order.labelUrl}
+        labelTrackingNumber={order.labelTrackingNumber}
+        labelTrackingUrl={order.labelTrackingUrl}
+        labelError={order.labelError}
+        hasOrgAddress={hasShipFromAddress(orgRow)}
+        hasSellerAddr={hasSellerAddress(seller)}
+      />
 
       <div className="mt-8 flex items-center justify-between">
         <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50">

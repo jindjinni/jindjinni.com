@@ -39,6 +39,20 @@ export const organizations = sqliteTable("organizations", {
     .default("trial"),
   stripeCustomerId: text("stripe_customer_id"),
   stripeSubscriptionStatus: text("stripe_subscription_status"),
+  // "Ship from" details used on every outbound shipping label this org
+  // generates (e.g. a free return/buyback label sent to a seller). Edited
+  // from Settings -> Business; left null until the admin fills it in, which
+  // is what gates label generation (see generateShippingLabel).
+  shipFromName: text("ship_from_name"),
+  shipFromCompany: text("ship_from_company"),
+  shipFromStreet1: text("ship_from_street1"),
+  shipFromStreet2: text("ship_from_street2"),
+  shipFromCity: text("ship_from_city"),
+  shipFromState: text("ship_from_state"),
+  shipFromZip: text("ship_from_zip"),
+  shipFromCountry: text("ship_from_country").notNull().default("US"),
+  shipFromPhone: text("ship_from_phone"),
+  shipFromEmail: text("ship_from_email"),
   ...timestamps,
 });
 
@@ -217,7 +231,18 @@ export const sellers = sqliteTable(
     name: text("name").notNull(),
     email: text("email"),
     phone: text("phone"),
+    // Legacy free-text address -- kept for any existing data/notes. New
+    // structured fields below are what a generated Shippo label actually
+    // reads from; both can coexist, but the structured ones are required
+    // for "Generate shipping label" to work.
     shippingAddress: text("shipping_address"),
+    addressStreet1: text("address_street1"),
+    addressStreet2: text("address_street2"),
+    addressCity: text("address_city"),
+    addressState: text("address_state"),
+    addressZip: text("address_zip"),
+    addressCountry: text("address_country").notNull().default("US"),
+    isResidential: integer("is_residential", { mode: "boolean" }).notNull().default(true),
     ...timestamps,
   },
   (t) => [index("sellers_org_idx").on(t.organizationId)],
@@ -252,6 +277,32 @@ export const buybackOrders = sqliteTable(
       .notNull()
       .default("Pre-Transit"),
     quotedTotal: real("quoted_total").notNull().default(0),
+    // Order-level adjustment -- matches the reference quotation tool's
+    // "Bonus/Additional items" section. When enabled, deductionAmount is
+    // subtracted from the items total to get the grand total.
+    adjustmentEnabled: integer("adjustment_enabled", { mode: "boolean" }).notNull().default(false),
+    deductionAmount: real("deduction_amount").notNull().default(0),
+    // Outbound label: which service to buy, the parcel to assume, and the
+    // result once generated. Nothing here is set until "Generate shipping
+    // label" succeeds -- see generateShippingLabel in actions/buyback.ts.
+    labelCarrier: text("label_carrier", { enum: ["UPS_GROUND", "USPS_GROUND"] })
+      .notNull()
+      .default("UPS_GROUND"),
+    parcelLengthIn: real("parcel_length_in").notNull().default(10),
+    parcelWidthIn: real("parcel_width_in").notNull().default(10),
+    parcelHeightIn: real("parcel_height_in").notNull().default(10),
+    parcelWeightLb: real("parcel_weight_lb").notNull().default(3),
+    labelStatus: text("label_status", { enum: ["NOT_GENERATED", "GENERATED", "ERROR"] })
+      .notNull()
+      .default("NOT_GENERATED"),
+    shippoShipmentId: text("shippo_shipment_id"),
+    shippoRateId: text("shippo_rate_id"),
+    shippoTransactionId: text("shippo_transaction_id"),
+    labelUrl: text("label_url"),
+    labelTrackingNumber: text("label_tracking_number"),
+    labelTrackingUrl: text("label_tracking_url"),
+    labelError: text("label_error"),
+    labelGeneratedAt: text("label_generated_at"),
     notes: text("notes"),
     ...timestamps,
   },
@@ -267,8 +318,10 @@ export const buybackOrderItems = sqliteTable(
       .notNull()
       .references(() => buybackOrders.id, { onDelete: "cascade" }),
     productId: text("product_id").references(() => products.id),
+    conditionId: text("condition_id").references(() => conditions.id),
     lineLabel: text("line_label").notNull(),
     productCodeVariant: text("product_code_variant"),
+    expirationDate: text("expiration_date"),
     quotedQuantity: integer("quoted_quantity").notNull(),
     quotedUnitPrice: real("quoted_unit_price").notNull().default(0),
     notes: text("notes"),

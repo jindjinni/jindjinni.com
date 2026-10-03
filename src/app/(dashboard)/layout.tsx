@@ -37,6 +37,11 @@ export default async function DashboardLayout({
               Settings
             </Link>
             {org.role !== "staff" && (
+              <Link href="/dashboard/settings/business" className="hover:text-emerald-700 dark:hover:text-emerald-400">
+                Business
+              </Link>
+            )}
+            {org.role !== "staff" && (
               <Link href="/dashboard/database" className="hover:text-emerald-700 dark:hover:text-emerald-400">
                 Database
               </Link>

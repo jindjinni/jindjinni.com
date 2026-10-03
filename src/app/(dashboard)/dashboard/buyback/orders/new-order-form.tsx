@@ -45,6 +45,15 @@ export function NewOrderForm({ sellers }: { sellers: Seller[] }) {
         </select>
       </label>
       <label className="flex flex-col gap-1 text-sm">
+        <span className="font-medium text-slate-700 dark:text-slate-300">Quotation date</span>
+        <input
+          name="quotationDate"
+          type="date"
+          defaultValue={new Date().toISOString().slice(0, 10)}
+          className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-emerald-600 dark:border-slate-700 dark:bg-slate-800"
+        />
+      </label>
+      <label className="flex flex-col gap-1 text-sm">
         <span className="font-medium text-slate-700 dark:text-slate-300">
           Customer reference (optional)
         </span>

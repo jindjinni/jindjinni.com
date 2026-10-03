@@ -4,8 +4,17 @@ import { useActionState } from "react";
 import { addQuotedItem } from "@/app/actions/buyback";
 
 type Product = { id: string; name: string };
+type Condition = { id: string; name: string };
 
-export function AddQuotedItemForm({ orderId, products }: { orderId: string; products: Product[] }) {
+export function AddQuotedItemForm({
+  orderId,
+  products,
+  conditions,
+}: {
+  orderId: string;
+  products: Product[];
+  conditions: Condition[];
+}) {
   const action = addQuotedItem.bind(null, orderId);
   const [state, formAction, pending] = useActionState(action, undefined);
 
@@ -43,6 +52,29 @@ export function AddQuotedItemForm({ orderId, products }: { orderId: string; prod
         <input
           name="productCodeVariant"
           className="w-32 rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-emerald-600 dark:border-slate-700 dark:bg-slate-800"
+        />
+      </label>
+      <label className="flex flex-col gap-1 text-sm">
+        <span className="text-slate-600 dark:text-slate-400">Condition</span>
+        <select
+          name="conditionId"
+          defaultValue=""
+          className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-600 dark:border-slate-700 dark:bg-slate-800"
+        >
+          <option value="">—</option>
+          {conditions.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="flex flex-col gap-1 text-sm">
+        <span className="text-slate-600 dark:text-slate-400">Expiry</span>
+        <input
+          name="expirationDate"
+          type="date"
+          className="w-36 rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-emerald-600 dark:border-slate-700 dark:bg-slate-800"
         />
       </label>
       <label className="flex flex-col gap-1 text-sm">

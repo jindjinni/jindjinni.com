@@ -14,10 +14,21 @@ import {
   inventoryTransactions,
   products,
   conditions,
+  organizations,
 } from "@/db/schema";
 import { newId } from "@/lib/ids";
+import { getOrganization, hasShipFromAddress, hasSellerAddress } from "@/lib/queries";
+import {
+  createShipment,
+  createTransaction,
+  pickGroundRate,
+  isShippoConfigured,
+  type ShippoAddress,
+} from "@/lib/shippo";
 
 export type ActionState = { error?: string } | undefined;
+
+const trimmed = (formData: FormData, key: string) => String(formData.get(key) ?? "").trim() || null;
 
 export async function createSeller(
   _prevState: ActionState,
@@ -32,12 +43,62 @@ export async function createSeller(
     id: newId("seller"),
     organizationId: org.organizationId,
     name,
-    email: String(formData.get("email") ?? "").trim() || null,
-    phone: String(formData.get("phone") ?? "").trim() || null,
-    shippingAddress: String(formData.get("shippingAddress") ?? "").trim() || null,
+    email: trimmed(formData, "email"),
+    phone: trimmed(formData, "phone"),
+    shippingAddress: trimmed(formData, "shippingAddress"),
+    addressStreet1: trimmed(formData, "addressStreet1"),
+    addressStreet2: trimmed(formData, "addressStreet2"),
+    addressCity: trimmed(formData, "addressCity"),
+    addressState: trimmed(formData, "addressState"),
+    addressZip: trimmed(formData, "addressZip"),
+    addressCountry: trimmed(formData, "addressCountry") ?? "US",
+    isResidential: formData.get("isResidential") === "on",
   });
 
   revalidatePath("/dashboard/sellers");
+}
+
+async function requireOrgSeller(organizationId: string, sellerId: string) {
+  const [seller] = await db
+    .select()
+    .from(sellers)
+    .where(and(eq(sellers.id, sellerId), eq(sellers.organizationId, organizationId)))
+    .limit(1);
+  return seller ?? null;
+}
+
+/** Fills in or corrects a seller's details -- most importantly the structured address a label ships to. */
+export async function updateSeller(
+  sellerId: string,
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const org = await requireOrg();
+  const seller = await requireOrgSeller(org.organizationId, sellerId);
+  if (!seller) return { error: "Seller not found." };
+
+  const name = String(formData.get("name") ?? "").trim();
+  if (!name) return { error: "Enter the seller's name." };
+
+  await db
+    .update(sellers)
+    .set({
+      name,
+      email: trimmed(formData, "email"),
+      phone: trimmed(formData, "phone"),
+      shippingAddress: trimmed(formData, "shippingAddress"),
+      addressStreet1: trimmed(formData, "addressStreet1"),
+      addressStreet2: trimmed(formData, "addressStreet2"),
+      addressCity: trimmed(formData, "addressCity"),
+      addressState: trimmed(formData, "addressState"),
+      addressZip: trimmed(formData, "addressZip"),
+      addressCountry: trimmed(formData, "addressCountry") ?? "US",
+      isResidential: formData.get("isResidential") === "on",
+    })
+    .where(eq(sellers.id, sellerId));
+
+  revalidatePath("/dashboard/sellers");
+  revalidatePath(`/dashboard/sellers/${sellerId}`);
 }
 
 /**
@@ -59,9 +120,9 @@ export async function createBuybackOrder(
     id: orderId,
     organizationId: org.organizationId,
     sellerId,
-    orderReference: String(formData.get("orderReference") ?? "").trim() || null,
-    orderDate: new Date().toISOString().slice(0, 10),
-    trackingNumber: String(formData.get("trackingNumber") ?? "").trim() || null,
+    orderReference: trimmed(formData, "orderReference"),
+    orderDate: trimmed(formData, "quotationDate") ?? new Date().toISOString().slice(0, 10),
+    trackingNumber: trimmed(formData, "trackingNumber"),
   });
 
   revalidatePath("/dashboard/buyback");
@@ -113,13 +174,185 @@ export async function addQuotedItem(
     id: newId("bbitem"),
     orderId,
     productId,
+    conditionId: trimmed(formData, "conditionId"),
     lineLabel,
-    productCodeVariant: String(formData.get("productCodeVariant") ?? "").trim() || null,
+    productCodeVariant: trimmed(formData, "productCodeVariant"),
+    expirationDate: trimmed(formData, "expirationDate"),
     quotedQuantity,
     quotedUnitPrice,
   });
 
   await recomputeOrderQuotedTotal(orderId);
+  revalidatePath(`/dashboard/buyback/${orderId}`);
+}
+
+/** Edits the quote's header fields -- reference, date, tracking -- after creation. */
+export async function updateBuybackOrderHeader(
+  orderId: string,
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const org = await requireOrg();
+  const order = await requireOrgOrder(org.organizationId, orderId);
+  if (!order) return { error: "Order not found." };
+
+  await db
+    .update(buybackOrders)
+    .set({
+      orderReference: trimmed(formData, "orderReference"),
+      orderDate: trimmed(formData, "quotationDate") ?? order.orderDate,
+      trackingNumber: trimmed(formData, "trackingNumber"),
+    })
+    .where(eq(buybackOrders.id, orderId));
+
+  revalidatePath(`/dashboard/buyback/${orderId}`);
+  revalidatePath("/dashboard/buyback/orders");
+}
+
+/** The quotation's "Bonus/Additional items" section -- an optional flat deduction off the items total. */
+export async function setOrderAdjustment(
+  orderId: string,
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const org = await requireOrg();
+  const order = await requireOrgOrder(org.organizationId, orderId);
+  if (!order) return { error: "Order not found." };
+
+  const adjustmentEnabled = formData.get("adjustmentEnabled") === "on";
+  const deductionAmount = Number(formData.get("deductionAmount") ?? 0) || 0;
+  if (deductionAmount < 0) return { error: "Deduction amount can't be negative." };
+
+  await db
+    .update(buybackOrders)
+    .set({ adjustmentEnabled, deductionAmount })
+    .where(eq(buybackOrders.id, orderId));
+
+  revalidatePath(`/dashboard/buyback/${orderId}`);
+}
+
+/**
+ * Generates (purchases) a real UPS Ground or USPS Ground label for this
+ * quote via Shippo, using the org's ship-from address (Settings -> Business)
+ * and the seller's shipping address. This is a real charge against the
+ * org's Shippo account once SHIPPO_API_KEY is a live token -- see
+ * src/lib/shippo.ts. Locally/in preview, where no key is set, this safely
+ * records a friendly "not connected yet" error instead of calling Shippo.
+ */
+export async function generateShippingLabel(
+  orderId: string,
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const org = await requireOrg();
+  const order = await requireOrgOrder(org.organizationId, orderId);
+  if (!order) return { error: "Order not found." };
+
+  const labelCarrier = (String(formData.get("labelCarrier") ?? "") || order.labelCarrier) as
+    | "UPS_GROUND"
+    | "USPS_GROUND";
+  const parcelLengthIn = Number(formData.get("parcelLengthIn")) || order.parcelLengthIn;
+  const parcelWidthIn = Number(formData.get("parcelWidthIn")) || order.parcelWidthIn;
+  const parcelHeightIn = Number(formData.get("parcelHeightIn")) || order.parcelHeightIn;
+  const parcelWeightLb = Number(formData.get("parcelWeightLb")) || order.parcelWeightLb;
+
+  // Persist the chosen carrier/dimensions regardless of what happens next,
+  // so a retry after fixing an address starts from the same choices.
+  await db
+    .update(buybackOrders)
+    .set({ labelCarrier, parcelLengthIn, parcelWidthIn, parcelHeightIn, parcelWeightLb })
+    .where(eq(buybackOrders.id, orderId));
+
+  if (!isShippoConfigured()) {
+    const message =
+      "Shipping labels aren't connected in this environment. This works once deployed with a live Shippo key.";
+    await db
+      .update(buybackOrders)
+      .set({ labelStatus: "ERROR", labelError: message })
+      .where(eq(buybackOrders.id, orderId));
+    revalidatePath(`/dashboard/buyback/${orderId}`);
+    return { error: message };
+  }
+
+  const orgRow = await getOrganization(org.organizationId);
+  if (!hasShipFromAddress(orgRow)) {
+    return { error: "Add your business's ship-from address in Settings → Business before generating a label." };
+  }
+
+  const seller = await requireOrgSeller(org.organizationId, order.sellerId);
+  if (!seller || !hasSellerAddress(seller)) {
+    return { error: "Add this seller's shipping address before generating a label." };
+  }
+
+  const addressFrom: ShippoAddress = {
+    name: orgRow!.shipFromName!,
+    company: orgRow!.shipFromCompany,
+    street1: orgRow!.shipFromStreet1!,
+    street2: orgRow!.shipFromStreet2,
+    city: orgRow!.shipFromCity!,
+    state: orgRow!.shipFromState!,
+    zip: orgRow!.shipFromZip!,
+    country: orgRow!.shipFromCountry,
+    phone: orgRow!.shipFromPhone,
+    email: orgRow!.shipFromEmail,
+    isResidential: false,
+  };
+  const addressTo: ShippoAddress = {
+    name: seller.name,
+    street1: seller.addressStreet1!,
+    street2: seller.addressStreet2,
+    city: seller.addressCity!,
+    state: seller.addressState!,
+    zip: seller.addressZip!,
+    country: seller.addressCountry,
+    phone: seller.phone,
+    email: seller.email,
+    isResidential: seller.isResidential,
+  };
+
+  try {
+    const shipment = await createShipment({
+      addressFrom,
+      addressTo,
+      parcel: { lengthIn: parcelLengthIn, widthIn: parcelWidthIn, heightIn: parcelHeightIn, weightLb: parcelWeightLb },
+    });
+    const rate = pickGroundRate(shipment, labelCarrier);
+    if (!rate) {
+      const serviceName = labelCarrier === "UPS_GROUND" ? "UPS Ground" : "USPS Ground";
+      throw new Error(`No ${serviceName} rate was returned for this address.`);
+    }
+
+    const transaction = await createTransaction(rate.object_id);
+    if (transaction.status !== "SUCCESS" || !transaction.label_url) {
+      const msg =
+        transaction.messages?.map((m) => m.text).filter(Boolean).join("; ") || "Label purchase did not succeed.";
+      throw new Error(msg);
+    }
+
+    await db
+      .update(buybackOrders)
+      .set({
+        labelStatus: "GENERATED",
+        shippoShipmentId: shipment.object_id,
+        shippoRateId: rate.object_id,
+        shippoTransactionId: transaction.object_id,
+        labelUrl: transaction.label_url,
+        labelTrackingNumber: transaction.tracking_number ?? null,
+        labelTrackingUrl: transaction.tracking_url_provider ?? null,
+        labelError: null,
+        labelGeneratedAt: new Date().toISOString(),
+      })
+      .where(eq(buybackOrders.id, orderId));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Label generation failed.";
+    await db
+      .update(buybackOrders)
+      .set({ labelStatus: "ERROR", labelError: message })
+      .where(eq(buybackOrders.id, orderId));
+    revalidatePath(`/dashboard/buyback/${orderId}`);
+    return { error: message };
+  }
+
   revalidatePath(`/dashboard/buyback/${orderId}`);
 }
 
