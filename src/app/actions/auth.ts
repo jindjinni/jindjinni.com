@@ -24,9 +24,13 @@ export async function login(
 ): Promise<ActionState> {
   const email = String(formData.get("email") ?? "").toLowerCase().trim();
   const password = String(formData.get("password") ?? "");
+  // Checked by default on the login form -- stays signed in for 90 days
+  // instead of just 1, so signing in once doesn't mean doing it again on
+  // every visit. See src/lib/auth.ts for how this shortens the session.
+  const rememberMe = formData.get("rememberMe") === "on" ? "true" : "false";
 
   try {
-    await signIn("credentials", { email, password, redirect: false });
+    await signIn("credentials", { email, password, rememberMe, redirect: false });
   } catch {
     return { error: "That email and password don't match an account." };
   }

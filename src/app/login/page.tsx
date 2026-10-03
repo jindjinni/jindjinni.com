@@ -41,6 +41,11 @@ export default function LoginPage() {
             />
           </label>
 
+          <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+            <input name="rememberMe" type="checkbox" defaultChecked />
+            Remember me
+          </label>
+
           {state?.error && (
             <p className="text-sm text-red-600 dark:text-red-400">{state.error}</p>
           )}
