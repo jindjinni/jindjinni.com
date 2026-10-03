@@ -24,6 +24,7 @@ export function AddressAutocompleteFields({
   prefix,
   defaultValues,
   showStreet2 = true,
+  required = false,
 }: {
   /** Field name prefix, e.g. "businessAddress" -> businessAddressStreet1, businessAddressCity, ... */
   prefix: string;
@@ -35,6 +36,8 @@ export function AddressAutocompleteFields({
     zip?: string | null;
   };
   showStreet2?: boolean;
+  /** Marks Street 1 / City / State / ZIP as required (e.g. at signup). Line 2 never is. */
+  required?: boolean;
 }) {
   const [street1, setStreet1] = useState(defaultValues?.street1 ?? "");
   const [city, setCity] = useState(defaultValues?.city ?? "");
@@ -96,6 +99,7 @@ export function AddressAutocompleteFields({
         <input
           name={`${prefix}Street1`}
           value={street1}
+          required={required}
           onChange={(e) => {
             const value = e.target.value;
             setStreet1(value);
@@ -155,7 +159,13 @@ export function AddressAutocompleteFields({
 
       <label className="flex flex-col gap-1 text-sm">
         <span className="font-medium text-slate-700 dark:text-slate-300">City</span>
-        <input name={`${prefix}City`} value={city} onChange={(e) => setCity(e.target.value)} className={inputClass} />
+        <input
+          name={`${prefix}City`}
+          value={city}
+          onChange={(e) => setCity(e.target.value)}
+          required={required}
+          className={inputClass}
+        />
       </label>
       <div className="flex gap-2">
         <label className="flex flex-1 flex-col gap-1 text-sm">
@@ -165,12 +175,19 @@ export function AddressAutocompleteFields({
             value={state}
             onChange={(e) => setState(e.target.value)}
             maxLength={2}
+            required={required}
             className={inputClass}
           />
         </label>
         <label className="flex flex-1 flex-col gap-1 text-sm">
           <span className="font-medium text-slate-700 dark:text-slate-300">ZIP Code</span>
-          <input name={`${prefix}Zip`} value={zip} onChange={(e) => setZip(e.target.value)} className={inputClass} />
+          <input
+            name={`${prefix}Zip`}
+            value={zip}
+            onChange={(e) => setZip(e.target.value)}
+            required={required}
+            className={inputClass}
+          />
         </label>
       </div>
     </>

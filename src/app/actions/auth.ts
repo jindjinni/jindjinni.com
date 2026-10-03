@@ -4,7 +4,17 @@ import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { db } from "@/db/client";
-import { organizations, users, memberships, conditions, purchasingCategories, purchasingConditions, purchasingExpirationRanges, purchasingBonusTiers } from "@/db/schema";
+import {
+  organizations,
+  users,
+  memberships,
+  conditions,
+  purchasingCategories,
+  purchasingConditions,
+  purchasingExpirationRanges,
+  purchasingBonusTiers,
+  businessProfiles,
+} from "@/db/schema";
 import { signIn, signOut } from "@/lib/auth";
 import {
   newId,
@@ -14,6 +24,8 @@ import {
   defaultPurchasingExpirationRangeRows,
   defaultPurchasingBonusTierRows,
 } from "@/lib/ids";
+import { extractBusinessProfileIdentityFields } from "@/lib/business-profile-form";
+import { encodeLogoFile } from "@/lib/logo-validation";
 
 export type ActionState = { error?: string } | undefined;
 
@@ -45,9 +57,13 @@ export async function logout() {
 
 /**
  * Brand-new company signing up: creates the User, a fresh Organization for
- * them (Owner role), and a starter set of Conditions they can rename or
- * add to later from Settings. This is the multi-tenant on-ramp -- every
- * other table in the app hangs off the organizationId created here.
+ * them (Owner role), a starter set of Conditions they can rename or add to
+ * later from Settings, AND their Business Profile -- per how this was
+ * asked for, most of the profile (logo, both addresses, contact details,
+ * Primary Contact) is required right at signup rather than filled in
+ * later, with only a few fields (DBA, website, Tax ID/EIN, business
+ * registration number) left optional. This is the multi-tenant on-ramp --
+ * every other table in the app hangs off the organizationId created here.
  */
 export async function signUpOrganization(
   _prevState: ActionState,
@@ -58,12 +74,37 @@ export async function signUpOrganization(
   const email = String(formData.get("email") ?? "").toLowerCase().trim();
   const password = String(formData.get("password") ?? "");
 
-  if (!companyName || !email || !password || password.length < 8) {
-    return {
-      error:
-        "Fill in your company name, email, and a password of at least 8 characters.",
-    };
+  if (!companyName) return { error: "Official Legal Business Name is required." };
+  if (!email || !password || password.length < 8) {
+    return { error: "Fill in your email and a password of at least 8 characters." };
   }
+
+  const logoFile = formData.get("logo");
+  if (!(logoFile instanceof File) || logoFile.size === 0) {
+    return { error: "A company logo is required to sign up." };
+  }
+  const encodedLogo = await encodeLogoFile(logoFile);
+  if ("error" in encodedLogo) {
+    return { error: encodedLogo.error };
+  }
+
+  const profile = extractBusinessProfileIdentityFields(formData);
+  if (!profile.businessAddressStreet1 || !profile.businessAddressCity || !profile.businessAddressState || !profile.businessAddressZip) {
+    return { error: "Business Address (street, city, state, and ZIP) is required." };
+  }
+  if (
+    !profile.shippingSameAsBusiness &&
+    (!profile.shippingAddressStreet1 || !profile.shippingAddressCity || !profile.shippingAddressState || !profile.shippingAddressZip)
+  ) {
+    return { error: "Shipping / Operating Address is required, or check \"Same as Business Address\"." };
+  }
+  if (!profile.businessPhone) return { error: "Main Business Phone Number is required." };
+  if (!profile.businessEmail) return { error: "Main Business Email is required." };
+  if (!profile.primaryContactFirstName || !profile.primaryContactLastName) {
+    return { error: "Primary Contact first and last name are required." };
+  }
+  if (!profile.primaryContactEmail) return { error: "Primary Contact email is required." };
+  if (!profile.primaryContactPhone) return { error: "Primary Contact phone number is required." };
 
   const [existing] = await db
     .select({ id: users.id })
@@ -96,6 +137,14 @@ export async function signUpOrganization(
   await db.insert(purchasingConditions).values(defaultPurchasingConditionRows(orgId));
   await db.insert(purchasingExpirationRanges).values(defaultPurchasingExpirationRangeRows(orgId));
   await db.insert(purchasingBonusTiers).values(defaultPurchasingBonusTierRows(orgId));
+  await db.insert(businessProfiles).values({
+    id: newId("bizprofile"),
+    organizationId: orgId,
+    ...profile,
+    logoData: encodedLogo.data,
+    logoContentType: encodedLogo.contentType,
+    logoUpdatedAt: new Date().toISOString(),
+  });
 
   try {
     await signIn("credentials", { email, password, redirect: false });

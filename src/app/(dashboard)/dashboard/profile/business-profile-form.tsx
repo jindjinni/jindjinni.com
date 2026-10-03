@@ -4,29 +4,10 @@ import { useActionState, useState } from "react";
 import { updateBusinessProfile, type ActionState } from "@/app/actions/business-profile";
 import type { BusinessProfile } from "@/lib/queries";
 import { AddressAutocompleteFields } from "@/components/address-autocomplete-fields";
+import { Field, Section } from "@/components/form-section";
 
 const inputClass =
   "w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-emerald-600 dark:border-slate-700 dark:bg-slate-800";
-
-function Field({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
-  return (
-    <label className="flex flex-col gap-1 text-sm">
-      <span className="font-medium text-slate-700 dark:text-slate-300">{label}</span>
-      {children}
-      {hint && <span className="text-xs text-slate-400">{hint}</span>}
-    </label>
-  );
-}
-
-function Section({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
-  return (
-    <section className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
-      <h2 className="text-base font-semibold text-slate-900 dark:text-slate-50">{title}</h2>
-      {description && <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{description}</p>}
-      <div className="mt-4 grid gap-4 sm:grid-cols-2">{children}</div>
-    </section>
-  );
-}
 
 export function BusinessProfileForm({
   organizationName,

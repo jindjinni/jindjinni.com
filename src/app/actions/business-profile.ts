@@ -15,11 +15,10 @@ import { db } from "@/db/client";
 import { organizations, businessProfiles, purchasingAuditLog } from "@/db/schema";
 import { newId } from "@/lib/ids";
 import { getBusinessProfile } from "@/lib/queries";
+import { trimmed, checked, extractBusinessProfileIdentityFields, formatBusinessAddress } from "@/lib/business-profile-form";
+import { encodeLogoFile } from "@/lib/logo-validation";
 
 export type ActionState = { error?: string; message?: string } | undefined;
-
-const MAX_LOGO_BYTES = 2 * 1024 * 1024; // 2MB -- plenty for a logo, small enough to embed in every page/receipt that shows it
-const ALLOWED_LOGO_TYPES = new Set(["image/png", "image/jpeg", "image/jpg"]);
 
 function requireProfileEditor(org: CurrentOrg): ActionState {
   if (org.role === "staff") {
@@ -47,9 +46,6 @@ async function logAudit(
   });
 }
 
-const trimmed = (formData: FormData, key: string) => String(formData.get(key) ?? "").trim() || null;
-const checked = (formData: FormData, key: string) => formData.get(key) === "on";
-
 /** Every Business Profile row always exists by the time this is called the first time. */
 async function ensureBusinessProfile(organizationId: string) {
   const existing = await getBusinessProfile(organizationId);
@@ -71,45 +67,11 @@ export async function updateBusinessProfile(
   if (!legalName) return { error: "Legal Business Name is required." };
 
   const existing = await ensureBusinessProfile(org.organizationId);
-
-  const nameDisplayPreference = (formData.get("nameDisplayPreference") as string) || "legal";
-  if (!["legal", "dba", "both"].includes(nameDisplayPreference)) {
-    return { error: "Invalid name display preference." };
-  }
-
-  const shippingSameAsBusiness = checked(formData, "shippingSameAsBusiness");
+  const identity = extractBusinessProfileIdentityFields(formData);
+  const shippingSameAsBusiness = identity.shippingSameAsBusiness;
 
   const patch = {
-    dbaName: trimmed(formData, "dbaName"),
-    nameDisplayPreference: nameDisplayPreference as "legal" | "dba" | "both",
-
-    businessAddressStreet1: trimmed(formData, "businessAddressStreet1"),
-    businessAddressStreet2: trimmed(formData, "businessAddressStreet2"),
-    businessAddressCity: trimmed(formData, "businessAddressCity"),
-    businessAddressState: trimmed(formData, "businessAddressState"),
-    businessAddressZip: trimmed(formData, "businessAddressZip"),
-    businessAddressCountry: trimmed(formData, "businessAddressCountry") ?? "US",
-
-    shippingSameAsBusiness,
-    shippingAddressStreet1: shippingSameAsBusiness ? null : trimmed(formData, "shippingAddressStreet1"),
-    shippingAddressStreet2: shippingSameAsBusiness ? null : trimmed(formData, "shippingAddressStreet2"),
-    shippingAddressCity: shippingSameAsBusiness ? null : trimmed(formData, "shippingAddressCity"),
-    shippingAddressState: shippingSameAsBusiness ? null : trimmed(formData, "shippingAddressState"),
-    shippingAddressZip: shippingSameAsBusiness ? null : trimmed(formData, "shippingAddressZip"),
-    shippingAddressCountry: shippingSameAsBusiness ? "US" : trimmed(formData, "shippingAddressCountry") ?? "US",
-
-    businessPhone: trimmed(formData, "businessPhone"),
-    businessEmail: trimmed(formData, "businessEmail"),
-    website: trimmed(formData, "website"),
-
-    primaryContactFirstName: trimmed(formData, "primaryContactFirstName"),
-    primaryContactLastName: trimmed(formData, "primaryContactLastName"),
-    primaryContactTitle: trimmed(formData, "primaryContactTitle"),
-    primaryContactEmail: trimmed(formData, "primaryContactEmail"),
-    primaryContactPhone: trimmed(formData, "primaryContactPhone"),
-
-    taxId: trimmed(formData, "taxId"),
-    businessRegistrationNumber: trimmed(formData, "businessRegistrationNumber"),
+    ...identity,
 
     docShowLogo: checked(formData, "docShowLogo"),
     docShowLegalName: checked(formData, "docShowLegalName"),
@@ -130,12 +92,12 @@ export async function updateBusinessProfile(
   await logAudit(org, "Legal Business Name", org.organizationName, legalName);
   await logAudit(org, "DBA / Trade Name", existing.dbaName, patch.dbaName);
   await logAudit(org, "Name display preference", existing.nameDisplayPreference, patch.nameDisplayPreference);
-  await logAudit(org, "Business address", formatAddress(existing, "business"), formatAddress(patch, "business"));
+  await logAudit(org, "Business address", formatBusinessAddress(existing, "business"), formatBusinessAddress(patch, "business"));
   await logAudit(
     org,
     "Shipping address",
-    shippingSameAsBusiness ? "Same as business" : formatAddress(existing, "shipping"),
-    shippingSameAsBusiness ? "Same as business" : formatAddress(patch, "shipping"),
+    shippingSameAsBusiness ? "Same as business" : formatBusinessAddress(existing, "shipping"),
+    shippingSameAsBusiness ? "Same as business" : formatBusinessAddress(patch, "shipping"),
   );
   await logAudit(org, "Business phone", existing.businessPhone, patch.businessPhone);
   await logAudit(org, "Business email", existing.businessEmail, patch.businessEmail);
@@ -154,30 +116,6 @@ export async function updateBusinessProfile(
   return { message: "Business Profile saved." };
 }
 
-function formatAddress(
-  row: {
-    businessAddressStreet1?: string | null;
-    businessAddressStreet2?: string | null;
-    businessAddressCity?: string | null;
-    businessAddressState?: string | null;
-    businessAddressZip?: string | null;
-    shippingAddressStreet1?: string | null;
-    shippingAddressStreet2?: string | null;
-    shippingAddressCity?: string | null;
-    shippingAddressState?: string | null;
-    shippingAddressZip?: string | null;
-  },
-  which: "business" | "shipping",
-) {
-  const street1 = which === "business" ? row.businessAddressStreet1 : row.shippingAddressStreet1;
-  const street2 = which === "business" ? row.businessAddressStreet2 : row.shippingAddressStreet2;
-  const city = which === "business" ? row.businessAddressCity : row.shippingAddressCity;
-  const state = which === "business" ? row.businessAddressState : row.shippingAddressState;
-  const zip = which === "business" ? row.businessAddressZip : row.shippingAddressZip;
-  const parts = [street1, street2, [city, state, zip].filter(Boolean).join(", ")].filter(Boolean);
-  return parts.length ? parts.join(" / ") : null;
-}
-
 export async function uploadBusinessLogo(
   _prevState: ActionState,
   formData: FormData,
@@ -190,22 +128,18 @@ export async function uploadBusinessLogo(
   if (!(file instanceof File) || file.size === 0) {
     return { error: "Choose a PNG or JPG image to upload." };
   }
-  if (!ALLOWED_LOGO_TYPES.has(file.type)) {
-    return { error: "Logo must be a PNG or JPG image." };
-  }
-  if (file.size > MAX_LOGO_BYTES) {
-    return { error: "Logo must be 2MB or smaller." };
+  const encoded = await encodeLogoFile(file);
+  if ("error" in encoded) {
+    return { error: encoded.error };
   }
 
   await ensureBusinessProfile(org.organizationId);
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const logoData = buffer.toString("base64");
 
   await db
     .update(businessProfiles)
     .set({
-      logoData,
-      logoContentType: file.type,
+      logoData: encoded.data,
+      logoContentType: encoded.contentType,
       logoUpdatedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     })
