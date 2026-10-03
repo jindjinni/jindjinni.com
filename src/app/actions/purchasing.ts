@@ -37,8 +37,10 @@ import {
   getPurchasingCustomer,
   computeAutomaticBonus,
 } from "@/lib/queries";
+import { seedPurchasingProductCatalogForOrg } from "@/lib/purchasing-catalog-seed";
 
 export type ActionState = { error?: string } | undefined;
+export type SeedCatalogActionState = { error?: string; message?: string } | undefined;
 
 const trimmed = (formData: FormData, key: string) => String(formData.get(key) ?? "").trim() || null;
 
@@ -952,4 +954,35 @@ export async function restorePurchasingQuotation(
     .where(and(eq(purchasingQuotations.id, quotationId), eq(purchasingQuotations.organizationId, org.organizationId)));
 
   revalidatePath("/dashboard/purchasing/quotations");
+}
+
+/**
+ * Loads the reference product catalog (pulled from the team's Airtable
+ * base -- see src/lib/purchasing-product-catalog-data.ts) into this org's
+ * Products list. Safe to click more than once: already-present product
+ * names are skipped, never duplicated. Every row lands at a $0 standard
+ * price (Airtable has no cost data) -- a Manager still needs to set real
+ * prices from this screen before a product is usable on a quotation.
+ */
+export async function loadPurchasingProductCatalog(
+  _prevState: SeedCatalogActionState,
+  _formData: FormData,
+): Promise<SeedCatalogActionState> {
+  const org = await requireOrg();
+  const blocked = requireManager(org);
+  if (blocked) return blocked;
+
+  const { inserted, skipped, missingCategories } = await seedPurchasingProductCatalogForOrg(org.organizationId);
+
+  revalidatePath("/dashboard/purchasing/products");
+
+  if (missingCategories.length > 0) {
+    return {
+      error: `Added ${inserted} product(s), but couldn't find a "${missingCategories.join('", "')}" category to file the rest under -- add it under Purchasing > Categories, then click this again.`,
+    };
+  }
+  if (inserted === 0) {
+    return { message: "Already up to date -- every catalog product is already in your list." };
+  }
+  return { message: `Added ${inserted} product(s) from the catalog (${skipped} were already in your list). Set real prices before quoting them.` };
 }

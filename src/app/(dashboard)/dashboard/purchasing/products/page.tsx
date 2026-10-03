@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireOrg } from "@/lib/tenant";
 import { getPurchasingProducts, getPurchasingCategories } from "@/lib/queries";
 import { AddProductForm } from "./add-product-form";
+import { LoadCatalogButton } from "./load-catalog-button";
 
 export default async function PurchasingProductsPage() {
   const org = await requireOrg();
@@ -18,6 +19,7 @@ export default async function PurchasingProductsPage() {
         One unified catalog, priced from a standard price × an expiration-range multiplier you set per product.
       </p>
 
+      {canEdit && <LoadCatalogButton />}
       {canEdit && <AddProductForm categories={categories} />}
 
       <div className="mt-6 overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
