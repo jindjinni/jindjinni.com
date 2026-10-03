@@ -1,11 +1,31 @@
 "use client";
 
-import { useActionState } from "react";
-import { createOrganization } from "@/app/actions/onboarding";
+import { useRef, useState, useTransition, type FormEvent } from "react";
+import { createOrganization, type ActionState } from "@/app/actions/onboarding";
 import { BusinessProfileSignupFields } from "@/components/business-profile-signup-fields";
 
 export default function OnboardingPage() {
-  const [state, action, pending] = useActionState(createOrganization, undefined);
+  // Called directly rather than through <form action={...}>/useActionState
+  // -- see the matching note in src/app/signup/page.tsx for why: React 19
+  // resets every uncontrolled field in the form (logo file, phone numbers,
+  // tax ID, ...) back to empty the moment an Actions-API-bound action
+  // resolves, including on a validation error, which on this long form
+  // meant one mistake wiped everything. A classic onSubmit handler still
+  // gets native required-field validation for free; it just isn't tied to
+  // that reset behavior.
+  const formRef = useRef<HTMLFormElement>(null);
+  const [state, setState] = useState<ActionState>(undefined);
+  const [pending, startCreate] = useTransition();
+
+  function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!formRef.current) return;
+    const formData = new FormData(formRef.current);
+    startCreate(async () => {
+      const result = await createOrganization(undefined, formData);
+      setState(result);
+    });
+  }
 
   return (
     <div className="flex flex-1 items-center justify-center bg-slate-50 px-4 py-10 dark:bg-slate-950">
@@ -16,7 +36,7 @@ export default function OnboardingPage() {
           a few fields are optional.
         </p>
 
-        <form action={action} className="mt-6 flex flex-col gap-6">
+        <form ref={formRef} onSubmit={handleSubmit} className="mt-6 flex flex-col gap-6">
           <BusinessProfileSignupFields />
 
           {state?.error && <p className="text-sm text-red-600 dark:text-red-400">{state.error}</p>}

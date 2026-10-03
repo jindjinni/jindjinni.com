@@ -26,6 +26,7 @@ import {
 } from "@/lib/ids";
 import { extractBusinessProfileIdentityFields } from "@/lib/business-profile-form";
 import { encodeLogoFile } from "@/lib/logo-validation";
+import { consumeSignupVerificationCode } from "@/lib/signup-verification";
 
 export type ActionState = { error?: string } | undefined;
 
@@ -62,8 +63,12 @@ export async function logout() {
  * asked for, most of the profile (logo, both addresses, contact details,
  * Primary Contact) is required right at signup rather than filled in
  * later, with only a few fields (DBA, website, Tax ID/EIN, business
- * registration number) left optional. This is the multi-tenant on-ramp --
- * every other table in the app hangs off the organizationId created here.
+ * registration number) left optional. Also requires a verification code
+ * that was just emailed to this address (see actions/email-verification.ts
+ * and lib/signup-verification.ts) -- proves the account is a real, reachable
+ * email before anything gets created, not just a plausible-looking string.
+ * This is the multi-tenant on-ramp -- every other table in the app hangs
+ * off the organizationId created here.
  */
 export async function signUpOrganization(
   _prevState: ActionState,
@@ -78,6 +83,16 @@ export async function signUpOrganization(
   if (!email || !password || password.length < 8) {
     return { error: "Fill in your email and a password of at least 8 characters." };
   }
+
+  // Proves the account email is real and reachable -- this is the actual
+  // security boundary, independent of whatever the signup page's UI already
+  // showed the person had entered correctly. See lib/signup-verification.ts.
+  const verificationCode = String(formData.get("verificationCode") ?? "").trim();
+  if (!verificationCode) {
+    return { error: "Enter the verification code we emailed you." };
+  }
+  const verification = await consumeSignupVerificationCode(email, verificationCode);
+  if (!verification.ok) return { error: verification.error };
 
   const logoFile = formData.get("logo");
   if (!(logoFile instanceof File) || logoFile.size === 0) {
@@ -124,7 +139,13 @@ export async function signUpOrganization(
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/(^-|-$)/g, "") || newId("org");
 
-  await db.insert(users).values({ id: userId, email, name, passwordHash });
+  await db.insert(users).values({
+    id: userId,
+    email,
+    name,
+    passwordHash,
+    emailVerified: new Date().toISOString(),
+  });
   await db.insert(organizations).values({ id: orgId, name: companyName, slug });
   await db.insert(memberships).values({
     id: newId("mem"),

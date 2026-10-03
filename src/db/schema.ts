@@ -141,6 +141,28 @@ export const users = sqliteTable("users", {
   ...timestamps,
 });
 
+/**
+ * Short-lived codes emailed during signup to prove the account email is
+ * real and reachable -- created and checked BEFORE any User/Organization
+ * row exists, so a wrong/abandoned code never leaves a half-created
+ * account behind. Keyed by the email itself (no user id yet). A row is
+ * consumed (consumedAt set) the moment its code is accepted; expired or
+ * never-consumed rows are harmless leftovers nothing else reads.
+ */
+export const signupEmailVerifications = sqliteTable(
+  "signup_email_verifications",
+  {
+    id: text("id").primaryKey(),
+    email: text("email").notNull(),
+    codeHash: text("code_hash").notNull(),
+    expiresAt: text("expires_at").notNull(),
+    attempts: integer("attempts").notNull().default(0),
+    consumedAt: text("consumed_at"),
+    ...timestamps,
+  },
+  (t) => [index("signup_email_verifications_email_idx").on(t.email)],
+);
+
 /** Which organization(s) a user belongs to, and with what role. */
 export const memberships = sqliteTable(
   "memberships",
