@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { updatePurchasingCustomer } from "@/app/actions/purchasing";
+import { AddressAutocompleteFields } from "@/components/address-autocomplete-fields";
 
 type ActionState = { error?: string } | undefined;
 
@@ -56,28 +57,16 @@ export function EditCustomerForm({ customerId, customer }: { customerId: string;
 
       <h3 className="mt-5 text-sm font-semibold text-slate-900 dark:text-slate-50">Shipping address</h3>
       <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <label className="flex flex-col gap-1 text-sm sm:col-span-2">
-          <span className="text-slate-600 dark:text-slate-400">Street 1</span>
-          <input name="addressStreet1" defaultValue={customer.addressStreet1 ?? ""} className={inputClass} />
-        </label>
-        <label className="flex flex-col gap-1 text-sm sm:col-span-2">
-          <span className="text-slate-600 dark:text-slate-400">Street 2</span>
-          <input name="addressStreet2" defaultValue={customer.addressStreet2 ?? ""} className={inputClass} />
-        </label>
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="text-slate-600 dark:text-slate-400">City</span>
-          <input name="addressCity" defaultValue={customer.addressCity ?? ""} className={inputClass} />
-        </label>
-        <span className="flex gap-2">
-          <label className="flex flex-1 flex-col gap-1 text-sm">
-            <span className="text-slate-600 dark:text-slate-400">State</span>
-            <input name="addressState" maxLength={2} defaultValue={customer.addressState ?? ""} className={inputClass} />
-          </label>
-          <label className="flex flex-1 flex-col gap-1 text-sm">
-            <span className="text-slate-600 dark:text-slate-400">ZIP</span>
-            <input name="addressZip" defaultValue={customer.addressZip ?? ""} className={inputClass} />
-          </label>
-        </span>
+        <AddressAutocompleteFields
+          prefix="address"
+          defaultValues={{
+            street1: customer.addressStreet1,
+            street2: customer.addressStreet2,
+            city: customer.addressCity,
+            state: customer.addressState,
+            zip: customer.addressZip,
+          }}
+        />
       </div>
       <label className="mt-3 flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
         <input type="checkbox" name="isResidential" defaultChecked={customer.isResidential} />

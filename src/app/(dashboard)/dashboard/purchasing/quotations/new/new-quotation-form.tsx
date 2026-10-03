@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { createPurchasingQuotation } from "@/app/actions/purchasing";
+import { AddressAutocompleteFields } from "@/components/address-autocomplete-fields";
 
 type ActionState = { error?: string } | undefined;
 
@@ -68,28 +69,7 @@ export function NewQuotationForm({
             <span className="text-slate-600 dark:text-slate-400">Phone</span>
             <input name="newCustomerPhone" className={inputClass} />
           </label>
-          <label className="flex flex-col gap-1 text-sm sm:col-span-2">
-            <span className="text-slate-600 dark:text-slate-400">Street address</span>
-            <input name="newCustomerAddressStreet1" className={inputClass} />
-          </label>
-          <label className="flex flex-col gap-1 text-sm sm:col-span-2">
-            <span className="text-slate-600 dark:text-slate-400">Street address 2</span>
-            <input name="newCustomerAddressStreet2" className={inputClass} />
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-slate-600 dark:text-slate-400">City</span>
-            <input name="newCustomerAddressCity" className={inputClass} />
-          </label>
-          <span className="flex gap-2">
-            <label className="flex flex-1 flex-col gap-1 text-sm">
-              <span className="text-slate-600 dark:text-slate-400">State</span>
-              <input name="newCustomerAddressState" maxLength={2} className={inputClass} />
-            </label>
-            <label className="flex flex-1 flex-col gap-1 text-sm">
-              <span className="text-slate-600 dark:text-slate-400">ZIP</span>
-              <input name="newCustomerAddressZip" className={inputClass} />
-            </label>
-          </span>
+          <AddressAutocompleteFields prefix="newCustomerAddress" />
           <label className="flex items-center gap-2 text-sm text-slate-700 sm:col-span-2 dark:text-slate-300">
             <input type="checkbox" name="newCustomerIsResidential" defaultChecked /> Residential address
           </label>

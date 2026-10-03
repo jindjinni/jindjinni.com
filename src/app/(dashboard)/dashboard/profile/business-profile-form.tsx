@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import { updateBusinessProfile, type ActionState } from "@/app/actions/business-profile";
 import type { BusinessProfile } from "@/lib/queries";
+import { AddressAutocompleteFields } from "@/components/address-autocomplete-fields";
 
 const inputClass =
   "w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-emerald-600 dark:border-slate-700 dark:bg-slate-800";
@@ -56,21 +57,16 @@ export function BusinessProfileForm({
       </Section>
 
       <Section title="Business Address" description="Your company's official mailing address.">
-        <Field label="Address Line 1">
-          <input name="businessAddressStreet1" defaultValue={profile?.businessAddressStreet1 ?? ""} className={inputClass} />
-        </Field>
-        <Field label="Address Line 2 / Suite">
-          <input name="businessAddressStreet2" defaultValue={profile?.businessAddressStreet2 ?? ""} className={inputClass} />
-        </Field>
-        <Field label="City">
-          <input name="businessAddressCity" defaultValue={profile?.businessAddressCity ?? ""} className={inputClass} />
-        </Field>
-        <Field label="State">
-          <input name="businessAddressState" defaultValue={profile?.businessAddressState ?? ""} className={inputClass} />
-        </Field>
-        <Field label="ZIP Code">
-          <input name="businessAddressZip" defaultValue={profile?.businessAddressZip ?? ""} className={inputClass} />
-        </Field>
+        <AddressAutocompleteFields
+          prefix="businessAddress"
+          defaultValues={{
+            street1: profile?.businessAddressStreet1,
+            street2: profile?.businessAddressStreet2,
+            city: profile?.businessAddressCity,
+            state: profile?.businessAddressState,
+            zip: profile?.businessAddressZip,
+          }}
+        />
         <Field label="Country">
           <input name="businessAddressCountry" defaultValue={profile?.businessAddressCountry ?? "US"} className={inputClass} />
         </Field>
@@ -92,21 +88,16 @@ export function BusinessProfileForm({
         </label>
         {!shippingSame && (
           <>
-            <Field label="Shipping Address Line 1">
-              <input name="shippingAddressStreet1" defaultValue={profile?.shippingAddressStreet1 ?? ""} className={inputClass} />
-            </Field>
-            <Field label="Shipping Address Line 2 / Suite">
-              <input name="shippingAddressStreet2" defaultValue={profile?.shippingAddressStreet2 ?? ""} className={inputClass} />
-            </Field>
-            <Field label="City">
-              <input name="shippingAddressCity" defaultValue={profile?.shippingAddressCity ?? ""} className={inputClass} />
-            </Field>
-            <Field label="State">
-              <input name="shippingAddressState" defaultValue={profile?.shippingAddressState ?? ""} className={inputClass} />
-            </Field>
-            <Field label="ZIP Code">
-              <input name="shippingAddressZip" defaultValue={profile?.shippingAddressZip ?? ""} className={inputClass} />
-            </Field>
+            <AddressAutocompleteFields
+              prefix="shippingAddress"
+              defaultValues={{
+                street1: profile?.shippingAddressStreet1,
+                street2: profile?.shippingAddressStreet2,
+                city: profile?.shippingAddressCity,
+                state: profile?.shippingAddressState,
+                zip: profile?.shippingAddressZip,
+              }}
+            />
             <Field label="Country">
               <input name="shippingAddressCountry" defaultValue={profile?.shippingAddressCountry ?? "US"} className={inputClass} />
             </Field>
