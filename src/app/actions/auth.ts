@@ -35,7 +35,7 @@ export async function login(
     return { error: "That email and password don't match an account." };
   }
 
-  redirect("/dashboard");
+  redirect("/dashboard/purchasing");
 }
 
 export async function logout() {
@@ -103,5 +103,5 @@ export async function signUpOrganization(
     return { error: "Account created, but signing you in failed -- try logging in." };
   }
 
-  redirect("/dashboard");
+  redirect("/dashboard/purchasing");
 }

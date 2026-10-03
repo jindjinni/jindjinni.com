@@ -18,37 +18,17 @@ export default async function DashboardLayout({
             {org.organizationName}
           </span>
           <nav className="flex gap-4 text-sm text-slate-600 dark:text-slate-400">
-            <Link href="/dashboard" className="hover:text-emerald-700 dark:hover:text-emerald-400">
-              Overview
-            </Link>
-            <Link href="/dashboard/products" className="hover:text-emerald-700 dark:hover:text-emerald-400">
-              Inventory
-            </Link>
-            <Link href="/dashboard/invoices" className="hover:text-emerald-700 dark:hover:text-emerald-400">
-              Invoices
-            </Link>
-            <Link href="/dashboard/sellers" className="hover:text-emerald-700 dark:hover:text-emerald-400">
-              Sellers
-            </Link>
-            <Link href="/dashboard/buyback" className="hover:text-emerald-700 dark:hover:text-emerald-400">
-              Buyback
-            </Link>
             <Link href="/dashboard/purchasing" className="hover:text-emerald-700 dark:hover:text-emerald-400">
               Purchasing
             </Link>
-            <Link href="/dashboard/settings/conditions" className="hover:text-emerald-700 dark:hover:text-emerald-400">
-              Settings
-            </Link>
-            {org.role !== "staff" && (
-              <Link href="/dashboard/settings/business" className="hover:text-emerald-700 dark:hover:text-emerald-400">
-                Business
-              </Link>
-            )}
             {org.role !== "staff" && (
               <Link href="/dashboard/database" className="hover:text-emerald-700 dark:hover:text-emerald-400">
                 Database
               </Link>
             )}
+            <Link href="/dashboard/profile" className="hover:text-emerald-700 dark:hover:text-emerald-400">
+              Profile
+            </Link>
           </nav>
         </div>
         <div className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400">

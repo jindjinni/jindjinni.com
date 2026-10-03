@@ -50,5 +50,5 @@ export async function createOrganization(formData: FormData): Promise<void> {
   await db.insert(purchasingExpirationRanges).values(defaultPurchasingExpirationRangeRows(orgId));
   await db.insert(purchasingBonusTiers).values(defaultPurchasingBonusTierRows(orgId));
 
-  redirect("/dashboard");
+  redirect("/dashboard/purchasing");
 }

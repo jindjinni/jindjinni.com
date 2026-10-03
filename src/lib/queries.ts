@@ -738,6 +738,61 @@ export async function getPurchasingAuditLog(organizationId: string, recordType?:
     .limit(200);
 }
 
+// The next three are org-wide, flattened versions of tables that only carry
+// a quotationId/productId (not their own organizationId) -- joined back to
+// something org-scoped so the Database page's raw-table view can filter by
+// tenant like every other table there.
+
+export async function getPurchasingQuotedItemsAll(organizationId: string) {
+  return db
+    .select({
+      id: purchasingQuotedItems.id,
+      quotationNumber: purchasingQuotations.quotationNumber,
+      productNameSnapshot: purchasingQuotedItems.productNameSnapshot,
+      conditionNameSnapshot: purchasingQuotedItems.conditionNameSnapshot,
+      expirationRangeLabelSnapshot: purchasingQuotedItems.expirationRangeLabelSnapshot,
+      quantity: purchasingQuotedItems.quantity,
+      finalUnitPrice: purchasingQuotedItems.finalUnitPrice,
+      lineTotal: purchasingQuotedItems.lineTotal,
+      createdAt: purchasingQuotedItems.createdAt,
+    })
+    .from(purchasingQuotedItems)
+    .innerJoin(purchasingQuotations, eq(purchasingQuotedItems.quotationId, purchasingQuotations.id))
+    .where(eq(purchasingQuotations.organizationId, organizationId))
+    .orderBy(desc(purchasingQuotedItems.createdAt));
+}
+
+export async function getPurchasingProductMultipliersAll(organizationId: string) {
+  return db
+    .select({
+      id: purchasingProductMultipliers.id,
+      productName: purchasingProducts.name,
+      expirationRangeLabel: purchasingExpirationRanges.label,
+      multiplier: purchasingProductMultipliers.multiplier,
+    })
+    .from(purchasingProductMultipliers)
+    .innerJoin(purchasingProducts, eq(purchasingProductMultipliers.productId, purchasingProducts.id))
+    .innerJoin(
+      purchasingExpirationRanges,
+      eq(purchasingProductMultipliers.expirationRangeId, purchasingExpirationRanges.id),
+    )
+    .where(eq(purchasingProductMultipliers.organizationId, organizationId));
+}
+
+export async function getPurchasingReceiptVersionsAll(organizationId: string) {
+  return db
+    .select({
+      id: purchasingReceiptVersions.id,
+      quotationNumber: purchasingQuotations.quotationNumber,
+      version: purchasingReceiptVersions.version,
+      generatedAt: purchasingReceiptVersions.generatedAt,
+    })
+    .from(purchasingReceiptVersions)
+    .innerJoin(purchasingQuotations, eq(purchasingReceiptVersions.quotationId, purchasingQuotations.id))
+    .where(eq(purchasingQuotations.organizationId, organizationId))
+    .orderBy(desc(purchasingReceiptVersions.generatedAt));
+}
+
 export async function getReceivedItemsAll(organizationId: string) {
   return db
     .select({

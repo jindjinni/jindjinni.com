@@ -1,25 +1,27 @@
 import Link from "next/link";
 import { requireOrg } from "@/lib/tenant";
 import {
-  getProducts,
-  getConditions,
-  getBuyers,
-  getInvoices,
-  getSellers,
-  getBuybackOrders,
-  getBuybackOrderItemsAll,
-  getReceivingShipments,
-  getReceivedItemsAll,
+  getPurchasingCustomers,
+  getPurchasingCategories,
+  getPurchasingProducts,
+  getPurchasingConditions,
+  getPurchasingExpirationRanges,
+  getPurchasingProductMultipliersAll,
+  getPurchasingBonusTiers,
+  getPurchasingQuotations,
+  getPurchasingQuotedItemsAll,
+  getPurchasingReceiptVersionsAll,
+  getPurchasingAuditLog,
+  purchasingCustomerName,
 } from "@/lib/queries";
 
 /**
- * Admin-only raw view across every table this app has data in -- the web
- * equivalent of an owner opening the Airtable base directly instead of one
- * of its Interface pages. Read-only: every one of these rows is still
- * created/changed through its purpose-built workflow page (Sellers,
- * Buyback, Receiving, Invoices, Settings) -- this is purely for seeing
- * everything at once, the thing that's hardest to do once data lives behind
- * separate app screens instead of one spreadsheet-like base.
+ * Admin-only raw view across every Purchasing table -- the web equivalent
+ * of an owner opening the base directly instead of one purpose-built
+ * screen. Read-only: every one of these rows is still created/changed
+ * through its own Purchasing page -- this is purely for seeing everything
+ * at once, the thing that's hardest to do once data lives behind separate
+ * app screens instead of one spreadsheet-like base.
  */
 
 type Column<T> = { header: string; align?: "right"; render: (row: T) => React.ReactNode };
@@ -48,151 +50,175 @@ export default async function DatabasePage({
   const { table: requestedTable } = await searchParams;
 
   const [
+    customers,
+    categories,
     products,
     conditions,
-    buyers,
-    invoices,
-    sellers,
-    buybackOrders,
+    expirationRanges,
+    productMultipliers,
+    bonusTiers,
+    quotations,
     quotedItems,
-    shipments,
-    receivedItems,
+    receiptVersions,
+    auditLog,
   ] = await Promise.all([
-    getProducts(org.organizationId),
-    getConditions(org.organizationId),
-    getBuyers(org.organizationId),
-    getInvoices(org.organizationId),
-    getSellers(org.organizationId),
-    getBuybackOrders(org.organizationId),
-    getBuybackOrderItemsAll(org.organizationId),
-    getReceivingShipments(org.organizationId),
-    getReceivedItemsAll(org.organizationId),
+    getPurchasingCustomers(org.organizationId, { includeArchived: true }),
+    getPurchasingCategories(org.organizationId, { includeInactive: true }),
+    getPurchasingProducts(org.organizationId, { includeInactive: true }),
+    getPurchasingConditions(org.organizationId, { includeInactive: true }),
+    getPurchasingExpirationRanges(org.organizationId, { includeInactive: true }),
+    getPurchasingProductMultipliersAll(org.organizationId),
+    getPurchasingBonusTiers(org.organizationId, { includeInactive: true }),
+    getPurchasingQuotations(org.organizationId, { includeArchived: true }),
+    getPurchasingQuotedItemsAll(org.organizationId),
+    getPurchasingReceiptVersionsAll(org.organizationId),
+    getPurchasingAuditLog(org.organizationId),
   ]);
 
   const money = (n: number) => `$${n.toFixed(2)}`;
-  const date = (s: string | null) => (s ? new Date(s).toLocaleString() : "—");
+  const date = (s: string | null | undefined) => (s ? new Date(s).toLocaleString() : "—");
 
   const tables = {
-    sellers: {
-      label: "Sellers",
-      ...buildTable(sellers, [
-        { header: "Name", render: (r) => r.name },
+    customers: {
+      label: "Customers",
+      ...buildTable(customers, [
+        { header: "Name", render: (r) => purchasingCustomerName(r) },
+        { header: "Reference #", render: (r) => r.customerReferenceNumber ?? "—" },
         { header: "Email", render: (r) => r.email ?? "—" },
         { header: "Phone", render: (r) => r.phone ?? "—" },
-        { header: "Shipping address", render: (r) => r.shippingAddress ?? "—" },
-        { header: "Created", render: (r) => date(r.createdAt) },
+        { header: "City", render: (r) => r.addressCity ?? "—" },
+        { header: "State", render: (r) => r.addressState ?? "—" },
+        { header: "Active", render: (r) => (r.archivedAt ? "Archived" : r.active ? "Yes" : "No") },
       ]),
     },
-    buybackOrders: {
-      label: "Buyback orders (quotes)",
-      ...buildTable(buybackOrders, [
-        { header: "Seller", render: (r) => r.sellerName },
-        { header: "Reference", render: (r) => r.orderReference ?? "—" },
-        { header: "Order date", render: (r) => r.orderDate ?? "—" },
-        { header: "Package status", render: (r) => r.packageStatus },
-        { header: "Quoted total", align: "right" as const, render: (r) => money(r.quotedTotal) },
-      ]),
-    },
-    quotedItems: {
-      label: "Quoted items",
-      ...buildTable(quotedItems, [
-        { header: "Seller", render: (r) => r.sellerName },
-        { header: "Order ref", render: (r) => r.orderReference ?? "—" },
-        { header: "Line", render: (r) => r.lineLabel },
-        { header: "Code / variant", render: (r) => r.productCodeVariant ?? "—" },
-        { header: "Qty quoted", align: "right" as const, render: (r) => r.quotedQuantity },
-        { header: "Unit price", align: "right" as const, render: (r) => money(r.quotedUnitPrice) },
-      ]),
-    },
-    shipments: {
-      label: "Receiving shipments",
-      ...buildTable(shipments, [
-        { header: "Seller", render: (r) => r.sellerName },
-        { header: "Order ref", render: (r) => r.orderReference ?? "—" },
-        { header: "Receiving status", render: (r) => r.receivingStatus.replaceAll("_", " ") },
-        { header: "Accounts decision", render: (r) => r.accountsDecision.replaceAll("_", " ") },
-        { header: "Accounts status", render: (r) => r.accountsStatus },
-        { header: "Created", render: (r) => date(r.createdAt) },
-      ]),
-    },
-    receivedItems: {
-      label: "Received items",
-      ...buildTable(receivedItems, [
-        { header: "Seller", render: (r) => r.sellerName },
-        { header: "Order ref", render: (r) => r.orderReference ?? "—" },
-        { header: "Product", render: (r) => r.productName },
-        { header: "Condition", render: (r) => r.conditionName },
-        { header: "Source", render: (r) => (r.itemSource === "EXTRA" ? "Extra" : "Quoted") },
-        { header: "Qty received", align: "right" as const, render: (r) => r.quantityReceived },
-        { header: "Posted to inventory", render: (r) => (r.postedToInventory ? "Yes" : "No") },
+    categories: {
+      label: "Categories",
+      ...buildTable(categories, [
+        { header: "Name", render: (r) => r.name },
+        { header: "Sort order", align: "right" as const, render: (r) => r.sortOrder },
+        { header: "Active", render: (r) => (r.active ? "Yes" : "No") },
       ]),
     },
     products: {
       label: "Products",
       ...buildTable(products, [
         { header: "Name", render: (r) => r.name },
-        { header: "SKU", render: (r) => r.sku ?? "—" },
-        { header: "Base price", align: "right" as const, render: (r) => money(r.basePrice) },
-        { header: "Created", render: (r) => date(r.createdAt) },
+        { header: "Category", render: (r) => r.categoryName ?? "—" },
+        { header: "Code", render: (r) => r.productCode ?? "—" },
+        { header: "Standard price", align: "right" as const, render: (r) => money(r.standardPrice) },
+        { header: "Active", render: (r) => (r.archivedAt ? "Archived" : r.active ? "Yes" : "No") },
       ]),
     },
     conditions: {
       label: "Conditions",
       ...buildTable(conditions, [
         { header: "Name", render: (r) => r.name },
+        { header: "Multiplier", align: "right" as const, render: (r) => r.multiplier },
         { header: "Sort order", align: "right" as const, render: (r) => r.sortOrder },
+        { header: "Active", render: (r) => (r.active ? "Yes" : "No") },
       ]),
     },
-    buyers: {
-      label: "Buyers",
-      ...buildTable(buyers, [
-        { header: "Company", render: (r) => r.companyName },
-        { header: "Contact", render: (r) => r.contactName ?? "—" },
-        { header: "Email", render: (r) => r.email ?? "—" },
-        { header: "Phone", render: (r) => r.phone ?? "—" },
+    expirationRanges: {
+      label: "Expiration ranges",
+      ...buildTable(expirationRanges, [
+        { header: "Label", render: (r) => r.label },
+        { header: "Min months", align: "right" as const, render: (r) => r.minMonths ?? "—" },
+        { header: "Max months", align: "right" as const, render: (r) => r.maxMonths ?? "—" },
+        { header: "Active", render: (r) => (r.active ? "Yes" : "No") },
       ]),
     },
-    invoices: {
-      label: "Invoices",
-      ...buildTable(invoices, [
-        { header: "Number", render: (r) => r.invoiceNumber ?? "—" },
-        { header: "Buyer", render: (r) => r.buyerCompanyName ?? "—" },
+    productMultipliers: {
+      label: "Product multipliers",
+      ...buildTable(productMultipliers, [
+        { header: "Product", render: (r) => r.productName },
+        { header: "Expiration range", render: (r) => r.expirationRangeLabel },
+        { header: "Multiplier", align: "right" as const, render: (r) => r.multiplier },
+      ]),
+    },
+    bonusTiers: {
+      label: "Bonus tiers",
+      ...buildTable(bonusTiers, [
+        { header: "Threshold amount", align: "right" as const, render: (r) => money(r.thresholdAmount) },
+        { header: "Bonus amount", align: "right" as const, render: (r) => money(r.bonusAmount) },
+        { header: "Active", render: (r) => (r.active ? "Yes" : "No") },
+      ]),
+    },
+    quotations: {
+      label: "Quotations",
+      ...buildTable(quotations, [
+        { header: "Number", render: (r) => r.quotationNumber },
+        { header: "Customer", render: (r) => r.customerNameSnapshot },
         { header: "Status", render: (r) => r.status },
-        { header: "Date", render: (r) => r.invoiceDate },
-        { header: "Total", align: "right" as const, render: (r) => money(r.total) },
+        { header: "Items total", align: "right" as const, render: (r) => money(r.itemsTotal) },
+        { header: "Bonus", align: "right" as const, render: (r) => money(r.bonusAmount) },
+        { header: "Grand total", align: "right" as const, render: (r) => money(r.grandTotal) },
+        { header: "Package status", render: (r) => r.packageStatus },
+        { header: "Created", render: (r) => date(r.createdAt) },
+      ]),
+    },
+    quotedItems: {
+      label: "Quoted items",
+      ...buildTable(quotedItems, [
+        { header: "Quotation #", render: (r) => r.quotationNumber },
+        { header: "Product", render: (r) => r.productNameSnapshot },
+        { header: "Condition", render: (r) => r.conditionNameSnapshot },
+        { header: "Expiration range", render: (r) => r.expirationRangeLabelSnapshot },
+        { header: "Qty", align: "right" as const, render: (r) => r.quantity },
+        { header: "Unit price", align: "right" as const, render: (r) => money(r.finalUnitPrice) },
+        { header: "Line total", align: "right" as const, render: (r) => money(r.lineTotal) },
+      ]),
+    },
+    receiptVersions: {
+      label: "Receipt versions",
+      ...buildTable(receiptVersions, [
+        { header: "Quotation #", render: (r) => r.quotationNumber },
+        { header: "Version", align: "right" as const, render: (r) => r.version },
+        { header: "Generated", render: (r) => date(r.generatedAt) },
+      ]),
+    },
+    auditLog: {
+      label: "Audit log",
+      ...buildTable(auditLog, [
+        { header: "Record type", render: (r) => r.recordType },
+        { header: "Field", render: (r) => r.fieldName },
+        { header: "Previous", render: (r) => r.previousValue ?? "—" },
+        { header: "New", render: (r) => r.newValue ?? "—" },
+        { header: "Changed", render: (r) => date(r.changedAt) },
       ]),
     },
   };
 
   type TableKey = keyof typeof tables;
   const order: TableKey[] = [
-    "sellers",
-    "buybackOrders",
-    "quotedItems",
-    "shipments",
-    "receivedItems",
+    "customers",
+    "categories",
     "products",
     "conditions",
-    "buyers",
-    "invoices",
+    "expirationRanges",
+    "productMultipliers",
+    "bonusTiers",
+    "quotations",
+    "quotedItems",
+    "receiptVersions",
+    "auditLog",
   ];
   const activeKey: TableKey = (order as string[]).includes(requestedTable ?? "")
     ? (requestedTable as TableKey)
-    : "sellers";
+    : "customers";
   const active = tables[activeKey];
 
   return (
     <div>
       <p className="text-sm">
-        <Link href="/dashboard/buyback" className="text-emerald-700 hover:underline dark:text-emerald-400">
-          ← Operations Center
+        <Link href="/dashboard/purchasing" className="text-emerald-700 hover:underline dark:text-emerald-400">
+          ← Purchasing
         </Link>
       </p>
       <h1 className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-50">
         Database
       </h1>
       <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-        Every table, raw. Owners and admins only. Create or edit records
+        Every Purchasing table, raw. Owners and admins only. Create or edit records
         through their own page -- this is a read-only view across all of
         them at once.
       </p>
