@@ -60,15 +60,16 @@ a fresh organization of your own.
 
 1. **Database**: create a free database at [turso.tech](https://turso.tech),
    copy its URL and auth token into `DATABASE_URL` / `DATABASE_AUTH_TOKEN` in
-   your production environment, then run `npm run db:push` once against it
-   (or set up `drizzle-kit generate` + migrations for a more controlled
-   rollout). Prefer Postgres instead? Only `src/db/client.ts` and
-   `drizzle.config.ts` need to change — the schema and every query in
-   `src/lib/queries.ts` are portable.
+   your production environment. Prefer Postgres instead? Only
+   `src/db/client.ts` and `drizzle.config.ts` need to change — the schema and
+   every query in `src/lib/queries.ts` are portable.
 2. **Hosting**: push this to GitHub and import it into
    [vercel.com](https://vercel.com) — it auto-detects Next.js. Set the same
    env vars there (`DATABASE_URL`, `DATABASE_AUTH_TOKEN`, `AUTH_SECRET`).
    `trustHost: true` in `src/lib/auth.ts` is already set for exactly this.
+   The `build` script runs `drizzle-kit push --force` before `next build`,
+   so every deploy syncs the schema against the live Turso database
+   automatically — no separate migration step to remember.
 3. **Billing**: not wired up yet (Phase 3) — add Stripe when you're ready to
    charge companies.
 
