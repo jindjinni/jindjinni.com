@@ -4,9 +4,16 @@ import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { db } from "@/db/client";
-import { organizations, users, memberships, conditions } from "@/db/schema";
+import { organizations, users, memberships, conditions, purchasingCategories, purchasingConditions, purchasingExpirationRanges, purchasingBonusTiers } from "@/db/schema";
 import { signIn, signOut } from "@/lib/auth";
-import { newId, defaultConditionRows } from "@/lib/ids";
+import {
+  newId,
+  defaultConditionRows,
+  defaultPurchasingCategoryRows,
+  defaultPurchasingConditionRows,
+  defaultPurchasingExpirationRangeRows,
+  defaultPurchasingBonusTierRows,
+} from "@/lib/ids";
 
 export type ActionState = { error?: string } | undefined;
 
@@ -81,6 +88,10 @@ export async function signUpOrganization(
     role: "owner",
   });
   await db.insert(conditions).values(defaultConditionRows(orgId));
+  await db.insert(purchasingCategories).values(defaultPurchasingCategoryRows(orgId));
+  await db.insert(purchasingConditions).values(defaultPurchasingConditionRows(orgId));
+  await db.insert(purchasingExpirationRanges).values(defaultPurchasingExpirationRangeRows(orgId));
+  await db.insert(purchasingBonusTiers).values(defaultPurchasingBonusTierRows(orgId));
 
   try {
     await signIn("credentials", { email, password, redirect: false });

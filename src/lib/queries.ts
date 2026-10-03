@@ -1,7 +1,7 @@
 // Data access layer -- every function here takes an explicit organizationId
 // and filters by it. Pages call these instead of touching `db` directly, so
 // there is exactly one place that has to get tenant-scoping right.
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import {
   conditions,
@@ -16,6 +16,17 @@ import {
   receivingShipments,
   receivedItems,
   organizations,
+  purchasingCustomers,
+  purchasingCategories,
+  purchasingProducts,
+  purchasingConditions,
+  purchasingExpirationRanges,
+  purchasingProductMultipliers,
+  purchasingBonusTiers,
+  purchasingQuotations,
+  purchasingQuotedItems,
+  purchasingAuditLog,
+  purchasingReceiptVersions,
 } from "@/db/schema";
 
 export async function getOrganization(organizationId: string) {
@@ -469,6 +480,262 @@ export async function getBuybackOrderItemsAll(organizationId: string) {
     .innerJoin(sellers, eq(buybackOrders.sellerId, sellers.id))
     .where(eq(buybackOrders.organizationId, organizationId))
     .orderBy(desc(buybackOrderItems.createdAt));
+}
+
+// ---------------------------------------------------------------------------
+// Purchasing department
+// ---------------------------------------------------------------------------
+
+export function purchasingCustomerName(c: { firstName: string; lastName: string | null }) {
+  return [c.firstName, c.lastName].filter(Boolean).join(" ");
+}
+
+export async function getPurchasingCustomers(organizationId: string, opts: { includeArchived?: boolean } = {}) {
+  const rows = await db
+    .select()
+    .from(purchasingCustomers)
+    .where(eq(purchasingCustomers.organizationId, organizationId))
+    .orderBy(purchasingCustomers.firstName);
+  return opts.includeArchived ? rows : rows.filter((r) => !r.archivedAt);
+}
+
+export async function getPurchasingCustomer(organizationId: string, customerId: string) {
+  const [row] = await db
+    .select()
+    .from(purchasingCustomers)
+    .where(and(eq(purchasingCustomers.id, customerId), eq(purchasingCustomers.organizationId, organizationId)))
+    .limit(1);
+  return row ?? null;
+}
+
+export async function getPurchasingCategories(organizationId: string, opts: { includeInactive?: boolean } = {}) {
+  const rows = await db
+    .select()
+    .from(purchasingCategories)
+    .where(eq(purchasingCategories.organizationId, organizationId))
+    .orderBy(purchasingCategories.sortOrder);
+  return opts.includeInactive ? rows : rows.filter((r) => r.active);
+}
+
+export async function getPurchasingConditions(organizationId: string, opts: { includeInactive?: boolean } = {}) {
+  const rows = await db
+    .select()
+    .from(purchasingConditions)
+    .where(eq(purchasingConditions.organizationId, organizationId))
+    .orderBy(purchasingConditions.sortOrder);
+  return opts.includeInactive ? rows : rows.filter((r) => r.active);
+}
+
+export async function getPurchasingExpirationRanges(organizationId: string, opts: { includeInactive?: boolean } = {}) {
+  const rows = await db
+    .select()
+    .from(purchasingExpirationRanges)
+    .where(eq(purchasingExpirationRanges.organizationId, organizationId))
+    .orderBy(purchasingExpirationRanges.sortOrder);
+  return opts.includeInactive ? rows : rows.filter((r) => r.active);
+}
+
+export async function getPurchasingBonusTiers(organizationId: string, opts: { includeInactive?: boolean } = {}) {
+  const rows = await db
+    .select()
+    .from(purchasingBonusTiers)
+    .where(eq(purchasingBonusTiers.organizationId, organizationId))
+    .orderBy(purchasingBonusTiers.sortOrder);
+  return opts.includeInactive ? rows : rows.filter((r) => r.active);
+}
+
+/** The best (highest) automatic bonus for a given items total -- the framework's tiered threshold rule, read, never hardcoded. */
+export function computeAutomaticBonus(
+  itemsTotal: number,
+  tiers: { thresholdAmount: number; bonusAmount: number; active: boolean }[],
+) {
+  const eligible = tiers.filter((t) => t.active && itemsTotal >= t.thresholdAmount);
+  if (eligible.length === 0) return { bonusAmount: 0, tier: null as (typeof tiers)[number] | null };
+  const best = eligible.reduce((a, b) => (b.thresholdAmount > a.thresholdAmount ? b : a));
+  return { bonusAmount: best.bonusAmount, tier: best };
+}
+
+export async function getPurchasingProducts(organizationId: string, opts: { includeInactive?: boolean } = {}) {
+  const rows = await db
+    .select({
+      id: purchasingProducts.id,
+      categoryId: purchasingProducts.categoryId,
+      categoryName: purchasingCategories.name,
+      name: purchasingProducts.name,
+      productCode: purchasingProducts.productCode,
+      standardPrice: purchasingProducts.standardPrice,
+      notes: purchasingProducts.notes,
+      active: purchasingProducts.active,
+      archivedAt: purchasingProducts.archivedAt,
+    })
+    .from(purchasingProducts)
+    .leftJoin(purchasingCategories, eq(purchasingProducts.categoryId, purchasingCategories.id))
+    .where(eq(purchasingProducts.organizationId, organizationId))
+    .orderBy(purchasingProducts.name);
+  return opts.includeInactive ? rows : rows.filter((r) => r.active && !r.archivedAt);
+}
+
+export async function getPurchasingProduct(organizationId: string, productId: string) {
+  const [row] = await db
+    .select()
+    .from(purchasingProducts)
+    .where(and(eq(purchasingProducts.id, productId), eq(purchasingProducts.organizationId, organizationId)))
+    .limit(1);
+  return row ?? null;
+}
+
+/** Every multiplier row for one product, joined to its expiration range label -- the editable "allowed ranges + price" list for that product. */
+export async function getProductMultipliers(organizationId: string, productId: string) {
+  return db
+    .select({
+      id: purchasingProductMultipliers.id,
+      expirationRangeId: purchasingProductMultipliers.expirationRangeId,
+      expirationRangeLabel: purchasingExpirationRanges.label,
+      multiplier: purchasingProductMultipliers.multiplier,
+    })
+    .from(purchasingProductMultipliers)
+    .innerJoin(
+      purchasingExpirationRanges,
+      eq(purchasingProductMultipliers.expirationRangeId, purchasingExpirationRanges.id),
+    )
+    .where(
+      and(
+        eq(purchasingProductMultipliers.organizationId, organizationId),
+        eq(purchasingProductMultipliers.productId, productId),
+      ),
+    )
+    .orderBy(purchasingExpirationRanges.sortOrder);
+}
+
+/** One lookup map: `${productId}:${expirationRangeId}` -> multiplier, for the quotation line-item price calculator. */
+export async function getAllProductMultipliersMap(organizationId: string) {
+  const rows = await db
+    .select({
+      productId: purchasingProductMultipliers.productId,
+      expirationRangeId: purchasingProductMultipliers.expirationRangeId,
+      multiplier: purchasingProductMultipliers.multiplier,
+    })
+    .from(purchasingProductMultipliers)
+    .where(eq(purchasingProductMultipliers.organizationId, organizationId));
+  return new Map(rows.map((r) => [`${r.productId}:${r.expirationRangeId}`, r.multiplier]));
+}
+
+export async function getNextQuotationNumber(organizationId: string) {
+  const today = new Date();
+  const yy = String(today.getFullYear()).slice(2);
+  const mm = String(today.getMonth() + 1).padStart(2, "0");
+  const dd = String(today.getDate()).padStart(2, "0");
+  const prefix = `REF-${yy}${mm}${dd}-`;
+
+  const rows = await db
+    .select({ quotationNumber: purchasingQuotations.quotationNumber })
+    .from(purchasingQuotations)
+    .where(eq(purchasingQuotations.organizationId, organizationId));
+
+  const todaysSuffixes = rows
+    .map((r) => r.quotationNumber)
+    .filter((n) => n.startsWith(prefix))
+    .map((n) => Number(n.slice(prefix.length)))
+    .filter((n) => Number.isFinite(n));
+  const next = todaysSuffixes.length ? Math.max(...todaysSuffixes) + 1 : 1;
+  return `${prefix}${next}`;
+}
+
+export async function getPurchasingQuotations(organizationId: string, opts: { includeArchived?: boolean } = {}) {
+  const rows = await db
+    .select({
+      id: purchasingQuotations.id,
+      quotationNumber: purchasingQuotations.quotationNumber,
+      quotationDate: purchasingQuotations.quotationDate,
+      status: purchasingQuotations.status,
+      customerNameSnapshot: purchasingQuotations.customerNameSnapshot,
+      itemsTotal: purchasingQuotations.itemsTotal,
+      bonusAmount: purchasingQuotations.bonusAmount,
+      deductionEnabled: purchasingQuotations.deductionEnabled,
+      deductionAmount: purchasingQuotations.deductionAmount,
+      grandTotal: purchasingQuotations.grandTotal,
+      trackingNumber: purchasingQuotations.trackingNumber,
+      packageStatus: purchasingQuotations.packageStatus,
+      archivedAt: purchasingQuotations.archivedAt,
+      createdAt: purchasingQuotations.createdAt,
+    })
+    .from(purchasingQuotations)
+    .where(eq(purchasingQuotations.organizationId, organizationId))
+    .orderBy(desc(purchasingQuotations.createdAt));
+  return opts.includeArchived ? rows : rows.filter((r) => !r.archivedAt);
+}
+
+export async function getPurchasingQuotationWithItems(organizationId: string, quotationId: string) {
+  const [quotation] = await db
+    .select()
+    .from(purchasingQuotations)
+    .where(and(eq(purchasingQuotations.id, quotationId), eq(purchasingQuotations.organizationId, organizationId)))
+    .limit(1);
+  if (!quotation) return null;
+
+  const items = await db
+    .select()
+    .from(purchasingQuotedItems)
+    .where(eq(purchasingQuotedItems.quotationId, quotationId))
+    .orderBy(purchasingQuotedItems.createdAt);
+
+  const customer = await getPurchasingCustomer(organizationId, quotation.customerId);
+
+  return { quotation, items, customer };
+}
+
+export async function getPurchasingDashboardCounts(organizationId: string) {
+  const [[customerCount], [productCount], [quotationCount], [activeQuotationCount]] = await Promise.all([
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(purchasingCustomers)
+      .where(and(eq(purchasingCustomers.organizationId, organizationId), isNull(purchasingCustomers.archivedAt))),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(purchasingProducts)
+      .where(and(eq(purchasingProducts.organizationId, organizationId), eq(purchasingProducts.active, true))),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(purchasingQuotations)
+      .where(eq(purchasingQuotations.organizationId, organizationId)),
+    db
+      .select({ count: sql<number>`count(*)`, total: sql<number>`coalesce(sum(${purchasingQuotations.grandTotal}), 0)` })
+      .from(purchasingQuotations)
+      .where(
+        and(
+          eq(purchasingQuotations.organizationId, organizationId),
+          isNull(purchasingQuotations.archivedAt),
+          eq(purchasingQuotations.status, "QUOTED"),
+        ),
+      ),
+  ]);
+  return {
+    customers: Number(customerCount?.count ?? 0),
+    products: Number(productCount?.count ?? 0),
+    quotations: Number(quotationCount?.count ?? 0),
+    openQuotations: Number(activeQuotationCount?.count ?? 0),
+    openQuotationsValue: Number((activeQuotationCount as { total?: number })?.total ?? 0),
+  };
+}
+
+export async function getReceiptVersions(quotationId: string) {
+  return db
+    .select()
+    .from(purchasingReceiptVersions)
+    .where(eq(purchasingReceiptVersions.quotationId, quotationId))
+    .orderBy(desc(purchasingReceiptVersions.version));
+}
+
+export async function getPurchasingAuditLog(organizationId: string, recordType?: string, recordId?: string) {
+  const conds = [eq(purchasingAuditLog.organizationId, organizationId)];
+  if (recordType) conds.push(eq(purchasingAuditLog.recordType, recordType));
+  if (recordId) conds.push(eq(purchasingAuditLog.recordId, recordId));
+  return db
+    .select()
+    .from(purchasingAuditLog)
+    .where(and(...conds))
+    .orderBy(desc(purchasingAuditLog.changedAt))
+    .limit(200);
 }
 
 export async function getReceivedItemsAll(organizationId: string) {

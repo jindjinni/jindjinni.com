@@ -17,8 +17,19 @@ import {
   inventoryTransactions,
   invoices,
   invoiceLineItems,
+  purchasingCategories,
+  purchasingConditions,
+  purchasingExpirationRanges,
+  purchasingBonusTiers,
 } from "../src/db/schema";
-import { newId, defaultConditionRows } from "../src/lib/ids";
+import {
+  newId,
+  defaultConditionRows,
+  defaultPurchasingCategoryRows,
+  defaultPurchasingConditionRows,
+  defaultPurchasingExpirationRangeRows,
+  defaultPurchasingBonusTierRows,
+} from "../src/lib/ids";
 
 async function main() {
   const demoEmail = "demo@example.com";
@@ -62,6 +73,10 @@ async function main() {
   // demo org isn't a special case.
   const conditionRows = defaultConditionRows(orgId);
   await db.insert(conditions).values(conditionRows);
+  await db.insert(purchasingCategories).values(defaultPurchasingCategoryRows(orgId));
+  await db.insert(purchasingConditions).values(defaultPurchasingConditionRows(orgId));
+  await db.insert(purchasingExpirationRanges).values(defaultPurchasingExpirationRangeRows(orgId));
+  await db.insert(purchasingBonusTiers).values(defaultPurchasingBonusTierRows(orgId));
   const byName = (name: string) => conditionRows.find((c) => c.name === name)!;
   const mint = byName("Mint");
   const dinged = byName("Dinged");
