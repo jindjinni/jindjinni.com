@@ -340,3 +340,115 @@ export async function getReceivingShipmentDetail(organizationId: string, shipmen
 
   return { shipment, order, seller, quotedItems, items };
 }
+
+/**
+ * The buyback module's "launch screen" -- one query that sorts every open
+ * buyback order/shipment into exactly one queue, the same way the old
+ * Airtable base split its single Receiving Shipments table across separate
+ * Receiving / Accounts / Customer Service interface pages. Nothing here is
+ * stored redundantly: it's all derived, on each load, from the same
+ * buybackOrders/receivingShipments rows the detail pages already use.
+ */
+export async function getOperationsQueues(organizationId: string) {
+  const [orders, shipments] = await Promise.all([
+    db
+      .select({
+        id: buybackOrders.id,
+        orderReference: buybackOrders.orderReference,
+        orderDate: buybackOrders.orderDate,
+        quotedTotal: buybackOrders.quotedTotal,
+        sellerName: sellers.name,
+      })
+      .from(buybackOrders)
+      .innerJoin(sellers, eq(buybackOrders.sellerId, sellers.id))
+      .where(eq(buybackOrders.organizationId, organizationId))
+      .orderBy(desc(buybackOrders.createdAt)),
+    db
+      .select({
+        id: receivingShipments.id,
+        orderId: receivingShipments.orderId,
+        receivingStatus: receivingShipments.receivingStatus,
+        accountsStatus: receivingShipments.accountsStatus,
+        accountsDecision: receivingShipments.accountsDecision,
+        customerNotified: receivingShipments.customerNotified,
+        createdAt: receivingShipments.createdAt,
+        paidAt: receivingShipments.paidAt,
+        orderReference: buybackOrders.orderReference,
+        quotedTotal: buybackOrders.quotedTotal,
+        sellerName: sellers.name,
+      })
+      .from(receivingShipments)
+      .innerJoin(buybackOrders, eq(receivingShipments.orderId, buybackOrders.id))
+      .innerJoin(sellers, eq(buybackOrders.sellerId, sellers.id))
+      .where(eq(receivingShipments.organizationId, organizationId))
+      .orderBy(desc(receivingShipments.createdAt)),
+  ]);
+
+  const orderIdsWithShipments = new Set(shipments.map((s) => s.orderId));
+
+  return {
+    awaitingArrival: orders.filter((o) => !orderIdsWithShipments.has(o.id)),
+    inProgress: shipments.filter((s) => s.receivingStatus === "IN_PROGRESS"),
+    needsAccounts: shipments.filter(
+      (s) => s.receivingStatus !== "IN_PROGRESS" && s.accountsStatus === "IN_REVIEW",
+    ),
+    needsNotification: shipments.filter(
+      (s) => s.accountsStatus === "PAID" && !s.customerNotified,
+    ),
+    totalShipments: shipments.length,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Admin database view -- read-only, flat, one function per table. This is
+// deliberately the raw rows (joined only enough to be readable), the same
+// thing an admin would see opening the Airtable base directly. Editing still
+// happens through the purpose-built workflow pages above; this is for
+// visibility into everything at once.
+// ---------------------------------------------------------------------------
+
+export async function getBuybackOrderItemsAll(organizationId: string) {
+  return db
+    .select({
+      id: buybackOrderItems.id,
+      orderId: buybackOrderItems.orderId,
+      orderReference: buybackOrders.orderReference,
+      sellerName: sellers.name,
+      lineLabel: buybackOrderItems.lineLabel,
+      productCodeVariant: buybackOrderItems.productCodeVariant,
+      quotedQuantity: buybackOrderItems.quotedQuantity,
+      quotedUnitPrice: buybackOrderItems.quotedUnitPrice,
+      createdAt: buybackOrderItems.createdAt,
+    })
+    .from(buybackOrderItems)
+    .innerJoin(buybackOrders, eq(buybackOrderItems.orderId, buybackOrders.id))
+    .innerJoin(sellers, eq(buybackOrders.sellerId, sellers.id))
+    .where(eq(buybackOrders.organizationId, organizationId))
+    .orderBy(desc(buybackOrderItems.createdAt));
+}
+
+export async function getReceivedItemsAll(organizationId: string) {
+  return db
+    .select({
+      id: receivedItems.id,
+      shipmentId: receivedItems.shipmentId,
+      sellerName: sellers.name,
+      orderReference: buybackOrders.orderReference,
+      productName: products.name,
+      conditionName: conditions.name,
+      itemSource: receivedItems.itemSource,
+      wasReceived: receivedItems.wasReceived,
+      quantityReceived: receivedItems.quantityReceived,
+      returnRequired: receivedItems.returnRequired,
+      postedToInventory: receivedItems.postedToInventory,
+      createdAt: receivedItems.createdAt,
+    })
+    .from(receivedItems)
+    .innerJoin(receivingShipments, eq(receivedItems.shipmentId, receivingShipments.id))
+    .innerJoin(buybackOrders, eq(receivingShipments.orderId, buybackOrders.id))
+    .innerJoin(sellers, eq(buybackOrders.sellerId, sellers.id))
+    .innerJoin(products, eq(receivedItems.productId, products.id))
+    .innerJoin(conditions, eq(receivedItems.conditionId, conditions.id))
+    .where(eq(receivingShipments.organizationId, organizationId))
+    .orderBy(desc(receivedItems.createdAt));
+}

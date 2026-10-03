@@ -65,6 +65,7 @@ export async function createBuybackOrder(
   });
 
   revalidatePath("/dashboard/buyback");
+  revalidatePath("/dashboard/buyback/orders");
   redirect(`/dashboard/buyback/${orderId}`);
 }
 
@@ -164,6 +165,7 @@ export async function createReceivingShipment(
   });
 
   revalidatePath(`/dashboard/buyback/${orderId}`);
+  revalidatePath("/dashboard/buyback");
   redirect(`/dashboard/buyback/shipments/${shipmentId}`);
 }
 
@@ -378,4 +380,5 @@ export async function markCustomerNotified(
     .where(eq(receivingShipments.id, shipmentId));
 
   revalidatePath(`/dashboard/buyback/shipments/${shipmentId}`);
+  revalidatePath("/dashboard/buyback");
 }

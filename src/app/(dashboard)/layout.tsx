@@ -36,6 +36,11 @@ export default async function DashboardLayout({
             <Link href="/dashboard/settings/conditions" className="hover:text-emerald-700 dark:hover:text-emerald-400">
               Settings
             </Link>
+            {org.role !== "staff" && (
+              <Link href="/dashboard/database" className="hover:text-emerald-700 dark:hover:text-emerald-400">
+                Database
+              </Link>
+            )}
           </nav>
         </div>
         <div className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400">

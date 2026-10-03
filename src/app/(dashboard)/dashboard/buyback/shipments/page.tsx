@@ -19,7 +19,12 @@ export default async function ReceivingShipmentsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-50">
+      <p className="text-sm">
+        <Link href="/dashboard/buyback" className="text-emerald-700 hover:underline dark:text-emerald-400">
+          ← Operations Center
+        </Link>
+      </p>
+      <h1 className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-50">
         Receiving shipments
       </h1>
       <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">

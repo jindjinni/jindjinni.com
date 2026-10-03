@@ -35,9 +35,17 @@ published "Ledger SaaS Blueprint" doc) for the full architecture and roadmap
   ledger, so there is one real source of truth, not just shared navigation:
   - **Sellers** (`/dashboard/sellers`) — add the people/companies you buy
     product back from.
-  - **Buyback orders / quotes** (`/dashboard/buyback`) — start a quote for a
-    seller, add quoted line items (product, quantity, unit price); the
-    quoted total computes automatically.
+  - **Order Operations Center** (`/dashboard/buyback`) — the launch screen
+    for the module, modeled on the Airtable base's own "Order Operations
+    Center" interface. Every open buyback order/shipment is sorted into
+    exactly one queue card (Awaiting arrival, Receiving, Accounts, Customer
+    service), the same split the Airtable base did across six separate
+    Receiving / Accounts / Customer Service interface pages — here it's one
+    screen, derived live from the same rows, with nothing duplicated or
+    cached.
+  - **Quotes** (`/dashboard/buyback/orders`) — start a quote for a seller,
+    add quoted line items (product, quantity, unit price); the quoted total
+    computes automatically.
   - **Receiving shipments** (`/dashboard/buyback/shipments`) — once a
     package physically arrives, record packaging condition, log each
     received item against a condition grade (including items that don't
@@ -54,6 +62,19 @@ published "Ledger SaaS Blueprint" doc) for the full architecture and roadmap
     Airtable base's real 11-value grading scale (Mint, Dinged, Minor
     Damage, Damaged, Stained, Torn, Crushed, Opened, Unsealed, Expired,
     Other) and lets you add more.
+  - The shipment detail page (Step 2 of receiving) is laid out as four
+    numbered steps -- Shipment, Packaging, Verify items, Complete &
+    Accounts -- mirroring the old Airtable "Receiving Intake Form"'s
+    sequential flow, minus the photo-capture steps (no photo support yet).
+  - **Database** (`/dashboard/database`, owners/admins only) — a raw,
+    tabbed grid across every table in the app (Sellers, Buyback Orders,
+    Quoted Items, Receiving Shipments, Received Items, Products,
+    Conditions, Buyers, Invoices): the web equivalent of an owner opening
+    the Airtable base directly instead of one of its Interface pages.
+    Read-only by design -- every row here is still created or changed
+    through its own purpose-built page; this is for seeing everything at
+    once, which is the thing that's hardest to do once data lives behind
+    separate app screens instead of one spreadsheet-like base.
 
 ## What's NOT built yet (see SPEC.md "Phase 2"/"Phase 3")
 

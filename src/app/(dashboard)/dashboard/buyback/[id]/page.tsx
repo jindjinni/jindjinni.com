@@ -30,7 +30,12 @@ export default async function BuybackOrderDetailPage({
 
   return (
     <div>
-      <div className="flex items-start justify-between gap-4">
+      <p className="text-sm">
+        <Link href="/dashboard/buyback/orders" className="text-emerald-700 hover:underline dark:text-emerald-400">
+          ← Quotes
+        </Link>
+      </p>
+      <div className="mt-2 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-50">
             {seller?.name ?? "Unknown seller"}
