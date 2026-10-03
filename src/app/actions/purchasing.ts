@@ -38,11 +38,22 @@ import {
   computeAutomaticBonus,
 } from "@/lib/queries";
 import { seedPurchasingProductCatalogForOrg } from "@/lib/purchasing-catalog-seed";
+import { parseSpreadsheetFile, findColumn } from "@/lib/spreadsheet-import";
 
 export type ActionState = { error?: string } | undefined;
 export type SeedCatalogActionState = { error?: string; message?: string } | undefined;
+export type ImportActionState = { error?: string; message?: string } | undefined;
 
 const trimmed = (formData: FormData, key: string) => String(formData.get(key) ?? "").trim() || null;
+
+async function readUploadedFile(formData: FormData): Promise<{ buffer: Buffer; filename: string } | { error: string }> {
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    return { error: "Choose a CSV or Excel file to import." };
+  }
+  const buffer = Buffer.from(await file.arrayBuffer());
+  return { buffer, filename: file.name };
+}
 
 function requireManager(org: CurrentOrg): ActionState {
   if (org.role === "staff") {
@@ -985,4 +996,254 @@ export async function loadPurchasingProductCatalog(
     return { message: "Already up to date -- every catalog product is already in your list." };
   }
   return { message: `Added ${inserted} product(s) from the catalog (${skipped} were already in your list). Set real prices before quoting them.` };
+}
+
+/**
+ * Bulk-adds products from an uploaded CSV/Excel file. Expected columns
+ * (case-insensitive, any order): Name (required), Category, Product Code,
+ * Standard Price, Active, Notes. A Category that doesn't exist yet is
+ * created on the fly. Rows whose name already matches a product this org
+ * has are skipped, not duplicated or overwritten -- re-upload a corrected
+ * file as many times as needed.
+ */
+export async function importPurchasingProducts(
+  _prevState: ImportActionState,
+  formData: FormData,
+): Promise<ImportActionState> {
+  const org = await requireOrg();
+  const blocked = requireManager(org);
+  if (blocked) return blocked;
+
+  const file = await readUploadedFile(formData);
+  if ("error" in file) return file;
+
+  let parsed;
+  try {
+    parsed = parseSpreadsheetFile(file.buffer, file.filename);
+  } catch {
+    return { error: "Couldn't read that file -- make sure it's a CSV or Excel export." };
+  }
+  if (parsed.rows.length === 0) return { error: "That file doesn't have any data rows." };
+
+  const nameCol = findColumn(parsed.headers, ["name", "product", "product name"]);
+  if (!nameCol) {
+    return { error: `Couldn't find a Name column. Found: ${parsed.headers.join(", ") || "(no headers)"}.` };
+  }
+  const categoryCol = findColumn(parsed.headers, ["category", "brand"]);
+  const codeCol = findColumn(parsed.headers, ["product code", "code", "sku"]);
+  const priceCol = findColumn(parsed.headers, ["standard price", "price", "cost"]);
+  const activeCol = findColumn(parsed.headers, ["active"]);
+  const notesCol = findColumn(parsed.headers, ["notes"]);
+
+  const categories = await db
+    .select({ id: purchasingCategories.id, name: purchasingCategories.name })
+    .from(purchasingCategories)
+    .where(eq(purchasingCategories.organizationId, org.organizationId));
+  const categoryIdByName = new Map(categories.map((c) => [c.name.toLowerCase(), c.id]));
+  let nextSortOrder = categories.length;
+
+  const existingProducts = await db
+    .select({ name: purchasingProducts.name })
+    .from(purchasingProducts)
+    .where(eq(purchasingProducts.organizationId, org.organizationId));
+  const existingNames = new Set(existingProducts.map((p) => p.name.toLowerCase()));
+
+  let inserted = 0;
+  let skipped = 0;
+  let categoriesCreated = 0;
+  const errors: string[] = [];
+
+  for (let i = 0; i < parsed.rows.length; i++) {
+    const row = parsed.rows[i];
+    const rowNumber = i + 2; // +1 for the header row, +1 for 1-indexing
+    const name = row[nameCol]?.trim();
+    if (!name) {
+      errors.push(`Row ${rowNumber}: missing name.`);
+      continue;
+    }
+    if (existingNames.has(name.toLowerCase())) {
+      skipped++;
+      continue;
+    }
+
+    let categoryId: string | null = null;
+    const categoryName = categoryCol ? row[categoryCol]?.trim() : "";
+    if (categoryName) {
+      categoryId = categoryIdByName.get(categoryName.toLowerCase()) ?? null;
+      if (!categoryId) {
+        categoryId = newId("pcat");
+        await db.insert(purchasingCategories).values({
+          id: categoryId,
+          organizationId: org.organizationId,
+          name: categoryName,
+          sortOrder: nextSortOrder++,
+        });
+        categoryIdByName.set(categoryName.toLowerCase(), categoryId);
+        categoriesCreated++;
+      }
+    }
+
+    let standardPrice = 0;
+    const rawPrice = priceCol ? row[priceCol]?.trim() : "";
+    if (rawPrice) {
+      const parsedPrice = Number(rawPrice.replace(/[$,]/g, ""));
+      if (Number.isNaN(parsedPrice) || parsedPrice < 0) {
+        errors.push(`Row ${rowNumber}: "${rawPrice}" isn't a valid price -- set it to $0, fix it after import.`);
+      } else {
+        standardPrice = parsedPrice;
+      }
+    }
+
+    const activeValue = (activeCol ? row[activeCol]?.trim() : "").toLowerCase();
+    const active = activeValue === "" || !["no", "false", "0", "inactive"].includes(activeValue);
+
+    await db.insert(purchasingProducts).values({
+      id: newId("pprod"),
+      organizationId: org.organizationId,
+      categoryId,
+      name,
+      productCode: codeCol ? row[codeCol]?.trim() || null : null,
+      standardPrice,
+      notes: notesCol ? row[notesCol]?.trim() || null : null,
+      active,
+    });
+    existingNames.add(name.toLowerCase());
+    inserted++;
+  }
+
+  revalidatePath("/dashboard/purchasing/products");
+
+  const parts = [`Imported ${inserted} product(s)`];
+  if (skipped > 0) parts.push(`skipped ${skipped} already in your list`);
+  if (categoriesCreated > 0) {
+    parts.push(`created ${categoriesCreated} new categor${categoriesCreated === 1 ? "y" : "ies"}`);
+  }
+  let message = parts.join(", ") + ".";
+  if (errors.length > 0) {
+    message += ` ${errors.length} row(s) had problems: ${errors.slice(0, 5).join(" ")}${errors.length > 5 ? " …" : ""}`;
+  }
+  return { message };
+}
+
+/**
+ * Bulk-adds customers from an uploaded CSV/Excel file. Expected columns
+ * (case-insensitive, any order): Name or First Name (one is required), Last
+ * Name, Email, Phone, Reference #, and optionally an address. A row is
+ * skipped (not duplicated) when its email matches an existing customer, or
+ * -- when neither row has an email -- when its first+last name matches.
+ */
+export async function importPurchasingCustomers(
+  _prevState: ImportActionState,
+  formData: FormData,
+): Promise<ImportActionState> {
+  const org = await requireOrg();
+
+  const file = await readUploadedFile(formData);
+  if ("error" in file) return file;
+
+  let parsed;
+  try {
+    parsed = parseSpreadsheetFile(file.buffer, file.filename);
+  } catch {
+    return { error: "Couldn't read that file -- make sure it's a CSV or Excel export." };
+  }
+  if (parsed.rows.length === 0) return { error: "That file doesn't have any data rows." };
+
+  const firstNameCol = findColumn(parsed.headers, ["first name", "firstname", "first"]);
+  const fullNameCol = findColumn(parsed.headers, ["name", "full name", "customer name"]);
+  if (!firstNameCol && !fullNameCol) {
+    return { error: `Couldn't find a Name or First Name column. Found: ${parsed.headers.join(", ") || "(no headers)"}.` };
+  }
+  const lastNameCol = findColumn(parsed.headers, ["last name", "lastname", "last"]);
+  const emailCol = findColumn(parsed.headers, ["email", "email address"]);
+  const phoneCol = findColumn(parsed.headers, ["phone", "phone number", "telephone"]);
+  const refCol = findColumn(parsed.headers, ["reference #", "reference number", "customer reference number", "ref #"]);
+  const street1Col = findColumn(parsed.headers, ["address", "street", "address line 1", "street1", "address 1"]);
+  const street2Col = findColumn(parsed.headers, ["address line 2", "street2", "address 2"]);
+  const cityCol = findColumn(parsed.headers, ["city"]);
+  const stateCol = findColumn(parsed.headers, ["state"]);
+  const zipCol = findColumn(parsed.headers, ["zip", "zip code", "postal code"]);
+
+  const existingCustomers = await db
+    .select({
+      firstName: purchasingCustomers.firstName,
+      lastName: purchasingCustomers.lastName,
+      email: purchasingCustomers.email,
+    })
+    .from(purchasingCustomers)
+    .where(eq(purchasingCustomers.organizationId, org.organizationId));
+  const existingEmails = new Set(
+    existingCustomers.filter((c) => c.email).map((c) => c.email!.toLowerCase()),
+  );
+  const existingNamePairs = new Set(
+    existingCustomers.map((c) => `${c.firstName} ${c.lastName ?? ""}`.trim().toLowerCase()),
+  );
+
+  let inserted = 0;
+  let skipped = 0;
+  const errors: string[] = [];
+
+  for (let i = 0; i < parsed.rows.length; i++) {
+    const row = parsed.rows[i];
+    const rowNumber = i + 2;
+
+    let firstName = "";
+    let lastName = "";
+    if (firstNameCol) {
+      firstName = row[firstNameCol]?.trim() ?? "";
+      lastName = lastNameCol ? row[lastNameCol]?.trim() ?? "" : "";
+    } else if (fullNameCol) {
+      const full = (row[fullNameCol] ?? "").trim();
+      const spaceIdx = full.indexOf(" ");
+      if (spaceIdx === -1) {
+        firstName = full;
+      } else {
+        firstName = full.slice(0, spaceIdx);
+        lastName = full.slice(spaceIdx + 1);
+      }
+    }
+    if (!firstName) {
+      errors.push(`Row ${rowNumber}: missing name.`);
+      continue;
+    }
+
+    const email = emailCol ? row[emailCol]?.trim() || null : null;
+    if (email && existingEmails.has(email.toLowerCase())) {
+      skipped++;
+      continue;
+    }
+    const namePair = `${firstName} ${lastName}`.trim().toLowerCase();
+    if (!email && existingNamePairs.has(namePair)) {
+      skipped++;
+      continue;
+    }
+
+    await db.insert(purchasingCustomers).values({
+      id: newId("pcust"),
+      organizationId: org.organizationId,
+      firstName,
+      lastName: lastName || null,
+      customerReferenceNumber: refCol ? row[refCol]?.trim() || null : null,
+      email,
+      phone: phoneCol ? row[phoneCol]?.trim() || null : null,
+      addressStreet1: street1Col ? row[street1Col]?.trim() || null : null,
+      addressStreet2: street2Col ? row[street2Col]?.trim() || null : null,
+      addressCity: cityCol ? row[cityCol]?.trim() || null : null,
+      addressState: stateCol ? row[stateCol]?.trim() || null : null,
+      addressZip: zipCol ? row[zipCol]?.trim() || null : null,
+    });
+    if (email) existingEmails.add(email.toLowerCase());
+    existingNamePairs.add(namePair);
+    inserted++;
+  }
+
+  revalidatePath("/dashboard/purchasing/customers");
+
+  const parts = [`Imported ${inserted} customer(s)`];
+  if (skipped > 0) parts.push(`skipped ${skipped} already in your list`);
+  let message = parts.join(", ") + ".";
+  if (errors.length > 0) {
+    message += ` ${errors.length} row(s) had problems: ${errors.slice(0, 5).join(" ")}${errors.length > 5 ? " …" : ""}`;
+  }
+  return { message };
 }

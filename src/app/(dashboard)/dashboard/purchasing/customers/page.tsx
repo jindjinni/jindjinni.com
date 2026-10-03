@@ -2,6 +2,8 @@ import Link from "next/link";
 import { requireOrg } from "@/lib/tenant";
 import { getPurchasingCustomers, purchasingCustomerName } from "@/lib/queries";
 import { AddCustomerForm } from "./add-customer-form";
+import { ImportSpreadsheetForm } from "../import-spreadsheet-form";
+import { importPurchasingCustomers } from "@/app/actions/purchasing";
 
 export default async function PurchasingCustomersPage() {
   const org = await requireOrg();
@@ -13,6 +15,15 @@ export default async function PurchasingCustomersPage() {
       <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
         Everyone we&rsquo;ve bought from. Editable by any Purchasing user -- archiving is reserved for a Purchasing Manager.
       </p>
+
+      <ImportSpreadsheetForm
+        action={importPurchasingCustomers}
+        title="Import from CSV/Excel"
+        columnsHelp={"Columns: Name or First Name (required), Last Name, Email, Phone, Reference #, Address, City, State, Zip."}
+        templateFilename="customers-template.csv"
+        templateHeaders={["First Name", "Last Name", "Email", "Phone"]}
+        templateSampleRow={["Jordan", "Alvarez", "jordan@example.com", "555-0100"]}
+      />
 
       <AddCustomerForm />
 

@@ -3,6 +3,8 @@ import { requireOrg } from "@/lib/tenant";
 import { getPurchasingProducts, getPurchasingCategories } from "@/lib/queries";
 import { AddProductForm } from "./add-product-form";
 import { LoadCatalogButton } from "./load-catalog-button";
+import { ImportSpreadsheetForm } from "../import-spreadsheet-form";
+import { importPurchasingProducts } from "@/app/actions/purchasing";
 
 export default async function PurchasingProductsPage() {
   const org = await requireOrg();
@@ -20,6 +22,16 @@ export default async function PurchasingProductsPage() {
       </p>
 
       {canEdit && <LoadCatalogButton />}
+      {canEdit && (
+        <ImportSpreadsheetForm
+          action={importPurchasingProducts}
+          title="Import from CSV/Excel"
+          columnsHelp={'Columns: Name (required), Category, Product Code, Standard Price, Active, Notes. A new Category name creates it automatically.'}
+          templateFilename="products-template.csv"
+          templateHeaders={["Name", "Category", "Product Code", "Standard Price", "Active", "Notes"]}
+          templateSampleRow={["Dexcom G7 15 Day Sensor", "Dexcom", "STP-FT-013", "45.00", "Yes", ""]}
+        />
+      )}
       {canEdit && <AddProductForm categories={categories} />}
 
       <div className="mt-6 overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
