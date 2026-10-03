@@ -596,13 +596,47 @@ async function recomputeQuotationTotals(org: CurrentOrg, quotationId: string) {
     .where(eq(purchasingQuotations.id, quotationId));
 }
 
-export async function createPurchasingQuotation(formData: FormData): Promise<void> {
+/**
+ * Starts a quotation. Either pass an existing customerId, or -- when the
+ * customer isn't in the system yet -- pass newCustomerFirstName (required)
+ * plus whatever other newCustomer* fields are known; a customer record is
+ * created on the fly so the quotation always points at a real customer.
+ */
+export async function createPurchasingQuotation(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const org = await requireOrg();
 
-  const customerId = String(formData.get("customerId") ?? "");
-  if (!customerId) return;
-  const customer = await getPurchasingCustomer(org.organizationId, customerId);
-  if (!customer) return;
+  let customerId = String(formData.get("customerId") ?? "");
+  let customer: Awaited<ReturnType<typeof getPurchasingCustomer>>;
+
+  if (customerId) {
+    customer = await getPurchasingCustomer(org.organizationId, customerId);
+    if (!customer) return { error: "Customer not found." };
+  } else {
+    const firstName = String(formData.get("newCustomerFirstName") ?? "").trim();
+    if (!firstName) return { error: "Choose an existing customer, or enter a first name for a new one." };
+
+    customerId = newId("pcust");
+    const newCustomerRow = {
+      id: customerId,
+      organizationId: org.organizationId,
+      firstName,
+      lastName: trimmed(formData, "newCustomerLastName"),
+      email: trimmed(formData, "newCustomerEmail"),
+      phone: trimmed(formData, "newCustomerPhone"),
+      addressStreet1: trimmed(formData, "newCustomerAddressStreet1"),
+      addressStreet2: trimmed(formData, "newCustomerAddressStreet2"),
+      addressCity: trimmed(formData, "newCustomerAddressCity"),
+      addressState: trimmed(formData, "newCustomerAddressState"),
+      addressZip: trimmed(formData, "newCustomerAddressZip"),
+      isResidential: formData.get("newCustomerIsResidential") === "on",
+    };
+    await db.insert(purchasingCustomers).values(newCustomerRow);
+    customer = newCustomerRow as unknown as Awaited<ReturnType<typeof getPurchasingCustomer>>;
+  }
+  if (!customer) return { error: "Customer not found." };
 
   const quotationId = newId("pquote");
   const quotationNumber = await getNextQuotationNumber(org.organizationId);
