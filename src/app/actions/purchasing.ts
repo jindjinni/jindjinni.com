@@ -537,6 +537,12 @@ export async function updatePurchasingCondition(conditionId: string, formData: F
   revalidatePath("/dashboard/purchasing/conditions");
 }
 
+function parseMultiplier(formData: FormData): number {
+  const raw = formData.get("defaultMultiplier");
+  const n = raw === null || String(raw).trim() === "" ? 1 : Number(raw);
+  return Number.isNaN(n) || n < 0 ? 1 : n;
+}
+
 export async function createPurchasingExpirationRange(formData: FormData): Promise<void> {
   const org = await requireOrg();
   if (org.role === "staff") return;
@@ -545,6 +551,7 @@ export async function createPurchasingExpirationRange(formData: FormData): Promi
   if (!label) return;
   const minMonths = formData.get("minMonths") ? Number(formData.get("minMonths")) : null;
   const maxMonths = formData.get("maxMonths") ? Number(formData.get("maxMonths")) : null;
+  const defaultMultiplier = parseMultiplier(formData);
 
   await db.insert(purchasingExpirationRanges).values({
     id: newId("prange"),
@@ -552,6 +559,7 @@ export async function createPurchasingExpirationRange(formData: FormData): Promi
     label,
     minMonths,
     maxMonths,
+    defaultMultiplier,
     sortOrder: 999,
   });
 
@@ -566,12 +574,93 @@ export async function updatePurchasingExpirationRange(rangeId: string, formData:
   if (!label) return;
   const minMonths = formData.get("minMonths") ? Number(formData.get("minMonths")) : null;
   const maxMonths = formData.get("maxMonths") ? Number(formData.get("maxMonths")) : null;
+  const defaultMultiplier = parseMultiplier(formData);
   const active = formData.get("active") === "on";
+
+  const [existing] = await db
+    .select({ defaultMultiplier: purchasingExpirationRanges.defaultMultiplier })
+    .from(purchasingExpirationRanges)
+    .where(and(eq(purchasingExpirationRanges.id, rangeId), eq(purchasingExpirationRanges.organizationId, org.organizationId)))
+    .limit(1);
+  if (existing && existing.defaultMultiplier !== defaultMultiplier) {
+    await logAudit(org, "expiration_range", rangeId, "default_multiplier", existing.defaultMultiplier, defaultMultiplier);
+  }
 
   await db
     .update(purchasingExpirationRanges)
-    .set({ label, minMonths, maxMonths, active })
+    .set({ label, minMonths, maxMonths, defaultMultiplier, active })
     .where(and(eq(purchasingExpirationRanges.id, rangeId), eq(purchasingExpirationRanges.organizationId, org.organizationId)));
+
+  revalidatePath("/dashboard/purchasing/expiration-ranges");
+}
+
+/** Independent copy -- own id, same label/months/multiplier as a starting point. */
+export async function duplicatePurchasingExpirationRange(
+  rangeId: string,
+  _prevState: ActionState,
+  _formData: FormData,
+): Promise<ActionState> {
+  const org = await requireOrg();
+  const blocked = requireManager(org);
+  if (blocked) return blocked;
+
+  const [existing] = await db
+    .select()
+    .from(purchasingExpirationRanges)
+    .where(and(eq(purchasingExpirationRanges.id, rangeId), eq(purchasingExpirationRanges.organizationId, org.organizationId)))
+    .limit(1);
+  if (!existing) return { error: "Month range not found." };
+
+  await db.insert(purchasingExpirationRanges).values({
+    id: newId("prange"),
+    organizationId: org.organizationId,
+    label: `${existing.label} (Copy)`,
+    minMonths: existing.minMonths,
+    maxMonths: existing.maxMonths,
+    defaultMultiplier: existing.defaultMultiplier,
+    sortOrder: existing.sortOrder,
+    active: existing.active,
+  });
+
+  revalidatePath("/dashboard/purchasing/expiration-ranges");
+}
+
+/**
+ * Permanent delete -- blocked once a quotation has actually used this range
+ * (its quoted item keeps expirationRangeLabelSnapshot for display, but the
+ * live expirationRangeId foreign key would dangle), same guard as products.
+ * Also cleans up any per-product override rows keyed to this range, since
+ * FK cascade isn't enforced at the DB level here.
+ */
+export async function deletePurchasingExpirationRange(
+  rangeId: string,
+  _prevState: ActionState,
+  _formData: FormData,
+): Promise<ActionState> {
+  const org = await requireOrg();
+  const blocked = requireManager(org);
+  if (blocked) return blocked;
+
+  const [existing] = await db
+    .select({ id: purchasingExpirationRanges.id })
+    .from(purchasingExpirationRanges)
+    .where(and(eq(purchasingExpirationRanges.id, rangeId), eq(purchasingExpirationRanges.organizationId, org.organizationId)))
+    .limit(1);
+  if (!existing) return { error: "Month range not found." };
+
+  const [quotedUsage] = await db
+    .select({ id: purchasingQuotedItems.id })
+    .from(purchasingQuotedItems)
+    .where(eq(purchasingQuotedItems.expirationRangeId, rangeId))
+    .limit(1);
+  if (quotedUsage) {
+    return {
+      error: "This month range has already been used on a quotation, so it can't be permanently deleted -- turn off Active instead to stop it from being offered on new quotes.",
+    };
+  }
+
+  await db.delete(purchasingProductMultipliers).where(eq(purchasingProductMultipliers.expirationRangeId, rangeId));
+  await db.delete(purchasingExpirationRanges).where(eq(purchasingExpirationRanges.id, rangeId));
 
   revalidatePath("/dashboard/purchasing/expiration-ranges");
 }
@@ -814,6 +903,22 @@ export async function addPurchasingQuotedItem(
   let baseUnitPrice = 0;
   let appliedMultiplier = 1;
 
+  // Range default comes first, so a brand-new range prices correctly even
+  // before anyone sets up a per-product override; the override (looked up
+  // below once productId is known) wins over this default when it exists.
+  let expirationRangeLabelSnapshot: string | null = null;
+  let rangeDefaultMultiplier = 1;
+  if (expirationRangeId) {
+    const [range] = await db
+      .select({ label: purchasingExpirationRanges.label, defaultMultiplier: purchasingExpirationRanges.defaultMultiplier })
+      .from(purchasingExpirationRanges)
+      .where(eq(purchasingExpirationRanges.id, expirationRangeId))
+      .limit(1);
+    expirationRangeLabelSnapshot = range?.label ?? null;
+    rangeDefaultMultiplier = range?.defaultMultiplier ?? 1;
+    appliedMultiplier = rangeDefaultMultiplier;
+  }
+
   if (productId) {
     const [product] = await db
       .select({
@@ -850,7 +955,7 @@ export async function addPurchasingQuotedItem(
           ),
         )
         .limit(1);
-      appliedMultiplier = mult?.multiplier ?? 1;
+      appliedMultiplier = mult?.multiplier ?? rangeDefaultMultiplier;
     }
   }
   if (!productNameSnapshot) return { error: "Choose a product, or describe the item." };
@@ -867,15 +972,6 @@ export async function addPurchasingQuotedItem(
     conditionMultiplier = condition?.multiplier ?? 1;
   }
 
-  let expirationRangeLabelSnapshot: string | null = null;
-  if (expirationRangeId) {
-    const [range] = await db
-      .select({ label: purchasingExpirationRanges.label })
-      .from(purchasingExpirationRanges)
-      .where(eq(purchasingExpirationRanges.id, expirationRangeId))
-      .limit(1);
-    expirationRangeLabelSnapshot = range?.label ?? null;
-  }
 
   const computedUnitPrice = baseUnitPrice * appliedMultiplier * conditionMultiplier;
   const overrideRaw = formData.get("overrideUnitPrice");

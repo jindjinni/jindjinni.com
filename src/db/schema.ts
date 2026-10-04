@@ -643,6 +643,13 @@ export const purchasingExpirationRanges = sqliteTable(
     label: text("label").notNull(),
     minMonths: integer("min_months"),
     maxMonths: integer("max_months"),
+    // Applied to EVERY product at this range unless that product has its
+    // own row in purchasing_product_multipliers, which wins when present
+    // (see computeQuotedItemPrice-equivalent logic in actions/purchasing.ts).
+    // This is what makes a brand-new range price correctly right away,
+    // instead of defaulting to full price until someone configures every
+    // product one at a time.
+    defaultMultiplier: real("default_multiplier").notNull().default(1),
     sortOrder: integer("sort_order").notNull().default(0),
     active: integer("active", { mode: "boolean" }).notNull().default(true),
     ...timestamps,
