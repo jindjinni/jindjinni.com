@@ -74,12 +74,13 @@ export function ShippingLabelSection({
     <div id="shipping" className="mt-8 rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
       <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50">Shipping label</h2>
       <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-        Free outbound label for the customer -- generated through Shippo once their shipping details are on file.
+        Free label for the customer to ship their items to us -- generated through Shippo once their address is on file.
+        It always ships <span className="font-medium">from the customer</span> <span className="font-medium">to our receiving address</span> on file.
       </p>
 
       {!hasOrgAddress && (
         <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:bg-amber-950 dark:text-amber-400">
-          Add your business&apos;s ship-from address in{" "}
+          Add your business&apos;s receiving address in{" "}
           <Link href="/dashboard/settings/business" className="font-medium hover:underline">
             Settings → Business
           </Link>{" "}

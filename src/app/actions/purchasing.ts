@@ -1569,15 +1569,22 @@ export async function updatePurchasingQuotationHeader(
 
 /**
  * Generates (purchases) a real UPS Ground or USPS Ground label for this
- * quotation via Shippo, using the org's ship-from address (Settings ->
- * Business) and the customer's shipping address on file. A quotation is
- * often given before the customer's address is known -- in that case this
- * returns a clear error pointing to the customer record, where the address
- * can be filled in (or corrected) and the label generated afterward. This
- * is a real charge against the org's Shippo account once SHIPPO_API_KEY is
- * a live token -- see src/lib/shippo.ts. Locally/in preview, where no key
- * is set, this safely records a friendly "not connected yet" error instead
- * of calling Shippo.
+ * quotation via Shippo -- this is a reverse/inbound label, same idea as
+ * Buyback's: the customer is the one shipping a package, and it always
+ * ships TO this business's receiving address (Settings -> Business,
+ * organizations.shipFrom* -- reused here as the destination, not the
+ * origin). The customer is the origin, using their shipping address on
+ * file. We generate and purchase the label, then hand the customer a
+ * tracking link (and the label itself, if they need to print it) so they
+ * can box up their items and send them to us.
+ *
+ * A quotation is often given before the customer's address is known -- in
+ * that case this returns a clear error pointing to the customer record,
+ * where the address can be filled in (or corrected) and the label
+ * generated afterward. This is a real charge against the org's Shippo
+ * account once SHIPPO_API_KEY is a live token -- see src/lib/shippo.ts.
+ * Locally/in preview, where no key is set, this safely records a friendly
+ * "not connected yet" error instead of calling Shippo.
  */
 export async function generatePurchasingShippingLabel(
   quotationId: string,
@@ -1616,18 +1623,33 @@ export async function generatePurchasingShippingLabel(
 
   const orgRow = await getOrganization(org.organizationId);
   if (!hasShipFromAddress(orgRow)) {
-    return { error: "Add your business's ship-from address in Settings → Business before generating a label." };
+    return { error: "Add your business's receiving address in Settings → Business before generating a label." };
   }
 
   const customer = await getPurchasingCustomer(org.organizationId, quotation.customerId);
   if (!customer || !hasCustomerAddress(customer)) {
     return {
       error:
-        "This customer doesn't have a shipping address on file yet. Add it on the customer's page, then generate the label.",
+        "This customer doesn't have a shipping address on file yet -- that's the address they'll ship from. Add it on the customer's page, then generate the label.",
     };
   }
 
+  // The customer is shipping the package to us, so they're the origin...
   const addressFrom: ShippoAddress = {
+    name: `${customer.firstName}${customer.lastName ? ` ${customer.lastName}` : ""}`,
+    street1: customer.addressStreet1!,
+    street2: customer.addressStreet2,
+    city: customer.addressCity!,
+    state: customer.addressState!,
+    zip: customer.addressZip!,
+    country: customer.addressCountry,
+    phone: customer.phone,
+    email: customer.email,
+    isResidential: customer.isResidential,
+  };
+  // ...and it always arrives at our receiving address on file, never the
+  // other way around -- this business is always the destination here.
+  const addressTo: ShippoAddress = {
     name: orgRow!.shipFromName!,
     company: orgRow!.shipFromCompany,
     street1: orgRow!.shipFromStreet1!,
@@ -1639,18 +1661,6 @@ export async function generatePurchasingShippingLabel(
     phone: orgRow!.shipFromPhone,
     email: orgRow!.shipFromEmail,
     isResidential: false,
-  };
-  const addressTo: ShippoAddress = {
-    name: `${customer.firstName}${customer.lastName ? ` ${customer.lastName}` : ""}`,
-    street1: customer.addressStreet1!,
-    street2: customer.addressStreet2,
-    city: customer.addressCity!,
-    state: customer.addressState!,
-    zip: customer.addressZip!,
-    country: customer.addressCountry,
-    phone: customer.phone,
-    email: customer.email,
-    isResidential: customer.isResidential,
   };
 
   try {
