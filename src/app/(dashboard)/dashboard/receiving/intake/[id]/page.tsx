@@ -45,7 +45,7 @@ export default async function IntakeDetailPage({ params }: { params: Promise<{ i
 
   return (
     <IntakeForm
-      key={`${pkg.id}:${pkg.status}`}
+      key={`${pkg.id}:${pkg.status}:${data.adjustment?.status ?? ""}:${data.adjustment?.adjustedTotal ?? ""}`}
       packageId={pkg.id}
       status={pkg.status}
       canWrite={canWriteReceiving(org.role)}
@@ -60,6 +60,8 @@ export default async function IntakeDetailPage({ params }: { params: Promise<{ i
       settings={{ emailsEnabled: data.settings.emailsEnabled }}
       photos={data.photos}
       items={data.items}
+      quotedLines={data.quotedLines}
+      adjustment={data.adjustment}
       saved={{
         accountsStatus: pkg.accountsStatus ?? "",
         paidAt: pkg.paidAt,

@@ -31,6 +31,10 @@ import { newId } from "@/lib/ids";
 import { sniffReceiptType } from "@/lib/purchasing-receipt-docs";
 import { detectCarrier, normalizeTracking } from "@/lib/purchasing-quotation-import";
 import {
+  BOARD_COLUMNS,
+  BOARD_COLUMN_LABELS,
+  boardColumnFor,
+  type BoardColumn,
   DAMAGE_TYPES,
   DOCUMENT_PHOTO_KINDS,
   ITEM_PHOTO_KINDS,
@@ -302,14 +306,22 @@ async function applyAccountsFields(org: CurrentOrg, p: typeof receivingPackages.
     set.adjustmentAmountEmail = v;
   }
   if (formData.has("customerEmailNote")) set.customerEmailNote = text(formData.get("customerEmailNote"), 4000);
-  if (formData.has("accountsDecision")) set.accountsDecision = pick(formData.get("accountsDecision"), RECEIVING_ACCOUNTS_DECISIONS);
   if (formData.has("customerTexted")) set.customerTexted = formData.get("customerTexted") === "on" || formData.get("customerTexted") === "true";
-  if (formData.has("accountsStatus")) {
-    const next = pick(formData.get("accountsStatus"), ["IN_REVIEW", "PAID"] as const);
-    set.accountsStatus = next;
+  // Accounts Decision and Accounts Status describe the same thing from two angles (the board column and the paid flag), so they are kept in step.
+  if (formData.has("accountsDecision") || formData.has("accountsStatus")) {
+    let decision = formData.has("accountsDecision") ? pick(formData.get("accountsDecision"), RECEIVING_ACCOUNTS_DECISIONS) : p.accountsDecision;
+    let status = formData.has("accountsStatus") ? pick(formData.get("accountsStatus"), ["IN_REVIEW", "PAID"] as const) : p.accountsStatus;
+    const decChanged = decision !== p.accountsDecision;
+    const stChanged = status !== p.accountsStatus;
+    if (stChanged && status === "PAID") decision = "PAID";
+    else if (decChanged && decision === "PAID") status = "PAID";
+    else if (stChanged && p.accountsStatus === "PAID" && decision === "PAID") decision = "NEED_TO_BE_REVIEWED";
+    else if (decChanged && p.accountsDecision === "PAID" && status === "PAID") status = "IN_REVIEW";
+    set.accountsDecision = decision;
+    set.accountsStatus = status;
     // The "paid" timestamp is stamped by the app the moment the status becomes Paid.
-    if (next === "PAID" && p.accountsStatus !== "PAID") set.paidAt = sql`(current_timestamp)` as unknown as string;
-    if (next !== "PAID") set.paidAt = null;
+    if (status === "PAID" && p.accountsStatus !== "PAID") set.paidAt = sql`(current_timestamp)` as unknown as string;
+    if (status !== "PAID" && p.accountsStatus === "PAID") set.paidAt = null;
   }
   if (Object.keys(set).length === 0) return { ok: true };
   await db
@@ -482,14 +494,72 @@ export async function saveFollowUp(packageId: string, formData: FormData): Promi
   return { ok: true, id: packageId, notice };
 }
 
+/** Board drag-and-drop: moves a shipment to another column (its Accounts Decision). Dropping on Paid marks it paid. */
+export async function moveReceivingCard(packageId: string, target: string): Promise<ReceivingActionState> {
+  const org = await requireAccounts();
+  if (!(BOARD_COLUMNS as readonly string[]).includes(target)) return { error: "Unknown column." };
+  const p = await ownPackage(org.organizationId, packageId);
+  if (!p) return { error: "That shipment wasn't found." };
+  if (target === "PAID" && p.status === "IN_PROGRESS") return { error: "Submit receiving first, then move it to Paid." };
+  const col = target as BoardColumn;
+  if (boardColumnFor(p) === col) return { ok: true, id: packageId };
+
+  const f = new FormData();
+  f.set("accountsDecision", col === "UNCATEGORIZED" ? "" : col);
+  if (col === "PAID") f.set("accountsStatus", "PAID");
+  else if (p.accountsStatus === "PAID") f.set("accountsStatus", "IN_REVIEW");
+  const r = await applyAccountsFields(org, p, f);
+  if (r.error) return r;
+  await auditReceiving(org, p.quotationId, "receiving", `Moved to ${BOARD_COLUMN_LABELS[col]}`);
+  const notice = col === "PAID" ? await maybeAutoNotify(org, packageId) : undefined;
+  refresh(packageId);
+  return { ok: true, id: packageId, notice };
+}
+
 // ---- product lines ------------------------------------------------------------
 
-/** Adds a product that arrived but wasn't quoted. Pick a product from the catalog or type a name. */
-export async function addReceivingItem(packageId: string, input: { productId?: string | null; name?: string | null }): Promise<ReceivingActionState> {
+/**
+ * Adds a product line. A product that was on the quotation gets another row for the same quoted line
+ * (e.g. the same product received in a second lot); anything else is an extra product that wasn't quoted.
+ */
+export async function addReceivingItem(
+  packageId: string,
+  input: { productId?: string | null; name?: string | null; quotedItemId?: string | null },
+): Promise<ReceivingActionState> {
   const org = await requireWriter();
   const p = await ownPackage(org.organizationId, packageId);
   if (!p) return { error: "That shipment wasn't found." };
   if (p.status !== "IN_PROGRESS") return { error: "This shipment was already submitted. Reopen it to change the products." };
+
+  const existing = await db
+    .select()
+    .from(receivingItems)
+    .where(and(eq(receivingItems.packageId, packageId), eq(receivingItems.organizationId, org.organizationId)))
+    .orderBy(receivingItems.sortOrder);
+  const quotedRows = existing.filter((r) => r.quotedItemId);
+  const sibling =
+    (input.quotedItemId ? quotedRows.find((r) => r.quotedItemId === input.quotedItemId) : null) ??
+    (input.productId ? quotedRows.find((r) => r.productId === input.productId) : null) ??
+    null;
+  if (input.quotedItemId && !sibling) return { error: "That quoted product wasn't found on this order." };
+
+  const id = newId("ritem");
+  if (sibling) {
+    await db.insert(receivingItems).values({
+      id,
+      organizationId: org.organizationId,
+      packageId,
+      quotedItemId: sibling.quotedItemId,
+      productId: sibling.productId,
+      productName: sibling.productName,
+      itemSource: "QUOTED",
+      ndc: sibling.ndc,
+      sortOrder: existing.length,
+    });
+    await auditReceiving(org, p.quotationId, "receiving", `Another line added for ${sibling.productName}`);
+    refresh(packageId);
+    return { ok: true, id };
+  }
 
   let productId: string | null = null;
   let name = (input.name ?? "").trim().slice(0, 160);
@@ -507,8 +577,6 @@ export async function addReceivingItem(packageId: string, input: { productId?: s
   }
   if (!name) return { error: "Choose a product or type its name." };
 
-  const [{ n }] = await db.select({ n: sql<number>`count(*)` }).from(receivingItems).where(eq(receivingItems.packageId, packageId));
-  const id = newId("ritem");
   await db.insert(receivingItems).values({
     id,
     organizationId: org.organizationId,
@@ -517,7 +585,7 @@ export async function addReceivingItem(packageId: string, input: { productId?: s
     productName: name,
     itemSource: "EXTRA",
     ndc,
-    sortOrder: Number(n),
+    sortOrder: existing.length,
   });
   await auditReceiving(org, p.quotationId, "receiving", `Extra product added: ${name}`);
   refresh(packageId);

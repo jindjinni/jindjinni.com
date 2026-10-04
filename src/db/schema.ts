@@ -1286,6 +1286,74 @@ export const receivingSettings = sqliteTable("receiving_settings", {
 });
 
 /**
+ * An adjustment quotation: a corrected copy of the quotation the customer was given, made while receiving
+ * (different quantities, conditions or prices, with a reason). One per shipment. Finalizing it produces the
+ * adjusted invoice PDF that is attached to the shipment and sent to the customer.
+ */
+export const receivingAdjustments = sqliteTable(
+  "receiving_adjustments",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    packageId: text("package_id")
+      .notNull()
+      .references(() => receivingPackages.id, { onDelete: "cascade" }),
+    number: text("number").notNull(),
+    status: text("status", { enum: ["DRAFT", "FINAL"] }).notNull().default("DRAFT"),
+    reasonCategory: text("reason_category", { enum: RECEIVING_ADJUSTMENT_REASONS }),
+    reasonNotes: text("reason_notes"),
+    // Copied from the original quotation when the adjustment is started, so the comparison never shifts.
+    originalTotal: real("original_total").notNull().default(0),
+    bonusAmount: real("bonus_amount").notNull().default(0),
+    deductionAmount: real("deduction_amount").notNull().default(0),
+    itemsTotal: real("items_total").notNull().default(0),
+    adjustedTotal: real("adjusted_total").notNull().default(0),
+    finalizedAt: text("finalized_at"),
+    finalizedByUserId: text("finalized_by_user_id").references(() => users.id),
+    // The stored PDF (a REVISED_INVOICE photo row on the shipment), when file storage is connected.
+    documentPhotoId: text("document_photo_id"),
+    createdByUserId: text("created_by_user_id").references(() => users.id),
+    ...timestamps,
+  },
+  (t) => [
+    index("receiving_adjustments_org_idx").on(t.organizationId),
+    uniqueIndex("receiving_adjustments_package_idx").on(t.packageId),
+  ],
+);
+
+export const receivingAdjustmentLines = sqliteTable(
+  "receiving_adjustment_lines",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    adjustmentId: text("adjustment_id")
+      .notNull()
+      .references(() => receivingAdjustments.id, { onDelete: "cascade" }),
+    quotedItemId: text("quoted_item_id"),
+    productId: text("product_id"),
+    productName: text("product_name").notNull(),
+    productCode: text("product_code"),
+    condition: text("condition"),
+    expiryLabel: text("expiry_label"),
+    // What the original quotation said (null for a line added during the adjustment).
+    originalQuantity: integer("original_quantity"),
+    originalUnitPrice: real("original_unit_price"),
+    originalLineTotal: real("original_line_total"),
+    quantity: integer("quantity").notNull().default(0),
+    unitPrice: real("unit_price").notNull().default(0),
+    lineTotal: real("line_total").notNull().default(0),
+    note: text("note"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    ...timestamps,
+  },
+  (t) => [index("receiving_adjustment_lines_adj_idx").on(t.adjustmentId)],
+);
+
+/**
  * One row per org -- every piece of wording on the printed/exported
  * quotation receipt that isn't per-quotation data (banner, disclaimer,
  * mint-condition policy, payment-timing note, footer thank-you). Every

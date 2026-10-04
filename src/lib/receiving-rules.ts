@@ -75,14 +75,6 @@ export const ADJUSTMENT_REASON_OPTIONS: readonly (typeof RECEIVING_ADJUSTMENT_RE
   "Product Damage", "Packaging Damage", "Packaging Non-Compliance", "Product Not Eligible", "Missing Item", "Extra Item", "Other",
 ];
 
-/** The existing "Generate Adjustment Quotation" tool. The link carries the customer, order and reason so the tool opens pre-filled. */
-export const ADJUSTMENT_TOOL_URL = "https://claude.ai/code/artifact/3b4f58b7-6dd4-4d4e-a00b-0edae60b8741";
-export function adjustmentToolLink(customer: string, orderRef: string, tracking: string | null, reason: string | null): string {
-  const order = [orderRef, tracking].filter(Boolean).join(" — ");
-  const q = new URLSearchParams({ customer, order, reason: reason ?? "" });
-  return `${ADJUSTMENT_TOOL_URL}?${q.toString()}`;
-}
-
 export type ShipmentFacts = {
   trackingNumber?: string | null;
   receivedAt?: string | null;
@@ -107,6 +99,8 @@ export type ShipmentFacts = {
 
 export type ItemFacts = {
   productName?: string | null;
+  /** The quotation line this row belongs to. Several rows can share one (e.g. one product received in two lots). */
+  quotedItemId?: string | null;
   itemSource?: string | null;
   quotedQuantity?: number | null;
   wasReceived?: string | null;
@@ -120,13 +114,40 @@ export type ItemFacts = {
 
 const blank = (v: string | null | undefined) => !v || !v.trim();
 
-/** A product line is flagged when something about it differs from the quotation or can't be accepted. */
+/**
+ * Which product lines are flagged (differ from the quotation or can't be accepted).
+ * Rows that share a quotation line (one product received in several lots) are compared as a group:
+ * 6 + 4 received against 10 quoted is fine.
+ */
+export function discrepancyFlags(items: ItemFacts[]): boolean[] {
+  const received = new Map<string, number>();
+  const quoted = new Map<string, number>();
+  for (const i of items) {
+    if (!i.quotedItemId) continue;
+    received.set(i.quotedItemId, (received.get(i.quotedItemId) ?? 0) + (i.quantityReceived ?? 0));
+    if (i.quotedQuantity != null) quoted.set(i.quotedItemId, i.quotedQuantity);
+  }
+  return items.map((i) => {
+    if (i.codeMatches === "NO" || i.expirationQualifies === "NO") return true;
+    if (i.itemSource === "EXTRA") return true;
+    const grouped = !!i.quotedItemId && quoted.has(i.quotedItemId);
+    const splitLine = !!i.quotedItemId && i.quotedQuantity == null;
+    if (i.wasReceived === "NO" && !splitLine) return true;
+    if (grouped) {
+      // Only judge the count once every row in the group has one.
+      const rows = items.filter((x) => x.quotedItemId === i.quotedItemId);
+      if (rows.every((x) => x.quantityReceived != null) && received.get(i.quotedItemId!) !== quoted.get(i.quotedItemId!)) return true;
+      return false;
+    }
+    if (i.wasReceived === "PARTIALLY") return true;
+    if (i.quotedQuantity != null && i.quantityReceived != null && i.quantityReceived !== i.quotedQuantity) return true;
+    return false;
+  });
+}
+
+/** A single line on its own (used where there is no list to compare against). */
 export function itemDiscrepancy(i: ItemFacts): boolean {
-  if (i.codeMatches === "NO" || i.expirationQualifies === "NO") return true;
-  if (i.itemSource === "EXTRA") return true;
-  if (i.wasReceived === "NO" || i.wasReceived === "PARTIALLY") return true;
-  if (i.itemSource !== "EXTRA" && i.quotedQuantity != null && i.quantityReceived != null && i.quantityReceived !== i.quotedQuantity) return true;
-  return false;
+  return discrepancyFlags([i])[0];
 }
 
 /** Quantity received vs. the lots listed for it (blank when either side is unknown). */
@@ -142,7 +163,7 @@ export function summarizeItems(items: ItemFacts[]) {
   return {
     lines: items.length,
     quantityReceived: items.reduce((a, i) => a + (i.quantityReceived ?? 0), 0),
-    anyDiscrepancy: items.some(itemDiscrepancy),
+    anyDiscrepancy: discrepancyFlags(items).some(Boolean),
     quantityToReturn: returned,
     returnStatuses: statuses,
   };
@@ -193,7 +214,7 @@ export function finalStatusFor(s: ShipmentFacts, items: ItemFacts[] = []): "RECE
     s.overallPackaging === "NOT_ACCEPTABLE" ||
     s.quantityMatches === "NO" ||
     s.adjustmentNeeded === "YES" ||
-    items.some(itemDiscrepancy);
+    discrepancyFlags(items).some(Boolean);
   return discrepancy ? "RECEIVING_COMPLETE_WITH_DISCREPANCY" : "RECEIVING_COMPLETE";
 }
 
@@ -237,4 +258,44 @@ export function weekOf(dateLike: string | null | undefined): string | null {
   const back = (d.getUTCDay() + 6) % 7; // Monday = 0
   d.setUTCDate(d.getUTCDate() - back);
   return d.toISOString().slice(0, 10);
+}
+
+
+// ---- the All Shipments board ----------------------------------------------
+
+export const BOARD_COLUMNS = ["UNCATEGORIZED", "NEED_TO_BE_REVIEWED", "NEED_ADJUSTED_QUOTATION", "NEED_TO_BE_RETURNED", "NEED_TO_BE_PAID", "PAID"] as const;
+export type BoardColumn = (typeof BOARD_COLUMNS)[number];
+export const BOARD_COLUMN_LABELS: Record<BoardColumn, string> = {
+  UNCATEGORIZED: "Uncategorized",
+  NEED_TO_BE_REVIEWED: "Need to Be Reviewed",
+  NEED_ADJUSTED_QUOTATION: "Need Adjusted Quotation",
+  NEED_TO_BE_RETURNED: "Need to Be Returned",
+  NEED_TO_BE_PAID: "Need to Be Paid",
+  PAID: "Paid",
+};
+
+/** Where a shipment sits on the workflow board (the Accounts Decision). Paid wins; no decision yet = Uncategorized. */
+export function boardColumnFor(s: { accountsDecision?: string | null; accountsStatus?: string | null }): BoardColumn {
+  if (s.accountsStatus === "PAID" || s.accountsDecision === "PAID") return "PAID";
+  const d = s.accountsDecision;
+  if (d && (BOARD_COLUMNS as readonly string[]).includes(d) && d !== "UNCATEGORIZED") return d as BoardColumn;
+  return "UNCATEGORIZED";
+}
+
+/** "2028-01-20" -> "January 2028" (the old Expiration (Month) column). */
+export function expirationMonth(date: string | null | undefined): string {
+  const m = date ? /^(\d{4})-(\d{2})-\d{2}$/.exec(date) : null;
+  if (!m) return "";
+  const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  return `${months[Number(m[2]) - 1] ?? ""} ${m[1]}`.trim();
+}
+
+/**
+ * Suggested "needs return" answer from a product's condition (only used to pre-fill a blank answer; the agent can change it).
+ * Clean-looking product is accepted; anything damaged, opened or expired waits for review.
+ */
+export function suggestDisposition(condition: string | null | undefined): "NO" | "PENDING_REVIEW" | null {
+  if (!condition) return null;
+  if (condition === "Mint" || condition === "Dinged") return "NO";
+  return "PENDING_REVIEW";
 }

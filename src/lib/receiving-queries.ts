@@ -15,6 +15,7 @@ import {
   receivingItems,
   receivingExpirationLots,
   receivingSettings,
+  receivingAdjustments,
   memberships,
   users,
 } from "@/db/schema";
@@ -22,7 +23,9 @@ import { newId } from "@/lib/ids";
 import { getReceiptState } from "@/lib/purchasing-receipt-docs";
 import {
   computeMissingInfo,
-  itemDiscrepancy,
+  discrepancyFlags,
+  boardColumnFor,
+  type BoardColumn,
   lotsMismatch,
   parseDamageTypes,
   parseStringList,
@@ -136,6 +139,8 @@ export type BoardCard = {
   trackingNumber: string | null;
   receivedAt: string | null;
   adjustmentNeeded: string | null;
+  column: BoardColumn;
+  accountsStatus: string | null;
   customerName: string;
   quotationNumber: string;
   grandTotal: number;
@@ -151,6 +156,8 @@ export async function getReceivingBoard(organizationId: string): Promise<BoardCa
       pkgTracking: receivingPackages.trackingNumber,
       receivedAt: receivingPackages.receivedAt,
       adjustmentNeeded: receivingPackages.adjustmentNeeded,
+      accountsDecision: receivingPackages.accountsDecision,
+      accountsStatus: receivingPackages.accountsStatus,
       createdAt: receivingPackages.createdAt,
       ...briefSelect,
     })
@@ -174,6 +181,8 @@ export async function getReceivingBoard(organizationId: string): Promise<BoardCa
       trackingNumber: r.pkgTracking ?? b.trackingNumber,
       receivedAt: r.receivedAt,
       adjustmentNeeded: r.adjustmentNeeded,
+      column: boardColumnFor(r),
+      accountsStatus: r.accountsStatus,
       customerName: b.customerName,
       quotationNumber: r.quotationNumber,
       grandTotal: r.grandTotal,
@@ -203,6 +212,7 @@ export type ItemLot = {
 
 export type ItemView = {
   id: string;
+  quotedItemId: string | null;
   productId: string | null;
   productName: string;
   itemSource: "QUOTED" | "EXTRA";
@@ -239,6 +249,20 @@ export type ItemView = {
 
 export type TeamMember = { userId: string; name: string };
 
+/** One line of the quotation the customer was given (what we expected to receive). */
+export type QuotedLine = {
+  id: string;
+  productId: string | null;
+  name: string;
+  code: string | null;
+  condition: string | null;
+  expiration: string | null;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+  notes: string | null;
+};
+
 export async function getReceivingSettings(organizationId: string) {
   const [row] = await db.select().from(receivingSettings).where(eq(receivingSettings.organizationId, organizationId)).limit(1);
   return {
@@ -250,6 +274,8 @@ export async function getReceivingSettings(organizationId: string) {
     packagingGuideUrl: row?.packagingGuideUrl ?? "",
   };
 }
+
+export type AdjustmentSummary = { id: string; number: string; status: "DRAFT" | "FINAL"; adjustedTotal: number; originalTotal: number };
 
 export async function getReceivingPackage(organizationId: string, packageId: string) {
   const [row] = await db
@@ -293,7 +319,8 @@ export async function getReceivingPackage(organizationId: string, packageId: str
         .where(and(eq(receivingExpirationLots.organizationId, organizationId), inArray(receivingExpirationLots.itemId, itemRows.map((i) => i.id))))
         .orderBy(receivingExpirationLots.sortOrder, receivingExpirationLots.createdAt)
     : [];
-  const items: ItemView[] = itemRows.map((i) => {
+  const flags = discrepancyFlags(itemRows);
+  const items: ItemView[] = itemRows.map((i, idx) => {
     const lots = lotRows
       .filter((l) => l.itemId === i.id)
       .map((l) => ({
@@ -306,6 +333,7 @@ export async function getReceivingPackage(organizationId: string, packageId: str
       }));
     return {
       id: i.id,
+      quotedItemId: i.quotedItemId,
       productId: i.productId,
       productName: i.productName,
       itemSource: i.itemSource,
@@ -336,10 +364,29 @@ export async function getReceivingPackage(organizationId: string, packageId: str
       returnTracking: i.returnTracking ?? "",
       returnNotes: i.returnNotes ?? "",
       lots,
-      flagged: itemDiscrepancy(i),
+      flagged: flags[idx],
       lotsMismatch: lotsMismatch(i.quantityReceived, lots.map((l) => l.quantity)),
     };
   });
+
+  const quotedLines: QuotedLine[] = (
+    await db
+      .select({
+        id: purchasingQuotedItems.id,
+        productId: purchasingQuotedItems.productId,
+        name: purchasingQuotedItems.productNameSnapshot,
+        code: purchasingQuotedItems.productCodeSnapshot,
+        condition: purchasingQuotedItems.conditionNameSnapshot,
+        expiration: purchasingQuotedItems.expirationRangeLabelSnapshot,
+        quantity: purchasingQuotedItems.quantity,
+        unitPrice: purchasingQuotedItems.finalUnitPrice,
+        lineTotal: purchasingQuotedItems.lineTotal,
+        notes: purchasingQuotedItems.notes,
+      })
+      .from(purchasingQuotedItems)
+      .where(eq(purchasingQuotedItems.quotationId, row.quotationId))
+      .orderBy(purchasingQuotedItems.createdAt)
+  ).map((l) => ({ ...l }));
 
   const members = await db
     .select({ userId: users.id, name: users.name, email: users.email })
@@ -371,13 +418,21 @@ export async function getReceivingPackage(organizationId: string, packageId: str
   const pkg = row.pkg;
   const damageTypes = parseDamageTypes(pkg.damageTypes);
   const settings = await getReceivingSettings(organizationId);
+  const [adjRow] = await db
+    .select({ id: receivingAdjustments.id, number: receivingAdjustments.number, status: receivingAdjustments.status, adjustedTotal: receivingAdjustments.adjustedTotal, originalTotal: receivingAdjustments.originalTotal })
+    .from(receivingAdjustments)
+    .where(and(eq(receivingAdjustments.packageId, packageId), eq(receivingAdjustments.organizationId, organizationId)))
+    .limit(1);
+  const adjustment: AdjustmentSummary | null = adjRow ?? null;
   return {
     pkg,
+    adjustment,
     damageTypes,
     brief,
     quotationStatus: row.quotationStatus,
     tracking: { packageStatus: row.packageStatus, lastUpdate: row.lastTrackingUpdate, deliveredAt: row.deliveredAt },
     team,
+    quotedLines,
     items,
     summary: summarizeItems(itemRows),
     photos: photoRows as PackagePhoto[],

@@ -170,6 +170,20 @@ export async function deliverCustomerEmail(org: OrgRef, packageId: string, kind:
     }
   }
 
+  // A finalized adjustment quotation always goes with an adjustment email -- the stored copy if it was attached
+  // above, otherwise one built right now (storage not connected, or the stored file couldn't be read).
+  if (isAdjustment) {
+    const { getAdjustmentForPackage, renderAdjustmentPdf } = await import("@/lib/receiving-adjustment-service");
+    const adj = await getAdjustmentForPackage(org.organizationId, packageId);
+    if (adj && adj.status === "FINAL") {
+      const stored = !!adj.documentPhotoId && wanted.some((w) => w.id === adj.documentPhotoId) && attachments.some((a) => a.filename.startsWith("Adjusted-Quotation-"));
+      if (!stored) {
+        const pdf = await renderAdjustmentPdf(org.organizationId, org.organizationName, adj.id);
+        if (pdf) attachments.unshift({ filename: pdf.filename, content: Buffer.from(pdf.bytes) });
+      }
+    }
+  }
+
   const sent = await sendCustomerEmail({
     to,
     subject: built.subject,

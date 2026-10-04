@@ -1,27 +1,25 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
-  addReceivingItem,
   deleteReceivingItem,
   reopenReceiving,
   saveFollowUp,
   saveReceiving,
-  searchProductsForReceiving,
   sendCustomerNotification,
   sendPackagingWarning,
   submitReceiving,
 } from "@/app/actions/receiving";
-import type { PackagePhoto, QuotationBrief, ItemView, TeamMember } from "@/lib/receiving-queries";
+import type { AdjustmentSummary, PackagePhoto, QuotationBrief, QuotedLine, ItemView, TeamMember } from "@/lib/receiving-queries";
 import {
   ACCOUNTS_DECISION_LABELS,
   ACCOUNTS_STATUS_LABELS,
   DAMAGE_TYPES,
   STATUS_LABELS,
-  adjustmentToolLink,
   computeMissingInfo,
+  discrepancyFlags,
   finalPayout,
   finalStatusFor,
   formatMoney,
@@ -33,7 +31,9 @@ import {
 } from "@/lib/receiving-rules";
 import { MONEY, STATUS_PILL, chipClass, formatUtcStamp } from "@/lib/receiving-ui";
 import { Choice, PhotoSlot, Row, Step, YN, YN_RISK, field } from "./intake-parts";
-import { ItemAdjustmentCard, ItemVerifyCard, itemFactsOf, toItemState, type ItemState } from "./item-card";
+import { ItemAdjustmentCard, itemFactsOf, toItemState, type ItemState } from "./item-card";
+import { QuotedPanel, ReceivedTable } from "./receiving-table";
+import { StartAdjustmentButton } from "../../adjustments/start-button";
 
 export type FormValues = {
   trackingNumber: string;
@@ -79,6 +79,8 @@ type Props = {
   settings: { emailsEnabled: boolean };
   photos: PackagePhoto[];
   items: ItemView[];
+  quotedLines: QuotedLine[];
+  adjustment: AdjustmentSummary | null;
   saved: {
     accountsStatus: string;
     paidAt: string | null;
@@ -112,74 +114,6 @@ const TEMPLATE_LABELS: Record<EmailTemplateKey, string> = {
 
 const fieldKeysForAccounts = ["adjustedOrderTotal", "adjustmentAmountEmail", "customerEmailNote", "accountsDecision", "accountsStatus"] as const;
 
-function AddProduct({ packageId, disabled, onError }: { packageId: string; disabled: boolean; onError: (m: string) => void }) {
-  const router = useRouter();
-  const [term, setTerm] = useState("");
-  const [results, setResults] = useState<{ id: string; name: string; ndc: string | null; productCode: string | null }[]>([]);
-  const [busy, startTransition] = useTransition();
-
-  useEffect(() => {
-    if (term.trim().length < 2) return;
-    let live = true;
-    const t = setTimeout(() => {
-      searchProductsForReceiving(term).then((r) => {
-        if (live) setResults(r);
-      });
-    }, 250);
-    return () => {
-      live = false;
-      clearTimeout(t);
-    };
-  }, [term]);
-
-  function add(input: { productId?: string; name?: string }) {
-    onError("");
-    startTransition(async () => {
-      const res = await addReceivingItem(packageId, input);
-      if (res.error) onError(res.error);
-      else {
-        setTerm("");
-        setResults([]);
-        router.refresh();
-      }
-    });
-  }
-  const shown = term.trim().length < 2 ? [] : results;
-
-  return (
-    <div className="rounded-xl border border-dashed border-amber-400 p-4">
-      <label htmlFor="add-product" className="text-sm font-medium text-slate-700 dark:text-slate-200">
-        Something arrived that wasn&apos;t on the order?
-      </label>
-      <input
-        id="add-product"
-        className={`${field} mt-2`}
-        placeholder="Search your product list by name, code or NDC…"
-        value={term}
-        disabled={disabled || busy}
-        onChange={(e) => setTerm(e.target.value)}
-      />
-      {shown.length > 0 && (
-        <ul className="mt-2 divide-y divide-slate-100 rounded-lg border border-slate-200 bg-white dark:divide-slate-800 dark:border-slate-700 dark:bg-slate-900">
-          {shown.map((p) => (
-            <li key={p.id}>
-              <button type="button" disabled={busy} onClick={() => add({ productId: p.id })} className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-amber-50 dark:hover:bg-amber-950/30">
-                <span className="min-w-0 truncate font-medium">{p.name}</span>
-                <span className="shrink-0 text-xs text-slate-500">{[p.productCode, p.ndc && `NDC ${p.ndc}`].filter(Boolean).join(" · ")}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      {term.trim().length >= 2 && (
-        <button type="button" disabled={busy} onClick={() => add({ name: term })} className="mt-2 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900">
-          Add &ldquo;{term.trim()}&rdquo; as typed
-        </button>
-      )}
-    </div>
-  );
-}
-
 export function IntakeForm(props: Props) {
   const { packageId, status, canWrite, canAccounts, storageOk, brief, receipt, photos, saved } = props;
   const router = useRouter();
@@ -196,15 +130,21 @@ export function IntakeForm(props: Props) {
 
   // Product lines: the server's list, with whatever the agent has typed over the top.
   const items: ItemState[] = props.items.map((pi) => edits[pi.id] ?? toItemState(pi));
-  function patchItem(id: string, patch: Partial<ItemState>) {
-    const base = items.find((i) => i.id === id);
-    if (!base) return;
-    setEdits((e) => ({ ...e, [id]: { ...base, ...patch } }));
+  function patchMany(updates: Record<string, Partial<ItemState>>) {
+    setEdits((e) => {
+      const next = { ...e };
+      for (const [id, patch] of Object.entries(updates)) {
+        const base = next[id] ?? items.find((i) => i.id === id);
+        if (base) next[id] = { ...base, ...patch };
+      }
+      return next;
+    });
   }
 
   const counts: Partial<Record<PhotoKind, number>> = {};
   for (const p of photos) if (!p.itemId) counts[p.kind] = (counts[p.kind] ?? 0) + 1;
   const itemFacts = items.map(itemFactsOf);
+  const flags = discrepancyFlags(itemFacts);
   const facts = { ...v };
   const missing = computeMissingInfo(facts, counts, itemFacts);
   const finalStatus = finalStatusFor(facts, itemFacts);
@@ -216,7 +156,6 @@ export function IntakeForm(props: Props) {
   const payout = finalPayout(total, adjustedValid ? adjustedNum : null);
   const suggestedChange = adjustedValid && adjustedNum != null ? Math.round((adjustedNum - total) * 100) / 100 : null;
   const template = pickEmailTemplate({ adjustmentNeeded: v.adjustmentNeeded, overallPackaging: v.overallPackaging });
-  const firstReason = items.find((i) => i.adjustmentReason)?.adjustmentReason ?? null;
   const submittedBy = props.team.find((t) => t.userId === saved.submittedByUserId)?.name;
 
   function receivingFormData() {
@@ -353,20 +292,11 @@ export function IntakeForm(props: Props) {
         </Row>
         <Row label="Items Quoted For This Order"><span className="whitespace-pre-line">{brief.itemsText}</span></Row>
         <Row label="Quotation / Invoice">
+          <span className="text-slate-600 dark:text-slate-400">Shown in full under Step 6, next to what you receive.</span>
           {receipt.present ? (
-            <div className="space-y-2">
-              {receipt.isImage ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={`/api/receiving/packages/${packageId}/quotation-receipt`} alt="Quotation receipt" className="max-h-80 max-w-full rounded-lg border border-slate-200 dark:border-slate-700" />
-              ) : (
-                <iframe title="Quotation receipt" src={`/api/receiving/packages/${packageId}/quotation-receipt`} className="h-96 w-full rounded-lg border border-slate-200 bg-white dark:border-slate-700" />
-              )}
-              <a href={`/api/receiving/packages/${packageId}/quotation-receipt`} target="_blank" rel="noreferrer" className="inline-block text-xs font-medium text-amber-800 underline dark:text-amber-300">
-                Open in a new tab
-              </a>
-            </div>
+            <a href={`/api/receiving/packages/${packageId}/quotation-receipt`} target="_blank" rel="noreferrer" className="ml-2 text-xs font-medium text-amber-800 underline dark:text-amber-300">Open in a new tab</a>
           ) : (
-            <span className="text-slate-500">No receipt on file</span>
+            <span className="ml-2 text-xs text-slate-500">(none on file)</span>
           )}
         </Row>
       </Step>
@@ -500,40 +430,34 @@ export function IntakeForm(props: Props) {
         </Step>
 
         {/* STEP 6 */}
-        <Step n={6} id="step-6" title="Verify what arrived" note="One card per product. Enter what you counted, the lot number and NDC printed on the product, and its expiration date. Everything here is saved with the shipment.">
-          <div className="mt-3 space-y-4">
-            {items.length === 0 && <p className="rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-700 dark:bg-slate-800 dark:text-slate-200">No product lines yet. Add what arrived below.</p>}
-            {items.map((it) => (
-              <ItemVerifyCard
-                key={it.id}
-                item={it}
-                editable={editable}
-                packageId={packageId}
-                photos={photos}
-                storageOk={storageOk}
-                onError={setError}
-                onChange={(patch) => patchItem(it.id, patch)}
-                onRemove={() => removeItem(it.id)}
-              />
-            ))}
-            {editable && <AddProduct packageId={packageId} disabled={!editable} onError={setError} />}
-          </div>
+        <Step n={6} id="step-6" title="Verify what arrived" note="Compare what arrived with the quotation below, then fill in the received items like a quotation: product, quantity, condition, lot number, and whether it is accepted or returned.">
+          <QuotedPanel packageId={packageId} receipt={receipt} quotedLines={props.quotedLines} itemsText={brief.itemsText} orderTotal={total} items={items} />
+          <ReceivedTable
+            packageId={packageId}
+            items={items}
+            flags={flags}
+            editable={editable}
+            quotedLines={props.quotedLines}
+            photos={photos}
+            storageOk={storageOk}
+            onError={setError}
+            onPatchMany={patchMany}
+            onRemove={removeItem}
+          />
 
           <div className="mt-5 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
             <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Verification Summary</h3>
-            <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-4">
-              <div><dt className="text-xs text-slate-500">Product lines</dt><dd className="text-lg font-semibold tabular-nums">{summary.lines}</dd></div>
-              <div><dt className="text-xs text-slate-500">Quantity received</dt><dd className="text-lg font-semibold tabular-nums">{summary.quantityReceived}</dd></div>
+            <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-5">
+              <div><dt className="text-xs text-slate-500">Total product lines</dt><dd className="text-lg font-semibold tabular-nums">{summary.lines}</dd></div>
+              <div><dt className="text-xs text-slate-500">Total quantity received</dt><dd className="text-lg font-semibold tabular-nums">{summary.quantityReceived}</dd></div>
               <div>
-                <dt className="text-xs text-slate-500">Any discrepancy?</dt>
-                <dd className={`text-lg font-semibold ${summary.anyDiscrepancy ? "text-orange-700 dark:text-orange-300" : "text-green-700 dark:text-green-400"}`}>{summary.anyDiscrepancy ? "Yes" : "No"}</dd>
+                <dt className="text-xs text-slate-500">Discrepancy status</dt>
+                <dd className={`text-lg font-semibold ${summary.anyDiscrepancy ? "text-orange-700 dark:text-orange-300" : "text-green-700 dark:text-green-400"}`}>{summary.anyDiscrepancy ? "Discrepancy" : "None"}</dd>
               </div>
+              <div><dt className="text-xs text-slate-500">Total quantity to be returned</dt><dd className="text-lg font-semibold tabular-nums">{summary.quantityToReturn}</dd></div>
               <div>
-                <dt className="text-xs text-slate-500">To return</dt>
-                <dd className="text-lg font-semibold tabular-nums">
-                  {summary.quantityToReturn}
-                  {summary.returnStatuses.length > 0 && <span className="ml-2 text-xs font-normal text-slate-500">{summary.returnStatuses.map((s) => RETURN_STATUS_LABELS[s as keyof typeof RETURN_STATUS_LABELS] ?? s).join(", ")}</span>}
-                </dd>
+                <dt className="text-xs text-slate-500">Return status summary</dt>
+                <dd className="text-sm font-medium">{summary.returnStatuses.length ? summary.returnStatuses.map((x) => RETURN_STATUS_LABELS[x as keyof typeof RETURN_STATUS_LABELS] ?? x).join(", ") : "—"}</dd>
               </div>
             </dl>
           </div>
@@ -545,21 +469,10 @@ export function IntakeForm(props: Props) {
           {v.adjustmentNeeded === "YES" && (
             <>
               <Row label="Adjustment Details">{textInput("adjustmentDetails", 3)}</Row>
-              <Row label="Adjusted Quotation">
-                <a
-                  href={adjustmentToolLink(brief.customerName, brief.quotationNumber, v.trackingNumber || null, firstReason)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-block rounded-lg bg-[#F7B838] px-3 py-2 text-sm font-semibold text-amber-950 hover:brightness-95"
-                >
-                  Generate adjustment quotation
-                </a>
-                <p className="mt-1 text-xs text-slate-500">Opens the adjustment tool in a new tab. Upload the revised invoice below when you have it.</p>
-              </Row>
               {items.length > 0 && (
                 <div className="mt-3 space-y-3">
-                  {items.map((it) => (
-                    <ItemAdjustmentCard key={it.id} item={it} editable={editable} onChange={(patch) => patchItem(it.id, patch)} />
+                  {items.map((it, idx) => (
+                    <ItemAdjustmentCard key={it.id} item={it} flagged={flags[idx]} editable={editable} onChange={(patch) => patchMany({ [it.id]: patch })} />
                   ))}
                 </div>
               )}
@@ -571,6 +484,27 @@ export function IntakeForm(props: Props) {
       {/* STEP 7 (accounting part) */}
       <fieldset disabled={!canAccounts} className="min-w-0 border-0 p-0">
         <div className="mt-2">
+          {(v.adjustmentNeeded === "YES" || props.adjustment) && (
+          <Row label="Adjusted Quotation">
+            {props.adjustment ? (
+  <div className="space-y-1">
+    <Link href={`/dashboard/receiving/adjustments/${props.adjustment.id}`} className="inline-block rounded-lg bg-[#F7B838] px-3 py-2 text-sm font-semibold text-amber-950 hover:brightness-95">
+      Open {props.adjustment.number}
+    </Link>
+    <p className="text-xs text-slate-600 dark:text-slate-400">
+      {props.adjustment.status === "FINAL" ? "Final and attached to this order" : "Draft, not attached yet"} · {formatMoney(props.adjustment.originalTotal)} → {formatMoney(props.adjustment.adjustedTotal)}
+    </p>
+  </div>
+            ) : canAccounts ? (
+  <>
+    <StartAdjustmentButton packageId={packageId} />
+    <p className="mt-1 text-xs text-slate-500">Starts a new quotation from the original one and what you received. You edit it, then it is attached to this order.</p>
+  </>
+            ) : (
+  <p className="text-xs text-slate-500">No adjusted quotation yet. Receivers, accountants and admins can create one.</p>
+            )}
+          </Row>
+          )}
           <Row label="Adjusted Order Total" hint="Leave blank to pay the original order total.">
             <input id="adjustedOrderTotal" inputMode="decimal" placeholder="0.00" className={`${field} sm:w-48`} value={v.adjustedOrderTotal} onChange={(e) => set("adjustedOrderTotal", e.target.value)} />
             {!adjustedValid && <p className="mt-1 text-xs text-red-700">Enter a dollar amount.</p>}
