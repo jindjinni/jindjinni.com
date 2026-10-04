@@ -594,6 +594,7 @@ export async function createPurchasingBonusTier(formData: FormData): Promise<voi
     organizationId: org.organizationId,
     thresholdAmount,
     bonusAmount,
+    description: trimmed(formData, "description"),
     sortOrder: 999,
   });
 
@@ -628,7 +629,57 @@ export async function updatePurchasingBonusTier(tierId: string, formData: FormDa
     );
   }
 
-  await db.update(purchasingBonusTiers).set({ thresholdAmount, bonusAmount, active }).where(eq(purchasingBonusTiers.id, tierId));
+  await db
+    .update(purchasingBonusTiers)
+    .set({ thresholdAmount, bonusAmount, description: trimmed(formData, "description"), active })
+    .where(eq(purchasingBonusTiers.id, tierId));
+  revalidatePath("/dashboard/purchasing/bonus-tiers");
+}
+
+/** Independent copy -- own id, same threshold/bonus/description as a starting point. No dependents to worry about (bonus tiers are never referenced by id from a quotation, only snapshotted as a label + amount), so this is always safe. */
+export async function duplicatePurchasingBonusTier(
+  tierId: string,
+  _prevState: ActionState,
+  _formData: FormData,
+): Promise<ActionState> {
+  const org = await requireOrg();
+  const blocked = requireManager(org);
+  if (blocked) return blocked;
+
+  const [existing] = await db
+    .select()
+    .from(purchasingBonusTiers)
+    .where(and(eq(purchasingBonusTiers.id, tierId), eq(purchasingBonusTiers.organizationId, org.organizationId)))
+    .limit(1);
+  if (!existing) return { error: "Bonus tier not found." };
+
+  await db.insert(purchasingBonusTiers).values({
+    id: newId("pbonus"),
+    organizationId: org.organizationId,
+    thresholdAmount: existing.thresholdAmount,
+    bonusAmount: existing.bonusAmount,
+    description: existing.description,
+    sortOrder: existing.sortOrder,
+    active: existing.active,
+  });
+
+  revalidatePath("/dashboard/purchasing/bonus-tiers");
+}
+
+/** Permanent delete -- safe unconditionally: a quotation only ever snapshots a tier's label + amount (bonusTierLabelSnapshot, bonusAmount), never a live foreign key to this row, so nothing can be left dangling. */
+export async function deletePurchasingBonusTier(
+  tierId: string,
+  _prevState: ActionState,
+  _formData: FormData,
+): Promise<ActionState> {
+  const org = await requireOrg();
+  const blocked = requireManager(org);
+  if (blocked) return blocked;
+
+  await db
+    .delete(purchasingBonusTiers)
+    .where(and(eq(purchasingBonusTiers.id, tierId), eq(purchasingBonusTiers.organizationId, org.organizationId)));
+
   revalidatePath("/dashboard/purchasing/bonus-tiers");
 }
 

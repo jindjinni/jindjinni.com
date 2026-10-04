@@ -688,6 +688,11 @@ export const purchasingBonusTiers = sqliteTable(
       .references(() => organizations.id, { onDelete: "cascade" }),
     thresholdAmount: real("threshold_amount").notNull(),
     bonusAmount: real("bonus_amount").notNull(),
+    // Free-text, shown on the Bonus Management list (e.g. "Get $50 bonus for
+    // orders over $2000+") -- purely descriptive, never parsed. Nothing
+    // enforces it matches thresholdAmount/bonusAmount; that's on whoever
+    // edits the tier, same as the reference tool this was ported from.
+    description: text("description"),
     sortOrder: integer("sort_order").notNull().default(0),
     active: integer("active", { mode: "boolean" }).notNull().default(true),
     ...timestamps,
