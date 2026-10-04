@@ -12,7 +12,8 @@ export type StorageDriver = {
 };
 
 const blobDriver: StorageDriver = {
-  configured: () => !!process.env.BLOB_READ_WRITE_TOKEN,
+  // Vercel connects a store either with a read-write token or (newer, safer) a store id used with the deployment's own sign-in (OIDC). Either works.
+  configured: () => !!(process.env.BLOB_READ_WRITE_TOKEN || process.env.BLOB_STORE_ID),
   async save(pathname, bytes, contentType) {
     await put(pathname, Buffer.from(bytes), { access: "private", contentType, addRandomSuffix: false, allowOverwrite: false });
   },
