@@ -41,6 +41,7 @@ import {
 } from "@/lib/queries";
 import { seedPurchasingProductCatalogForOrg } from "@/lib/purchasing-catalog-seed";
 import { seedPurchasingMonthRangesForOrg } from "@/lib/purchasing-month-range-seed";
+import { seedPurchasingConditionsForOrg } from "@/lib/purchasing-condition-seed";
 import { parseSpreadsheetFile, findColumn } from "@/lib/spreadsheet-import";
 
 export type ActionState = { error?: string } | undefined;
@@ -601,6 +602,90 @@ export async function updatePurchasingCondition(conditionId: string, formData: F
   revalidatePath("/dashboard/purchasing/conditions");
 }
 
+/** Moves a condition to the Archived tab (active: false) without deleting it -- still usable on any quotation that already referenced it, just no longer offered for new lines. */
+export async function archivePurchasingCondition(
+  conditionId: string,
+  _prevState: ActionState,
+  _formData: FormData,
+): Promise<ActionState> {
+  const org = await requireOrg();
+  const blocked = requireManager(org);
+  if (blocked) return blocked;
+
+  await db
+    .update(purchasingConditions)
+    .set({ active: false })
+    .where(and(eq(purchasingConditions.id, conditionId), eq(purchasingConditions.organizationId, org.organizationId)));
+
+  revalidatePath("/dashboard/purchasing/conditions");
+}
+
+export async function restorePurchasingCondition(
+  conditionId: string,
+  _prevState: ActionState,
+  _formData: FormData,
+): Promise<ActionState> {
+  const org = await requireOrg();
+  const blocked = requireManager(org);
+  if (blocked) return blocked;
+
+  await db
+    .update(purchasingConditions)
+    .set({ active: true })
+    .where(and(eq(purchasingConditions.id, conditionId), eq(purchasingConditions.organizationId, org.organizationId)));
+
+  revalidatePath("/dashboard/purchasing/conditions");
+}
+
+/** Permanent delete -- blocked once a quoted line has actually used this condition (it keeps conditionNameSnapshot for display, but the live conditionId foreign key would dangle). Use Archive instead for a condition you just don't want offered anymore. */
+export async function deletePurchasingCondition(
+  conditionId: string,
+  _prevState: ActionState,
+  _formData: FormData,
+): Promise<ActionState> {
+  const org = await requireOrg();
+  const blocked = requireManager(org);
+  if (blocked) return blocked;
+
+  const [existing] = await db
+    .select({ id: purchasingConditions.id })
+    .from(purchasingConditions)
+    .where(and(eq(purchasingConditions.id, conditionId), eq(purchasingConditions.organizationId, org.organizationId)))
+    .limit(1);
+  if (!existing) return { error: "Condition not found." };
+
+  const [quotedUsage] = await db
+    .select({ id: purchasingQuotedItems.id })
+    .from(purchasingQuotedItems)
+    .where(eq(purchasingQuotedItems.conditionId, conditionId))
+    .limit(1);
+  if (quotedUsage) {
+    return {
+      error: "This condition has already been used on a quotation, so it can't be permanently deleted -- use Archive instead to stop offering it on new lines.",
+    };
+  }
+
+  await db.delete(purchasingConditions).where(eq(purchasingConditions.id, conditionId));
+  revalidatePath("/dashboard/purchasing/conditions");
+}
+
+export async function loadPurchasingConditionCatalog(
+  _prevState: SeedCatalogActionState,
+  _formData: FormData,
+): Promise<SeedCatalogActionState> {
+  const org = await requireOrg();
+  const blocked = requireManager(org);
+  if (blocked) return blocked;
+
+  const { inserted, skipped } = await seedPurchasingConditionsForOrg(org.organizationId);
+  revalidatePath("/dashboard/purchasing/conditions");
+
+  if (inserted === 0) {
+    return { message: "Already up to date -- both real conditions are already in your list." };
+  }
+  return { message: `Added ${inserted} condition(s) (${skipped} were already in your list).` };
+}
+
 function parseMultiplier(formData: FormData): number {
   const raw = formData.get("defaultMultiplier");
   const n = raw === null || String(raw).trim() === "" ? 1 : Number(raw);
@@ -972,7 +1057,7 @@ export async function addPurchasingQuotedItem(
   if (!quotation) return { error: "Quotation not found." };
 
   const productId = String(formData.get("productId") ?? "") || null;
-  const conditionId = String(formData.get("conditionId") ?? "") || null;
+  let conditionId = String(formData.get("conditionId") ?? "") || null;
   const expirationRangeId = String(formData.get("expirationRangeId") ?? "") || null;
   const quantity = Number(formData.get("quantity"));
   if (!Number.isInteger(quantity) || quantity <= 0) {
@@ -1044,7 +1129,22 @@ export async function addPurchasingQuotedItem(
 
   let conditionNameSnapshot: string | null = null;
   let conditionMultiplier = 1;
-  if (conditionId) {
+  if (conditionId === "__custom__") {
+    // A one-off condition that doesn't fit the normal grading scale -- a
+    // free-text label + payout multiplier typed right on this line, same as
+    // an override price, instead of forcing a new row into Manage
+    // Conditions for something that may never come up again.
+    const customName = trimmed(formData, "customConditionName");
+    const customMultiplierRaw = formData.get("customConditionMultiplier");
+    if (!customName) return { error: "Enter a name for the custom condition." };
+    const customMultiplier = Number(customMultiplierRaw);
+    if (Number.isNaN(customMultiplier) || customMultiplier < 0) {
+      return { error: "Custom condition payout must be a positive number." };
+    }
+    conditionId = null;
+    conditionNameSnapshot = customName;
+    conditionMultiplier = customMultiplier;
+  } else if (conditionId) {
     const [condition] = await db
       .select({ name: purchasingConditions.name, multiplier: purchasingConditions.multiplier })
       .from(purchasingConditions)

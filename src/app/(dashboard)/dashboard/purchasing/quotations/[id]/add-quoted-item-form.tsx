@@ -1,12 +1,14 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { addPurchasingQuotedItem } from "@/app/actions/purchasing";
 
 type ActionState = { error?: string } | undefined;
 
 const inputClass =
   "rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-emerald-600 dark:border-slate-700 dark:bg-slate-800";
+
+const CUSTOM_CONDITION_VALUE = "__custom__";
 
 type Product = { id: string; name: string; standardPrice: number };
 type Condition = { id: string; name: string };
@@ -29,6 +31,8 @@ export function AddQuotedItemForm({
     addPurchasingQuotedItem.bind(null, quotationId),
     undefined,
   );
+  const [conditionSelection, setConditionSelection] = useState("");
+  const isCustomCondition = conditionSelection === CUSTOM_CONDITION_VALUE;
 
   return (
     <form action={formAction} className="mt-4 flex flex-wrap items-end gap-3 rounded-xl border border-dashed border-slate-300 p-4 dark:border-slate-700">
@@ -47,15 +51,46 @@ export function AddQuotedItemForm({
       </label>
       <label className="flex flex-col gap-1 text-sm">
         <span className="text-slate-600 dark:text-slate-400">Condition</span>
-        <select name="conditionId" className={inputClass} defaultValue="">
+        <select
+          name="conditionId"
+          className={inputClass}
+          value={conditionSelection}
+          onChange={(e) => setConditionSelection(e.target.value)}
+        >
           <option value="">— None —</option>
           {conditions.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
             </option>
           ))}
+          <option value={CUSTOM_CONDITION_VALUE}>Custom…</option>
         </select>
       </label>
+      {isCustomCondition && (
+        <>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-slate-600 dark:text-slate-400">Custom condition</span>
+            <input
+              name="customConditionName"
+              required
+              placeholder="e.g. Water damage"
+              className={`w-40 ${inputClass}`}
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-slate-600 dark:text-slate-400">Custom payout (×)</span>
+            <input
+              name="customConditionMultiplier"
+              type="number"
+              step="0.01"
+              min="0"
+              required
+              placeholder="e.g. 0.60"
+              className={`w-28 ${inputClass}`}
+            />
+          </label>
+        </>
+      )}
       <label className="flex flex-col gap-1 text-sm">
         <span className="text-slate-600 dark:text-slate-400">Expiry</span>
         <select name="expirationRangeId" className={inputClass} defaultValue="">
