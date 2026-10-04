@@ -13,6 +13,7 @@ type Product = {
   name: string;
   categoryId: string | null;
   productCode: string | null;
+  ndc: string | null;
   standardPrice: number;
   notes: string | null;
   active: boolean;
@@ -53,6 +54,10 @@ export function EditProductForm({
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-slate-600 dark:text-slate-400">Product code</span>
           <input name="productCode" defaultValue={product.productCode ?? ""} className={inputClass} />
+        </label>
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="text-slate-600 dark:text-slate-400">NDC</span>
+          <input name="ndc" defaultValue={product.ndc ?? ""} placeholder="e.g. 53885-0245-50" className={inputClass} />
         </label>
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-slate-600 dark:text-slate-400">Standard price ($)</span>

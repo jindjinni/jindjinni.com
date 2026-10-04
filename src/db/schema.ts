@@ -606,6 +606,10 @@ export const purchasingProducts = sqliteTable(
     categoryId: text("category_id").references(() => purchasingCategories.id),
     name: text("name").notNull(),
     productCode: text("product_code"),
+    // National Drug Code (e.g. 53885-0245-50). MUST stay nullable: adding a
+    // NOT NULL column to this populated table makes drizzle-kit emit
+    // `delete from purchasing_products` (see scripts/safe-push.ts).
+    ndc: text("ndc"),
     standardPrice: real("standard_price").notNull().default(0),
     notes: text("notes"),
     // Products that never expire (receivers, readers, ...) -- the quotation

@@ -5,11 +5,17 @@ import { AddProductForm } from "./add-product-form";
 import { LoadCatalogButton } from "./load-catalog-button";
 import { ImportSpreadsheetForm } from "../import-spreadsheet-form";
 import { ProductRowActions } from "./product-row-actions";
-import { importPurchasingProducts } from "@/app/actions/purchasing";
+import { importPurchasingProducts, updatePurchasingProductsFromFile } from "@/app/actions/purchasing";
+import { backfillProductNdcs } from "@/lib/purchasing-ndc";
+
+const payoutPct = (m: number) => `${Math.round(m * 1000) / 10}%`;
 
 export default async function PurchasingProductsPage() {
   const org = await requireOrg();
   const canEdit = org.role !== "staff";
+  // Moves any "NDC ..." typed into Notes (or known from the catalog) into the
+  // real NDC column. Only fills blanks; cheap and safe to repeat.
+  await backfillProductNdcs(org.organizationId);
   const [products, categories, expiryOptionsMap, conditionsMap] = await Promise.all([
     getPurchasingProducts(org.organizationId, { includeInactive: canEdit }),
     getPurchasingCategories(org.organizationId),
@@ -29,10 +35,30 @@ export default async function PurchasingProductsPage() {
         <ImportSpreadsheetForm
           action={importPurchasingProducts}
           title="Import from CSV/Excel"
-          columnsHelp={'Columns: Name (required), Category, Product Code, Standard Price, Active, Notes. A new Category name creates it automatically.'}
+          columnsHelp={'Columns: Name (required), Category, Product Code, NDC, Standard Price, Active, Notes. A new Category name creates it automatically. Products already in your list are skipped.'}
           templateFilename="products-template.csv"
-          templateHeaders={["Name", "Category", "Product Code", "Standard Price", "Active", "Notes"]}
-          templateSampleRow={["Dexcom G7 15 Day Sensor", "Dexcom", "STP-FT-013", "45.00", "Yes", ""]}
+          templateHeaders={["Name", "Category", "Product Code", "NDC", "Standard Price", "Active", "Notes"]}
+          templateSampleRow={["Dexcom G7 15 Day Sensor", "Dexcom", "STP-FT-013", "", "45.00", "Yes", ""]}
+        />
+      )}
+      {canEdit && (
+        <ImportSpreadsheetForm
+          action={updatePurchasingProductsFromFile}
+          title="Update prices & details from CSV/Excel"
+          columnsHelp={'For products already in your list (matched by Name): fills in Standard Price, Product Code, NDC, Notes. Only blanks and $0 prices are filled, so nothing you typed since is overwritten. Every price change is logged under Audit Log.'}
+          templateFilename="product-prices-template.csv"
+          templateHeaders={["Name", "Standard Price", "Product Code", "NDC", "Notes"]}
+          templateSampleRow={["Dexcom G7 15 Day Sensor", "45.00", "STP-FT-013", "", ""]}
+          extraFields={
+            <>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" name="replace" /> Also replace values that are already filled in
+              </label>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" name="addMissing" /> Also add products from the file that aren&rsquo;t in my list yet
+              </label>
+            </>
+          }
         />
       )}
       {canEdit && <AddProductForm categories={categories} />}
@@ -44,6 +70,7 @@ export default async function PurchasingProductsPage() {
               <th className="px-4 py-3 font-medium">Name</th>
               <th className="px-4 py-3 font-medium">Category</th>
               <th className="px-4 py-3 font-medium">Code</th>
+              <th className="px-4 py-3 font-medium">NDC</th>
               <th className="px-4 py-3 text-right font-medium">Standard price</th>
               <th className="px-4 py-3 font-medium">Expiry options</th>
               <th className="px-4 py-3 font-medium">Conditions</th>
@@ -54,7 +81,7 @@ export default async function PurchasingProductsPage() {
           <tbody>
             {products.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={9} className="px-4 py-8 text-center text-slate-400">
                   No products yet -- add one above.
                 </td>
               </tr>
@@ -75,20 +102,29 @@ export default async function PurchasingProductsPage() {
                 </td>
                 <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{p.categoryName ?? "—"}</td>
                 <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{p.productCode ?? "—"}</td>
+                <td className="whitespace-nowrap px-4 py-3 tabular-nums text-slate-700 dark:text-slate-300">{p.ndc ?? "—"}</td>
                 <td className="px-4 py-3 text-right tabular-nums text-slate-900 dark:text-slate-50">
                   ${p.standardPrice.toFixed(2)}
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap gap-1">
-                    {(expiryOptionsMap.get(p.id) ?? []).map((o) => (
-                      <span
-                        key={o.id}
-                        className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300"
-                      >
-                        {o.label}
+                    {p.noExpiration ? (
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                        Does not expire
                       </span>
-                    ))}
-                    {(expiryOptionsMap.get(p.id) ?? []).length === 0 && <span className="text-xs text-slate-400">—</span>}
+                    ) : (
+                      <>
+                        {(expiryOptionsMap.get(p.id) ?? []).map((o) => (
+                          <span
+                            key={o.id}
+                            className="whitespace-nowrap rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                          >
+                            {o.label} · {payoutPct(o.multiplier)}
+                          </span>
+                        ))}
+                        {(expiryOptionsMap.get(p.id) ?? []).length === 0 && <span className="text-xs text-slate-400">—</span>}
+                      </>
+                    )}
                   </div>
                 </td>
                 <td className="px-4 py-3">

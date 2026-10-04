@@ -256,3 +256,21 @@ Same pipeline as the rest of the app — no Purchasing-specific steps:
 change in `src/db/schema.ts` auto-migrates against the live Turso database
 on the next Vercel deploy. No manual migration step, ever. See the root
 `README.md` for the general run/deploy instructions.
+
+## Schema pushes are guarded (safe-push)
+
+`npm run build` runs `scripts/safe-push.ts` instead of `drizzle-kit push --force`. It computes the
+same schema plan, then **stops the deploy** if the plan would `DELETE FROM` / `DROP TABLE` a table that
+has rows, or drop a column. Background: on SQLite/libSQL, adding a `NOT NULL` column to a populated table
+makes drizzle-kit emit `delete from <table>` first, and `--force` approved it silently -- that wiped the
+products table on 2026-10-04 (and quotations earlier the same day). Rule of thumb: new columns on existing
+tables must be **nullable** (or the table must be empty). `ALLOW_DESTRUCTIVE_SCHEMA=1` overrides it for one
+deploy when the loss is intended.
+
+## NDC and restoring product details
+
+- `purchasing_products.ndc` is a real (nullable) column. Existing "NDC ..." text in Notes is copied into it
+  automatically (`backfillProductNdcs`, runs on the Products page; it only fills blanks).
+- Products > "Update prices & details from CSV/Excel" matches rows by Name and fills Standard Price,
+  Product Code, NDC and Notes. By default it only fills blanks / $0 prices; every price change is audit-logged.
+- The Products list shows each product's expiry options with payout % (same numbers as Product Multipliers).

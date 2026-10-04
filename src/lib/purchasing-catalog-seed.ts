@@ -49,6 +49,7 @@ export async function seedPurchasingProductCatalogForOrg(organizationId: string)
       categoryId,
       name: row.name,
       productCode: row.productCode,
+      ndc: row.ndc,
       standardPrice: 0,
       notes,
       active: row.active,

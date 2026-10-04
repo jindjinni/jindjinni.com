@@ -35,6 +35,10 @@ export function AddProductForm({ categories }: { categories: Category[] }) {
           <input name="productCode" className={inputClass} />
         </label>
         <label className="flex flex-col gap-1 text-sm">
+          <span className="text-slate-600 dark:text-slate-400">NDC</span>
+          <input name="ndc" placeholder="e.g. 53885-0245-50" className={inputClass} />
+        </label>
+        <label className="flex flex-col gap-1 text-sm">
           <span className="text-slate-600 dark:text-slate-400">Standard price ($)</span>
           <input name="standardPrice" type="number" step="0.01" min="0" defaultValue={0} className={inputClass} />
         </label>

@@ -50,6 +50,7 @@ import { seedPurchasingMonthRangesForOrg } from "@/lib/purchasing-month-range-se
 import { seedPurchasingConditionsForOrg } from "@/lib/purchasing-condition-seed";
 import { parseSpreadsheetFile, findColumn } from "@/lib/spreadsheet-import";
 import { applyExpiryRulesForOrg } from "@/lib/purchasing-expiry-plan";
+import { extractNdc } from "@/lib/purchasing-ndc";
 import {
   createShipment,
   createTransaction,
@@ -296,6 +297,7 @@ export async function createPurchasingProduct(
     categoryId: trimmed(formData, "categoryId"),
     name,
     productCode: trimmed(formData, "productCode"),
+    ndc: trimmed(formData, "ndc"),
     standardPrice,
     notes: trimmed(formData, "notes"),
   });
@@ -340,6 +342,7 @@ export async function updatePurchasingProduct(
       categoryId: trimmed(formData, "categoryId"),
       name,
       productCode: trimmed(formData, "productCode"),
+      ndc: trimmed(formData, "ndc"),
       standardPrice,
       notes: trimmed(formData, "notes"),
       active,
@@ -1970,6 +1973,7 @@ export async function importPurchasingProducts(
   const priceCol = findColumn(parsed.headers, ["standard price", "price", "cost"]);
   const activeCol = findColumn(parsed.headers, ["active"]);
   const notesCol = findColumn(parsed.headers, ["notes"]);
+  const ndcCol = findColumn(parsed.headers, ["ndc", "ndc code", "ndc number"]);
 
   const categories = await db
     .select({ id: purchasingCategories.id, name: purchasingCategories.name })
@@ -2039,6 +2043,7 @@ export async function importPurchasingProducts(
       categoryId,
       name,
       productCode: codeCol ? row[codeCol]?.trim() || null : null,
+      ndc: (ndcCol ? row[ndcCol]?.trim() : "") || extractNdc(notesCol ? row[notesCol] : null),
       standardPrice,
       notes: notesCol ? row[notesCol]?.trim() || null : null,
       active,
@@ -2057,6 +2062,156 @@ export async function importPurchasingProducts(
   let message = parts.join(", ") + ".";
   if (errors.length > 0) {
     message += ` ${errors.length} row(s) had problems: ${errors.slice(0, 5).join(" ")}${errors.length > 5 ? " …" : ""}`;
+  }
+  return { message };
+}
+
+/**
+ * Fills in details for products that are ALREADY in the list, from an
+ * uploaded CSV/Excel file -- the way to put prices back after a restore, or
+ * to bulk-edit prices in a spreadsheet. Rows are matched by product Name
+ * (case-insensitive). Columns: Name (required), Standard Price, Product
+ * Code, NDC, Notes, Active, Category.
+ *
+ * Careful by default: it only fills what is still empty (a $0 price, a blank
+ * code/NDC/notes), so anything typed in since is never overwritten. Tick
+ * "replace" to overwrite filled-in values too. Every price change is written
+ * to the audit log. Tick "add" to also create products that aren't in the
+ * list yet.
+ */
+export async function updatePurchasingProductsFromFile(
+  _prevState: ImportActionState,
+  formData: FormData,
+): Promise<ImportActionState> {
+  const org = await requireOrg();
+  const blocked = requireManager(org);
+  if (blocked) return blocked;
+
+  const replace = formData.get("replace") === "on";
+  const addMissing = formData.get("addMissing") === "on";
+
+  const file = await readUploadedFile(formData);
+  if ("error" in file) return file;
+
+  let parsed;
+  try {
+    parsed = parseSpreadsheetFile(file.buffer, file.filename);
+  } catch {
+    return { error: "Couldn't read that file -- make sure it's a CSV or Excel export." };
+  }
+  if (parsed.rows.length === 0) return { error: "That file doesn't have any data rows." };
+
+  const nameCol = findColumn(parsed.headers, ["name", "product", "product name"]);
+  if (!nameCol) {
+    return { error: `Couldn't find a Name column. Found: ${parsed.headers.join(", ") || "(no headers)"}.` };
+  }
+  const priceCol = findColumn(parsed.headers, ["standard price", "price", "cost"]);
+  const codeCol = findColumn(parsed.headers, ["product code", "code", "sku"]);
+  const ndcCol = findColumn(parsed.headers, ["ndc", "ndc code", "ndc number"]);
+  const notesCol = findColumn(parsed.headers, ["notes"]);
+  const activeCol = findColumn(parsed.headers, ["active"]);
+  const categoryCol = findColumn(parsed.headers, ["category", "brand"]);
+  if (!priceCol && !codeCol && !ndcCol && !notesCol && !activeCol) {
+    return { error: "Add at least one column to update besides Name: Standard Price, Product Code, NDC, Notes or Active." };
+  }
+
+  const [products, categories] = await Promise.all([
+    db.select().from(purchasingProducts).where(eq(purchasingProducts.organizationId, org.organizationId)),
+    db
+      .select({ id: purchasingCategories.id, name: purchasingCategories.name })
+      .from(purchasingCategories)
+      .where(eq(purchasingCategories.organizationId, org.organizationId)),
+  ]);
+  const key = (n: string) => n.trim().toLowerCase().replace(/\s+/g, " ");
+  const productByName = new Map<string, (typeof products)[number]>();
+  for (const p of products) if (!productByName.has(key(p.name))) productByName.set(key(p.name), p);
+  const categoryIdByName = new Map(categories.map((c) => [c.name.toLowerCase(), c.id]));
+
+  let pricesSet = 0;
+  let otherFieldsFilled = 0;
+  let unchanged = 0;
+  let added = 0;
+  const notFound: string[] = [];
+  const problems: string[] = [];
+
+  for (let i = 0; i < parsed.rows.length; i++) {
+    const row = parsed.rows[i];
+    const rowNumber = i + 2;
+    const name = row[nameCol]?.trim();
+    if (!name) continue;
+
+    let price: number | null = null;
+    const rawPrice = priceCol ? row[priceCol]?.trim() : "";
+    if (rawPrice) {
+      const n = Number(rawPrice.replace(/[$,]/g, ""));
+      if (Number.isNaN(n) || n < 0) problems.push(`Row ${rowNumber}: "${rawPrice}" isn't a valid price.`);
+      else price = n;
+    }
+    const code = codeCol ? row[codeCol]?.trim() || null : null;
+    const noteText = notesCol ? row[notesCol]?.trim() || null : null;
+    const ndc = (ndcCol ? row[ndcCol]?.trim() : "") || extractNdc(noteText);
+    const activeRaw = (activeCol ? row[activeCol]?.trim() : "").toLowerCase();
+
+    const existing = productByName.get(key(name));
+    if (!existing) {
+      if (!addMissing) {
+        notFound.push(name);
+        continue;
+      }
+      const categoryName = categoryCol ? row[categoryCol]?.trim() : "";
+      const id = newId("pprod");
+      await db.insert(purchasingProducts).values({
+        id,
+        organizationId: org.organizationId,
+        categoryId: categoryName ? (categoryIdByName.get(categoryName.toLowerCase()) ?? null) : null,
+        name,
+        productCode: code,
+        ndc,
+        standardPrice: price ?? 0,
+        notes: noteText,
+        active: activeRaw === "" || !["no", "false", "0", "inactive"].includes(activeRaw),
+      });
+      if (price !== null && price > 0) await logAudit(org, "product", id, "standard_price", 0, price, "Added from file");
+      added++;
+      continue;
+    }
+
+    const patch: Partial<typeof purchasingProducts.$inferInsert> = {};
+    if (price !== null && price !== existing.standardPrice && (replace || existing.standardPrice === 0)) {
+      patch.standardPrice = price;
+    }
+    if (code && code !== existing.productCode && (replace || !existing.productCode)) patch.productCode = code;
+    if (ndc && ndc !== existing.ndc && (replace || !existing.ndc)) patch.ndc = ndc;
+    if (noteText && noteText !== existing.notes && (replace || !existing.notes)) patch.notes = noteText;
+    if (replace && activeRaw) {
+      const active = !["no", "false", "0", "inactive"].includes(activeRaw);
+      if (active !== existing.active) patch.active = active;
+    }
+
+    if (Object.keys(patch).length === 0) {
+      unchanged++;
+      continue;
+    }
+    await db.update(purchasingProducts).set(patch).where(eq(purchasingProducts.id, existing.id));
+    if (patch.standardPrice !== undefined) {
+      await logAudit(org, "product", existing.id, "standard_price", existing.standardPrice, patch.standardPrice, "Updated from file");
+      pricesSet++;
+    }
+    if (Object.keys(patch).some((k) => k !== "standardPrice")) otherFieldsFilled++;
+  }
+
+  revalidatePath("/dashboard/purchasing/products");
+  revalidatePath("/dashboard/purchasing/audit-log");
+
+  const parts = [`${pricesSet} price(s) set`, `${otherFieldsFilled} product(s) had a code, NDC or note filled in`];
+  if (added > 0) parts.push(`${added} new product(s) added`);
+  parts.push(`${unchanged} already up to date`);
+  let message = parts.join(", ") + ".";
+  if (notFound.length > 0) {
+    message += ` ${notFound.length} name(s) in the file weren't found in your list: ${notFound.slice(0, 5).join("; ")}${notFound.length > 5 ? " …" : ""}.`;
+  }
+  if (problems.length > 0) {
+    message += ` ${problems.length} problem(s): ${problems.slice(0, 5).join(" ")}${problems.length > 5 ? " …" : ""}`;
   }
   return { message };
 }

@@ -745,6 +745,7 @@ export async function getPurchasingProducts(organizationId: string, opts: { incl
       categoryName: purchasingCategories.name,
       name: purchasingProducts.name,
       productCode: purchasingProducts.productCode,
+      ndc: purchasingProducts.ndc,
       standardPrice: purchasingProducts.standardPrice,
       notes: purchasingProducts.notes,
       noExpiration: purchasingProducts.noExpiration,
@@ -797,16 +798,19 @@ export async function getProductExpiryOptionsMap(organizationId: string) {
       productId: purchasingProductMultipliers.productId,
       expirationRangeId: purchasingProductMultipliers.expirationRangeId,
       label: purchasingExpirationRanges.label,
+      multiplier: purchasingProductMultipliers.multiplier,
     })
     .from(purchasingProductMultipliers)
     .innerJoin(purchasingExpirationRanges, eq(purchasingProductMultipliers.expirationRangeId, purchasingExpirationRanges.id))
     .where(eq(purchasingProductMultipliers.organizationId, organizationId))
     .orderBy(purchasingExpirationRanges.sortOrder);
 
-  const map = new Map<string, { id: string; label: string }[]>();
+  // multiplier = this product's own payout for that range (1 = 100%) -- the
+  // same number shown on the Product Multipliers page.
+  const map = new Map<string, { id: string; label: string; multiplier: number }[]>();
   for (const r of rows) {
     const list = map.get(r.productId) ?? [];
-    list.push({ id: r.expirationRangeId, label: r.label });
+    list.push({ id: r.expirationRangeId, label: r.label, multiplier: r.multiplier });
     map.set(r.productId, list);
   }
   return map;

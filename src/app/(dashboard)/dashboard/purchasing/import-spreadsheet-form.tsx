@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, type ReactNode } from "react";
 
 type ImportActionState = { error?: string; message?: string } | undefined;
 type ImportAction = (prevState: ImportActionState, formData: FormData) => Promise<ImportActionState>;
@@ -22,6 +22,7 @@ export function ImportSpreadsheetForm({
   templateFilename,
   templateHeaders,
   templateSampleRow,
+  extraFields,
 }: {
   action: ImportAction;
   title: string;
@@ -29,6 +30,8 @@ export function ImportSpreadsheetForm({
   templateFilename: string;
   templateHeaders: string[];
   templateSampleRow: string[];
+  /** Optional extra controls (checkboxes etc.) rendered inside the form. */
+  extraFields?: ReactNode;
 }) {
   const [state, formAction, pending] = useActionState<ImportActionState, FormData>(action, undefined);
 
@@ -52,6 +55,7 @@ export function ImportSpreadsheetForm({
     >
       <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">{title}</h3>
       <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{columnsHelp}</p>
+      {extraFields && <div className="mt-3 flex flex-col gap-1.5 text-sm text-slate-700 dark:text-slate-300">{extraFields}</div>}
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <input
           type="file"
