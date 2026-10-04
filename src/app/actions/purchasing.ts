@@ -40,6 +40,7 @@ import {
   resolveBusinessDocumentIdentity,
 } from "@/lib/queries";
 import { seedPurchasingProductCatalogForOrg } from "@/lib/purchasing-catalog-seed";
+import { seedPurchasingMonthRangesForOrg } from "@/lib/purchasing-month-range-seed";
 import { parseSpreadsheetFile, findColumn } from "@/lib/spreadsheet-import";
 
 export type ActionState = { error?: string } | undefined;
@@ -592,6 +593,24 @@ export async function updatePurchasingExpirationRange(rangeId: string, formData:
     .where(and(eq(purchasingExpirationRanges.id, rangeId), eq(purchasingExpirationRanges.organizationId, org.organizationId)));
 
   revalidatePath("/dashboard/purchasing/expiration-ranges");
+}
+
+export async function loadPurchasingMonthRangeCatalog(
+  _prevState: SeedCatalogActionState,
+  _formData: FormData,
+): Promise<SeedCatalogActionState> {
+  const org = await requireOrg();
+  const blocked = requireManager(org);
+  if (blocked) return blocked;
+
+  const { inserted, skipped } = await seedPurchasingMonthRangesForOrg(org.organizationId);
+
+  revalidatePath("/dashboard/purchasing/expiration-ranges");
+
+  if (inserted === 0) {
+    return { message: "Already up to date -- every month range from the real list is already here." };
+  }
+  return { message: `Added ${inserted} month range(s) (${skipped} were already in your list).` };
 }
 
 /** Independent copy -- own id, same label/months/multiplier as a starting point. */

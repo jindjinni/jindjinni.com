@@ -2,6 +2,7 @@ import { requireOrg } from "@/lib/tenant";
 import { getPurchasingExpirationRanges } from "@/lib/queries";
 import { createPurchasingExpirationRange } from "@/app/actions/purchasing";
 import { MonthRangeRow } from "./month-range-row";
+import { LoadMonthRangeCatalogButton } from "./load-month-range-catalog-button";
 
 const inputClass =
   "rounded-md border border-slate-300 px-3 py-1.5 text-sm outline-none focus:border-emerald-600 dark:border-slate-700 dark:bg-slate-800";
@@ -22,6 +23,7 @@ export default async function PurchasingExpirationRangesPage() {
         </div>
       </div>
 
+      {canEdit && <LoadMonthRangeCatalogButton />}
       {canEdit && (
         <form
           action={createPurchasingExpirationRange}
