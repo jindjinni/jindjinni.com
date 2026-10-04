@@ -46,7 +46,7 @@ export function NewQuotationForm({
             </option>
             {customers.map((c) => (
               <option key={c.id} value={c.id}>
-                {[c.firstName, c.lastName].filter(Boolean).join(" ")}{c.incomplete ? " — profile incomplete" : ""}
+                {[c.firstName, c.lastName].filter(Boolean).join(" ")}{c.incomplete ? " — name/address incomplete" : ""}
               </option>
             ))}
           </select>
@@ -62,12 +62,12 @@ export function NewQuotationForm({
             <input name="newCustomerLastName" required className={inputClass} />
           </label>
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-slate-600 dark:text-slate-400">Email *</span>
-            <input name="newCustomerEmail" type="email" required className={inputClass} />
+            <span className="text-slate-600 dark:text-slate-400">Email (add later if unknown)</span>
+            <input name="newCustomerEmail" type="email" className={inputClass} />
           </label>
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-slate-600 dark:text-slate-400">Phone *</span>
-            <input name="newCustomerPhone" type="tel" required className={inputClass} />
+            <span className="text-slate-600 dark:text-slate-400">Phone (add later if unknown)</span>
+            <input name="newCustomerPhone" type="tel" className={inputClass} />
           </label>
           <AddressAutocompleteFields prefix="newCustomerAddress" required />
           <label className="flex items-center gap-2 text-sm text-slate-700 sm:col-span-2 dark:text-slate-300">

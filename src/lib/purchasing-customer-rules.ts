@@ -1,7 +1,15 @@
-// What a Purchasing customer must always have on file: full name (first AND
-// last), email, phone, and a full street address. Shared by the add/edit
-// customer forms, the new-quotation form, the CSV import and the quotation
-// check, so the rule lives in exactly one place. Pure functions -- no DB.
+// What a Purchasing customer must have on file.
+//
+//  * ALWAYS required: full name (first AND last) and a full street address.
+//    That is all a free shipping label needs -- the customer is the sender and
+//    their address is also the return address.
+//  * Email and phone are expected, but often aren't known when the quotation
+//    and label are created, so they may be left blank and added later. A
+//    customer missing them is flagged ("needs email/phone") until they are.
+//
+// Shared by the add/edit customer forms, the new-quotation form, the CSV
+// import and the quotation check, so the rule lives in one place. Pure
+// functions -- no DB.
 
 export type CustomerContact = {
   firstName?: string | null;
@@ -16,13 +24,11 @@ export type CustomerContact = {
 
 const blank = (v: string | null | undefined) => !v || !v.trim();
 
-/** Human labels of the required things that are missing -- empty array means complete. */
+/** Human labels of the ALWAYS-required things that are missing (name + address) -- empty array means OK. */
 export function missingCustomerFields(c: CustomerContact): string[] {
   const missing: string[] = [];
   if (blank(c.firstName)) missing.push("first name");
   if (blank(c.lastName)) missing.push("last name");
-  if (blank(c.email)) missing.push("email");
-  if (blank(c.phone)) missing.push("phone");
   if (blank(c.street1)) missing.push("street address");
   if (blank(c.city)) missing.push("city");
   if (blank(c.state)) missing.push("state");
@@ -30,13 +36,25 @@ export function missingCustomerFields(c: CustomerContact): string[] {
   return missing;
 }
 
+/** Contact details still to collect (email / phone) -- not a reason to block anything. */
+export function missingContactDetails(c: CustomerContact): string[] {
+  const missing: string[] = [];
+  if (blank(c.email)) missing.push("email");
+  if (blank(c.phone)) missing.push("phone");
+  return missing;
+}
+
 /** Null when the customer is fine to save; otherwise one plain-language error. */
 export function customerValidationError(c: CustomerContact): string | null {
   const missing = missingCustomerFields(c);
   if (missing.length > 0) {
-    return `A customer needs a full name, full address, email and phone number. Missing: ${missing.join(", ")}.`;
+    return `A customer needs a full name and full address. Missing: ${missing.join(", ")}.`;
   }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.email!.trim())) return "Enter a valid email address.";
-  if (c.phone!.replace(/\D/g, "").length < 10) return "Enter a full phone number (at least 10 digits).";
+  if (!blank(c.email) && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.email!.trim())) {
+    return "That email address doesn't look right. Fix it, or leave it blank and add it later.";
+  }
+  if (!blank(c.phone) && c.phone!.replace(/\D/g, "").length < 10) {
+    return "That phone number looks too short (needs at least 10 digits). Fix it, or leave it blank and add it later.";
+  }
   return null;
 }

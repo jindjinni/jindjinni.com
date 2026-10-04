@@ -42,12 +42,12 @@ export function EditCustomerForm({ customerId, customer }: { customerId: string;
           <input name="lastName" required defaultValue={customer.lastName ?? ""} className={inputClass} />
         </label>
         <label className="flex flex-col gap-1 text-sm">
-          <span className="text-slate-600 dark:text-slate-400">Email *</span>
-          <input name="email" type="email" required defaultValue={customer.email ?? ""} className={inputClass} />
+          <span className="text-slate-600 dark:text-slate-400">Email</span>
+          <input name="email" type="email" defaultValue={customer.email ?? ""} className={inputClass} />
         </label>
         <label className="flex flex-col gap-1 text-sm">
-          <span className="text-slate-600 dark:text-slate-400">Phone *</span>
-          <input name="phone" type="tel" required defaultValue={customer.phone ?? ""} className={inputClass} />
+          <span className="text-slate-600 dark:text-slate-400">Phone</span>
+          <input name="phone" type="tel" defaultValue={customer.phone ?? ""} className={inputClass} />
         </label>
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-slate-600 dark:text-slate-400">Customer reference #</span>

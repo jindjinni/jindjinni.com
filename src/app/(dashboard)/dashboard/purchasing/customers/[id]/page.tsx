@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { requireOrg } from "@/lib/tenant";
 import { getPurchasingCustomer, getPurchasingQuotationsForCustomer, purchasingCustomerName } from "@/lib/queries";
-import { missingCustomerFields } from "@/lib/purchasing-customer-rules";
+import { missingContactDetails, missingCustomerFields } from "@/lib/purchasing-customer-rules";
 import { archivePurchasingCustomer, restorePurchasingCustomer } from "@/app/actions/purchasing";
 import { EditCustomerForm } from "./edit-customer-form";
 import { ActionButton } from "@/components/action-button";
@@ -19,13 +19,12 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
   const missing = missingCustomerFields({
     firstName: customer.firstName,
     lastName: customer.lastName,
-    email: customer.email,
-    phone: customer.phone,
     street1: customer.addressStreet1,
     city: customer.addressCity,
     state: customer.addressState,
     zip: customer.addressZip,
   });
+  const missingContact = missingContactDetails({ email: customer.email, phone: customer.phone });
   const money = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const statusLabel: Record<string, string> = { QUOTED: "Quoted", CONFIRMED: "Confirmed", RECEIVED: "Received", CANCELLED: "Cancelled" };
 
@@ -73,7 +72,12 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
 
       {missing.length > 0 && (
         <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-200">
-          This profile is incomplete. Still needed: {missing.join(", ")}. Fill these in and save before starting a new quotation.
+          This profile is incomplete. Still needed: {missing.join(", ")}. Fill these in and save before starting a new quotation or label.
+        </p>
+      )}
+      {missing.length === 0 && missingContact.length > 0 && (
+        <p className="mt-3 rounded-md bg-sky-50 px-3 py-2 text-sm text-sky-800 dark:bg-sky-950 dark:text-sky-200">
+          Still to collect: {missingContact.join(" and ")}. Quotations and shipping labels work without it &mdash; add it below whenever you get it.
         </p>
       )}
 

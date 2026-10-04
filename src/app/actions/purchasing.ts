@@ -1207,8 +1207,6 @@ export async function createPurchasingQuotation(
     const missing = missingCustomerFields({
       firstName: customer.firstName,
       lastName: customer.lastName,
-      email: customer.email,
-      phone: customer.phone,
       street1: customer.addressStreet1,
       city: customer.addressCity,
       state: customer.addressState,
@@ -1216,7 +1214,7 @@ export async function createPurchasingQuotation(
     });
     if (missing.length > 0) {
       return {
-        error: `This customer's profile is incomplete (missing: ${missing.join(", ")}). Open their profile and fill it in before starting a quotation.`,
+        error: `This customer's profile is missing their ${missing.join(", ")}. Open their profile and fill that in before starting a quotation (email and phone can wait).`,
       };
     }
   } else {
@@ -1802,7 +1800,10 @@ export async function generatePurchasingShippingLabel(
 
     await logAudit(org, "quotation", quotationId, "shipping_label", null, null, "Shipping label generated via Shippo");
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Label generation failed.";
+    let message = err instanceof Error ? err.message : "Label generation failed.";
+    if (/phone/i.test(message) && !customer.phone) {
+      message += " (This customer has no phone number on file yet -- try USPS Ground, or add their phone on their profile and generate the label again.)";
+    }
     await db
       .update(purchasingQuotations)
       .set({ labelStatus: "ERROR", labelError: message })
@@ -2399,7 +2400,7 @@ export async function importPurchasingCustomers(
       zip: zipCol ? row[zipCol] : null,
     });
     if (importProblem) {
-      errors.push(`Row ${rowNumber}: ${importProblem.replace("A customer needs a full name, full address, email and phone number. ", "")}`);
+      errors.push(`Row ${rowNumber}: ${importProblem.replace("A customer needs a full name and full address. ", "")}`);
       continue;
     }
 
