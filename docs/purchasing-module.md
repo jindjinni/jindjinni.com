@@ -83,6 +83,11 @@ customer says something's wrong, even after it was generated):
   price a line differently). Leaving the override-price field blank
   recomputes automatically from the newly chosen condition/expiration
   instead of silently re-applying the old price.
+- **$0 products = "not accepting"**: a product whose standard price is $0
+  shows a "Not accepting" badge on the Products list and "— not accepting"
+  in the quote product picker. Adding (or recomputing) a line for one is
+  refused with an explanatory error; a manager can still quote it by
+  entering an override price.
 - **Remove a line** — isolated per-row state/confirm dialog, no restrictions.
 - Automatic bonus tier and any manual deduction (with a required reason)
   both factor into `grandTotal`, recomputed via `recomputeQuotationTotals()`
@@ -238,7 +243,6 @@ hard-deletable since quotations only ever snapshot a tier's label + amount.
 
 ## Not built yet / explicitly deferred
 
-- A dedicated NDC code field on products.
 - The "Users & Access" system (invitations, roles, department-level
   access) — currently every member of an org has the same
   owner/admin/staff role across the whole app, not per-department.
@@ -251,10 +255,11 @@ hard-deletable since quotations only ever snapshot a tier's label + amount.
 
 ## Deployment
 
-Same pipeline as the rest of the app — no Purchasing-specific steps:
-`drizzle-kit push --force` runs as part of `npm run build`, so every schema
-change in `src/db/schema.ts` auto-migrates against the live Turso database
-on the next Vercel deploy. No manual migration step, ever. See the root
+Same pipeline as the rest of the app — no Purchasing-specific steps: a
+schema push runs as part of `npm run build` (via `scripts/safe-push.ts`, see
+below), so every schema change in `src/db/schema.ts` auto-migrates against
+the live Turso database on the next Vercel deploy. No manual migration step,
+unless safe-push blocks a destructive change. See the root
 `README.md` for the general run/deploy instructions.
 
 ## Schema pushes are guarded (safe-push)
