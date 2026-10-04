@@ -979,6 +979,90 @@ export const purchasingQuotationDocuments = sqliteTable(
   ],
 );
 
+// ---------------------------------------------------------------------------
+// Receiving department (separate from the older buyback-order tables above).
+// One package per quotation (the Quotation Summary in Purchasing is the
+// shared order list; Receiving never keeps its own copy of
+// an order -- it points at the quotation and records what physically arrived).
+// ---------------------------------------------------------------------------
+
+export const RECEIVING_STATUSES = ["IN_PROGRESS", "RECEIVING_COMPLETE", "RECEIVING_COMPLETE_WITH_DISCREPANCY"] as const;
+export const RECEIVING_PHOTO_KINDS = [
+  "UNOPENED_PACKAGE",
+  "SHIPPING_LABEL",
+  "DAMAGE",
+  "PACKAGE_AS_OPENED",
+  "PACKAGING_ISSUE",
+  "COMPLETE_CONTENTS",
+  "PACKING_SHEET",
+] as const;
+
+export const receivingPackages = sqliteTable(
+  "receiving_packages",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    quotationId: text("quotation_id")
+      .notNull()
+      .references(() => purchasingQuotations.id, { onDelete: "cascade" }),
+    status: text("status", { enum: RECEIVING_STATUSES }).notNull().default("IN_PROGRESS"),
+    trackingNumber: text("tracking_number"),
+    carrier: text("carrier", { enum: ["UPS", "USPS", "FedEx", "Other"] }),
+    receivedAt: text("received_at"), // "YYYY-MM-DD HH:MM:SS" exactly as the receiver entered it (no time-zone shift)
+    receivedByUserId: text("received_by_user_id").references(() => users.id),
+    externalDamage: text("external_damage", { enum: ["YES", "NO"] }),
+    damageTypes: text("damage_types"), // JSON array of labels
+    damageNotes: text("damage_notes"),
+    doubleBoxed: text("double_boxed", { enum: ["YES", "NO"] }),
+    protectiveMaterial: text("protective_material", { enum: ["YES", "NO"] }),
+    sturdyOuterBox: text("sturdy_outer_box", { enum: ["YES", "NO"] }),
+    productsSecured: text("products_secured", { enum: ["YES", "NO"] }),
+    packageSealed: text("package_sealed", { enum: ["YES", "NO"] }),
+    packagingRequirementsMet: text("packaging_requirements_met", { enum: ["YES", "NO", "PARTIALLY"] }),
+    overallPackaging: text("overall_packaging", { enum: ["ACCEPTABLE", "NOT_ACCEPTABLE"] }),
+    packagingIssueNotes: text("packaging_issue_notes"),
+    packingSheetIncluded: text("packing_sheet_included", { enum: ["YES", "NO"] }),
+    quantityMatches: text("quantity_matches", { enum: ["YES", "NO"] }),
+    adjustmentNeeded: text("adjustment_needed", { enum: ["YES", "NO"] }),
+    adjustmentDetails: text("adjustment_details"),
+    receivingNotes: text("receiving_notes"),
+    submittedByUserId: text("submitted_by_user_id").references(() => users.id),
+    submittedAt: text("submitted_at"),
+    ...timestamps,
+  },
+  (t) => [
+    index("receiving_packages_org_idx").on(t.organizationId),
+    uniqueIndex("receiving_packages_quotation_idx").on(t.quotationId),
+  ],
+);
+
+/** A photo on a shipment. The file itself lives in private file storage (never a public link) and is served only through a signed-in, company-checked route. */
+export const receivingPackagePhotos = sqliteTable(
+  "receiving_package_photos",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    packageId: text("package_id")
+      .notNull()
+      .references(() => receivingPackages.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: RECEIVING_PHOTO_KINDS }).notNull(),
+    filename: text("filename").notNull(),
+    contentType: text("content_type").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    storagePath: text("storage_path").notNull(),
+    uploadedByUserId: text("uploaded_by_user_id").references(() => users.id),
+    ...timestamps,
+  },
+  (t) => [
+    index("receiving_package_photos_org_idx").on(t.organizationId),
+    index("receiving_package_photos_package_idx").on(t.packageId),
+  ],
+);
+
 /**
  * One row per org -- every piece of wording on the printed/exported
  * quotation receipt that isn't per-quotation data (banner, disclaimer,

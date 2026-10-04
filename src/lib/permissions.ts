@@ -7,7 +7,7 @@
 //   admin               everything, incl. the Admin panel (only the owner can make/remove admins)
 //   purchasing_manager  Purchasing with manager powers (price overrides, archive, settings tabs)
 //   purchasing_agent    Purchasing day-to-day: customers, quotations, labels -- no overrides/settings
-//   receiver            Receiving department (being built -- no Purchasing access)
+//   receiver            Receiving department only -- no Purchasing access
 //   accountant          Purchasing in view-only mode (quotations, customers, receipts, audit log)
 //   staff               legacy role from before the Admin panel; behaves exactly like purchasing_agent
 
@@ -40,7 +40,7 @@ export const ROLE_DESCRIPTIONS: Record<Role, string> = {
   admin: "Full access to everything, including inviting and managing the team.",
   purchasing_manager: "Everything in Purchasing, including price overrides, archiving, bonus tiers, conditions and settings.",
   purchasing_agent: "Purchasing day-to-day: customers, quotations and shipping labels. No price overrides or settings.",
-  receiver: "Receiving department (coming soon). No access to Purchasing.",
+  receiver: "Receiving department: log incoming packages, photos and checks. No access to Purchasing.",
   accountant: "View-only access to Purchasing: quotations, customers, receipts and the audit log.",
   staff: "Purchasing day-to-day: customers, quotations and shipping labels.",
 };
@@ -69,11 +69,21 @@ export function canWritePurchasing(role: string): boolean {
   return canViewPurchasing(role) && role !== "accountant";
 }
 
+/** May open the Receiving department (every role can look; Purchasing roles and accountants are view-only there). */
+export function canViewReceiving(role: string): boolean {
+  return (ROLES as readonly string[]).includes(role);
+}
+
+/** May change data in Receiving: the Receiver role, Admin and the Owner. */
+export function canWriteReceiving(role: string): boolean {
+  return role === "receiver" || isAdmin(role);
+}
+
 /** Which departments a role can open, for the menu and the home redirect. */
 export function departmentsFor(role: string): string[] {
   const out: string[] = [];
   if (canViewPurchasing(role)) out.push("purchasing");
-  if (role === "receiver" || isAdmin(role)) out.push("receiving");
+  if (canViewReceiving(role)) out.push("receiving");
   return out;
 }
 

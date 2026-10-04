@@ -1,6 +1,7 @@
 // Data access layer -- every function here takes an explicit organizationId
 // and filters by it. Pages call these instead of touching `db` directly, so
 // there is exactly one place that has to get tenant-scoping right.
+import { getReceivingStatusByQuotation } from "@/lib/receiving-queries";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import {
@@ -1008,6 +1009,8 @@ export async function getPurchasingQuotationsSummary(organizationId: string, opt
     itemsByQuotation.set(item.quotationId, list);
   }
 
+  const receivingByQuotation = await getReceivingStatusByQuotation(organizationId);
+
   return visible.map((r) => {
     const items = itemsByQuotation.get(r.id) ?? [];
     const docs = docsByQuotation.get(r.id);
@@ -1040,6 +1043,7 @@ export async function getPurchasingQuotationsSummary(organizationId: string, opt
     return {
       id: r.id,
       imported: r.source === "IMPORTED",
+      receiving: receivingByQuotation.get(r.id) ?? null,
       receipt,
       receiptStamp,
       receiptIsImage: receipt === "UPLOADED" && !!docs?.uploadedIsImage,

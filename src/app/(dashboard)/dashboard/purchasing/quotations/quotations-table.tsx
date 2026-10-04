@@ -4,6 +4,8 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { QuotationRowMenu } from "./quotation-row-menu";
 import { QuotationImportPanel } from "./quotation-import-panel";
+import { STATUS_LABELS } from "@/lib/receiving-rules";
+import { STATUS_PILL } from "@/lib/receiving-ui";
 import { ReceiptCell, type ReceiptState } from "./receipt-cell";
 
 export type QuotationSummaryRow = {
@@ -17,6 +19,7 @@ export type QuotationSummaryRow = {
   archivedAt: string | null;
   imported?: boolean;
   receipt?: ReceiptState;
+  receiving?: { packageId: string; status: "IN_PROGRESS" | "RECEIVING_COMPLETE" | "RECEIVING_COMPLETE_WITH_DISCREPANCY" } | null;
   receiptStamp?: string;
   receiptIsImage?: boolean;
   customerName: string;
@@ -242,13 +245,14 @@ export function QuotationsTable({ quotations, canImport = false }: { quotations:
               <th className="px-4 py-3">Items Quoted For</th>
               <th className="whitespace-nowrap px-4 py-3">Tracking #</th>
               <th className="whitespace-nowrap px-4 py-3">Quotation Receipt</th>
+              <th className="whitespace-nowrap px-4 py-3">Receiving</th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
           <tbody>
             {visible.length === 0 && (
               <tr>
-                <td colSpan={11} className="px-4 py-10 text-center text-slate-400">
+                <td colSpan={12} className="px-4 py-10 text-center text-slate-400">
                   {quotations.length === 0 ? "No quotations yet -- generate one above." : "No matches for that search."}
                 </td>
               </tr>
@@ -305,6 +309,18 @@ export function QuotationsTable({ quotations, canImport = false }: { quotations:
                     isImage={row.receiptIsImage ?? false}
                     canWrite={canImport}
                   />
+                </td>
+                <td className="whitespace-nowrap px-4 py-3.5">
+                  {row.receiving ? (
+                    <Link
+                      href={`/dashboard/receiving/intake/${row.receiving.packageId}`}
+                      className={`rounded-full px-2 py-0.5 text-xs font-medium hover:underline ${STATUS_PILL[row.receiving.status]}`}
+                    >
+                      {STATUS_LABELS[row.receiving.status]}
+                    </Link>
+                  ) : (
+                    <span className="text-xs text-slate-400">Not received</span>
+                  )}
                 </td>
                 <td className="px-4 py-3.5 text-right">
                   <QuotationRowMenu quotationId={row.id} label={row.quotationNumber} />

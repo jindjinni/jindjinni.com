@@ -6,7 +6,7 @@ import { users } from "@/db/schema";
 import { TERMS_VERSION } from "@/lib/legal";
 import { requireOrg } from "@/lib/tenant";
 import { logout } from "@/app/actions/auth";
-import { ROLE_LABELS, canViewPurchasing, isPurchasingManager } from "@/lib/permissions";
+import { ROLE_LABELS, canViewPurchasing, canViewReceiving, isPurchasingManager } from "@/lib/permissions";
 
 export default async function DashboardLayout({
   children,
@@ -32,6 +32,11 @@ export default async function DashboardLayout({
             {canViewPurchasing(org.role) && (
               <Link href="/dashboard/purchasing" className="hover:text-emerald-700 dark:hover:text-emerald-400">
                 Purchasing
+              </Link>
+            )}
+            {canViewReceiving(org.role) && (
+              <Link href="/dashboard/receiving" className="hover:text-emerald-700 dark:hover:text-emerald-400">
+                Receiving
               </Link>
             )}
             {isPurchasingManager(org.role) && (
