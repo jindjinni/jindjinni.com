@@ -52,6 +52,7 @@ import { seedPurchasingConditionsForOrg } from "@/lib/purchasing-condition-seed"
 import { parseSpreadsheetFile, findColumn } from "@/lib/spreadsheet-import";
 import { applyExpiryRulesForOrg } from "@/lib/purchasing-expiry-plan";
 import { extractNdc } from "@/lib/purchasing-ndc";
+import { CustomerDedupeIndex } from "@/lib/purchasing-customer-dedupe";
 import { customerValidationError, missingCustomerFields } from "@/lib/purchasing-customer-rules";
 import {
   createShipment,
@@ -63,7 +64,7 @@ import {
 
 export type ActionState = { error?: string } | undefined;
 export type SeedCatalogActionState = { error?: string; message?: string } | undefined;
-export type ImportActionState = { error?: string; message?: string } | undefined;
+export type ImportActionState = { error?: string; message?: string; details?: string[] } | undefined;
 
 const trimmed = (formData: FormData, key: string) => String(formData.get(key) ?? "").trim() || null;
 
@@ -2372,18 +2373,17 @@ export async function importPurchasingCustomers(
 
   const existingCustomers = await db
     .select({
+      id: purchasingCustomers.id,
       firstName: purchasingCustomers.firstName,
       lastName: purchasingCustomers.lastName,
       email: purchasingCustomers.email,
+      phone: purchasingCustomers.phone,
     })
     .from(purchasingCustomers)
     .where(eq(purchasingCustomers.organizationId, org.organizationId));
-  const existingEmails = new Set(
-    existingCustomers.filter((c) => c.email).map((c) => c.email!.toLowerCase()),
-  );
-  const existingNamePairs = new Set(
-    existingCustomers.map((c) => `${c.firstName} ${c.lastName ?? ""}`.trim().toLowerCase()),
-  );
+  const dedupe = new CustomerDedupeIndex();
+  for (const c of existingCustomers) dedupe.add(c.id, c);
+  const skippedDetails: string[] = [];
 
   let inserted = 0;
   let skipped = 0;
@@ -2424,18 +2424,17 @@ export async function importPurchasingCustomers(
       continue;
     }
 
-    if (email && existingEmails.has(email.toLowerCase())) {
+    const phoneValue = phoneCol ? row[phoneCol]?.trim() || null : null;
+    const dup = dedupe.find({ firstName, lastName, email, phone: phoneValue });
+    if (dup) {
       skipped++;
-      continue;
-    }
-    const namePair = `${firstName} ${lastName}`.trim().toLowerCase();
-    if (!email && existingNamePairs.has(namePair)) {
-      skipped++;
+      skippedDetails.push(`Row ${rowNumber}: ${`${firstName} ${lastName}`.trim()} skipped as a duplicate -- ${dup.reason}.`);
       continue;
     }
 
+    const newCustomerId = newId("pcust");
     await db.insert(purchasingCustomers).values({
-      id: newId("pcust"),
+      id: newCustomerId,
       organizationId: org.organizationId,
       firstName,
       lastName: lastName || null,
@@ -2448,20 +2447,17 @@ export async function importPurchasingCustomers(
       addressState: stateCol ? row[stateCol]?.trim() || null : null,
       addressZip: zipCol ? row[zipCol]?.trim() || null : null,
     });
-    if (email) existingEmails.add(email.toLowerCase());
-    existingNamePairs.add(namePair);
+    dedupe.add(newCustomerId, { firstName, lastName, email, phone: phoneValue });
     inserted++;
   }
 
   revalidatePath("/dashboard/purchasing/customers");
 
   const parts = [`Imported ${inserted} customer(s)`];
-  if (skipped > 0) parts.push(`skipped ${skipped} already in your list`);
-  let message = parts.join(", ") + ".";
-  if (errors.length > 0) {
-    message += ` ${errors.length} row(s) had problems: ${errors.slice(0, 5).join(" ")}${errors.length > 5 ? " …" : ""}`;
-  }
-  return { message };
+  if (skipped > 0) parts.push(`skipped ${skipped} duplicate(s) already in your list or repeated in the file`);
+  if (errors.length > 0) parts.push(`${errors.length} row(s) had problems`);
+  const details = [...skippedDetails, ...errors].slice(0, 300);
+  return { message: parts.join(", ") + ".", details: details.length > 0 ? details : undefined };
 }
 
 

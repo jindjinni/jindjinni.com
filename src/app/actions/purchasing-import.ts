@@ -13,6 +13,7 @@ import { purchasingCustomers, purchasingQuotations, purchasingAuditLog } from "@
 import { requireOrg, type CurrentOrg } from "@/lib/tenant";
 import { canWritePurchasing } from "@/lib/permissions";
 import { newId } from "@/lib/ids";
+import { CustomerDedupeIndex } from "@/lib/purchasing-customer-dedupe";
 import { parseSpreadsheetFile, type ParsedSheet } from "@/lib/spreadsheet-import";
 import {
   planQuotationImport,
@@ -79,8 +80,6 @@ async function readSheet(formData: FormData): Promise<{ sheet: ParsedSheet; file
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
 
-const nameKey = (first: string, last: string | null) => `${first} ${last ?? ""}`.replace(/\s+/g, " ").trim().toLowerCase();
-
 async function loadExisting(organizationId: string) {
   const quotes = await db
     .select({ n: purchasingQuotations.quotationNumber, t: purchasingQuotations.trackingNumber })
@@ -92,54 +91,36 @@ async function loadExisting(organizationId: string) {
       firstName: purchasingCustomers.firstName,
       lastName: purchasingCustomers.lastName,
       email: purchasingCustomers.email,
+      phone: purchasingCustomers.phone,
     })
     .from(purchasingCustomers)
     .where(eq(purchasingCustomers.organizationId, organizationId));
-  const byEmail = new Map<string, string>();
-  const nameCount = new Map<string, { id: string; count: number }>();
-  for (const c of customers) {
-    if (c.email) byEmail.set(c.email.toLowerCase(), c.id);
-    const k = nameKey(c.firstName, c.lastName);
-    const cur = nameCount.get(k);
-    nameCount.set(k, cur ? { id: cur.id, count: cur.count + 1 } : { id: c.id, count: 1 });
-  }
   return {
     references: new Set(quotes.map((q) => q.n.toLowerCase())),
     trackingNumbers: new Set(quotes.map((q) => (q.t ?? "").replace(/\s+/g, "").toUpperCase()).filter(Boolean)),
-    byEmail,
-    byName: nameCount,
+    customers,
   };
 }
 
 type Existing = Awaited<ReturnType<typeof loadExisting>>;
 
-/** Which customer each new row belongs to: an existing one (email, then name) or a to-be-created one (one per email/name). */
+/** Which customer each new row belongs to: an existing one or a to-be-created one -- the same "already there?" rule as the customer import (email; or name + phone; or name with nothing else to go on). */
 function matchCustomers(rows: ImportRow[], existing: Existing) {
+  const index = new CustomerDedupeIndex();
+  for (const c of existing.customers) index.add(c.id, c);
   const toCreate = new Map<string, ImportRow>(); // key -> first row that mentions the customer
   const assignment = new Map<number, { existingId: string } | { key: string }>();
-  const keyByEmail = new Map<string, string>();
-  const keyByName = new Map<string, string>();
   for (const row of rows) {
     const { firstName, lastName } = splitName(row.name);
-    const nk = nameKey(firstName, lastName);
-    if (row.email && existing.byEmail.has(row.email)) {
-      assignment.set(row.rowNumber, { existingId: existing.byEmail.get(row.email)! });
+    const candidate = { firstName, lastName, email: row.email, phone: row.phone };
+    const hit = index.find(candidate);
+    if (hit) {
+      assignment.set(row.rowNumber, hit.id.startsWith("new:") ? { key: hit.id.slice(4) } : { existingId: hit.id });
       continue;
     }
-    // Name match only when it is unambiguous, and only when the file's email doesn't point to a different known person.
-    const nameHit = existing.byName.get(nk);
-    if (nameHit && nameHit.count === 1 && !row.email) {
-      assignment.set(row.rowNumber, { existingId: nameHit.id });
-      continue;
-    }
-    let key = row.email ? keyByEmail.get(row.email) : undefined;
-    if (!key && !row.email) key = keyByName.get(nk);
-    if (!key) {
-      key = `c${toCreate.size}`;
-      toCreate.set(key, row);
-      if (row.email) keyByEmail.set(row.email, key);
-      else keyByName.set(nk, key);
-    }
+    const key = `c${toCreate.size}`;
+    toCreate.set(key, row);
+    index.add(`new:${key}`, candidate);
     assignment.set(row.rowNumber, { key });
   }
   return { toCreate, assignment };

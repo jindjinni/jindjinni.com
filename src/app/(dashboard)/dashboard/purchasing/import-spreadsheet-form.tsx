@@ -2,7 +2,7 @@
 
 import { useActionState, type ReactNode } from "react";
 
-type ImportActionState = { error?: string; message?: string } | undefined;
+type ImportActionState = { error?: string; message?: string; details?: string[] } | undefined;
 type ImportAction = (prevState: ImportActionState, formData: FormData) => Promise<ImportActionState>;
 
 function escapeCsvCell(cell: string) {
@@ -81,6 +81,16 @@ export function ImportSpreadsheetForm({
       </div>
       {state?.error && <p className="mt-2 text-sm text-red-600 dark:text-red-400">{state.error}</p>}
       {state?.message && <p className="mt-2 text-sm text-emerald-700 dark:text-emerald-400">{state.message}</p>}
+      {state?.details && state.details.length > 0 && (
+        <div className="mt-2 max-h-56 overflow-auto rounded-md border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300">
+          <p className="mb-1 font-medium">Skipped rows and why</p>
+          <ul className="list-disc space-y-0.5 pl-4">
+            {state.details.map((d, i) => (
+              <li key={i}>{d}</li>
+            ))}
+          </ul>
+        </div>
+      )}
     </form>
   );
 }

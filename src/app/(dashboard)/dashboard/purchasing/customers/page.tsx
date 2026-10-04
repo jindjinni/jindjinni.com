@@ -23,7 +23,7 @@ export default async function PurchasingCustomersPage() {
       <ImportSpreadsheetForm
         action={importPurchasingCustomers}
         title="Import from CSV/Excel"
-        columnsHelp={"Required columns: Name (or First Name; Last Name is optional), Address, City, State, Zip. Rows missing any of these are skipped and listed. Optional: Email, Phone, Reference #."}
+        columnsHelp={"Required columns: Name (or First Name; Last Name is optional), Address, City, State, Zip. Rows missing any of these are skipped and listed. Optional: Email, Phone, Reference #. Duplicates are never added: someone with the same email, or the same name and phone, is skipped and shown in the list below."}
         templateFilename="customers-template.csv"
         templateHeaders={["First Name", "Last Name", "Email", "Phone", "Address", "City", "State", "Zip"]}
         templateSampleRow={["Jordan", "Alvarez", "jordan@example.com", "555-010-0100", "123 Main St", "Springfield", "IL", "62701"]}
