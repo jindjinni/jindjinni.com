@@ -76,6 +76,16 @@ published "Ledger SaaS Blueprint" doc) for the full architecture and roadmap
     once, which is the thing that's hardest to do once data lives behind
     separate app screens instead of one spreadsheet-like base.
 
+- **Purchasing department** (`/dashboard/purchasing`) — a second,
+  independent buy-back-style module (separate tables, separate Airtable
+  source base) for buying product back from individual customers rather
+  than sellers: customizable product catalog/conditions/multipliers/bonus
+  tiers, fully-editable quotations with a printable, per-org-customizable
+  receipt, a unified Archive across every archivable record type, a
+  Quotation Summary list screen, and Shippo-backed free shipping labels for
+  customers to ship items in. See `docs/purchasing-module.md` for the full
+  write-up.
+
 ## What's NOT built yet (see SPEC.md "Phase 2"/"Phase 3")
 
 - Editing a line item on an *already-finalized* invoice (the Airtable
