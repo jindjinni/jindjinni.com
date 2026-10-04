@@ -130,7 +130,8 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
                     action={removePurchasingQuotedItem.bind(null, item.id)}
                     label="Remove"
                     pendingLabel="Removing..."
-                    className="text-xs font-medium text-red-600 hover:underline dark:text-red-400"
+                    confirm={`Remove ${item.productNameSnapshot} from this quotation?`}
+                    className="rounded-md border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950"
                   />
                 </td>
               </tr>

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { requireOrg } from "@/lib/tenant";
 import {
   getPurchasingQuotationWithItems,
+  getPurchasingExpirationRanges,
   getReceiptVersions,
   getBusinessProfile,
   resolveBusinessDocumentIdentity,
@@ -11,6 +12,15 @@ import { saveReceiptVersion } from "@/app/actions/purchasing";
 import { ActionButton } from "@/components/action-button";
 import { PrintButton } from "./print-button";
 
+/** "7+ months" range + a quotation dated Sep 30 2026 -> "Apr 2027" (quotation date + the range's minMonths). Null when the range has no minMonths or can't be resolved (e.g. it was later deleted). */
+function expiryOnwardsLabel(quotationDate: string, minMonths: number | null | undefined) {
+  if (minMonths == null) return null;
+  const d = new Date(quotationDate);
+  if (Number.isNaN(d.getTime())) return null;
+  d.setMonth(d.getMonth() + minMonths);
+  return d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+}
+
 export default async function QuotationReceiptPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const org = await requireOrg();
@@ -18,12 +28,19 @@ export default async function QuotationReceiptPage({ params }: { params: Promise
   const data = await getPurchasingQuotationWithItems(org.organizationId, id);
   if (!data) notFound();
   const { quotation, items } = data;
-  const versions = await getReceiptVersions(id);
-  const profile = await getBusinessProfile(org.organizationId);
+  const [ranges, versions, profile] = await Promise.all([
+    getPurchasingExpirationRanges(org.organizationId, { includeInactive: true }),
+    getReceiptVersions(id),
+    getBusinessProfile(org.organizationId),
+  ]);
+  const rangesById = new Map(ranges.map((r) => [r.id, r]));
   const business = resolveBusinessDocumentIdentity(org.organizationName, profile);
 
-  const validUntil = new Date(quotation.quotationDate);
-  validUntil.setHours(validUntil.getHours() + 72);
+  const formattedDate = new Date(quotation.quotationDate).toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
 
   return (
     <div>
@@ -45,107 +62,167 @@ export default async function QuotationReceiptPage({ params }: { params: Promise
         </div>
       </div>
 
-      <div className="mx-auto max-w-2xl rounded-lg border border-slate-200 bg-white p-8 text-slate-900 shadow-sm print:border-none print:p-0 print:shadow-none dark:border-slate-800 dark:bg-white">
-        <div className="rounded-md bg-amber-400 px-4 py-2 text-center text-sm font-bold uppercase tracking-wide text-slate-900">
+      <div className="mx-auto max-w-2xl rounded-lg border border-slate-200 bg-white p-8 text-slate-900 shadow-sm print:border-none print:p-0 print:shadow-none">
+        {/* Header / wordmark */}
+        <div className="text-center">
+          {business.showLogo && business.logoDataUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={business.logoDataUrl} alt={business.displayName} className="mx-auto h-14 object-contain" />
+          ) : (
+            <div className="leading-tight">
+              {business.displayName.split(" ").length > 1 ? (
+                <>
+                  <div className="text-2xl font-extrabold tracking-tight text-red-600">
+                    {business.displayName.split(" ")[0]}
+                  </div>
+                  <div className="text-base font-extrabold uppercase tracking-wide text-blue-700">
+                    {business.displayName.split(" ").slice(1).join(" ")}
+                  </div>
+                </>
+              ) : (
+                <div className="text-2xl font-extrabold tracking-tight text-slate-900">{business.displayName}</div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <h1 className="mt-3 text-center text-3xl font-bold text-slate-900">Quotation Receipt</h1>
+        <hr className="mt-3 border-slate-300" />
+
+        <div className="mt-4 rounded-md bg-amber-300 px-4 py-2 text-center text-lg font-extrabold uppercase tracking-wide text-slate-900">
           Limited Time Offer!
         </div>
 
-        <div className="mt-4 flex items-start justify-between gap-4">
-          <div className="flex items-center gap-3">
-            {business.showLogo && business.logoDataUrl && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={business.logoDataUrl} alt={business.displayName} className="h-12 w-12 object-contain" />
-            )}
-            <div>
-              <h1 className="text-xl font-bold tracking-tight">{business.displayName}</h1>
-              {business.address && (
-                <p className="text-xs text-slate-500">
-                  {[business.address.street1, business.address.street2].filter(Boolean).join(" ")}
-                  {business.address.city ? `, ${[business.address.city, business.address.state, business.address.zip].filter(Boolean).join(" ")}` : ""}
-                </p>
-              )}
-              {(business.phone || business.email || business.website) && (
-                <p className="text-xs text-slate-500">
-                  {[business.phone, business.email, business.website].filter(Boolean).join(" · ")}
-                </p>
-              )}
-            </div>
-          </div>
-          <span className="shrink-0 text-sm text-slate-500">{new Date(quotation.quotationDate).toLocaleDateString()}</span>
-        </div>
+        <p className="mt-4 text-sm text-slate-700">Date: {formattedDate}</p>
 
-        <p className="mt-4 text-sm font-semibold uppercase tracking-wide text-slate-500">Quotation for:</p>
-        <p className="text-lg font-semibold">{quotation.customerNameSnapshot}</p>
-        <p className="text-sm text-slate-500">Reference: {quotation.quotationNumber}</p>
+        <p className="mt-3 text-sm font-bold text-blue-700">QUOTATION FOR:</p>
+        <p className="text-lg font-bold uppercase text-slate-900">{quotation.customerNameSnapshot}</p>
 
-        <table className="mt-5 w-full border-collapse text-sm">
+        <table className="mt-4 w-full border-collapse text-sm">
           <thead>
-            <tr className="border-b-2 border-slate-900 text-left">
-              <th className="py-2 pr-2 font-semibold">#</th>
-              <th className="py-2 pr-2 font-semibold">Product</th>
-              <th className="py-2 pr-2 font-semibold">Note</th>
-              <th className="py-2 pr-2 font-semibold">Expiry</th>
-              <th className="py-2 pr-2 text-right font-semibold">Qty</th>
-              <th className="py-2 pr-2 text-right font-semibold">Unit Price</th>
-              <th className="py-2 text-right font-semibold">Total</th>
+            <tr className="bg-blue-600 text-left text-white">
+              <th className="px-2 py-2 font-semibold">#</th>
+              <th className="px-2 py-2 font-semibold">Product</th>
+              <th className="px-2 py-2 font-semibold">Note</th>
+              <th className="px-2 py-2 font-semibold">Expiry</th>
+              <th className="px-2 py-2 text-right font-semibold">Qty</th>
+              <th className="px-2 py-2 text-right font-semibold">Unit Price</th>
+              <th className="px-2 py-2 text-right font-semibold">Total</th>
             </tr>
           </thead>
           <tbody>
-            {items.map((item, i) => (
-              <tr key={item.id} className="border-b border-slate-200">
-                <td className="py-2 pr-2 text-slate-500">{i + 1}</td>
-                <td className="py-2 pr-2">{item.productNameSnapshot}</td>
-                <td className="py-2 pr-2 text-slate-500">{item.conditionNameSnapshot ?? ""}</td>
-                <td className="py-2 pr-2 text-slate-500">{item.expirationRangeLabelSnapshot ?? ""}</td>
-                <td className="py-2 pr-2 text-right tabular-nums">{item.quantity}</td>
-                <td className="py-2 pr-2 text-right tabular-nums">${item.finalUnitPrice.toFixed(2)}</td>
-                <td className="py-2 text-right tabular-nums">${item.lineTotal.toFixed(2)}</td>
-              </tr>
-            ))}
+            {items.map((item, i) => {
+              const range = item.expirationRangeId ? rangesById.get(item.expirationRangeId) : undefined;
+              const onwards = expiryOnwardsLabel(quotation.quotationDate, range?.minMonths);
+              return (
+                <tr key={item.id} className="border-b border-slate-200">
+                  <td className="px-2 py-3 align-top text-slate-500">{i + 1}</td>
+                  <td className="px-2 py-3 align-top font-medium">
+                    {item.productNameSnapshot}
+                    {item.productCodeSnapshot ? ` (${item.productCodeSnapshot})` : ""}
+                  </td>
+                  <td className="px-2 py-3 align-top text-slate-600">{item.conditionNameSnapshot ?? "—"}</td>
+                  <td className="px-2 py-3 align-top text-slate-600">
+                    {item.expirationRangeLabelSnapshot ?? "—"}
+                    {onwards && (
+                      <>
+                        <br />
+                        <span className="text-xs text-slate-400">({onwards} Onwards)</span>
+                      </>
+                    )}
+                  </td>
+                  <td className="px-2 py-3 text-right align-top tabular-nums">{item.quantity}</td>
+                  <td className="px-2 py-3 text-right align-top tabular-nums">${item.finalUnitPrice.toFixed(2)}</td>
+                  <td className="px-2 py-3 text-right align-top tabular-nums font-medium">${item.lineTotal.toFixed(2)}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
 
-        <div className="mt-4 flex flex-col items-end gap-1 text-sm">
+        <div className="mt-4 flex flex-col items-end gap-0.5 text-sm">
           <span>
             Items Total: <span className="tabular-nums font-medium">${quotation.itemsTotal.toFixed(2)}</span>
           </span>
           {quotation.bonusAmount > 0 && (
-            <span>
-              Bonus: <span className="tabular-nums font-medium">+${quotation.bonusAmount.toFixed(2)}</span>
-            </span>
+            <>
+              <span>
+                Bonus: <span className="tabular-nums font-medium">${quotation.bonusAmount.toFixed(2)}</span>
+              </span>
+              {quotation.bonusTierLabelSnapshot && (
+                <span className="text-xs text-slate-400">{quotation.bonusTierLabelSnapshot}</span>
+              )}
+            </>
           )}
           {quotation.deductionEnabled && quotation.deductionAmount > 0 && (
             <span>
               Deduction: <span className="tabular-nums font-medium">−${quotation.deductionAmount.toFixed(2)}</span>
             </span>
           )}
-          <span className="text-base font-bold">
+          <span className="mt-1 text-lg font-extrabold text-red-600">
             Grand Total: <span className="tabular-nums">${quotation.grandTotal.toFixed(2)}</span>
           </span>
         </div>
 
-        <div className="mt-4 rounded-md bg-blue-600 px-4 py-3 text-center text-sm font-semibold text-white">
+        <div className="mt-4 rounded-md bg-blue-50 px-4 py-3 text-center text-lg font-bold text-slate-900">
           Total will be ${quotation.grandTotal.toFixed(2)} plus free shipping!
         </div>
 
-        <div className="mt-6 space-y-2 text-xs leading-relaxed text-slate-500">
-          <p>
-            <strong>Hidden Damage:</strong> [Exact policy wording to confirm against your reference receipt.]
-          </p>
-          <p>
-            <strong>Packaging Damage:</strong> [Exact policy wording to confirm against your reference receipt.]
-          </p>
-          <p>
-            <strong>Lost Packages:</strong> [Exact policy wording to confirm against your reference receipt.]
-          </p>
+        <div className="mt-6 text-xs leading-relaxed text-slate-600">
+          <p className="text-sm font-bold text-blue-700">DISCLAIMER:</p>
+          <p className="mt-1">By sending your items, you acknowledge and agree to all {business.displayName} policies.</p>
+          <p>Supplies that are damaged, stained, ripped, torn, expired, or otherwise not accepted will be returned at the seller&rsquo;s expense.</p>
+
+          <p className="mt-3 text-sm font-bold text-blue-700">MINT CONDITION SUPPLIES ONLY:</p>
+          <ul className="mt-1 list-disc space-y-0.5 pl-5">
+            <li>No dents, scratches, tears, or stains.</li>
+            <li>We do NOT accept re-glued or re-taped supplies.</li>
+            <li className="font-bold">FACTORY SEALED ONLY</li>
+          </ul>
         </div>
 
-        <p className="mt-3 text-center text-xs font-semibold text-red-600">
-          Payment is issued only after items are received and verified.
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="rounded-md border border-amber-300 bg-amber-50 p-3">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-900">
+              <BoxIcon /> Hidden Damage
+            </div>
+            <p className="mt-2 text-xs leading-relaxed text-slate-700">
+              Damage found underneath pharmacy labels when removing the labels at our office may be subject to{" "}
+              <strong className="text-red-600">up to a 50% deduction</strong> of the quoted value.
+            </p>
+          </div>
+          <div className="rounded-md border border-amber-300 bg-amber-50 p-3">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-900">
+              <BoxIcon /> Packaging Damage
+            </div>
+            <p className="mt-2 text-xs leading-relaxed text-slate-700">
+              Supplies that arrive damaged due to failure to follow our packaging instructions may be subject to{" "}
+              <strong className="text-red-600">up to a 50% deduction</strong> of the quoted value.
+            </p>
+          </div>
+          <div className="rounded-md border border-amber-300 bg-amber-50 p-3">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-900">
+              <TruckIcon /> Lost Packages
+            </div>
+            <p className="mt-2 text-xs leading-relaxed text-slate-700">
+              If a package is lost in transit, the carrier normally only covers{" "}
+              <strong className="text-red-600">up to $100</strong> for lost packages, unless additional coverage applies.
+            </p>
+          </div>
+        </div>
+
+        <p className="mt-4 text-center text-sm font-bold text-red-600">
+          Payment is processed 3 business days after your package shows delivered to our office.
         </p>
-        <p className="mt-1 text-center text-xs text-slate-400">
-          This quotation is valid for 72 hours, until {validUntil.toLocaleString()}.
+        <p className="mt-1 text-center text-xs text-slate-500">
+          (Excludes weekends, public holidays, and days our office is closed.)
         </p>
+
+        <hr className="mt-4 border-slate-300" />
+        <p className="mt-3 text-center text-xs text-slate-400">
+          Thank you for your business! This quotation is valid for 72 hours.
+        </p>
+        <p className="text-center text-xs text-slate-300">Page 1 of 1</p>
       </div>
 
       {versions.length > 0 && (
@@ -161,5 +238,24 @@ export default async function QuotationReceiptPage({ params }: { params: Promise
         </div>
       )}
     </div>
+  );
+}
+
+function BoxIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M21 8 12 3 3 8v8l9 5 9-5V8Z" strokeLinejoin="round" />
+      <path d="M3 8l9 5 9-5M12 13v8" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function TruckIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M3 7h11v9H3zM14 11h4l3 3v2h-7z" strokeLinejoin="round" />
+      <circle cx="7" cy="18" r="1.6" />
+      <circle cx="17.5" cy="18" r="1.6" />
+    </svg>
   );
 }
