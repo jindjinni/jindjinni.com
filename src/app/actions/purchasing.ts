@@ -348,6 +348,72 @@ export async function restorePurchasingProduct(
   revalidatePath("/dashboard/purchasing/products");
 }
 
+/** Makes an independent copy of a product -- own id, own price, own multipliers never carried over (intentionally: a copy shouldn't silently inherit pricing rules the person may be about to change). Lands on the new product's own page so it can be tweaked right away. */
+export async function duplicatePurchasingProduct(
+  productId: string,
+  _prevState: ActionState,
+  _formData: FormData,
+): Promise<ActionState> {
+  const org = await requireOrg();
+  const blocked = requireManager(org);
+  if (blocked) return blocked;
+  const product = await requireOrgProduct(org.organizationId, productId);
+  if (!product) return { error: "Product not found." };
+
+  const newProductId = newId("pprod");
+  await db.insert(purchasingProducts).values({
+    id: newProductId,
+    organizationId: org.organizationId,
+    categoryId: product.categoryId,
+    name: `${product.name} (Copy)`,
+    productCode: product.productCode,
+    standardPrice: product.standardPrice,
+    notes: product.notes,
+    active: true,
+  });
+
+  revalidatePath("/dashboard/purchasing/products");
+  redirect(`/dashboard/purchasing/products/${newProductId}`);
+}
+
+/**
+ * Permanently removes a product -- distinct from Archive, which only hides
+ * it from new quotes. Only allowed when nothing actually depends on it: a
+ * product that has ever been quoted keeps that quotation's line item alive
+ * via its own frozen snapshot fields (productNameSnapshot etc.), but the
+ * line item's productId foreign key would be left dangling by a hard
+ * delete, so that case is refused in favor of Archive instead. Safe to
+ * call on a product nobody has quoted yet (e.g. a duplicate made by
+ * mistake, or a CSV import typo).
+ */
+export async function deletePurchasingProduct(
+  productId: string,
+  _prevState: ActionState,
+  _formData: FormData,
+): Promise<ActionState> {
+  const org = await requireOrg();
+  const blocked = requireManager(org);
+  if (blocked) return blocked;
+  const product = await requireOrgProduct(org.organizationId, productId);
+  if (!product) return { error: "Product not found." };
+
+  const [quotedUsage] = await db
+    .select({ id: purchasingQuotedItems.id })
+    .from(purchasingQuotedItems)
+    .where(eq(purchasingQuotedItems.productId, productId))
+    .limit(1);
+  if (quotedUsage) {
+    return {
+      error: "This product has already been used on a quotation, so it can't be permanently deleted -- use Archive instead to hide it from new quotes while keeping that quotation's records intact.",
+    };
+  }
+
+  await db.delete(purchasingProductMultipliers).where(eq(purchasingProductMultipliers.productId, productId));
+  await db.delete(purchasingProducts).where(eq(purchasingProducts.id, productId));
+
+  revalidatePath("/dashboard/purchasing/products");
+}
+
 /** Upserts the (product, expirationRange) -> multiplier row -- the editable price table behind a quoted line's unit price. */
 export async function setProductMultiplier(
   productId: string,

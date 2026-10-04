@@ -4,6 +4,7 @@ import { getPurchasingProducts, getPurchasingCategories } from "@/lib/queries";
 import { AddProductForm } from "./add-product-form";
 import { LoadCatalogButton } from "./load-catalog-button";
 import { ImportSpreadsheetForm } from "../import-spreadsheet-form";
+import { ProductRowActions } from "./product-row-actions";
 import { importPurchasingProducts } from "@/app/actions/purchasing";
 
 export default async function PurchasingProductsPage() {
@@ -43,12 +44,13 @@ export default async function PurchasingProductsPage() {
               <th className="px-4 py-3 font-medium">Code</th>
               <th className="px-4 py-3 text-right font-medium">Standard price</th>
               {canEdit && <th className="px-4 py-3 font-medium">Active</th>}
+              {canEdit && <th className="px-4 py-3" />}
             </tr>
           </thead>
           <tbody>
             {products.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
                   No products yet -- add one above.
                 </td>
               </tr>
@@ -75,6 +77,11 @@ export default async function PurchasingProductsPage() {
                 {canEdit && (
                   <td className="px-4 py-3 text-slate-700 dark:text-slate-300">
                     {p.archivedAt ? "Archived" : p.active ? "Yes" : "No"}
+                  </td>
+                )}
+                {canEdit && (
+                  <td className="px-4 py-3 text-right">
+                    <ProductRowActions productId={p.id} productName={p.name} archived={Boolean(p.archivedAt)} />
                   </td>
                 )}
               </tr>
