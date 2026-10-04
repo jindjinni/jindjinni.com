@@ -17,13 +17,13 @@ export default async function PurchasingCustomersPage() {
     <div>
       <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-50">Customers</h1>
       <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-        Everyone we&rsquo;ve bought from. Every customer needs a full name and full address; email and phone can be added later. Open a customer to edit them and see all of their quotations.
+        Everyone we&rsquo;ve bought from. Every customer needs a name (one name is fine) and a full address; email and phone can be added later. Open a customer to edit them and see all of their quotations.
       </p>
 
       <ImportSpreadsheetForm
         action={importPurchasingCustomers}
         title="Import from CSV/Excel"
-        columnsHelp={"Required columns: Name (or First Name + Last Name), Address, City, State, Zip. Rows missing any of these are skipped and listed. Optional: Email, Phone, Reference #."}
+        columnsHelp={"Required columns: Name (or First Name; Last Name is optional), Address, City, State, Zip. Rows missing any of these are skipped and listed. Optional: Email, Phone, Reference #."}
         templateFilename="customers-template.csv"
         templateHeaders={["First Name", "Last Name", "Email", "Phone", "Address", "City", "State", "Zip"]}
         templateSampleRow={["Jordan", "Alvarez", "jordan@example.com", "555-010-0100", "123 Main St", "Springfield", "IL", "62701"]}

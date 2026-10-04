@@ -54,12 +54,12 @@ export function NewQuotationForm({
       ) : (
         <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-slate-600 dark:text-slate-400">First name *</span>
+            <span className="text-slate-600 dark:text-slate-400">Name *</span>
             <input name="newCustomerFirstName" required className={inputClass} />
           </label>
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-slate-600 dark:text-slate-400">Last name *</span>
-            <input name="newCustomerLastName" required className={inputClass} />
+            <span className="text-slate-600 dark:text-slate-400">Last name (optional)</span>
+            <input name="newCustomerLastName" className={inputClass} />
           </label>
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-slate-600 dark:text-slate-400">Email (add later if unknown)</span>

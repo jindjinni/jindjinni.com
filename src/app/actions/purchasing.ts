@@ -2400,7 +2400,7 @@ export async function importPurchasingCustomers(
       zip: zipCol ? row[zipCol] : null,
     });
     if (importProblem) {
-      errors.push(`Row ${rowNumber}: ${importProblem.replace("A customer needs a full name and full address. ", "")}`);
+      errors.push(`Row ${rowNumber}: ${importProblem.replace("A customer needs a name and a full address. ", "")}`);
       continue;
     }
 

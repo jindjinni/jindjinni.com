@@ -34,12 +34,12 @@ export function EditCustomerForm({ customerId, customer }: { customerId: string;
     <form action={action} className="mt-4 rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="flex flex-col gap-1 text-sm">
-          <span className="text-slate-600 dark:text-slate-400">First name *</span>
+          <span className="text-slate-600 dark:text-slate-400">Name *</span>
           <input name="firstName" required defaultValue={customer.firstName} className={inputClass} />
         </label>
         <label className="flex flex-col gap-1 text-sm">
-          <span className="text-slate-600 dark:text-slate-400">Last name *</span>
-          <input name="lastName" required defaultValue={customer.lastName ?? ""} className={inputClass} />
+          <span className="text-slate-600 dark:text-slate-400">Last name (optional)</span>
+          <input name="lastName" defaultValue={customer.lastName ?? ""} className={inputClass} />
         </label>
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-slate-600 dark:text-slate-400">Email</span>

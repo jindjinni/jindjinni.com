@@ -14,16 +14,16 @@ export function AddCustomerForm() {
     <form action={action} className="mt-6 rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
       <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Add customer</h2>
       <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-        A full name and full address are required (that is all a free shipping label needs). Email and phone can be added later if you don&rsquo;t have them yet.
+        A name and a full address are required (that is all a free shipping label needs). Email and phone can be added later if you don&rsquo;t have them yet.
       </p>
       <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="flex flex-col gap-1 text-sm">
-          <span className="text-slate-600 dark:text-slate-400">First name *</span>
+          <span className="text-slate-600 dark:text-slate-400">Name *</span>
           <input name="firstName" required className={inputClass} />
         </label>
         <label className="flex flex-col gap-1 text-sm">
-          <span className="text-slate-600 dark:text-slate-400">Last name *</span>
-          <input name="lastName" required className={inputClass} />
+          <span className="text-slate-600 dark:text-slate-400">Last name (optional)</span>
+          <input name="lastName" className={inputClass} />
         </label>
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-slate-600 dark:text-slate-400">Email (add later if unknown)</span>

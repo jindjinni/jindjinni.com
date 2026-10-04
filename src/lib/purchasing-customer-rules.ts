@@ -1,6 +1,7 @@
 // What a Purchasing customer must have on file.
 //
-//  * ALWAYS required: full name (first AND last) and a full street address.
+//  * ALWAYS required: a name (a single name is fine -- last name is optional)
+//    and a full street address.
 //    That is all a free shipping label needs -- the customer is the sender and
 //    their address is also the return address.
 //  * Email and phone are expected, but often aren't known when the quotation
@@ -27,8 +28,7 @@ const blank = (v: string | null | undefined) => !v || !v.trim();
 /** Human labels of the ALWAYS-required things that are missing (name + address) -- empty array means OK. */
 export function missingCustomerFields(c: CustomerContact): string[] {
   const missing: string[] = [];
-  if (blank(c.firstName)) missing.push("first name");
-  if (blank(c.lastName)) missing.push("last name");
+  if (blank(c.firstName)) missing.push("name");
   if (blank(c.street1)) missing.push("street address");
   if (blank(c.city)) missing.push("city");
   if (blank(c.state)) missing.push("state");
@@ -48,7 +48,7 @@ export function missingContactDetails(c: CustomerContact): string[] {
 export function customerValidationError(c: CustomerContact): string | null {
   const missing = missingCustomerFields(c);
   if (missing.length > 0) {
-    return `A customer needs a full name and full address. Missing: ${missing.join(", ")}.`;
+    return `A customer needs a name and a full address. Missing: ${missing.join(", ")}.`;
   }
   if (!blank(c.email) && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.email!.trim())) {
     return "That email address doesn't look right. Fix it, or leave it blank and add it later.";
