@@ -1,14 +1,19 @@
 "use client";
 
-import { useActionState } from "react";
+import { useState, useTransition } from "react";
 import { setProductMultiplier, removeProductMultiplier } from "@/app/actions/purchasing";
-import { ActionButton } from "@/components/action-button";
 
-type ActionState = { error?: string } | undefined;
+type Range = { id: string; label: string; defaultMultiplier: number };
+type Row = { id: string; expirationRangeId: string; multiplier: number };
 
-type Range = { id: string; label: string };
-type Row = { id: string; expirationRangeId: string; expirationRangeLabel: string; multiplier: number };
-
+/**
+ * The product's "Expiry Options" -- which month ranges this product is
+ * quoted at, tied straight to purchasing_product_multipliers (the same
+ * table behind the standalone Product Multipliers page). Checking a box
+ * adds a row at that range's own default multiplier; unchecking removes
+ * it. A checked row also exposes its multiplier for fine-tuning here,
+ * without leaving this page.
+ */
 export function MultipliersSection({
   productId,
   standardPrice,
@@ -20,105 +25,98 @@ export function MultipliersSection({
   ranges: Range[];
   rows: Row[];
 }) {
-  const [state, action, pending] = useActionState<ActionState, FormData>(
-    setProductMultiplier.bind(null, productId),
-    undefined,
-  );
-  const usedRangeIds = new Set(rows.map((r) => r.expirationRangeId));
-  const availableRanges = ranges.filter((r) => !usedRangeIds.has(r.id));
+  const rowByRangeId = new Map(rows.map((r) => [r.expirationRangeId, r]));
 
   return (
     <div className="mt-6 rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
-      <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Expiration-range multipliers</h2>
+      <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Expiry Options</h2>
       <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-        Final unit price = standard price (${standardPrice.toFixed(2)}) × multiplier for the chosen expiry bucket.
+        Check every month range this product is quoted at. Final unit price = standard price (${standardPrice.toFixed(2)}) × the multiplier below -- starts at that range&rsquo;s own default and is editable per product.
       </p>
 
       <div className="mt-3 flex flex-col gap-2">
-        {rows.map((r) => (
-          <MultiplierRow key={r.id} productId={productId} standardPrice={standardPrice} row={r} />
+        {ranges.map((range) => (
+          <ExpiryOptionRow key={range.id} productId={productId} standardPrice={standardPrice} range={range} row={rowByRangeId.get(range.id) ?? null} />
         ))}
-        {rows.length === 0 && <p className="text-sm text-slate-400">No expiry buckets priced yet.</p>}
+        {ranges.length === 0 && (
+          <p className="text-sm text-slate-400">No month ranges set up yet -- add some under Purchasing &gt; Month Range first.</p>
+        )}
       </div>
-
-      {availableRanges.length > 0 && (
-        <form action={action} className="mt-4 flex items-end gap-3 border-t border-dashed border-slate-200 pt-4 text-sm dark:border-slate-700">
-          <label className="flex flex-col gap-1">
-            <span className="text-slate-600 dark:text-slate-400">Expiry bucket</span>
-            <select
-              name="expirationRangeId"
-              required
-              className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-emerald-600 dark:border-slate-700 dark:bg-slate-800"
-            >
-              {availableRanges.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-slate-600 dark:text-slate-400">Multiplier</span>
-            <input
-              name="multiplier"
-              type="number"
-              step="0.01"
-              min="0"
-              defaultValue={1}
-              className="w-24 rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-emerald-600 dark:border-slate-700 dark:bg-slate-800"
-            />
-          </label>
-          <button type="submit" disabled={pending} className="rounded-md bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800 disabled:opacity-60">
-            {pending ? "Adding..." : "Add bucket"}
-          </button>
-        </form>
-      )}
-      {state?.error && <p className="mt-2 text-sm text-red-600 dark:text-red-400">{state.error}</p>}
     </div>
   );
 }
 
-function MultiplierRow({
+function ExpiryOptionRow({
   productId,
   standardPrice,
+  range,
   row,
 }: {
   productId: string;
   standardPrice: number;
-  row: Row;
+  range: Range;
+  row: Row | null;
 }) {
-  const [state, formAction, pending] = useActionState<ActionState, FormData>(
-    setProductMultiplier.bind(null, productId),
-    undefined,
-  );
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const checked = row !== null;
+
+  function toggle() {
+    setError(null);
+    startTransition(async () => {
+      if (row) {
+        const result = await removeProductMultiplier(row.id, undefined, new FormData());
+        if (result?.error) setError(result.error);
+      } else {
+        const fd = new FormData();
+        fd.set("expirationRangeId", range.id);
+        fd.set("multiplier", String(range.defaultMultiplier));
+        const result = await setProductMultiplier(productId, undefined, fd);
+        if (result?.error) setError(result.error);
+      }
+    });
+  }
+
+  function saveMultiplier(formData: FormData) {
+    setError(null);
+    formData.set("expirationRangeId", range.id);
+    startTransition(async () => {
+      const result = await setProductMultiplier(productId, undefined, formData);
+      if (result?.error) setError(result.error);
+    });
+  }
 
   return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-center gap-3 text-sm">
-        <span className="w-32 text-slate-700 dark:text-slate-300">{row.expirationRangeLabel}</span>
-        <form action={formAction} className="flex items-center gap-2">
-          <input type="hidden" name="expirationRangeId" value={row.expirationRangeId} />
+    <div
+      className={
+        checked
+          ? "flex flex-wrap items-center gap-3 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm dark:border-emerald-800 dark:bg-emerald-950/40"
+          : "flex flex-wrap items-center gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800/50"
+      }
+    >
+      <label className="flex flex-1 cursor-pointer items-center gap-3">
+        <input type="checkbox" checked={checked} disabled={pending} onChange={toggle} className="h-4 w-4 accent-emerald-700" />
+        <span className="text-slate-800 dark:text-slate-200">{range.label}</span>
+      </label>
+      {row && (
+        <form action={saveMultiplier} className="flex items-center gap-2">
+          <span className="text-xs text-slate-500 dark:text-slate-400">×</span>
           <input
             name="multiplier"
             type="number"
             step="0.01"
             min="0"
             defaultValue={row.multiplier}
-            className="w-24 rounded-md border border-slate-300 px-2 py-1 text-sm outline-none focus:border-emerald-600 dark:border-slate-700 dark:bg-slate-800"
+            disabled={pending}
+            className="w-20 rounded-md border border-slate-300 px-2 py-1 text-sm outline-none focus:border-emerald-600 dark:border-slate-700 dark:bg-slate-800"
           />
-          <span className="tabular-nums text-slate-500">= ${(standardPrice * row.multiplier).toFixed(2)}</span>
+          <span className="tabular-nums text-xs text-slate-500 dark:text-slate-400">= ${(standardPrice * row.multiplier).toFixed(2)}</span>
           <button type="submit" disabled={pending} className="text-xs font-medium text-emerald-700 hover:underline dark:text-emerald-400">
-            {pending ? "Saving..." : "Save"}
+            Save
           </button>
         </form>
-        <ActionButton
-          action={removeProductMultiplier.bind(null, row.id)}
-          label="Remove"
-          pendingLabel="Removing..."
-          className="text-xs font-medium text-red-600 hover:underline dark:text-red-400"
-        />
-      </div>
-      {state?.error && <p className="text-xs text-red-600 dark:text-red-400">{state.error}</p>}
+      )}
+      {error && <p className="w-full text-xs text-red-600 dark:text-red-400">{error}</p>}
     </div>
   );
 }

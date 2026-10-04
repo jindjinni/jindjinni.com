@@ -684,6 +684,28 @@ export async function getProductMultipliers(organizationId: string, productId: s
     .orderBy(purchasingExpirationRanges.sortOrder);
 }
 
+/** productId -> its selected Expiry Options (month ranges it's quoted at), for the pills shown on the Products list. Sourced from the same purchasing_product_multipliers rows as the Product Multipliers page and the per-product Expiry Options section. */
+export async function getProductExpiryOptionsMap(organizationId: string) {
+  const rows = await db
+    .select({
+      productId: purchasingProductMultipliers.productId,
+      expirationRangeId: purchasingProductMultipliers.expirationRangeId,
+      label: purchasingExpirationRanges.label,
+    })
+    .from(purchasingProductMultipliers)
+    .innerJoin(purchasingExpirationRanges, eq(purchasingProductMultipliers.expirationRangeId, purchasingExpirationRanges.id))
+    .where(eq(purchasingProductMultipliers.organizationId, organizationId))
+    .orderBy(purchasingExpirationRanges.sortOrder);
+
+  const map = new Map<string, { id: string; label: string }[]>();
+  for (const r of rows) {
+    const list = map.get(r.productId) ?? [];
+    list.push({ id: r.expirationRangeId, label: r.label });
+    map.set(r.productId, list);
+  }
+  return map;
+}
+
 /** Every per-product multiplier override in the org, product name + range label joined in, for the standalone Product Multipliers list. */
 export async function getAllProductMultipliersForOrg(organizationId: string) {
   return db
