@@ -684,6 +684,25 @@ export async function getProductMultipliers(organizationId: string, productId: s
     .orderBy(purchasingExpirationRanges.sortOrder);
 }
 
+/** Every per-product multiplier override in the org, product name + range label joined in, for the standalone Product Multipliers list. */
+export async function getAllProductMultipliersForOrg(organizationId: string) {
+  return db
+    .select({
+      id: purchasingProductMultipliers.id,
+      productId: purchasingProductMultipliers.productId,
+      productName: purchasingProducts.name,
+      expirationRangeId: purchasingProductMultipliers.expirationRangeId,
+      expirationRangeLabel: purchasingExpirationRanges.label,
+      expirationRangeSortOrder: purchasingExpirationRanges.sortOrder,
+      multiplier: purchasingProductMultipliers.multiplier,
+    })
+    .from(purchasingProductMultipliers)
+    .innerJoin(purchasingProducts, eq(purchasingProductMultipliers.productId, purchasingProducts.id))
+    .innerJoin(purchasingExpirationRanges, eq(purchasingProductMultipliers.expirationRangeId, purchasingExpirationRanges.id))
+    .where(eq(purchasingProductMultipliers.organizationId, organizationId))
+    .orderBy(purchasingProducts.name, purchasingExpirationRanges.sortOrder);
+}
+
 /** One lookup map: `${productId}:${expirationRangeId}` -> multiplier, for the quotation line-item price calculator. */
 export async function getAllProductMultipliersMap(organizationId: string) {
   const rows = await db

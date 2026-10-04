@@ -415,23 +415,13 @@ export async function deletePurchasingProduct(
   revalidatePath("/dashboard/purchasing/products");
 }
 
-/** Upserts the (product, expirationRange) -> multiplier row -- the editable price table behind a quoted line's unit price. */
-export async function setProductMultiplier(
+/** Shared by setProductMultiplier (per-product page, productId bound) and createProductMultiplier (the standalone Product Multipliers page, productId picked from the form) so the upsert + audit logic stays in one place. */
+async function upsertProductMultiplier(
+  org: CurrentOrg,
   productId: string,
-  _prevState: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
-  const org = await requireOrg();
-  const blocked = requireManager(org);
-  if (blocked) return blocked;
-  const product = await requireOrgProduct(org.organizationId, productId);
-  if (!product) return { error: "Product not found." };
-
-  const expirationRangeId = String(formData.get("expirationRangeId") ?? "");
-  const multiplier = Number(formData.get("multiplier"));
-  if (!expirationRangeId) return { error: "Choose an expiration range." };
-  if (Number.isNaN(multiplier) || multiplier < 0) return { error: "Multiplier must be a positive number." };
-
+  expirationRangeId: string,
+  multiplier: number,
+): Promise<void> {
   const [existing] = await db
     .select()
     .from(purchasingProductMultipliers)
@@ -462,8 +452,80 @@ export async function setProductMultiplier(
     });
     await logAudit(org, "product_multiplier", id, "multiplier", null, multiplier, "Multiplier created");
   }
+}
 
+/** Upserts the (product, expirationRange) -> multiplier row -- the editable price table behind a quoted line's unit price. Called from the per-product page, where productId is already fixed. */
+export async function setProductMultiplier(
+  productId: string,
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const org = await requireOrg();
+  const blocked = requireManager(org);
+  if (blocked) return blocked;
+  const product = await requireOrgProduct(org.organizationId, productId);
+  if (!product) return { error: "Product not found." };
+
+  const expirationRangeId = String(formData.get("expirationRangeId") ?? "");
+  const multiplier = Number(formData.get("multiplier"));
+  if (!expirationRangeId) return { error: "Choose an expiration range." };
+  if (Number.isNaN(multiplier) || multiplier < 0) return { error: "Multiplier must be a positive number." };
+
+  await upsertProductMultiplier(org, productId, expirationRangeId, multiplier);
   revalidatePath(`/dashboard/purchasing/products/${productId}`);
+}
+
+/** Same upsert, but for the standalone Product Multipliers page's "+ Add Multiplier" form, where the product itself is also picked on the form. */
+export async function createProductMultiplier(_prevState: ActionState, formData: FormData): Promise<ActionState> {
+  const org = await requireOrg();
+  const blocked = requireManager(org);
+  if (blocked) return blocked;
+
+  const productId = String(formData.get("productId") ?? "");
+  const expirationRangeId = String(formData.get("expirationRangeId") ?? "");
+  const multiplier = Number(formData.get("multiplier"));
+  if (!productId) return { error: "Choose a product." };
+  if (!expirationRangeId) return { error: "Choose a month range." };
+  if (Number.isNaN(multiplier) || multiplier < 0) return { error: "Multiplier must be a positive number." };
+
+  const product = await requireOrgProduct(org.organizationId, productId);
+  if (!product) return { error: "Product not found." };
+
+  await upsertProductMultiplier(org, productId, expirationRangeId, multiplier);
+  revalidatePath("/dashboard/purchasing/product-multipliers");
+  revalidatePath(`/dashboard/purchasing/products/${productId}`);
+}
+
+/**
+ * Edits just the multiplier value on an existing row from the standalone
+ * Product Multipliers list's inline edit toggle -- the product and month
+ * range stay fixed (delete + re-add to reassign either, since the pair is
+ * unique). Two plain args + void return, matching the other inline-edit
+ * toggle rows (bonus tiers, month ranges) rather than the useActionState
+ * three-arg form, since this is called directly from a form action, not
+ * wired through useActionState.
+ */
+export async function updateProductMultiplierValue(multiplierId: string, formData: FormData): Promise<void> {
+  const org = await requireOrg();
+  if (org.role === "staff") return;
+
+  const multiplier = Number(formData.get("multiplier"));
+  if (Number.isNaN(multiplier) || multiplier < 0) return;
+
+  const [existing] = await db
+    .select({ id: purchasingProductMultipliers.id, productId: purchasingProductMultipliers.productId, multiplier: purchasingProductMultipliers.multiplier })
+    .from(purchasingProductMultipliers)
+    .where(and(eq(purchasingProductMultipliers.id, multiplierId), eq(purchasingProductMultipliers.organizationId, org.organizationId)))
+    .limit(1);
+  if (!existing) return;
+
+  if (existing.multiplier !== multiplier) {
+    await logAudit(org, "product_multiplier", existing.id, "multiplier", existing.multiplier, multiplier);
+  }
+  await db.update(purchasingProductMultipliers).set({ multiplier }).where(eq(purchasingProductMultipliers.id, multiplierId));
+
+  revalidatePath("/dashboard/purchasing/product-multipliers");
+  revalidatePath(`/dashboard/purchasing/products/${existing.productId}`);
 }
 
 export async function removeProductMultiplier(
@@ -489,6 +551,7 @@ export async function removeProductMultiplier(
 
   await db.delete(purchasingProductMultipliers).where(eq(purchasingProductMultipliers.id, multiplierId));
   revalidatePath(`/dashboard/purchasing/products/${row.productId}`);
+  revalidatePath("/dashboard/purchasing/product-multipliers");
 }
 
 // ---------------------------------------------------------------------------
