@@ -104,7 +104,13 @@ export default async function PurchasingProductsPage() {
                 <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{p.productCode ?? "—"}</td>
                 <td className="whitespace-nowrap px-4 py-3 tabular-nums text-slate-700 dark:text-slate-300">{p.ndc ?? "—"}</td>
                 <td className="px-4 py-3 text-right tabular-nums text-slate-900 dark:text-slate-50">
-                  ${p.standardPrice.toFixed(2)}
+                  {p.standardPrice > 0 ? (
+                    `$${p.standardPrice.toFixed(2)}`
+                  ) : (
+                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-200">
+                      Not accepting
+                    </span>
+                  )}
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap gap-1">

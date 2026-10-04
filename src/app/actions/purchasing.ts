@@ -1425,7 +1425,7 @@ export async function addPurchasingQuotedItem(
     finalUnitPrice = roundCents(override);
   } else if (productId && pricing.baseUnitPrice <= 0) {
     return {
-      error: `"${pricing.productNameSnapshot}" has no price yet. Set its standard price on the Products page first (a manager can also enter an override price here).`,
+      error: `"${pricing.productNameSnapshot}" isn't being accepted right now (its price is $0). A manager can still quote it by entering an override price.`,
     };
   }
 
@@ -1526,7 +1526,7 @@ export async function updatePurchasingQuotedItem(
     finalUnitPrice = roundCents(override);
   } else if (existing.productId && baseUnitPrice <= 0) {
     return {
-      error: `"${existing.productNameSnapshot}" was quoted with no price. Enter an override price (manager) or remove the line.`,
+      error: `"${existing.productNameSnapshot}" isn't being accepted right now (its price is $0). A manager can enter an override price, or remove the line.`,
     };
   }
 
@@ -1957,7 +1957,7 @@ export async function restorePurchasingQuotation(
  * Products list. Safe to click more than once: already-present product
  * names are skipped, never duplicated. Every row lands at a $0 standard
  * price (Airtable has no cost data) -- a Manager still needs to set real
- * prices from this screen before a product is usable on a quotation.
+ * prices from this screen before a product is usable on a quotation (a $0 price means "not accepting right now").
  */
 export async function loadPurchasingProductCatalog(
   _prevState: SeedCatalogActionState,

@@ -74,7 +74,7 @@ export function AddQuotedItemForm({
           </option>
           {products.map((p) => (
             <option key={p.id} value={p.id}>
-              {p.name}
+              {p.standardPrice > 0 ? p.name : `${p.name} — not accepting`}
             </option>
           ))}
         </select>
