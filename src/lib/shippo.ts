@@ -104,6 +104,12 @@ export type ShippoShipment = {
 export async function createShipment(params: {
   addressFrom: ShippoAddress;
   addressTo: ShippoAddress;
+  // Shippo defaults an undeliverable parcel's return address to
+  // addressFrom if this is left unset. Pass it explicitly wherever the
+  // caller wants to pin that down rather than rely on the default -- e.g.
+  // Purchasing always wants the customer (addressFrom there) to be the
+  // return address, regardless of which address Shippo treats as "from".
+  addressReturn?: ShippoAddress;
   parcel: { lengthIn: number; widthIn: number; heightIn: number; weightLb: number };
 }): Promise<ShippoShipment> {
   return shippoFetch("/shipments/", {
@@ -111,6 +117,7 @@ export async function createShipment(params: {
     body: JSON.stringify({
       address_from: toShippoAddress(params.addressFrom),
       address_to: toShippoAddress(params.addressTo),
+      ...(params.addressReturn ? { address_return: toShippoAddress(params.addressReturn) } : {}),
       parcels: [
         {
           length: String(params.parcel.lengthIn),

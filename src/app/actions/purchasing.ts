@@ -1667,6 +1667,10 @@ export async function generatePurchasingShippingLabel(
     const shipment = await createShipment({
       addressFrom,
       addressTo,
+      // Explicit, not just relying on Shippo's "defaults to addressFrom"
+      // behavior: an undeliverable package always goes back to the
+      // customer -- we're only ever the receiver here, never the sender.
+      addressReturn: addressFrom,
       parcel: { lengthIn: parcelLengthIn, widthIn: parcelWidthIn, heightIn: parcelHeightIn, weightLb: parcelWeightLb },
     });
     const rate = pickGroundRate(shipment, labelCarrier);
