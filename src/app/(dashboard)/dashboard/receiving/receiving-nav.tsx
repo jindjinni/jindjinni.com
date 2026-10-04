@@ -6,6 +6,8 @@ import { usePathname } from "next/navigation";
 const ITEMS = [
   { href: "/dashboard/receiving", label: "All Shipments", icon: "📦", exact: true },
   { href: "/dashboard/receiving/intake", label: "Receiving Intake Form", icon: "📝", exact: false },
+  { href: "/dashboard/receiving/received-items", label: "Received Items", icon: "📋", exact: false },
+  { href: "/dashboard/receiving/products", label: "Products", icon: "🏷️", exact: false },
   { href: "/dashboard/receiving/adjustments", label: "Order Adjustments", icon: "🧾", exact: false },
 ];
 

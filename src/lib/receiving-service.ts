@@ -55,6 +55,8 @@ export async function writeIntakeLog(org: OrgRef, packageId: string) {
     packageId,
     receivedFrom,
     receivedAt: data.pkg.receivedAt,
+    receivedByUserId: data.pkg.receivedByUserId ?? data.pkg.startedByUserId ?? null,
+    startedAt: data.pkg.startedAt ?? data.pkg.createdAt,
     pricePaid: finalPayout(data.brief.grandTotal, data.pkg.adjustedOrderTotal),
     notes: `Auto-logged from Receiving. Order: ${data.brief.quotationNumber}`,
     loggedByUserId: org.userId,
@@ -77,6 +79,9 @@ export async function writeIntakeLog(org: OrgRef, packageId: string) {
       weekOf: weekOf(data.pkg.receivedAt),
       receivedFrom,
       receivedAt: data.pkg.receivedAt,
+      receivedByUserId: data.pkg.receivedByUserId ?? data.pkg.startedByUserId ?? null,
+      needsReturn: i.needsReturn || null,
+      quantityToReturn: i.quantityToReturn ?? null,
     });
   }
 }

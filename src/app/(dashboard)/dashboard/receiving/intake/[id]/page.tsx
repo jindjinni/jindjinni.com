@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireOrg } from "@/lib/tenant";
 import { canWriteAccounts, canWriteReceiving, isAdmin } from "@/lib/permissions";
-import { getReceivingPackage } from "@/lib/receiving-queries";
+import { getReceivingCatalog, getReceivingPackage } from "@/lib/receiving-queries";
 import { storage } from "@/lib/receiving-storage";
 import { IntakeForm, type FormValues } from "./intake-form";
 
@@ -13,6 +13,7 @@ export default async function IntakeDetailPage({ params }: { params: Promise<{ i
   const data = await getReceivingPackage(org.organizationId, id);
   if (!data) notFound();
   const { pkg } = data;
+  const catalog = await getReceivingCatalog(org.organizationId);
 
   const initial: FormValues = {
     trackingNumber: pkg.trackingNumber ?? "",
@@ -62,6 +63,8 @@ export default async function IntakeDetailPage({ params }: { params: Promise<{ i
       items={data.items}
       quotedLines={data.quotedLines}
       adjustment={data.adjustment}
+      started={data.started}
+      catalog={catalog}
       saved={{
         accountsStatus: pkg.accountsStatus ?? "",
         paidAt: pkg.paidAt,

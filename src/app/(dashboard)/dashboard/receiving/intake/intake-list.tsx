@@ -34,7 +34,10 @@ export function IntakeList({ cards, canWrite }: { cards: BoardCard[]; canWrite: 
   function begin(quotationId: string) {
     setError("");
     startTransition(async () => {
-      const res = await startReceiving(quotationId);
+      const d = new Date();
+      const p2 = (n: number) => String(n).padStart(2, "0");
+      const localNow = `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}T${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`;
+      const res = await startReceiving(quotationId, localNow);
       if (res.error || !res.id) {
         setError(res.error ?? "Couldn't start receiving.");
         return;

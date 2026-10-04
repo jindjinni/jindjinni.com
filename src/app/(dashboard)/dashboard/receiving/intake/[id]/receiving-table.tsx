@@ -5,12 +5,13 @@
 
 import { useEffect, useState, useTransition, Fragment } from "react";
 import { useRouter } from "next/navigation";
-import { addReceivingItem, searchProductsForReceiving } from "@/app/actions/receiving";
-import type { PackagePhoto, QuotedLine } from "@/lib/receiving-queries";
+import { addReceivingItem } from "@/app/actions/receiving";
+import type { CatalogProduct, PackagePhoto, QuotedLine } from "@/lib/receiving-queries";
 import { CONDITION_OPTIONS, expirationMonth, suggestDisposition } from "@/lib/receiving-rules";
 import { MONEY } from "@/lib/receiving-ui";
 import { field } from "./intake-parts";
 import { ItemDetailsPanel, type ItemState } from "./item-card";
+import { ProductPicker } from "./product-picker";
 
 const cell = "w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm disabled:bg-slate-100 disabled:text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:disabled:bg-slate-800";
 const th = "whitespace-nowrap px-2 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400";
@@ -126,25 +127,10 @@ export function QuotedPanel({
   );
 }
 
-function AddLine({ packageId, quotedLines, disabled, onError }: { packageId: string; quotedLines: QuotedLine[]; disabled: boolean; onError: (m: string) => void }) {
+function AddLine({ packageId, quotedLines, catalog, disabled, onError }: { packageId: string; quotedLines: QuotedLine[]; catalog: CatalogProduct[]; disabled: boolean; onError: (m: string) => void }) {
   const router = useRouter();
-  const [term, setTerm] = useState("");
-  const [results, setResults] = useState<{ id: string; name: string; ndc: string | null; productCode: string | null }[]>([]);
+  const [typed, setTyped] = useState("");
   const [busy, startTransition] = useTransition();
-
-  useEffect(() => {
-    if (term.trim().length < 2) return;
-    let live = true;
-    const t = setTimeout(() => {
-      searchProductsForReceiving(term).then((r) => {
-        if (live) setResults(r);
-      });
-    }, 250);
-    return () => {
-      live = false;
-      clearTimeout(t);
-    };
-  }, [term]);
 
   function add(input: { productId?: string; name?: string; quotedItemId?: string }) {
     onError("");
@@ -152,13 +138,11 @@ function AddLine({ packageId, quotedLines, disabled, onError }: { packageId: str
       const res = await addReceivingItem(packageId, input);
       if (res.error) onError(res.error);
       else {
-        setTerm("");
-        setResults([]);
+        setTyped("");
         router.refresh();
       }
     });
   }
-  const shown = term.trim().length < 2 ? [] : results;
 
   return (
     <div className="rounded-xl border border-dashed border-amber-400 p-3">
@@ -174,27 +158,20 @@ function AddLine({ packageId, quotedLines, disabled, onError }: { packageId: str
           </div>
         </div>
       )}
-      <label htmlFor="add-product" className="text-sm font-medium text-slate-700 dark:text-slate-200">
-        Something arrived that wasn&apos;t on the order?
-      </label>
-      <input id="add-product" className={`${field} mt-2`} placeholder="Search your product list by name, code or NDC…" value={term} disabled={disabled || busy} onChange={(e) => setTerm(e.target.value)} />
-      {shown.length > 0 && (
-        <ul className="mt-2 divide-y divide-slate-100 rounded-lg border border-slate-200 bg-white dark:divide-slate-800 dark:border-slate-700 dark:bg-slate-900">
-          {shown.map((p) => (
-            <li key={p.id}>
-              <button type="button" disabled={busy} onClick={() => add({ productId: p.id })} className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-amber-50 dark:hover:bg-amber-950/30">
-                <span className="min-w-0 truncate font-medium">{p.name}</span>
-                <span className="shrink-0 text-xs text-slate-500">{[p.productCode, p.ndc && `NDC ${p.ndc}`].filter(Boolean).join(" · ")}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      {term.trim().length >= 2 && (
-        <button type="button" disabled={busy} onClick={() => add({ name: term })} className="mt-2 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900">
-          Add &ldquo;{term.trim()}&rdquo; as typed
+      <p className="text-sm font-medium text-slate-700 dark:text-slate-200">Something arrived that wasn&apos;t on the order? Pick it from the product list.</p>
+      <div className="mt-2">
+        <ProductPicker catalog={catalog} disabled={disabled || busy} onPick={(p) => add({ productId: p.id })} placeholder="Choose or type to search by name, code or NDC…" />
+        <p className="mt-1 text-xs text-slate-500">If the product has an NDC on file, it fills in on the new line automatically.</p>
+      </div>
+      <div className="mt-3 flex flex-wrap items-end gap-2">
+        <div className="min-w-0 flex-1">
+          <label htmlFor="add-typed" className="text-xs font-medium text-slate-600 dark:text-slate-400">Not in the list? Type its name</label>
+          <input id="add-typed" className={field} placeholder="Product name" value={typed} maxLength={160} disabled={disabled || busy} onChange={(e) => setTyped(e.target.value)} />
+        </div>
+        <button type="button" disabled={disabled || busy || typed.trim().length < 2} onClick={() => add({ name: typed })} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900">
+          Add as typed
         </button>
-      )}
+      </div>
     </div>
   );
 }
@@ -206,6 +183,7 @@ export function ReceivedTable({
   flags,
   editable,
   quotedLines,
+  catalog,
   photos,
   storageOk,
   onError,
@@ -217,6 +195,7 @@ export function ReceivedTable({
   flags: boolean[];
   editable: boolean;
   quotedLines: QuotedLine[];
+  catalog: CatalogProduct[];
   photos: PackagePhoto[];
   storageOk: boolean;
   onError: (m: string) => void;
@@ -393,7 +372,7 @@ export function ReceivedTable({
           </tfoot>
         </table>
       </div>
-      {editable && <AddLine packageId={packageId} quotedLines={quotedLines} disabled={!editable} onError={onError} />}
+      {editable && <AddLine packageId={packageId} quotedLines={quotedLines} catalog={catalog} disabled={!editable} onError={onError} />}
     </div>
   );
 }

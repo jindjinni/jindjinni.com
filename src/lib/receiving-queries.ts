@@ -12,7 +12,10 @@ import {
   purchasingQuotedItems,
   purchasingCustomers,
   purchasingProducts,
+  purchasingCategories,
   receivingItems,
+  receivingIntakeLines,
+  receivingIntakeLogs,
   receivingExpirationLots,
   receivingSettings,
   receivingAdjustments,
@@ -424,8 +427,13 @@ export async function getReceivingPackage(organizationId: string, packageId: str
     .where(and(eq(receivingAdjustments.packageId, packageId), eq(receivingAdjustments.organizationId, organizationId)))
     .limit(1);
   const adjustment: AdjustmentSummary | null = adjRow ?? null;
+  // Who opened the package and when (older packages fall back to the day the record was created).
+  const starterId = pkg.startedByUserId ?? pkg.receivedByUserId;
+  const [starter] = starterId ? await db.select({ name: users.name, email: users.email }).from(users).where(eq(users.id, starterId)).limit(1) : [];
+  const started = { at: pkg.startedAt ?? pkg.createdAt, byName: starter ? starter.name || starter.email : null };
   return {
     pkg,
+    started,
     adjustment,
     damageTypes,
     brief,
@@ -518,4 +526,149 @@ export async function getReceivingStatusByQuotation(organizationId: string) {
     .from(receivingPackages)
     .where(eq(receivingPackages.organizationId, organizationId));
   return new Map(rows.map((r) => [r.quotationId, { packageId: r.id, status: r.status }]));
+}
+
+
+export type CatalogProduct = { id: string; name: string; productCode: string | null; ndc: string | null; brandId: string | null; brand: string; noExpiration: boolean };
+
+/**
+ * The Purchasing product catalog as Receiving sees it (read only): every active product with its brand/category,
+ * code and NDC. Same table Purchasing quotes from, so there is one list of products for the whole company.
+ */
+export async function getReceivingCatalog(organizationId: string, limit = 3000): Promise<CatalogProduct[]> {
+  const rows = await db
+    .select({
+      id: purchasingProducts.id,
+      name: purchasingProducts.name,
+      productCode: purchasingProducts.productCode,
+      ndc: purchasingProducts.ndc,
+      brandId: purchasingProducts.categoryId,
+      brand: purchasingCategories.name,
+      brandOrder: purchasingCategories.sortOrder,
+      noExpiration: purchasingProducts.noExpiration,
+    })
+    .from(purchasingProducts)
+    .leftJoin(purchasingCategories, eq(purchasingCategories.id, purchasingProducts.categoryId))
+    .where(and(eq(purchasingProducts.organizationId, organizationId), eq(purchasingProducts.active, true), isNull(purchasingProducts.archivedAt)))
+    .orderBy(purchasingCategories.sortOrder, purchasingCategories.name, purchasingProducts.name)
+    .limit(limit);
+  return rows.map((r) => ({ id: r.id, name: r.name, productCode: r.productCode, ndc: r.ndc, brandId: r.brandId, brand: r.brand ?? "Other", noExpiration: r.noExpiration }));
+}
+
+
+// ---- Received Items database ------------------------------------------------------
+
+export type ReceivedItemsFilter = { q?: string; from?: string; to?: string; agentId?: string; condition?: string; limit?: number; offset?: number };
+
+export type ReceivedItemRow = {
+  id: string;
+  packageId: string;
+  receivedAt: string | null; // as the agent entered it
+  startedAt: string | null; // when the package was opened (UTC)
+  customer: string;
+  orderNumber: string;
+  trackingNumber: string | null;
+  productName: string;
+  ndc: string | null;
+  lotNumber: string | null;
+  quantity: number;
+  condition: string | null;
+  expirationEarliest: string | null;
+  expirationLatest: string | null;
+  needsReturn: string | null;
+  quantityToReturn: number | null;
+  receivedBy: string | null;
+};
+
+const isDay = (v: string | undefined) => !!v && /^\d{4}-\d{2}-\d{2}$/.test(v);
+
+/** Every product line that has been received and submitted, newest first. One company only. */
+export async function getReceivedItems(organizationId: string, f: ReceivedItemsFilter = {}): Promise<{ rows: ReceivedItemRow[]; total: number; totalQuantity: number }> {
+  const agentExpr = sql`coalesce(${receivingIntakeLines.receivedByUserId}, ${receivingIntakeLogs.receivedByUserId}, ${receivingPackages.receivedByUserId})`;
+  const conds = [eq(receivingIntakeLines.organizationId, organizationId)];
+  const term = (f.q ?? "").trim().replace(/[%_\\]/g, "").toLowerCase();
+  if (term) {
+    const pat = `%${term}%`;
+    conds.push(
+      or(
+        like(sql`lower(${receivingIntakeLines.productName})`, pat),
+        like(sql`lower(coalesce(${receivingIntakeLines.ndc}, ''))`, pat),
+        like(sql`lower(coalesce(${receivingIntakeLines.lotNumber}, ''))`, pat),
+        like(sql`lower(coalesce(${receivingIntakeLines.receivedFrom}, ''))`, pat),
+        like(sql`lower(${purchasingQuotations.quotationNumber})`, pat),
+        like(sql`lower(coalesce(${receivingPackages.trackingNumber}, ${purchasingQuotations.trackingNumber}, ''))`, pat),
+        like(sql`lower(coalesce(${users.name}, ${users.email}, ''))`, pat),
+      )!,
+    );
+  }
+  if (isDay(f.from)) conds.push(sql`substr(${receivingIntakeLines.receivedAt}, 1, 10) >= ${f.from}`);
+  if (isDay(f.to)) conds.push(sql`substr(${receivingIntakeLines.receivedAt}, 1, 10) <= ${f.to}`);
+  if (f.agentId) conds.push(sql`${agentExpr} = ${f.agentId}`);
+  if (f.condition) conds.push(eq(receivingIntakeLines.condition, f.condition));
+
+  const base = db
+    .select({
+      id: receivingIntakeLines.id,
+      packageId: receivingPackages.id,
+      receivedAt: receivingIntakeLines.receivedAt,
+      startedAt: sql<string | null>`coalesce(${receivingIntakeLogs.startedAt}, ${receivingPackages.startedAt}, ${receivingPackages.createdAt})`,
+      customer: receivingIntakeLines.receivedFrom,
+      orderNumber: purchasingQuotations.quotationNumber,
+      trackingNumber: sql<string | null>`coalesce(${receivingPackages.trackingNumber}, ${purchasingQuotations.trackingNumber})`,
+      productName: receivingIntakeLines.productName,
+      ndc: receivingIntakeLines.ndc,
+      lotNumber: receivingIntakeLines.lotNumber,
+      quantity: receivingIntakeLines.quantity,
+      condition: receivingIntakeLines.condition,
+      expirationEarliest: receivingIntakeLines.expirationEarliest,
+      expirationLatest: receivingIntakeLines.expirationLatest,
+      needsReturn: receivingIntakeLines.needsReturn,
+      quantityToReturn: receivingIntakeLines.quantityToReturn,
+      receivedByName: users.name,
+      receivedByEmail: users.email,
+    })
+    .from(receivingIntakeLines)
+    .innerJoin(receivingIntakeLogs, eq(receivingIntakeLogs.id, receivingIntakeLines.logId))
+    .innerJoin(receivingPackages, eq(receivingPackages.id, receivingIntakeLogs.packageId))
+    .innerJoin(purchasingQuotations, eq(purchasingQuotations.id, receivingPackages.quotationId))
+    .leftJoin(users, sql`${users.id} = ${agentExpr}`)
+    .where(and(...conds));
+
+  const rows = await base
+    .orderBy(desc(receivingIntakeLines.receivedAt), desc(receivingIntakeLines.createdAt))
+    .limit(Math.min(Math.max(f.limit ?? 100, 1), 5000))
+    .offset(Math.max(f.offset ?? 0, 0));
+
+  const [agg] = await db
+    .select({ n: sql<number>`count(*)`, qty: sql<number>`coalesce(sum(${receivingIntakeLines.quantity}), 0)` })
+    .from(receivingIntakeLines)
+    .innerJoin(receivingIntakeLogs, eq(receivingIntakeLogs.id, receivingIntakeLines.logId))
+    .innerJoin(receivingPackages, eq(receivingPackages.id, receivingIntakeLogs.packageId))
+    .innerJoin(purchasingQuotations, eq(purchasingQuotations.id, receivingPackages.quotationId))
+    .leftJoin(users, sql`${users.id} = ${agentExpr}`)
+    .where(and(...conds));
+
+  return {
+    rows: rows.map((r) => ({
+      id: r.id,
+      packageId: r.packageId,
+      receivedAt: r.receivedAt,
+      startedAt: r.startedAt,
+      customer: r.customer ?? "",
+      orderNumber: r.orderNumber,
+      trackingNumber: r.trackingNumber,
+      productName: r.productName,
+      ndc: r.ndc,
+      lotNumber: r.lotNumber,
+      quantity: r.quantity,
+      condition: r.condition,
+      expirationEarliest: r.expirationEarliest,
+      expirationLatest: r.expirationLatest,
+      needsReturn: r.needsReturn,
+      quantityToReturn: r.quantityToReturn,
+      receivedBy: r.receivedByName || r.receivedByEmail || null,
+    })),
+    total: Number(agg?.n ?? 0),
+    totalQuantity: Number(agg?.qty ?? 0),
+  };
 }

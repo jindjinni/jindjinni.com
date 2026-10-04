@@ -54,6 +54,19 @@ const YES_NO = ["YES", "NO"] as const;
 /** Photo kinds the accounting side may add at any time, even after the shipment is submitted. */
 const ACCOUNTS_PHOTO_KINDS: readonly PhotoKind[] = ["REVISED_INVOICE", "CUSTOMER_NOTE", "PAYMENT_CONFIRMATION"];
 
+/** "YYYY-MM-DD HH:MM:SS" in UTC, the same shape as the database's own time stamps. */
+function nowUtc() {
+  return new Date().toISOString().slice(0, 19).replace("T", " ");
+}
+/** The agent's own clock as the browser sent it ("YYYY-MM-DDTHH:MM[:SS]"), kept only if it is a real time within a day of now. */
+function localStamp(v: string | null | undefined): string | null {
+  const m = v ? /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?$/.exec(v.trim()) : null;
+  if (!m) return null;
+  const t = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] ?? 0));
+  if (!Number.isFinite(t) || Math.abs(t - Date.now()) > 36 * 3600 * 1000) return null;
+  return `${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}:${m[6] ?? "00"}`;
+}
+
 async function requireWriter(): Promise<CurrentOrg> {
   const org = await requireOrg();
   if (!canWriteReceiving(org.role)) throw new Error("Your role can view Receiving but can't make changes.");
@@ -131,7 +144,7 @@ async function photoCountsFor(packageId: string) {
 // ---- start ------------------------------------------------------------------
 
 /** Start receiving an order from the Quotation Summary. If it's already started, just returns the existing package. */
-export async function startReceiving(quotationId: string): Promise<ReceivingActionState> {
+export async function startReceiving(quotationId: string, localNow?: string | null): Promise<ReceivingActionState> {
   const org = await requireWriter();
   const [q] = await db
     .select({
@@ -163,7 +176,11 @@ export async function startReceiving(quotationId: string): Promise<ReceivingActi
       status: "IN_PROGRESS",
       trackingNumber: q.trackingNumber,
       carrier,
+      // The moment the agent opens the package: server time + who they are. Locked -- nothing in the form edits these.
+      startedAt: nowUtc(),
+      startedByUserId: org.userId,
       receivedByUserId: org.userId,
+      receivedAt: localStamp(localNow),
     });
   } catch {
     // Two people started it at the same moment: the unique index kept one.
@@ -545,6 +562,12 @@ export async function addReceivingItem(
 
   const id = newId("ritem");
   if (sibling) {
+    // The product's NDC from the catalog fills in when the earlier row doesn't have one.
+    let siblingNdc = sibling.ndc;
+    if (!siblingNdc && sibling.productId) {
+      const [prod] = await db.select({ ndc: purchasingProducts.ndc }).from(purchasingProducts).where(and(eq(purchasingProducts.id, sibling.productId), eq(purchasingProducts.organizationId, org.organizationId))).limit(1);
+      siblingNdc = prod?.ndc || null;
+    }
     await db.insert(receivingItems).values({
       id,
       organizationId: org.organizationId,
@@ -553,7 +576,7 @@ export async function addReceivingItem(
       productId: sibling.productId,
       productName: sibling.productName,
       itemSource: "QUOTED",
-      ndc: sibling.ndc,
+      ndc: siblingNdc,
       sortOrder: existing.length,
     });
     await auditReceiving(org, p.quotationId, "receiving", `Another line added for ${sibling.productName}`);

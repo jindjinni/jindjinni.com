@@ -1028,6 +1028,9 @@ export const receivingPackages = sqliteTable(
     carrier: text("carrier", { enum: ["UPS", "USPS", "FedEx", "Other"] }),
     receivedAt: text("received_at"), // "YYYY-MM-DD HH:MM:SS" exactly as the receiver entered it (no time-zone shift)
     receivedByUserId: text("received_by_user_id").references(() => users.id),
+    // Set once, by the app, the moment an agent opens the package: server time (UTC) and the signed-in agent. Never edited.
+    startedAt: text("started_at"),
+    startedByUserId: text("started_by_user_id").references(() => users.id),
     externalDamage: text("external_damage", { enum: ["YES", "NO"] }),
     damageTypes: text("damage_types"), // JSON array of labels
     damageNotes: text("damage_notes"),
@@ -1231,6 +1234,8 @@ export const receivingIntakeLogs = sqliteTable(
       .references(() => receivingPackages.id, { onDelete: "cascade" }),
     receivedFrom: text("received_from").notNull(),
     receivedAt: text("received_at"),
+    receivedByUserId: text("received_by_user_id").references(() => users.id),
+    startedAt: text("started_at"),
     pricePaid: real("price_paid"),
     notes: text("notes"),
     loggedByUserId: text("logged_by_user_id").references(() => users.id),
@@ -1263,6 +1268,9 @@ export const receivingIntakeLines = sqliteTable(
     weekOf: text("week_of"), // the Monday of the week it was received, YYYY-MM-DD
     receivedFrom: text("received_from"),
     receivedAt: text("received_at"),
+    receivedByUserId: text("received_by_user_id").references(() => users.id),
+    needsReturn: text("needs_return"),
+    quantityToReturn: integer("quantity_to_return"),
     ...timestamps,
   },
   (t) => [

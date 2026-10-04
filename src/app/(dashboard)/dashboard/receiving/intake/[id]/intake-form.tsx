@@ -12,7 +12,7 @@ import {
   sendPackagingWarning,
   submitReceiving,
 } from "@/app/actions/receiving";
-import type { AdjustmentSummary, PackagePhoto, QuotationBrief, QuotedLine, ItemView, TeamMember } from "@/lib/receiving-queries";
+import type { AdjustmentSummary, CatalogProduct, PackagePhoto, QuotationBrief, QuotedLine, ItemView, TeamMember } from "@/lib/receiving-queries";
 import {
   ACCOUNTS_DECISION_LABELS,
   ACCOUNTS_STATUS_LABELS,
@@ -30,6 +30,7 @@ import {
   type PhotoKind,
 } from "@/lib/receiving-rules";
 import { MONEY, STATUS_PILL, chipClass, formatUtcStamp } from "@/lib/receiving-ui";
+import { LocalTime } from "@/components/local-time";
 import { Choice, PhotoSlot, Row, Step, YN, YN_RISK, field } from "./intake-parts";
 import { ItemAdjustmentCard, itemFactsOf, toItemState, type ItemState } from "./item-card";
 import { QuotedPanel, ReceivedTable } from "./receiving-table";
@@ -81,6 +82,8 @@ type Props = {
   items: ItemView[];
   quotedLines: QuotedLine[];
   adjustment: AdjustmentSummary | null;
+  started: { at: string; byName: string | null };
+  catalog: CatalogProduct[];
   saved: {
     accountsStatus: string;
     paidAt: string | null;
@@ -149,6 +152,10 @@ export function IntakeForm(props: Props) {
   const missing = computeMissingInfo(facts, counts, itemFacts);
   const finalStatus = finalStatusFor(facts, itemFacts);
   const summary = summarizeItems(itemFacts);
+  // Received lines (something actually arrived) with no lot number typed on the line or on any of its expiration lots.
+  const missingLots = items
+    .filter((i) => i.wasReceived !== "NO" && (parseInt(i.quantityReceived, 10) || 0) > 0 && !i.lotNumber.trim() && !i.lots.some((l) => l.lotNumber.trim()))
+    .map((i) => i.productName);
 
   const total = brief.grandTotal;
   const adjustedNum = v.adjustedOrderTotal.trim() === "" ? null : Number(v.adjustedOrderTotal.replace(/[$,\s]/g, ""));
@@ -324,6 +331,13 @@ export function IntakeForm(props: Props) {
               <span className="text-slate-500">No carrier update yet</span>
             )}
           </Row>
+          <Row label="Receiving Started" hint="Stamped automatically when the package was opened. It can't be changed.">
+            <span className="inline-flex flex-wrap items-center gap-x-2 rounded-lg bg-slate-100 px-3 py-2 text-sm font-medium dark:bg-slate-800">
+              <span aria-hidden="true">🔒</span>
+              <LocalTime value={props.started.at} />
+              <span className="text-slate-600 dark:text-slate-400">by {props.started.byName ?? "—"}</span>
+            </span>
+          </Row>
           <Row label="Date/Time Received">
             <div className="flex flex-wrap items-center gap-2">
               <input id="receivedAt" type="datetime-local" className={`${field} sm:w-auto`} value={v.receivedAt} onChange={(e) => set("receivedAt", e.target.value)} />
@@ -438,6 +452,7 @@ export function IntakeForm(props: Props) {
             flags={flags}
             editable={editable}
             quotedLines={props.quotedLines}
+            catalog={props.catalog}
             photos={photos}
             storageOk={storageOk}
             onError={setError}
@@ -460,6 +475,11 @@ export function IntakeForm(props: Props) {
                 <dd className="text-sm font-medium">{summary.returnStatuses.length ? summary.returnStatuses.map((x) => RETURN_STATUS_LABELS[x as keyof typeof RETURN_STATUS_LABELS] ?? x).join(", ") : "—"}</dd>
               </div>
             </dl>
+            {missingLots.length > 0 && (
+              <p role="status" className="mt-3 rounded-lg bg-orange-50 px-3 py-2 text-sm text-orange-900 dark:bg-orange-950/40 dark:text-orange-100">
+                Lot number missing on {missingLots.length === 1 ? "1 line" : `${missingLots.length} lines`}: {missingLots.join(", ")}. Supplies normally come with a lot number. Type it in the Lot column.
+              </p>
+            )}
           </div>
         </Step>
 
