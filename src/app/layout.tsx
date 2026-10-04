@@ -9,8 +9,9 @@ import "./globals.css";
 // SPEC.md.
 
 export const metadata: Metadata = {
-  title: "Ledger",
-  description: "Inventory and invoicing for resellers of conditioned goods.",
+  title: "jindjinni | Run your business from one place",
+  description:
+    "jindjinni is one connected platform for purchasing, receiving, inventory, invoicing, distribution, accounts, and customer service.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

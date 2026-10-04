@@ -8,6 +8,24 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+
+  /* jindjinni landing page palette */
+  --color-ink: #0c1f34;
+  --color-muted: #55615a;
+  --color-line: #e3e9e5;
+  --color-brand: #1fd16b;
+  --color-brand-hover: #16bd5d;
+  --color-brand-deep: #0a7a3a;
+  --color-mint: #ecfbf2;
+  --color-mint-line: #c9efd9;
+  --color-gold: #d9a441;
+}
+
+/* Smooth in-page scrolling for the landing page nav anchors. */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
 }
 
 @media (prefers-color-scheme: dark) {
