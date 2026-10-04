@@ -8,12 +8,16 @@ import {
   getProductConditionsMap,
   getPurchasingExpirationRanges,
   purchasingCustomerName,
+  getOrganization,
+  hasShipFromAddress,
+  hasCustomerAddress,
 } from "@/lib/queries";
 import { archivePurchasingQuotation, restorePurchasingQuotation } from "@/app/actions/purchasing";
 import { AddQuotedItemForm } from "./add-quoted-item-form";
 import { QuotationHeaderForm } from "./quotation-header-form";
 import { DeductionForm } from "./deduction-form";
 import { QuotedItemRow } from "./quoted-item-row";
+import { ShippingLabelSection } from "./shipping-label-section";
 import { ActionButton } from "@/components/action-button";
 
 export default async function QuotationDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -25,11 +29,12 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
   if (!data) notFound();
   const { quotation, items, customer } = data;
 
-  const [products, conditions, ranges, productConditionsMap] = await Promise.all([
+  const [products, conditions, ranges, productConditionsMap, orgRow] = await Promise.all([
     getPurchasingProducts(org.organizationId),
     getPurchasingConditions(org.organizationId),
     getPurchasingExpirationRanges(org.organizationId),
     getProductConditionsMap(org.organizationId),
+    getOrganization(org.organizationId),
   ]);
 
   return (
@@ -165,6 +170,25 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
           Grand total: <span className="tabular-nums">${quotation.grandTotal.toFixed(2)}</span>
         </span>
       </div>
+
+      {customer && (
+        <ShippingLabelSection
+          quotationId={quotation.id}
+          customerId={customer.id}
+          labelCarrier={quotation.labelCarrier}
+          parcelLengthIn={quotation.parcelLengthIn}
+          parcelWidthIn={quotation.parcelWidthIn}
+          parcelHeightIn={quotation.parcelHeightIn}
+          parcelWeightLb={quotation.parcelWeightLb}
+          labelStatus={quotation.labelStatus}
+          labelUrl={quotation.labelUrl}
+          labelTrackingNumber={quotation.labelTrackingNumber}
+          labelTrackingUrl={quotation.labelTrackingUrl}
+          labelError={quotation.labelError}
+          hasOrgAddress={hasShipFromAddress(orgRow)}
+          hasCustomerAddr={hasCustomerAddress(customer)}
+        />
+      )}
     </div>
   );
 }

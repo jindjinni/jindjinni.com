@@ -196,6 +196,11 @@ export function hasSellerAddress(seller: { addressStreet1: string | null; addres
   return !!(seller?.addressStreet1 && seller.addressCity && seller.addressState && seller.addressZip);
 }
 
+/** True once a purchasing customer has a real structured address a label can ship to. */
+export function hasCustomerAddress(customer: { addressStreet1: string | null; addressCity: string | null; addressState: string | null; addressZip: string | null } | null | undefined) {
+  return !!(customer?.addressStreet1 && customer.addressCity && customer.addressState && customer.addressZip);
+}
+
 /** Simple product list for <select> inputs -- no on-hand rollup needed. */
 export async function getProducts(organizationId: string) {
   return db
@@ -881,6 +886,100 @@ export async function getPurchasingQuotations(organizationId: string, opts: { in
     .where(eq(purchasingQuotations.organizationId, organizationId))
     .orderBy(desc(purchasingQuotations.createdAt));
   return opts.includeArchived ? rows : rows.filter((r) => !r.archivedAt);
+}
+
+/**
+ * Everything the Quotation Summary table needs in one shot: the quotation
+ * joined with its customer's *live* contact/address (not the frozen
+ * snapshot columns) so a shipping address filled in after the quote was
+ * given shows up immediately, plus a one-line "items quoted for" summary
+ * built from the quoted items. Used by the redesigned
+ * /dashboard/purchasing/quotations list page.
+ */
+export async function getPurchasingQuotationsSummary(organizationId: string, opts: { includeArchived?: boolean } = {}) {
+  const rows = await db
+    .select({
+      id: purchasingQuotations.id,
+      quotationNumber: purchasingQuotations.quotationNumber,
+      quotationDate: purchasingQuotations.quotationDate,
+      status: purchasingQuotations.status,
+      grandTotal: purchasingQuotations.grandTotal,
+      trackingNumber: purchasingQuotations.trackingNumber,
+      labelStatus: purchasingQuotations.labelStatus,
+      labelUrl: purchasingQuotations.labelUrl,
+      archivedAt: purchasingQuotations.archivedAt,
+      createdAt: purchasingQuotations.createdAt,
+      customerNameSnapshot: purchasingQuotations.customerNameSnapshot,
+      customerEmailSnapshot: purchasingQuotations.customerEmailSnapshot,
+      customerPhoneSnapshot: purchasingQuotations.customerPhoneSnapshot,
+      customerId: purchasingCustomers.id,
+      customerFirstName: purchasingCustomers.firstName,
+      customerLastName: purchasingCustomers.lastName,
+      customerEmail: purchasingCustomers.email,
+      customerPhone: purchasingCustomers.phone,
+      addressStreet1: purchasingCustomers.addressStreet1,
+      addressCity: purchasingCustomers.addressCity,
+      addressState: purchasingCustomers.addressState,
+      addressZip: purchasingCustomers.addressZip,
+    })
+    .from(purchasingQuotations)
+    .leftJoin(purchasingCustomers, eq(purchasingCustomers.id, purchasingQuotations.customerId))
+    .where(eq(purchasingQuotations.organizationId, organizationId))
+    .orderBy(desc(purchasingQuotations.createdAt));
+
+  const visible = opts.includeArchived ? rows : rows.filter((r) => !r.archivedAt);
+
+  const itemRows = await db
+    .select({
+      quotationId: purchasingQuotedItems.quotationId,
+      productNameSnapshot: purchasingQuotedItems.productNameSnapshot,
+      quantity: purchasingQuotedItems.quantity,
+    })
+    .from(purchasingQuotedItems)
+    .innerJoin(purchasingQuotations, eq(purchasingQuotations.id, purchasingQuotedItems.quotationId))
+    .where(eq(purchasingQuotations.organizationId, organizationId));
+
+  const itemsByQuotation = new Map<string, { productNameSnapshot: string; quantity: number }[]>();
+  for (const item of itemRows) {
+    const list = itemsByQuotation.get(item.quotationId) ?? [];
+    list.push({ productNameSnapshot: item.productNameSnapshot, quantity: item.quantity });
+    itemsByQuotation.set(item.quotationId, list);
+  }
+
+  return visible.map((r) => {
+    const items = itemsByQuotation.get(r.id) ?? [];
+    const itemsSummary =
+      items.length === 0
+        ? "—"
+        : items.map((i) => `${i.productNameSnapshot} (x${i.quantity})`).join(", ");
+    const customerName = r.customerFirstName
+      ? [r.customerFirstName, r.customerLastName].filter(Boolean).join(" ")
+      : r.customerNameSnapshot;
+    const email = r.customerEmail ?? r.customerEmailSnapshot;
+    const phone = r.customerPhone ?? r.customerPhoneSnapshot;
+    const shippingInfo =
+      r.addressStreet1 && r.addressCity && r.addressState && r.addressZip
+        ? `${r.addressCity}, ${r.addressState} ${r.addressZip}`
+        : "Not provided";
+    return {
+      id: r.id,
+      quotationNumber: r.quotationNumber,
+      quotationDate: r.quotationDate,
+      status: r.status,
+      grandTotal: r.grandTotal,
+      trackingNumber: r.trackingNumber,
+      labelStatus: r.labelStatus,
+      labelUrl: r.labelUrl,
+      archivedAt: r.archivedAt,
+      customerId: r.customerId,
+      customerName,
+      email,
+      phone,
+      shippingInfo,
+      itemsSummary,
+      itemCount: items.length,
+    };
+  });
 }
 
 export async function getPurchasingQuotationWithItems(organizationId: string, quotationId: string) {

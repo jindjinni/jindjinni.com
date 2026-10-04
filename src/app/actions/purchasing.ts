@@ -41,11 +41,21 @@ import {
   getBusinessProfile,
   resolveBusinessDocumentIdentity,
   getPurchasingReceiptSettings,
+  getOrganization,
+  hasShipFromAddress,
+  hasCustomerAddress,
 } from "@/lib/queries";
 import { seedPurchasingProductCatalogForOrg } from "@/lib/purchasing-catalog-seed";
 import { seedPurchasingMonthRangesForOrg } from "@/lib/purchasing-month-range-seed";
 import { seedPurchasingConditionsForOrg } from "@/lib/purchasing-condition-seed";
 import { parseSpreadsheetFile, findColumn } from "@/lib/spreadsheet-import";
+import {
+  createShipment,
+  createTransaction,
+  pickGroundRate,
+  isShippoConfigured,
+  type ShippoAddress,
+} from "@/lib/shippo";
 
 export type ActionState = { error?: string } | undefined;
 export type SeedCatalogActionState = { error?: string; message?: string } | undefined;
@@ -1552,6 +1562,145 @@ export async function updatePurchasingQuotationHeader(
       notes: trimmed(formData, "notes"),
     })
     .where(eq(purchasingQuotations.id, quotationId));
+
+  revalidatePath(`/dashboard/purchasing/quotations/${quotationId}`);
+  revalidatePath("/dashboard/purchasing/quotations");
+}
+
+/**
+ * Generates (purchases) a real UPS Ground or USPS Ground label for this
+ * quotation via Shippo, using the org's ship-from address (Settings ->
+ * Business) and the customer's shipping address on file. A quotation is
+ * often given before the customer's address is known -- in that case this
+ * returns a clear error pointing to the customer record, where the address
+ * can be filled in (or corrected) and the label generated afterward. This
+ * is a real charge against the org's Shippo account once SHIPPO_API_KEY is
+ * a live token -- see src/lib/shippo.ts. Locally/in preview, where no key
+ * is set, this safely records a friendly "not connected yet" error instead
+ * of calling Shippo.
+ */
+export async function generatePurchasingShippingLabel(
+  quotationId: string,
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const org = await requireOrg();
+  const quotation = await requireOrgQuotation(org.organizationId, quotationId);
+  if (!quotation) return { error: "Quotation not found." };
+
+  const labelCarrier = (String(formData.get("labelCarrier") ?? "") || quotation.labelCarrier) as
+    | "UPS_GROUND"
+    | "USPS_GROUND";
+  const parcelLengthIn = Number(formData.get("parcelLengthIn")) || quotation.parcelLengthIn;
+  const parcelWidthIn = Number(formData.get("parcelWidthIn")) || quotation.parcelWidthIn;
+  const parcelHeightIn = Number(formData.get("parcelHeightIn")) || quotation.parcelHeightIn;
+  const parcelWeightLb = Number(formData.get("parcelWeightLb")) || quotation.parcelWeightLb;
+
+  // Persist the chosen carrier/dimensions regardless of what happens next,
+  // so a retry after fixing an address starts from the same choices.
+  await db
+    .update(purchasingQuotations)
+    .set({ labelCarrier, parcelLengthIn, parcelWidthIn, parcelHeightIn, parcelWeightLb })
+    .where(eq(purchasingQuotations.id, quotationId));
+
+  if (!isShippoConfigured()) {
+    const message =
+      "Shipping labels aren't connected in this environment. This works once deployed with a live Shippo key.";
+    await db
+      .update(purchasingQuotations)
+      .set({ labelStatus: "ERROR", labelError: message })
+      .where(eq(purchasingQuotations.id, quotationId));
+    revalidatePath(`/dashboard/purchasing/quotations/${quotationId}`);
+    return { error: message };
+  }
+
+  const orgRow = await getOrganization(org.organizationId);
+  if (!hasShipFromAddress(orgRow)) {
+    return { error: "Add your business's ship-from address in Settings → Business before generating a label." };
+  }
+
+  const customer = await getPurchasingCustomer(org.organizationId, quotation.customerId);
+  if (!customer || !hasCustomerAddress(customer)) {
+    return {
+      error:
+        "This customer doesn't have a shipping address on file yet. Add it on the customer's page, then generate the label.",
+    };
+  }
+
+  const addressFrom: ShippoAddress = {
+    name: orgRow!.shipFromName!,
+    company: orgRow!.shipFromCompany,
+    street1: orgRow!.shipFromStreet1!,
+    street2: orgRow!.shipFromStreet2,
+    city: orgRow!.shipFromCity!,
+    state: orgRow!.shipFromState!,
+    zip: orgRow!.shipFromZip!,
+    country: orgRow!.shipFromCountry,
+    phone: orgRow!.shipFromPhone,
+    email: orgRow!.shipFromEmail,
+    isResidential: false,
+  };
+  const addressTo: ShippoAddress = {
+    name: `${customer.firstName}${customer.lastName ? ` ${customer.lastName}` : ""}`,
+    street1: customer.addressStreet1!,
+    street2: customer.addressStreet2,
+    city: customer.addressCity!,
+    state: customer.addressState!,
+    zip: customer.addressZip!,
+    country: customer.addressCountry,
+    phone: customer.phone,
+    email: customer.email,
+    isResidential: customer.isResidential,
+  };
+
+  try {
+    const shipment = await createShipment({
+      addressFrom,
+      addressTo,
+      parcel: { lengthIn: parcelLengthIn, widthIn: parcelWidthIn, heightIn: parcelHeightIn, weightLb: parcelWeightLb },
+    });
+    const rate = pickGroundRate(shipment, labelCarrier);
+    if (!rate) {
+      const serviceName = labelCarrier === "UPS_GROUND" ? "UPS Ground" : "USPS Ground";
+      throw new Error(`No ${serviceName} rate was returned for this address.`);
+    }
+
+    const transaction = await createTransaction(rate.object_id);
+    if (transaction.status !== "SUCCESS" || !transaction.label_url) {
+      const msg =
+        transaction.messages?.map((m) => m.text).filter(Boolean).join("; ") || "Label purchase did not succeed.";
+      throw new Error(msg);
+    }
+
+    await db
+      .update(purchasingQuotations)
+      .set({
+        labelStatus: "GENERATED",
+        shippoShipmentId: shipment.object_id,
+        shippoRateId: rate.object_id,
+        shippoTransactionId: transaction.object_id,
+        labelUrl: transaction.label_url,
+        labelTrackingNumber: transaction.tracking_number ?? null,
+        labelTrackingUrl: transaction.tracking_url_provider ?? null,
+        labelError: null,
+        labelGeneratedAt: new Date().toISOString(),
+        // Mirror onto the general tracking fields too, so the Quotation
+        // Summary table's Tracking # column picks this up automatically.
+        carrier: labelCarrier === "UPS_GROUND" ? "UPS" : "USPS",
+        trackingNumber: transaction.tracking_number ?? quotation.trackingNumber,
+      })
+      .where(eq(purchasingQuotations.id, quotationId));
+
+    await logAudit(org, "quotation", quotationId, "shipping_label", null, null, "Shipping label generated via Shippo");
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Label generation failed.";
+    await db
+      .update(purchasingQuotations)
+      .set({ labelStatus: "ERROR", labelError: message })
+      .where(eq(purchasingQuotations.id, quotationId));
+    revalidatePath(`/dashboard/purchasing/quotations/${quotationId}`);
+    return { error: message };
+  }
 
   revalidatePath(`/dashboard/purchasing/quotations/${quotationId}`);
   revalidatePath("/dashboard/purchasing/quotations");

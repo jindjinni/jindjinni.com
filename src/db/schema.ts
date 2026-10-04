@@ -790,6 +790,29 @@ export const purchasingQuotations = sqliteTable(
       .default("Pre-Transit"),
     lastTrackingUpdate: text("last_tracking_update"),
     deliveredAt: text("delivered_at"),
+    // Outbound Shippo label -- which service/parcel to assume and the result
+    // once purchased. Nothing here is set until "Generate shipping label"
+    // succeeds -- see generatePurchasingShippingLabel in actions/purchasing.ts.
+    // On success this also fills in carrier/trackingNumber above so the
+    // Quotation Summary table's Tracking # column picks it up automatically.
+    labelCarrier: text("label_carrier", { enum: ["UPS_GROUND", "USPS_GROUND"] })
+      .notNull()
+      .default("UPS_GROUND"),
+    parcelLengthIn: real("parcel_length_in").notNull().default(10),
+    parcelWidthIn: real("parcel_width_in").notNull().default(10),
+    parcelHeightIn: real("parcel_height_in").notNull().default(10),
+    parcelWeightLb: real("parcel_weight_lb").notNull().default(3),
+    labelStatus: text("label_status", { enum: ["NOT_GENERATED", "GENERATED", "ERROR"] })
+      .notNull()
+      .default("NOT_GENERATED"),
+    shippoShipmentId: text("shippo_shipment_id"),
+    shippoRateId: text("shippo_rate_id"),
+    shippoTransactionId: text("shippo_transaction_id"),
+    labelUrl: text("label_url"),
+    labelTrackingNumber: text("label_tracking_number"),
+    labelTrackingUrl: text("label_tracking_url"),
+    labelError: text("label_error"),
+    labelGeneratedAt: text("label_generated_at"),
     notes: text("notes"),
     createdByUserId: text("created_by_user_id").references(() => users.id),
     archivedAt: text("archived_at"),
