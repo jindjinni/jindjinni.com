@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { LegalPage, type LegalSection } from "@/components/legal/legal-page";
-import { CLOSE_GRACE_DAYS, CONTACT_EMAIL, SIGN_IN_HISTORY_MONTHS } from "@/lib/legal";
+import { CLOSE_GRACE_DAYS, CONTACT_EMAIL, OPERATOR_NAME, OPERATOR_STATE, SIGN_IN_HISTORY_MONTHS } from "@/lib/legal";
 
 export const metadata: Metadata = { title: "Privacy Policy | jindjinni" };
 
@@ -8,7 +8,7 @@ const sections: LegalSection[] = [
   {
     heading: "Who we are and what this covers",
     paras: [
-      "jindjinni (\"we\", \"us\") provides a business workspace used by companies to run purchasing and related operations. This policy explains what information we collect, how we use it, who we share it with and the choices you have. It covers our website and the workspace (the \"Service\").",
+      `jindjinni ("we", "us") is owned and operated by ${OPERATOR_NAME}, located in ${OPERATOR_STATE}, United States. We provide a business workspace used by companies to run purchasing and related operations. This policy explains what information we collect, how we use it, who we share it with and the choices you have. It covers our website and the workspace (the "Service").`,
       "There are two kinds of information, and we treat them differently. Account and company information is information about you and your company that we collect to run the Service, and we decide how it is used. Workspace data is the business records your company enters, such as customers, prices and quotations. Your company decides what goes in, and we process it on the company's behalf.",
     ],
   },
@@ -97,7 +97,7 @@ const sections: LegalSection[] = [
   },
   {
     heading: "Contact us",
-    paras: [`For privacy questions or requests, email ${CONTACT_EMAIL}.`],
+    paras: [`For privacy questions or requests, email ${CONTACT_EMAIL}, or write to ${OPERATOR_NAME}, ${OPERATOR_STATE}, USA.`],
   },
 ];
 

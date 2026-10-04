@@ -6,6 +6,9 @@
 export const TERMS_VERSION = "2026-10-04";
 export const LEGAL_UPDATED = "October 4, 2026";
 export const SERVICE_NAME = "jindjinni";
+/** The business that owns and runs the service (the party to the Terms). */
+export const OPERATOR_NAME = "Plantarz Property Solutions";
+export const OPERATOR_STATE = "Florida";
 export const CONTACT_EMAIL = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || "support@jindjinni.com";
 export const CLOSE_GRACE_DAYS = 30;
 export const SIGN_IN_HISTORY_MONTHS = 12;

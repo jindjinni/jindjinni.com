@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { LegalPage, type LegalSection } from "@/components/legal/legal-page";
-import { CLOSE_GRACE_DAYS, CONTACT_EMAIL } from "@/lib/legal";
+import { CLOSE_GRACE_DAYS, CONTACT_EMAIL, OPERATOR_NAME, OPERATOR_STATE } from "@/lib/legal";
 
 export const metadata: Metadata = { title: "Terms of Service | jindjinni" };
 
@@ -8,7 +8,7 @@ const sections: LegalSection[] = [
   {
     heading: "Who these terms are between",
     paras: [
-      "These Terms of Service (the \"Terms\") are an agreement between you and jindjinni (\"jindjinni\", \"we\", \"us\"). They cover your use of the jindjinni website and the business workspace we provide through it (the \"Service\").",
+      `These Terms of Service (the "Terms") are an agreement between you and ${OPERATOR_NAME}, a business located in ${OPERATOR_STATE}, United States, which owns and operates jindjinni ("jindjinni", "we", "us"). They cover your use of the jindjinni website and the business workspace we provide through it (the "Service").`,
       "jindjinni is for businesses. If you create an account or accept an invitation on behalf of a company, you confirm you have the authority to bind that company to these Terms, and \"you\" includes the company. You must be at least 18 years old to use the Service.",
     ],
   },
@@ -113,7 +113,7 @@ const sections: LegalSection[] = [
   {
     heading: "Governing law and disputes",
     paras: [
-      "These Terms are governed by the laws of the United States and of the state in which jindjinni is organized, without regard to conflict-of-law rules. Before starting any formal claim, each side agrees to try to resolve the matter informally by contacting the other and allowing 30 days. Claims that are not resolved that way must be brought in the courts located in that state, and both sides agree to those courts' jurisdiction.",
+      `These Terms are governed by the laws of the State of ${OPERATOR_STATE} and the United States, without regard to conflict-of-law rules. Before starting any formal claim, each side agrees to try to resolve the matter informally by contacting the other and allowing 30 days. Claims that are not resolved that way must be brought in the state or federal courts located in ${OPERATOR_STATE}, and both sides agree to those courts' jurisdiction.`,
     ],
   },
   {
@@ -124,7 +124,7 @@ const sections: LegalSection[] = [
   },
   {
     heading: "Contact",
-    paras: [`Questions about these Terms? Email ${CONTACT_EMAIL}.`],
+    paras: [`Questions about these Terms? Email ${CONTACT_EMAIL}. jindjinni is operated by ${OPERATOR_NAME}, ${OPERATOR_STATE}, USA.`],
   },
 ];
 
