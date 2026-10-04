@@ -74,6 +74,9 @@ async function readUploadedFile(formData: FormData): Promise<{ buffer: Buffer; f
   return { buffer, filename: file.name };
 }
 
+/** Money is always whole cents: a unit price like $0.768 is stored as $0.77, so unit price x quantity on a receipt always equals the line total. */
+const roundCents = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+
 function requireManager(org: CurrentOrg): ActionState {
   if (org.role === "staff") {
     return { error: "Only a Purchasing Manager or Master Admin can do that." };
@@ -1136,7 +1139,7 @@ async function recomputeQuotationTotals(org: CurrentOrg, quotationId: string) {
     .select({ lineTotal: purchasingQuotedItems.lineTotal })
     .from(purchasingQuotedItems)
     .where(eq(purchasingQuotedItems.quotationId, quotationId));
-  const itemsTotal = items.reduce((sum, i) => sum + i.lineTotal, 0);
+  const itemsTotal = roundCents(items.reduce((sum, i) => sum + i.lineTotal, 0));
 
   const tiers = await getPurchasingBonusTiers(org.organizationId);
   const { bonusAmount, tier } = computeAutomaticBonus(itemsTotal, tiers);
@@ -1149,7 +1152,7 @@ async function recomputeQuotationTotals(org: CurrentOrg, quotationId: string) {
   if (!quotation) return;
 
   const deduction = quotation.deductionEnabled ? quotation.deductionAmount : 0;
-  const grandTotal = itemsTotal + bonusAmount - deduction + quotation.returnLabelCost;
+  const grandTotal = roundCents(itemsTotal + bonusAmount - deduction + quotation.returnLabelCost);
 
   await db
     .update(purchasingQuotations)
@@ -1226,6 +1229,8 @@ export async function createPurchasingQuotation(
 }
 
 type QuotedItemPricing = {
+  /** The expiry band actually used -- null when the product never expires. */
+  expirationRangeId: string | null;
   productNameSnapshot: string;
   productCodeSnapshot: string | null;
   categoryNameSnapshot: string | null;
@@ -1254,7 +1259,8 @@ async function resolveQuotedItemPricing(
     fallbackProductNameSnapshot: string | null;
   },
 ): Promise<{ error: string } | QuotedItemPricing> {
-  const { productId, expirationRangeId, fallbackProductNameSnapshot } = params;
+  const { productId, fallbackProductNameSnapshot } = params;
+  let expirationRangeId = params.expirationRangeId;
   let conditionId = params.conditionId;
 
   let productNameSnapshot = fallbackProductNameSnapshot;
@@ -1272,10 +1278,16 @@ async function resolveQuotedItemPricing(
     const [range] = await db
       .select({ label: purchasingExpirationRanges.label, defaultMultiplier: purchasingExpirationRanges.defaultMultiplier })
       .from(purchasingExpirationRanges)
-      .where(eq(purchasingExpirationRanges.id, expirationRangeId))
+      .where(
+        and(
+          eq(purchasingExpirationRanges.id, expirationRangeId),
+          eq(purchasingExpirationRanges.organizationId, org.organizationId),
+        ),
+      )
       .limit(1);
-    expirationRangeLabelSnapshot = range?.label ?? null;
-    rangeDefaultMultiplier = range?.defaultMultiplier ?? 1;
+    if (!range) return { error: "Expiry range not found." };
+    expirationRangeLabelSnapshot = range.label;
+    rangeDefaultMultiplier = range.defaultMultiplier ?? 1;
     appliedMultiplier = rangeDefaultMultiplier;
   }
 
@@ -1286,11 +1298,19 @@ async function resolveQuotedItemPricing(
         productCode: purchasingProducts.productCode,
         standardPrice: purchasingProducts.standardPrice,
         categoryId: purchasingProducts.categoryId,
+        noExpiration: purchasingProducts.noExpiration,
       })
       .from(purchasingProducts)
       .where(and(eq(purchasingProducts.id, productId), eq(purchasingProducts.organizationId, org.organizationId)))
       .limit(1);
     if (!product) return { error: "Product not found." };
+    if (product.noExpiration) {
+      // Receivers/readers/meters never expire, so an expiry band must not
+      // discount them even if one is sent along.
+      expirationRangeId = null;
+      expirationRangeLabelSnapshot = null;
+      appliedMultiplier = 1;
+    }
     productNameSnapshot = product.name;
     productCodeSnapshot = product.productCode;
     baseUnitPrice = product.standardPrice;
@@ -1304,7 +1324,7 @@ async function resolveQuotedItemPricing(
       categoryNameSnapshot = cat?.name ?? null;
     }
 
-    if (expirationRangeId) {
+    if (expirationRangeId && !product.noExpiration) {
       const [mult] = await db
         .select({ multiplier: purchasingProductMultipliers.multiplier })
         .from(purchasingProductMultipliers)
@@ -1333,6 +1353,12 @@ async function resolveQuotedItemPricing(
     if (Number.isNaN(customMultiplier) || customMultiplier < 0) {
       return { error: "Custom condition payout must be a positive number." };
     }
+    if (customMultiplier > 1) {
+      return {
+        error:
+          "A custom condition can't pay more than 100% of the standard price. A manager can use an override price if a higher payout is really intended.",
+      };
+    }
     conditionId = null;
     conditionNameSnapshot = customName;
     conditionMultiplier = customMultiplier;
@@ -1342,11 +1368,13 @@ async function resolveQuotedItemPricing(
       .from(purchasingConditions)
       .where(and(eq(purchasingConditions.id, conditionId), eq(purchasingConditions.organizationId, org.organizationId)))
       .limit(1);
-    conditionNameSnapshot = condition?.name ?? null;
-    conditionMultiplier = condition?.multiplier ?? 1;
+    if (!condition) return { error: "Condition not found." };
+    conditionNameSnapshot = condition.name;
+    conditionMultiplier = condition.multiplier;
   }
 
   return {
+    expirationRangeId,
     productNameSnapshot,
     productCodeSnapshot,
     categoryNameSnapshot,
@@ -1386,14 +1414,19 @@ export async function addPurchasingQuotedItem(
   });
   if ("error" in pricing) return { error: pricing.error };
 
-  const computedUnitPrice = pricing.baseUnitPrice * pricing.appliedMultiplier * pricing.conditionMultiplier;
+  const computedUnitPrice = roundCents(pricing.baseUnitPrice * pricing.appliedMultiplier * pricing.conditionMultiplier);
   const overrideRaw = formData.get("overrideUnitPrice");
+  const hasOverride = overrideRaw !== null && String(overrideRaw).trim() !== "";
   let finalUnitPrice = computedUnitPrice;
-  if (overrideRaw !== null && String(overrideRaw).trim() !== "") {
+  if (hasOverride) {
     if (org.role === "staff") return { error: "Only a Purchasing Manager or Master Admin can override a price." };
     const override = Number(overrideRaw);
     if (Number.isNaN(override) || override < 0) return { error: "Override price must be a positive number." };
-    finalUnitPrice = override;
+    finalUnitPrice = roundCents(override);
+  } else if (productId && pricing.baseUnitPrice <= 0) {
+    return {
+      error: `"${pricing.productNameSnapshot}" has no price yet. Set its standard price on the Products page first (a manager can also enter an override price here).`,
+    };
   }
 
   const itemId = newId("pqitem");
@@ -1406,14 +1439,14 @@ export async function addPurchasingQuotedItem(
     categoryNameSnapshot: pricing.categoryNameSnapshot,
     conditionId: pricing.conditionId,
     conditionNameSnapshot: pricing.conditionNameSnapshot,
-    expirationRangeId,
+    expirationRangeId: pricing.expirationRangeId,
     expirationRangeLabelSnapshot: pricing.expirationRangeLabelSnapshot,
     quantity,
     baseUnitPrice: pricing.baseUnitPrice,
     appliedMultiplier: pricing.appliedMultiplier,
     conditionMultiplier: pricing.conditionMultiplier,
     finalUnitPrice,
-    lineTotal: finalUnitPrice * quantity,
+    lineTotal: roundCents(finalUnitPrice * quantity),
     notes: trimmed(formData, "notes"),
   });
 
@@ -1453,6 +1486,7 @@ export async function updatePurchasingQuotedItem(
       quotationId: purchasingQuotedItems.quotationId,
       productId: purchasingQuotedItems.productId,
       productNameSnapshot: purchasingQuotedItems.productNameSnapshot,
+      baseUnitPrice: purchasingQuotedItems.baseUnitPrice,
       quotationNumber: purchasingQuotations.quotationNumber,
     })
     .from(purchasingQuotedItems)
@@ -1478,14 +1512,22 @@ export async function updatePurchasingQuotedItem(
   });
   if ("error" in pricing) return { error: pricing.error };
 
-  const computedUnitPrice = pricing.baseUnitPrice * pricing.appliedMultiplier * pricing.conditionMultiplier;
+  // The line keeps the base price it was quoted at, so fixing a quantity or
+  // condition never silently re-prices it to today's product price.
+  const baseUnitPrice = existing.productId ? existing.baseUnitPrice : pricing.baseUnitPrice;
+  const computedUnitPrice = roundCents(baseUnitPrice * pricing.appliedMultiplier * pricing.conditionMultiplier);
   const overrideRaw = formData.get("overrideUnitPrice");
+  const hasOverride = overrideRaw !== null && String(overrideRaw).trim() !== "";
   let finalUnitPrice = computedUnitPrice;
-  if (overrideRaw !== null && String(overrideRaw).trim() !== "") {
+  if (hasOverride) {
     if (org.role === "staff") return { error: "Only a Purchasing Manager or Master Admin can override a price." };
     const override = Number(overrideRaw);
     if (Number.isNaN(override) || override < 0) return { error: "Override price must be a positive number." };
-    finalUnitPrice = override;
+    finalUnitPrice = roundCents(override);
+  } else if (existing.productId && baseUnitPrice <= 0) {
+    return {
+      error: `"${existing.productNameSnapshot}" was quoted with no price. Enter an override price (manager) or remove the line.`,
+    };
   }
 
   await db
@@ -1493,13 +1535,13 @@ export async function updatePurchasingQuotedItem(
     .set({
       conditionId: pricing.conditionId,
       conditionNameSnapshot: pricing.conditionNameSnapshot,
-      expirationRangeId,
+      expirationRangeId: pricing.expirationRangeId,
       expirationRangeLabelSnapshot: pricing.expirationRangeLabelSnapshot,
       quantity,
       appliedMultiplier: pricing.appliedMultiplier,
       conditionMultiplier: pricing.conditionMultiplier,
       finalUnitPrice,
-      lineTotal: finalUnitPrice * quantity,
+      lineTotal: roundCents(finalUnitPrice * quantity),
     })
     .where(eq(purchasingQuotedItems.id, itemId));
 
@@ -1741,6 +1783,9 @@ export async function setPurchasingQuotationDeduction(
     return { error: "Enter a reason for the deduction." };
   }
   if (deductionAmount < 0) return { error: "Deduction amount can't be negative." };
+  if (deductionEnabled && deductionAmount > quotation.itemsTotal + quotation.bonusAmount + quotation.returnLabelCost) {
+    return { error: "The deduction can't be more than the quotation total." };
+  }
 
   if (deductionEnabled !== quotation.deductionEnabled || deductionAmount !== quotation.deductionAmount) {
     await logAudit(
