@@ -23,7 +23,7 @@ import {
   type ImportRow,
 } from "@/lib/purchasing-quotation-import";
 
-const MAX_FILE_BYTES = 5 * 1024 * 1024;
+const MAX_FILE_BYTES = 4 * 1024 * 1024; // Vercel rejects request bodies over 4.5 MB
 const REPORT_ROW_CAP = 300;
 
 export type QuotationImportReportLine = {
@@ -69,7 +69,7 @@ async function requireWriter(): Promise<CurrentOrg> {
 async function readSheet(formData: FormData): Promise<{ sheet: ParsedSheet; fileName: string } | { error: string }> {
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) return { error: "Choose a CSV or Excel file to import." };
-  if (file.size > MAX_FILE_BYTES) return { error: "That file is over 5 MB. Split it into smaller files and import them one at a time." };
+  if (file.size > MAX_FILE_BYTES) return { error: "That file is over 4 MB. Split it into smaller files and import them one at a time." };
   try {
     const sheet = parseSpreadsheetFile(Buffer.from(await file.arrayBuffer()), file.name);
     return { sheet, fileName: file.name };

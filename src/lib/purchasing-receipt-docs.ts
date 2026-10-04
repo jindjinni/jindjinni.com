@@ -18,15 +18,31 @@ import {
 } from "@/lib/queries";
 import { buildReceiptPdf } from "@/lib/purchasing-receipt-pdf";
 
-export const MAX_RECEIPT_UPLOAD_BYTES = 5 * 1024 * 1024;
+// Vercel rejects request bodies over 4.5 MB, so 4 MB is the honest ceiling for one attached file.
+export const MAX_RECEIPT_UPLOAD_BYTES = 4 * 1024 * 1024;
 
-/** Real PDFs start with "%PDF-". */
-export const looksLikePdf = (bytes: Uint8Array) =>
-  bytes.length > 5 && bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46 && bytes[4] === 0x2d;
+export type ReceiptFileType = { mime: string; ext: string; isImage: boolean };
 
-export function receiptFilename(quotationNumber: string) {
+/**
+ * What a file really is, judged by its first bytes (never by its name or the
+ * type the browser claims). Receipts can be a PDF or a photo/screenshot:
+ * PDF, PNG, JPEG, WebP or GIF. Anything else (including SVG/HTML) is refused.
+ */
+export function sniffReceiptType(b: Uint8Array): ReceiptFileType | null {
+  const at = (i: number, ...v: number[]) => v.every((x, k) => b[i + k] === x);
+  if (b.length > 12) {
+    if (at(0, 0x25, 0x50, 0x44, 0x46, 0x2d)) return { mime: "application/pdf", ext: "pdf", isImage: false };
+    if (at(0, 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)) return { mime: "image/png", ext: "png", isImage: true };
+    if (at(0, 0xff, 0xd8, 0xff)) return { mime: "image/jpeg", ext: "jpg", isImage: true };
+    if (at(0, 0x47, 0x49, 0x46, 0x38)) return { mime: "image/gif", ext: "gif", isImage: true };
+    if (at(0, 0x52, 0x49, 0x46, 0x46) && at(8, 0x57, 0x45, 0x42, 0x50)) return { mime: "image/webp", ext: "webp", isImage: true };
+  }
+  return null;
+}
+
+export function receiptFilename(quotationNumber: string, ext = "pdf") {
   const safe = quotationNumber.replace(/[^A-Za-z0-9._-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 60) || "receipt";
-  return `Quotation-Receipt-${safe}.pdf`;
+  return `Quotation-Receipt-${safe}.${ext}`;
 }
 
 function expiryOnwardsLabel(quotationDate: string, minMonths: number | null | undefined) {

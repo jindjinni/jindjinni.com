@@ -87,7 +87,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2">
           <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-500">Receipt PDF</span>
+            <span className="text-xs text-slate-500">Receipt</span>
             <ReceiptCell
               quotationId={quotation.id}
               label={quotation.quotationNumber}

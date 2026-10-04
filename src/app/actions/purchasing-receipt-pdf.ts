@@ -1,7 +1,8 @@
 "use server";
 
-// Receipt PDF actions on a quotation: attach your own PDF (used for imported
-// orders), remove it, or rebuild the app's own receipt.
+// Receipt actions on a quotation: attach your own file -- a PDF, photo or
+// screenshot (used for imported orders) -- remove it, or rebuild the app's own
+// PDF receipt.
 
 import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
@@ -12,7 +13,7 @@ import { canWritePurchasing } from "@/lib/permissions";
 import { newId } from "@/lib/ids";
 import {
   MAX_RECEIPT_UPLOAD_BYTES,
-  looksLikePdf,
+  sniffReceiptType,
   receiptFilename,
   refreshGeneratedReceipt,
   removeUploadedReceipt,
@@ -61,19 +62,22 @@ export async function uploadReceiptPdf(quotationId: string, formData: FormData):
   if (!q) return { error: "Quotation not found." };
 
   const file = formData.get("file");
-  if (!(file instanceof File) || file.size === 0) return { error: "Choose a PDF file to attach." };
-  if (file.size > MAX_RECEIPT_UPLOAD_BYTES) return { error: "That PDF is over 5 MB. Choose a smaller file." };
+  if (!(file instanceof File) || file.size === 0) return { error: "Choose a PDF, photo or screenshot to attach." };
+  if (file.size > MAX_RECEIPT_UPLOAD_BYTES) return { error: "That file is over 4 MB. Choose a smaller file or a lower-resolution photo." };
   const bytes = new Uint8Array(await file.arrayBuffer());
-  if (!looksLikePdf(bytes)) return { error: "That file isn't a PDF. Choose a .pdf file." };
+  const type = sniffReceiptType(bytes);
+  if (!type) return { error: "That file isn't a PDF or an image. Attach a PDF, or a JPG, PNG, WebP or GIF photo/screenshot." };
 
+  const cleanName = file.name.replace(/[^A-Za-z0-9._ -]/g, "_").slice(0, 120);
+  const nameOk = cleanName.toLowerCase().endsWith(`.${type.ext}`) || (type.ext === "jpg" && /\.jpe?g$/i.test(cleanName));
   await saveUploadedReceipt({
     organizationId: org.organizationId,
     quotationId,
-    filename: file.name.toLowerCase().endsWith(".pdf") ? file.name.replace(/[^A-Za-z0-9._ -]/g, "_").slice(0, 120) : receiptFilename(q.number),
+    filename: nameOk ? cleanName : receiptFilename(q.number, type.ext),
     bytes,
     userId: org.userId,
   });
-  await audit(org, quotationId, `Receipt PDF attached (${file.name}, ${Math.round(file.size / 1024)} KB)`);
+  await audit(org, quotationId, `Receipt file attached (${file.name}, ${Math.round(file.size / 1024)} KB)`);
   refresh(quotationId);
   return { ok: true };
 }
@@ -82,7 +86,7 @@ export async function removeReceiptPdf(quotationId: string): Promise<ReceiptPdfA
   const org = await requireWriter();
   if (!(await ownQuotation(org.organizationId, quotationId))) return { error: "Quotation not found." };
   await removeUploadedReceipt(org.organizationId, quotationId);
-  await audit(org, quotationId, "Attached receipt PDF removed");
+  await audit(org, quotationId, "Attached receipt file removed");
   refresh(quotationId);
   return { ok: true };
 }
