@@ -87,6 +87,29 @@ export async function requireOrg(): Promise<CurrentOrg> {
   };
 }
 
+/**
+ * Route-handler version of requireOrg(): same rule (the signed-in user's own
+ * active membership in a company that isn't closed), but returns null instead
+ * of redirecting, so an API route can answer 401/403 itself.
+ */
+export async function requireOrgApi(): Promise<CurrentOrg | null> {
+  const session = await auth();
+  const userId = (session?.user as { id?: string } | undefined)?.id;
+  if (!userId) return null;
+  const [row] = await db
+    .select({
+      organizationId: organizations.id,
+      organizationName: organizations.name,
+      role: memberships.role,
+    })
+    .from(memberships)
+    .innerJoin(organizations, eq(memberships.organizationId, organizations.id))
+    .where(and(eq(memberships.userId, userId), isNull(memberships.deactivatedAt), isNull(organizations.closedAt)))
+    .limit(1);
+  if (!row) return null;
+  return { userId, organizationId: row.organizationId, organizationName: row.organizationName, role: row.role as CurrentOrg["role"] };
+}
+
 export type ClosedCompany = {
   organizationId: string;
   organizationName: string;

@@ -28,6 +28,7 @@ import {
   purchasingQuotedItems,
   purchasingAuditLog,
   purchasingReceiptVersions,
+  purchasingQuotationDocuments,
   purchasingReceiptSettings,
   businessProfiles,
 } from "@/db/schema";
@@ -979,6 +980,23 @@ export async function getPurchasingQuotationsSummary(organizationId: string, opt
     .innerJoin(purchasingQuotations, eq(purchasingQuotations.id, purchasingQuotedItems.quotationId))
     .where(eq(purchasingQuotations.organizationId, organizationId));
 
+  // Which receipt PDFs exist (without loading the files themselves).
+  const docRows = await db
+    .select({
+      quotationId: purchasingQuotationDocuments.quotationId,
+      kind: purchasingQuotationDocuments.kind,
+      updatedAt: purchasingQuotationDocuments.updatedAt,
+    })
+    .from(purchasingQuotationDocuments)
+    .where(eq(purchasingQuotationDocuments.organizationId, organizationId));
+  const docsByQuotation = new Map<string, { uploaded?: string; generated?: string }>();
+  for (const d of docRows) {
+    const cur = docsByQuotation.get(d.quotationId) ?? {};
+    if (d.kind === "UPLOADED") cur.uploaded = d.updatedAt;
+    else cur.generated = d.updatedAt;
+    docsByQuotation.set(d.quotationId, cur);
+  }
+
   const itemsByQuotation = new Map<string, { productNameSnapshot: string; quantity: number }[]>();
   for (const item of itemRows) {
     const list = itemsByQuotation.get(item.quotationId) ?? [];
@@ -988,6 +1006,16 @@ export async function getPurchasingQuotationsSummary(organizationId: string, opt
 
   return visible.map((r) => {
     const items = itemsByQuotation.get(r.id) ?? [];
+    const docs = docsByQuotation.get(r.id);
+    // "AUTO" = no PDF stored yet but the order has lines, so one is built the first time it is opened.
+    const receipt: "UPLOADED" | "GENERATED" | "AUTO" | null = docs?.uploaded
+      ? "UPLOADED"
+      : docs?.generated
+        ? "GENERATED"
+        : items.length > 0
+          ? "AUTO"
+          : null;
+    const receiptStamp = docs?.uploaded ?? docs?.generated ?? "";
     const itemsSummary =
       items.length === 0
         ? r.importedItemsText?.trim()
@@ -1008,6 +1036,8 @@ export async function getPurchasingQuotationsSummary(organizationId: string, opt
     return {
       id: r.id,
       imported: r.source === "IMPORTED",
+      receipt,
+      receiptStamp,
       quotationNumber: r.quotationNumber,
       quotationDate: r.quotationDate,
       status: r.status,

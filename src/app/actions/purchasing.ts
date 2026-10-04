@@ -52,6 +52,7 @@ import { seedPurchasingConditionsForOrg } from "@/lib/purchasing-condition-seed"
 import { parseSpreadsheetFile, findColumn } from "@/lib/spreadsheet-import";
 import { applyExpiryRulesForOrg } from "@/lib/purchasing-expiry-plan";
 import { extractNdc } from "@/lib/purchasing-ndc";
+import { refreshGeneratedReceipt } from "@/lib/purchasing-receipt-docs";
 import { CustomerDedupeIndex } from "@/lib/purchasing-customer-dedupe";
 import { customerValidationError, missingCustomerFields } from "@/lib/purchasing-customer-rules";
 import {
@@ -1205,6 +1206,9 @@ async function recomputeQuotationTotals(org: CurrentOrg, quotationId: string) {
       grandTotal,
     })
     .where(eq(purchasingQuotations.id, quotationId));
+
+  // Keep the stored receipt PDF in step with the order (never blocks the save).
+  await refreshGeneratedReceipt(org, quotationId);
 }
 
 /**

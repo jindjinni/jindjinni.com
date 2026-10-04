@@ -1,4 +1,6 @@
-import { isPurchasingManager } from "@/lib/permissions";
+import { isPurchasingManager, canWritePurchasing } from "@/lib/permissions";
+import { getReceiptState } from "@/lib/purchasing-receipt-docs";
+import { ReceiptCell } from "../receipt-cell";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { requireOrg } from "@/lib/tenant";
@@ -30,6 +32,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
   const data = await getPurchasingQuotationWithItems(org.organizationId, id);
   if (!data) notFound();
   const { quotation, items, customer } = data;
+  const receiptState = await getReceiptState(org.organizationId, quotation.id, items.length);
 
   const [products, conditions, ranges, productConditionsMap, orgRow, multiplierRows] = await Promise.all([
     getPurchasingProducts(org.organizationId),
@@ -83,6 +86,16 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
           />
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-500">Receipt PDF</span>
+            <ReceiptCell
+              quotationId={quotation.id}
+              label={quotation.quotationNumber}
+              receipt={receiptState.receipt}
+              stamp={receiptState.stamp}
+              canWrite={canWritePurchasing(org.role)}
+            />
+          </div>
           <Link
             href={`/dashboard/purchasing/quotations/${quotation.id}/receipt`}
             className="rounded-md bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800"

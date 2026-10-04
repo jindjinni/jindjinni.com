@@ -949,6 +949,37 @@ export const purchasingReceiptVersions = sqliteTable(
 );
 
 /**
+ * The PDF receipt shown on the Quotation Summary. kind GENERATED = the app's
+ * own receipt PDF (replaced whenever the order changes); kind UPLOADED = a PDF
+ * someone attached by hand (e.g. for an imported order) -- it wins over the
+ * generated one. At most one of each kind per quotation. The file itself is
+ * kept as base64 text and is only ever served through a signed-in, company-
+ * checked route -- never a public link.
+ */
+export const purchasingQuotationDocuments = sqliteTable(
+  "purchasing_quotation_documents",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    quotationId: text("quotation_id")
+      .notNull()
+      .references(() => purchasingQuotations.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: ["GENERATED", "UPLOADED"] }).notNull(),
+    filename: text("filename").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    contentBase64: text("content_base64").notNull(),
+    createdByUserId: text("created_by_user_id").references(() => users.id),
+    ...timestamps,
+  },
+  (t) => [
+    index("purchasing_quotation_documents_org_idx").on(t.organizationId),
+    uniqueIndex("purchasing_quotation_documents_quote_kind_idx").on(t.quotationId, t.kind),
+  ],
+);
+
+/**
  * One row per org -- every piece of wording on the printed/exported
  * quotation receipt that isn't per-quotation data (banner, disclaimer,
  * mint-condition policy, payment-timing note, footer thank-you). Every

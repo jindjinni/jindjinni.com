@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { QuotationRowMenu } from "./quotation-row-menu";
 import { QuotationImportPanel } from "./quotation-import-panel";
+import { ReceiptCell, type ReceiptState } from "./receipt-cell";
 
 export type QuotationSummaryRow = {
   id: string;
@@ -15,6 +16,8 @@ export type QuotationSummaryRow = {
   labelStatus: "NOT_GENERATED" | "GENERATED" | "ERROR";
   archivedAt: string | null;
   imported?: boolean;
+  receipt?: ReceiptState;
+  receiptStamp?: string;
   customerName: string;
   email: string | null;
   phone: string | null;
@@ -237,13 +240,14 @@ export function QuotationsTable({ quotations, canImport = false }: { quotations:
               <th className="whitespace-nowrap px-4 py-3">Shipping Info</th>
               <th className="px-4 py-3">Items Quoted For</th>
               <th className="whitespace-nowrap px-4 py-3">Tracking #</th>
+              <th className="whitespace-nowrap px-4 py-3">Quotation Receipt</th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
           <tbody>
             {visible.length === 0 && (
               <tr>
-                <td colSpan={10} className="px-4 py-10 text-center text-slate-400">
+                <td colSpan={11} className="px-4 py-10 text-center text-slate-400">
                   {quotations.length === 0 ? "No quotations yet -- generate one above." : "No matches for that search."}
                 </td>
               </tr>
@@ -290,6 +294,15 @@ export function QuotationsTable({ quotations, canImport = false }: { quotations:
                 <td className="min-w-[14rem] px-4 py-3.5 text-slate-700 dark:text-slate-300">{row.itemsSummary}</td>
                 <td className="whitespace-nowrap px-4 py-3.5 text-slate-700 dark:text-slate-300">
                   {row.trackingNumber ?? (row.labelStatus === "GENERATED" ? "Generated" : "—")}
+                </td>
+                <td className="whitespace-nowrap px-4 py-3.5">
+                  <ReceiptCell
+                    quotationId={row.id}
+                    label={row.quotationNumber}
+                    receipt={row.receipt ?? null}
+                    stamp={row.receiptStamp ?? ""}
+                    canWrite={canImport}
+                  />
                 </td>
                 <td className="px-4 py-3.5 text-right">
                   <QuotationRowMenu quotationId={row.id} label={row.quotationNumber} />
