@@ -51,6 +51,7 @@ import { seedPurchasingConditionsForOrg } from "@/lib/purchasing-condition-seed"
 import { parseSpreadsheetFile, findColumn } from "@/lib/spreadsheet-import";
 import { applyExpiryRulesForOrg } from "@/lib/purchasing-expiry-plan";
 import { extractNdc } from "@/lib/purchasing-ndc";
+import { customerValidationError, missingCustomerFields } from "@/lib/purchasing-customer-rules";
 import {
   createShipment,
   createTransaction,
@@ -117,7 +118,17 @@ export async function createPurchasingCustomer(
   const org = await requireOrg();
 
   const firstName = String(formData.get("firstName") ?? "").trim();
-  if (!firstName) return { error: "Enter the customer's first name." };
+  const invalid = customerValidationError({
+    firstName,
+    lastName: trimmed(formData, "lastName"),
+    email: trimmed(formData, "email"),
+    phone: trimmed(formData, "phone"),
+    street1: trimmed(formData, "addressStreet1"),
+    city: trimmed(formData, "addressCity"),
+    state: trimmed(formData, "addressState"),
+    zip: trimmed(formData, "addressZip"),
+  });
+  if (invalid) return { error: invalid };
 
   const customerId = newId("pcust");
   await db.insert(purchasingCustomers).values({
@@ -156,7 +167,17 @@ export async function updatePurchasingCustomer(
   if (!customer) return { error: "Customer not found." };
 
   const firstName = String(formData.get("firstName") ?? "").trim();
-  if (!firstName) return { error: "Enter the customer's first name." };
+  const invalid = customerValidationError({
+    firstName,
+    lastName: trimmed(formData, "lastName"),
+    email: trimmed(formData, "email"),
+    phone: trimmed(formData, "phone"),
+    street1: trimmed(formData, "addressStreet1"),
+    city: trimmed(formData, "addressCity"),
+    state: trimmed(formData, "addressState"),
+    zip: trimmed(formData, "addressZip"),
+  });
+  if (invalid) return { error: invalid };
 
   await db
     .update(purchasingCustomers)
@@ -1183,9 +1204,37 @@ export async function createPurchasingQuotation(
   if (customerId) {
     customer = await getPurchasingCustomer(org.organizationId, customerId);
     if (!customer) return { error: "Customer not found." };
+    const missing = missingCustomerFields({
+      firstName: customer.firstName,
+      lastName: customer.lastName,
+      email: customer.email,
+      phone: customer.phone,
+      street1: customer.addressStreet1,
+      city: customer.addressCity,
+      state: customer.addressState,
+      zip: customer.addressZip,
+    });
+    if (missing.length > 0) {
+      return {
+        error: `This customer's profile is incomplete (missing: ${missing.join(", ")}). Open their profile and fill it in before starting a quotation.`,
+      };
+    }
   } else {
     const firstName = String(formData.get("newCustomerFirstName") ?? "").trim();
-    if (!firstName) return { error: "Choose an existing customer, or enter a first name for a new one." };
+    if (!firstName && !String(formData.get("newCustomerLastName") ?? "").trim()) {
+      return { error: "Choose an existing customer, or enter the new customer's details." };
+    }
+    const invalid = customerValidationError({
+      firstName,
+      lastName: trimmed(formData, "newCustomerLastName"),
+      email: trimmed(formData, "newCustomerEmail"),
+      phone: trimmed(formData, "newCustomerPhone"),
+      street1: trimmed(formData, "newCustomerAddressStreet1"),
+      city: trimmed(formData, "newCustomerAddressCity"),
+      state: trimmed(formData, "newCustomerAddressState"),
+      zip: trimmed(formData, "newCustomerAddressZip"),
+    });
+    if (invalid) return { error: invalid };
 
     customerId = newId("pcust");
     const newCustomerRow = {
@@ -2338,12 +2387,22 @@ export async function importPurchasingCustomers(
         lastName = full.slice(spaceIdx + 1);
       }
     }
-    if (!firstName) {
-      errors.push(`Row ${rowNumber}: missing name.`);
+    const email = emailCol ? row[emailCol]?.trim() || null : null;
+    const importProblem = customerValidationError({
+      firstName,
+      lastName,
+      email,
+      phone: phoneCol ? row[phoneCol] : null,
+      street1: street1Col ? row[street1Col] : null,
+      city: cityCol ? row[cityCol] : null,
+      state: stateCol ? row[stateCol] : null,
+      zip: zipCol ? row[zipCol] : null,
+    });
+    if (importProblem) {
+      errors.push(`Row ${rowNumber}: ${importProblem.replace("A customer needs a full name, full address, email and phone number. ", "")}`);
       continue;
     }
 
-    const email = emailCol ? row[emailCol]?.trim() || null : null;
     if (email && existingEmails.has(email.toLowerCase())) {
       skipped++;
       continue;

@@ -1,28 +1,32 @@
 import Link from "next/link";
 import { requireOrg } from "@/lib/tenant";
-import { getPurchasingCustomers, purchasingCustomerName } from "@/lib/queries";
+import { getPurchasingCustomers, getPurchasingQuotationCountsByCustomer, purchasingCustomerName } from "@/lib/queries";
+import { missingCustomerFields } from "@/lib/purchasing-customer-rules";
 import { AddCustomerForm } from "./add-customer-form";
 import { ImportSpreadsheetForm } from "../import-spreadsheet-form";
 import { importPurchasingCustomers } from "@/app/actions/purchasing";
 
 export default async function PurchasingCustomersPage() {
   const org = await requireOrg();
-  const customers = await getPurchasingCustomers(org.organizationId);
+  const [customers, quoteCounts] = await Promise.all([
+    getPurchasingCustomers(org.organizationId),
+    getPurchasingQuotationCountsByCustomer(org.organizationId),
+  ]);
 
   return (
     <div>
       <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-50">Customers</h1>
       <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-        Everyone we&rsquo;ve bought from. Editable by any Purchasing user -- archiving is reserved for a Purchasing Manager.
+        Everyone we&rsquo;ve bought from. Every customer needs a full name, full address, email and phone. Open a customer to edit them and see all of their quotations.
       </p>
 
       <ImportSpreadsheetForm
         action={importPurchasingCustomers}
         title="Import from CSV/Excel"
-        columnsHelp={"Columns: Name or First Name (required), Last Name, Email, Phone, Reference #, Address, City, State, Zip."}
+        columnsHelp={"Required columns: Name (or First Name + Last Name), Email, Phone, Address, City, State, Zip. Rows missing any of these are skipped and listed. Optional: Reference #."}
         templateFilename="customers-template.csv"
-        templateHeaders={["First Name", "Last Name", "Email", "Phone"]}
-        templateSampleRow={["Jordan", "Alvarez", "jordan@example.com", "555-0100"]}
+        templateHeaders={["First Name", "Last Name", "Email", "Phone", "Address", "City", "State", "Zip"]}
+        templateSampleRow={["Jordan", "Alvarez", "jordan@example.com", "555-010-0100", "123 Main St", "Springfield", "IL", "62701"]}
       />
 
       <AddCustomerForm />
@@ -34,13 +38,14 @@ export default async function PurchasingCustomersPage() {
               <th className="px-4 py-3 font-medium">Name</th>
               <th className="px-4 py-3 font-medium">Email</th>
               <th className="px-4 py-3 font-medium">Phone</th>
-              <th className="px-4 py-3 font-medium">Reference #</th>
+              <th className="px-4 py-3 font-medium">Address</th>
+              <th className="px-4 py-3 text-right font-medium">Quotations</th>
             </tr>
           </thead>
           <tbody>
             {customers.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={5} className="px-4 py-8 text-center text-slate-400">
                   No customers yet -- add one above.
                 </td>
               </tr>
@@ -54,10 +59,31 @@ export default async function PurchasingCustomersPage() {
                   >
                     {purchasingCustomerName(c)}
                   </Link>
+                  {missingCustomerFields({
+                    firstName: c.firstName,
+                    lastName: c.lastName,
+                    email: c.email,
+                    phone: c.phone,
+                    street1: c.addressStreet1,
+                    city: c.addressCity,
+                    state: c.addressState,
+                    zip: c.addressZip,
+                  }).length > 0 && (
+                    <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-200">
+                      Incomplete
+                    </span>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{c.email ?? "—"}</td>
                 <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{c.phone ?? "—"}</td>
-                <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{c.customerReferenceNumber ?? "—"}</td>
+                <td className="px-4 py-3 text-slate-700 dark:text-slate-300">
+                  {[c.addressStreet1, c.addressCity, [c.addressState, c.addressZip].filter(Boolean).join(" ")]
+                    .filter(Boolean)
+                    .join(", ") || "—"}
+                </td>
+                <td className="px-4 py-3 text-right tabular-nums text-slate-700 dark:text-slate-300">
+                  {quoteCounts.get(c.id) ?? 0}
+                </td>
               </tr>
             ))}
           </tbody>

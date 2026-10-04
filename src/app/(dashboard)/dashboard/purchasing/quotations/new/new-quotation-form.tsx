@@ -9,7 +9,7 @@ type ActionState = { error?: string } | undefined;
 const inputClass =
   "rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-emerald-600 dark:border-slate-700 dark:bg-slate-800";
 
-type Customer = { id: string; firstName: string; lastName: string | null };
+type Customer = { id: string; firstName: string; lastName: string | null; incomplete?: boolean };
 
 export function NewQuotationForm({
   customers,
@@ -46,7 +46,7 @@ export function NewQuotationForm({
             </option>
             {customers.map((c) => (
               <option key={c.id} value={c.id}>
-                {[c.firstName, c.lastName].filter(Boolean).join(" ")}
+                {[c.firstName, c.lastName].filter(Boolean).join(" ")}{c.incomplete ? " — profile incomplete" : ""}
               </option>
             ))}
           </select>
@@ -54,22 +54,22 @@ export function NewQuotationForm({
       ) : (
         <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-slate-600 dark:text-slate-400">First name</span>
+            <span className="text-slate-600 dark:text-slate-400">First name *</span>
             <input name="newCustomerFirstName" required className={inputClass} />
           </label>
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-slate-600 dark:text-slate-400">Last name</span>
-            <input name="newCustomerLastName" className={inputClass} />
+            <span className="text-slate-600 dark:text-slate-400">Last name *</span>
+            <input name="newCustomerLastName" required className={inputClass} />
           </label>
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-slate-600 dark:text-slate-400">Email</span>
-            <input name="newCustomerEmail" type="email" className={inputClass} />
+            <span className="text-slate-600 dark:text-slate-400">Email *</span>
+            <input name="newCustomerEmail" type="email" required className={inputClass} />
           </label>
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-slate-600 dark:text-slate-400">Phone</span>
-            <input name="newCustomerPhone" className={inputClass} />
+            <span className="text-slate-600 dark:text-slate-400">Phone *</span>
+            <input name="newCustomerPhone" type="tel" required className={inputClass} />
           </label>
-          <AddressAutocompleteFields prefix="newCustomerAddress" />
+          <AddressAutocompleteFields prefix="newCustomerAddress" required />
           <label className="flex items-center gap-2 text-sm text-slate-700 sm:col-span-2 dark:text-slate-300">
             <input type="checkbox" name="newCustomerIsResidential" defaultChecked /> Residential address
           </label>

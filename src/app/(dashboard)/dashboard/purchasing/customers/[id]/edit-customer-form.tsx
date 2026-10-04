@@ -34,20 +34,20 @@ export function EditCustomerForm({ customerId, customer }: { customerId: string;
     <form action={action} className="mt-4 rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="flex flex-col gap-1 text-sm">
-          <span className="text-slate-600 dark:text-slate-400">First name</span>
+          <span className="text-slate-600 dark:text-slate-400">First name *</span>
           <input name="firstName" required defaultValue={customer.firstName} className={inputClass} />
         </label>
         <label className="flex flex-col gap-1 text-sm">
-          <span className="text-slate-600 dark:text-slate-400">Last name</span>
-          <input name="lastName" defaultValue={customer.lastName ?? ""} className={inputClass} />
+          <span className="text-slate-600 dark:text-slate-400">Last name *</span>
+          <input name="lastName" required defaultValue={customer.lastName ?? ""} className={inputClass} />
         </label>
         <label className="flex flex-col gap-1 text-sm">
-          <span className="text-slate-600 dark:text-slate-400">Email</span>
-          <input name="email" type="email" defaultValue={customer.email ?? ""} className={inputClass} />
+          <span className="text-slate-600 dark:text-slate-400">Email *</span>
+          <input name="email" type="email" required defaultValue={customer.email ?? ""} className={inputClass} />
         </label>
         <label className="flex flex-col gap-1 text-sm">
-          <span className="text-slate-600 dark:text-slate-400">Phone</span>
-          <input name="phone" defaultValue={customer.phone ?? ""} className={inputClass} />
+          <span className="text-slate-600 dark:text-slate-400">Phone *</span>
+          <input name="phone" type="tel" required defaultValue={customer.phone ?? ""} className={inputClass} />
         </label>
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-slate-600 dark:text-slate-400">Customer reference #</span>
@@ -55,7 +55,7 @@ export function EditCustomerForm({ customerId, customer }: { customerId: string;
         </label>
       </div>
 
-      <h3 className="mt-5 text-sm font-semibold text-slate-900 dark:text-slate-50">Shipping address</h3>
+      <h3 className="mt-5 text-sm font-semibold text-slate-900 dark:text-slate-50">Address *</h3>
       <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <AddressAutocompleteFields
           prefix="address"
@@ -66,6 +66,7 @@ export function EditCustomerForm({ customerId, customer }: { customerId: string;
             state: customer.addressState,
             zip: customer.addressZip,
           }}
+          required
         />
       </div>
       <label className="mt-3 flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">

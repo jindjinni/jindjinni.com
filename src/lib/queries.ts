@@ -653,6 +653,38 @@ export async function getPurchasingCustomer(organizationId: string, customerId: 
   return row ?? null;
 }
 
+/** Every quotation (reference number) ever created for one customer, newest first -- archived ones included and flagged. */
+export async function getPurchasingQuotationsForCustomer(organizationId: string, customerId: string) {
+  return db
+    .select({
+      id: purchasingQuotations.id,
+      quotationNumber: purchasingQuotations.quotationNumber,
+      quotationDate: purchasingQuotations.quotationDate,
+      status: purchasingQuotations.status,
+      itemsTotal: purchasingQuotations.itemsTotal,
+      bonusAmount: purchasingQuotations.bonusAmount,
+      deductionEnabled: purchasingQuotations.deductionEnabled,
+      deductionAmount: purchasingQuotations.deductionAmount,
+      grandTotal: purchasingQuotations.grandTotal,
+      trackingNumber: purchasingQuotations.trackingNumber,
+      packageStatus: purchasingQuotations.packageStatus,
+      archivedAt: purchasingQuotations.archivedAt,
+    })
+    .from(purchasingQuotations)
+    .where(and(eq(purchasingQuotations.organizationId, organizationId), eq(purchasingQuotations.customerId, customerId)))
+    .orderBy(desc(purchasingQuotations.createdAt));
+}
+
+/** customerId -> how many quotations they have (for the Customers list). */
+export async function getPurchasingQuotationCountsByCustomer(organizationId: string) {
+  const rows = await db
+    .select({ customerId: purchasingQuotations.customerId, count: sql<number>`count(*)` })
+    .from(purchasingQuotations)
+    .where(and(eq(purchasingQuotations.organizationId, organizationId), isNull(purchasingQuotations.archivedAt)))
+    .groupBy(purchasingQuotations.customerId);
+  return new Map(rows.map((r) => [r.customerId, Number(r.count)]));
+}
+
 export async function getPurchasingCategories(organizationId: string, opts: { includeInactive?: boolean } = {}) {
   const rows = await db
     .select()
