@@ -9,10 +9,11 @@ import {
   getPurchasingExpirationRanges,
   purchasingCustomerName,
 } from "@/lib/queries";
-import { removePurchasingQuotedItem, archivePurchasingQuotation, restorePurchasingQuotation } from "@/app/actions/purchasing";
+import { archivePurchasingQuotation, restorePurchasingQuotation } from "@/app/actions/purchasing";
 import { AddQuotedItemForm } from "./add-quoted-item-form";
 import { QuotationHeaderForm } from "./quotation-header-form";
 import { DeductionForm } from "./deduction-form";
+import { QuotedItemRow } from "./quoted-item-row";
 import { ActionButton } from "@/components/action-button";
 
 export default async function QuotationDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -96,6 +97,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
         <table className="w-full text-left text-sm">
           <thead className="border-b border-slate-200 text-slate-500 dark:border-slate-800 dark:text-slate-400">
             <tr>
+              <th className="px-4 py-3 font-medium">#</th>
               <th className="px-4 py-3 font-medium">Product</th>
               <th className="px-4 py-3 font-medium">Condition</th>
               <th className="px-4 py-3 font-medium">Expiry</th>
@@ -108,33 +110,21 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
           <tbody>
             {items.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={8} className="px-4 py-8 text-center text-slate-400">
                   Nothing quoted yet. Add a line below.
                 </td>
               </tr>
             )}
-            {items.map((item) => (
-              <tr key={item.id} className="border-b border-slate-100 last:border-0 dark:border-slate-800">
-                <td className="px-4 py-3 text-slate-900 dark:text-slate-50">{item.productNameSnapshot}</td>
-                <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{item.conditionNameSnapshot ?? "—"}</td>
-                <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{item.expirationRangeLabelSnapshot ?? "—"}</td>
-                <td className="px-4 py-3 text-right tabular-nums text-slate-700 dark:text-slate-300">{item.quantity}</td>
-                <td className="px-4 py-3 text-right tabular-nums text-slate-700 dark:text-slate-300">
-                  ${item.finalUnitPrice.toFixed(2)}
-                </td>
-                <td className="px-4 py-3 text-right tabular-nums text-slate-900 dark:text-slate-50">
-                  ${item.lineTotal.toFixed(2)}
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <ActionButton
-                    action={removePurchasingQuotedItem.bind(null, item.id)}
-                    label="Remove"
-                    pendingLabel="Removing..."
-                    confirm={`Remove ${item.productNameSnapshot} from this quotation?`}
-                    className="rounded-md border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950"
-                  />
-                </td>
-              </tr>
+            {items.map((item, i) => (
+              <QuotedItemRow
+                key={item.id}
+                item={item}
+                index={i}
+                conditions={conditions}
+                productConditions={Object.fromEntries(productConditionsMap)}
+                ranges={ranges}
+                canOverridePrice={canEdit}
+              />
             ))}
           </tbody>
         </table>

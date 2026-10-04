@@ -1149,24 +1149,39 @@ export async function createPurchasingQuotation(
   redirect(`/dashboard/purchasing/quotations/${quotationId}`);
 }
 
-export async function addPurchasingQuotedItem(
-  quotationId: string,
-  _prevState: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
-  const org = await requireOrg();
-  const quotation = await requireOrgQuotation(org.organizationId, quotationId);
-  if (!quotation) return { error: "Quotation not found." };
+type QuotedItemPricing = {
+  productNameSnapshot: string;
+  productCodeSnapshot: string | null;
+  categoryNameSnapshot: string | null;
+  baseUnitPrice: number;
+  appliedMultiplier: number;
+  expirationRangeLabelSnapshot: string | null;
+  conditionId: string | null;
+  conditionNameSnapshot: string | null;
+  conditionMultiplier: number;
+};
 
-  const productId = String(formData.get("productId") ?? "") || null;
-  let conditionId = String(formData.get("conditionId") ?? "") || null;
-  const expirationRangeId = String(formData.get("expirationRangeId") ?? "") || null;
-  const quantity = Number(formData.get("quantity"));
-  if (!Number.isInteger(quantity) || quantity <= 0) {
-    return { error: "Quantity must be a whole number greater than zero." };
-  }
+/**
+ * Shared by addPurchasingQuotedItem and updatePurchasingQuotedItem so a line
+ * prices identically whether it's being created or corrected later --
+ * product/condition/expiry lookups and the multiplier fallback chain
+ * (per-product override -> range default -> 1) live in exactly one place.
+ */
+async function resolveQuotedItemPricing(
+  org: CurrentOrg,
+  params: {
+    productId: string | null;
+    expirationRangeId: string | null;
+    conditionId: string | null; // may be "__custom__"
+    customConditionName: string | null;
+    customConditionMultiplierRaw: FormDataEntryValue | null;
+    fallbackProductNameSnapshot: string | null;
+  },
+): Promise<{ error: string } | QuotedItemPricing> {
+  const { productId, expirationRangeId, fallbackProductNameSnapshot } = params;
+  let conditionId = params.conditionId;
 
-  let productNameSnapshot = trimmed(formData, "productNameSnapshot");
+  let productNameSnapshot = fallbackProductNameSnapshot;
   let productCodeSnapshot: string | null = null;
   let categoryNameSnapshot: string | null = null;
   let baseUnitPrice = 0;
@@ -1236,10 +1251,9 @@ export async function addPurchasingQuotedItem(
     // free-text label + payout multiplier typed right on this line, same as
     // an override price, instead of forcing a new row into Manage
     // Conditions for something that may never come up again.
-    const customName = trimmed(formData, "customConditionName");
-    const customMultiplierRaw = formData.get("customConditionMultiplier");
+    const customName = params.customConditionName;
     if (!customName) return { error: "Enter a name for the custom condition." };
-    const customMultiplier = Number(customMultiplierRaw);
+    const customMultiplier = Number(params.customConditionMultiplierRaw);
     if (Number.isNaN(customMultiplier) || customMultiplier < 0) {
       return { error: "Custom condition payout must be a positive number." };
     }
@@ -1256,8 +1270,47 @@ export async function addPurchasingQuotedItem(
     conditionMultiplier = condition?.multiplier ?? 1;
   }
 
+  return {
+    productNameSnapshot,
+    productCodeSnapshot,
+    categoryNameSnapshot,
+    baseUnitPrice,
+    appliedMultiplier,
+    expirationRangeLabelSnapshot,
+    conditionId,
+    conditionNameSnapshot,
+    conditionMultiplier,
+  };
+}
 
-  const computedUnitPrice = baseUnitPrice * appliedMultiplier * conditionMultiplier;
+export async function addPurchasingQuotedItem(
+  quotationId: string,
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const org = await requireOrg();
+  const quotation = await requireOrgQuotation(org.organizationId, quotationId);
+  if (!quotation) return { error: "Quotation not found." };
+
+  const productId = String(formData.get("productId") ?? "") || null;
+  const conditionId = String(formData.get("conditionId") ?? "") || null;
+  const expirationRangeId = String(formData.get("expirationRangeId") ?? "") || null;
+  const quantity = Number(formData.get("quantity"));
+  if (!Number.isInteger(quantity) || quantity <= 0) {
+    return { error: "Quantity must be a whole number greater than zero." };
+  }
+
+  const pricing = await resolveQuotedItemPricing(org, {
+    productId,
+    expirationRangeId,
+    conditionId,
+    customConditionName: trimmed(formData, "customConditionName"),
+    customConditionMultiplierRaw: formData.get("customConditionMultiplier"),
+    fallbackProductNameSnapshot: trimmed(formData, "productNameSnapshot"),
+  });
+  if ("error" in pricing) return { error: pricing.error };
+
+  const computedUnitPrice = pricing.baseUnitPrice * pricing.appliedMultiplier * pricing.conditionMultiplier;
   const overrideRaw = formData.get("overrideUnitPrice");
   let finalUnitPrice = computedUnitPrice;
   if (overrideRaw !== null && String(overrideRaw).trim() !== "") {
@@ -1272,17 +1325,17 @@ export async function addPurchasingQuotedItem(
     id: itemId,
     quotationId,
     productId,
-    productNameSnapshot,
-    productCodeSnapshot,
-    categoryNameSnapshot,
-    conditionId,
-    conditionNameSnapshot,
+    productNameSnapshot: pricing.productNameSnapshot,
+    productCodeSnapshot: pricing.productCodeSnapshot,
+    categoryNameSnapshot: pricing.categoryNameSnapshot,
+    conditionId: pricing.conditionId,
+    conditionNameSnapshot: pricing.conditionNameSnapshot,
     expirationRangeId,
-    expirationRangeLabelSnapshot,
+    expirationRangeLabelSnapshot: pricing.expirationRangeLabelSnapshot,
     quantity,
-    baseUnitPrice,
-    appliedMultiplier,
-    conditionMultiplier,
+    baseUnitPrice: pricing.baseUnitPrice,
+    appliedMultiplier: pricing.appliedMultiplier,
+    conditionMultiplier: pricing.conditionMultiplier,
     finalUnitPrice,
     lineTotal: finalUnitPrice * quantity,
     notes: trimmed(formData, "notes"),
@@ -1302,6 +1355,92 @@ export async function addPurchasingQuotedItem(
 
   await recomputeQuotationTotals(org, quotationId);
   revalidatePath(`/dashboard/purchasing/quotations/${quotationId}`);
+}
+
+/**
+ * Corrects an existing line in place -- condition, expiry, quantity, and
+ * (for managers) the price override -- instead of forcing a remove +
+ * re-add when a customer disputes a condition or an agent mis-keyed
+ * something. The product itself isn't editable here; swapping products is
+ * still remove + re-add, since that's a materially different line.
+ */
+export async function updatePurchasingQuotedItem(
+  itemId: string,
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const org = await requireOrg();
+
+  const [existing] = await db
+    .select({
+      id: purchasingQuotedItems.id,
+      quotationId: purchasingQuotedItems.quotationId,
+      productId: purchasingQuotedItems.productId,
+      productNameSnapshot: purchasingQuotedItems.productNameSnapshot,
+      quotationNumber: purchasingQuotations.quotationNumber,
+    })
+    .from(purchasingQuotedItems)
+    .innerJoin(purchasingQuotations, eq(purchasingQuotedItems.quotationId, purchasingQuotations.id))
+    .where(and(eq(purchasingQuotedItems.id, itemId), eq(purchasingQuotations.organizationId, org.organizationId)))
+    .limit(1);
+  if (!existing) return { error: "Line not found." };
+
+  const conditionId = String(formData.get("conditionId") ?? "") || null;
+  const expirationRangeId = String(formData.get("expirationRangeId") ?? "") || null;
+  const quantity = Number(formData.get("quantity"));
+  if (!Number.isInteger(quantity) || quantity <= 0) {
+    return { error: "Quantity must be a whole number greater than zero." };
+  }
+
+  const pricing = await resolveQuotedItemPricing(org, {
+    productId: existing.productId,
+    expirationRangeId,
+    conditionId,
+    customConditionName: trimmed(formData, "customConditionName"),
+    customConditionMultiplierRaw: formData.get("customConditionMultiplier"),
+    fallbackProductNameSnapshot: existing.productNameSnapshot,
+  });
+  if ("error" in pricing) return { error: pricing.error };
+
+  const computedUnitPrice = pricing.baseUnitPrice * pricing.appliedMultiplier * pricing.conditionMultiplier;
+  const overrideRaw = formData.get("overrideUnitPrice");
+  let finalUnitPrice = computedUnitPrice;
+  if (overrideRaw !== null && String(overrideRaw).trim() !== "") {
+    if (org.role === "staff") return { error: "Only a Purchasing Manager or Master Admin can override a price." };
+    const override = Number(overrideRaw);
+    if (Number.isNaN(override) || override < 0) return { error: "Override price must be a positive number." };
+    finalUnitPrice = override;
+  }
+
+  await db
+    .update(purchasingQuotedItems)
+    .set({
+      conditionId: pricing.conditionId,
+      conditionNameSnapshot: pricing.conditionNameSnapshot,
+      expirationRangeId,
+      expirationRangeLabelSnapshot: pricing.expirationRangeLabelSnapshot,
+      quantity,
+      appliedMultiplier: pricing.appliedMultiplier,
+      conditionMultiplier: pricing.conditionMultiplier,
+      finalUnitPrice,
+      lineTotal: finalUnitPrice * quantity,
+    })
+    .where(eq(purchasingQuotedItems.id, itemId));
+
+  if (finalUnitPrice !== computedUnitPrice) {
+    await logAudit(
+      org,
+      "quoted_item",
+      itemId,
+      "price_override",
+      computedUnitPrice,
+      finalUnitPrice,
+      `Edited on quotation ${existing.quotationNumber}`,
+    );
+  }
+
+  await recomputeQuotationTotals(org, existing.quotationId);
+  revalidatePath(`/dashboard/purchasing/quotations/${existing.quotationId}`);
 }
 
 export async function removePurchasingQuotedItem(
