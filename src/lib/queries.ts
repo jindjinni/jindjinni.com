@@ -28,6 +28,7 @@ import {
   purchasingQuotedItems,
   purchasingAuditLog,
   purchasingReceiptVersions,
+  purchasingReceiptSettings,
   businessProfiles,
 } from "@/db/schema";
 
@@ -105,6 +106,67 @@ export function resolveBusinessDocumentIdentity(
     email: (profile?.docShowEmail ?? true) ? profile?.businessEmail ?? null : null,
     website: (profile?.docShowWebsite ?? false) ? profile?.website ?? null : null,
   };
+}
+
+export type PurchasingReceiptSettings = typeof purchasingReceiptSettings.$inferSelect;
+
+export async function getPurchasingReceiptSettings(organizationId: string) {
+  const [row] = await db
+    .select()
+    .from(purchasingReceiptSettings)
+    .where(eq(purchasingReceiptSettings.organizationId, organizationId))
+    .limit(1);
+  return row ?? null;
+}
+
+/** The built-in receipt wording -- what every org saw before this became editable, and what a null column still falls back to today. */
+export const PURCHASING_RECEIPT_DEFAULTS = {
+  bannerText: "Limited Time Offer!",
+  shippingSuffix: "plus free shipping!",
+  disclaimerIntro: "By sending your items, you acknowledge and agree to all {business} policies.",
+  disclaimerReturnPolicy:
+    "Supplies that are damaged, stained, ripped, torn, expired, or otherwise not accepted will be returned at the seller's expense.",
+  disclaimerDamageSummary:
+    "Hidden damage found under pharmacy labels or packaging damage caused by not following our packaging instructions may each be subject to up to a 50% deduction of the quoted value, and packages lost in transit are covered by the carrier for up to $100 only, unless additional coverage applies.",
+  conditionHeading: "MINT CONDITION SUPPLIES ONLY:",
+  conditionBullets: "No dents, scratches, tears, or stains.\nWe do NOT accept re-glued or re-taped supplies.\nFACTORY SEALED ONLY",
+  paymentTimingText: "Payment is processed 3 business days after your package shows delivered to our office.",
+  paymentTimingSubtext: "(Excludes weekends, public holidays, and days our office is closed.)",
+  footerThankYou: "Thank you for your business! This quotation is valid for 72 hours.",
+} as const;
+
+export type ResolvedPurchasingReceiptSettings = { [K in keyof typeof PURCHASING_RECEIPT_DEFAULTS]: string };
+
+/**
+ * Every receipt-wording field with null columns swapped for the built-in
+ * default -- the *unsubstituted* form, with the literal "{business}" token
+ * still in disclaimerIntro. This is what the Quotation Receipt Layout
+ * editor reads and saves, so an org can rename itself later without that
+ * field silently going stale. Call renderReceiptCopy() to get the version
+ * with {business} filled in for actually printing a receipt.
+ */
+export function resolvePurchasingReceiptSettings(row: PurchasingReceiptSettings | null): ResolvedPurchasingReceiptSettings {
+  const d = PURCHASING_RECEIPT_DEFAULTS;
+  return {
+    bannerText: row?.bannerText || d.bannerText,
+    shippingSuffix: row?.shippingSuffix || d.shippingSuffix,
+    disclaimerIntro: row?.disclaimerIntro || d.disclaimerIntro,
+    disclaimerReturnPolicy: row?.disclaimerReturnPolicy || d.disclaimerReturnPolicy,
+    disclaimerDamageSummary: row?.disclaimerDamageSummary || d.disclaimerDamageSummary,
+    conditionHeading: row?.conditionHeading || d.conditionHeading,
+    conditionBullets: row?.conditionBullets || d.conditionBullets,
+    paymentTimingText: row?.paymentTimingText || d.paymentTimingText,
+    paymentTimingSubtext: row?.paymentTimingSubtext || d.paymentTimingSubtext,
+    footerThankYou: row?.footerThankYou || d.footerThankYou,
+  };
+}
+
+/** resolvePurchasingReceiptSettings() output with {business} filled in -- call this right before printing/rendering a receipt, never for the settings editor. */
+export function renderReceiptCopy(
+  copy: ResolvedPurchasingReceiptSettings,
+  businessDisplayName: string,
+): ResolvedPurchasingReceiptSettings {
+  return { ...copy, disclaimerIntro: copy.disclaimerIntro.replaceAll("{business}", businessDisplayName) };
 }
 
 export async function getOrganization(organizationId: string) {

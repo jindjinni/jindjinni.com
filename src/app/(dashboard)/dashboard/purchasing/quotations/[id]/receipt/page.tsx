@@ -7,6 +7,9 @@ import {
   getReceiptVersions,
   getBusinessProfile,
   resolveBusinessDocumentIdentity,
+  getPurchasingReceiptSettings,
+  resolvePurchasingReceiptSettings,
+  renderReceiptCopy,
 } from "@/lib/queries";
 import { saveReceiptVersion } from "@/app/actions/purchasing";
 import { ActionButton } from "@/components/action-button";
@@ -28,13 +31,16 @@ export default async function QuotationReceiptPage({ params }: { params: Promise
   const data = await getPurchasingQuotationWithItems(org.organizationId, id);
   if (!data) notFound();
   const { quotation, items } = data;
-  const [ranges, versions, profile] = await Promise.all([
+  const [ranges, versions, profile, receiptSettingsRow] = await Promise.all([
     getPurchasingExpirationRanges(org.organizationId, { includeInactive: true }),
     getReceiptVersions(id),
     getBusinessProfile(org.organizationId),
+    getPurchasingReceiptSettings(org.organizationId),
   ]);
   const rangesById = new Map(ranges.map((r) => [r.id, r]));
   const business = resolveBusinessDocumentIdentity(org.organizationName, profile);
+  const copy = renderReceiptCopy(resolvePurchasingReceiptSettings(receiptSettingsRow), business.displayName);
+  const conditionBullets = copy.conditionBullets.split("\n").map((b) => b.trim()).filter(Boolean);
 
   const formattedDate = new Date(quotation.quotationDate).toLocaleDateString("en-US", {
     month: "long",
@@ -90,7 +96,7 @@ export default async function QuotationReceiptPage({ params }: { params: Promise
         <hr className="mt-3 border-slate-300" />
 
         <div className="mt-4 rounded-md bg-amber-300 px-4 py-2 text-center text-lg font-extrabold uppercase tracking-wide text-slate-900">
-          Limited Time Offer!
+          {copy.bannerText}
         </div>
 
         <p className="mt-4 text-sm text-slate-700">Date: {formattedDate}</p>
@@ -165,39 +171,34 @@ export default async function QuotationReceiptPage({ params }: { params: Promise
         </div>
 
         <div className="mt-4 rounded-md bg-blue-50 px-4 py-3 text-center text-lg font-bold text-slate-900">
-          Total will be ${quotation.grandTotal.toFixed(2)} plus free shipping!
+          Total will be ${quotation.grandTotal.toFixed(2)} {copy.shippingSuffix}
         </div>
 
         <div className="mt-6 text-xs leading-relaxed text-slate-600">
           <p className="text-sm font-bold text-blue-700">DISCLAIMER:</p>
-          <p className="mt-1">By sending your items, you acknowledge and agree to all {business.displayName} policies.</p>
-          <p>Supplies that are damaged, stained, ripped, torn, expired, or otherwise not accepted will be returned at the seller&rsquo;s expense.</p>
-          <p className="mt-1">
-            Hidden damage found under pharmacy labels or packaging damage caused by not following our packaging
-            instructions may each be subject to <strong className="text-red-600">up to a 50% deduction</strong> of the
-            quoted value, and packages lost in transit are covered by the carrier for{" "}
-            <strong className="text-red-600">up to $100</strong> only, unless additional coverage applies.
-          </p>
+          <p className="mt-1">{copy.disclaimerIntro}</p>
+          <p>{copy.disclaimerReturnPolicy}</p>
+          <p className="mt-1">{copy.disclaimerDamageSummary}</p>
 
-          <p className="mt-3 text-sm font-bold text-blue-700">MINT CONDITION SUPPLIES ONLY:</p>
-          <ul className="mt-1 list-disc space-y-0.5 pl-5">
-            <li>No dents, scratches, tears, or stains.</li>
-            <li>We do NOT accept re-glued or re-taped supplies.</li>
-            <li className="font-bold">FACTORY SEALED ONLY</li>
-          </ul>
+          {conditionBullets.length > 0 && (
+            <>
+              <p className="mt-3 text-sm font-bold text-blue-700">{copy.conditionHeading}</p>
+              <ul className="mt-1 list-disc space-y-0.5 pl-5">
+                {conditionBullets.map((bullet, i) => (
+                  <li key={i} className={i === conditionBullets.length - 1 ? "font-bold" : undefined}>
+                    {bullet}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
         </div>
 
-        <p className="mt-4 text-center text-sm font-bold text-red-600">
-          Payment is processed 3 business days after your package shows delivered to our office.
-        </p>
-        <p className="mt-1 text-center text-xs text-slate-500">
-          (Excludes weekends, public holidays, and days our office is closed.)
-        </p>
+        <p className="mt-4 text-center text-sm font-bold text-red-600">{copy.paymentTimingText}</p>
+        <p className="mt-1 text-center text-xs text-slate-500">{copy.paymentTimingSubtext}</p>
 
         <hr className="mt-4 border-slate-300" />
-        <p className="mt-3 text-center text-xs text-slate-400">
-          Thank you for your business! This quotation is valid for 72 hours.
-        </p>
+        <p className="mt-3 text-center text-xs text-slate-400">{copy.footerThankYou}</p>
         <p className="text-center text-xs text-slate-300">Page 1 of 1</p>
       </div>
 

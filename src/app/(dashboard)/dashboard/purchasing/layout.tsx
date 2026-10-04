@@ -17,6 +17,7 @@ export default async function PurchasingLayout({ children }: { children: React.R
           { href: "/dashboard/purchasing/expiration-ranges", label: "Month Range" },
           { href: "/dashboard/purchasing/product-multipliers", label: "Product Multipliers" },
           { href: "/dashboard/purchasing/bonus-tiers", label: "Bonus tiers" },
+          { href: "/dashboard/purchasing/receipt-layout", label: "Quotation Receipt Layout" },
           { href: "/dashboard/purchasing/audit-log", label: "Audit log" },
         ]
       : []),

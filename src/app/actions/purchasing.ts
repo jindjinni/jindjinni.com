@@ -30,6 +30,7 @@ import {
   purchasingQuotedItems,
   purchasingAuditLog,
   purchasingReceiptVersions,
+  purchasingReceiptSettings,
 } from "@/db/schema";
 import { newId } from "@/lib/ids";
 import {
@@ -39,6 +40,7 @@ import {
   computeAutomaticBonus,
   getBusinessProfile,
   resolveBusinessDocumentIdentity,
+  getPurchasingReceiptSettings,
 } from "@/lib/queries";
 import { seedPurchasingProductCatalogForOrg } from "@/lib/purchasing-catalog-seed";
 import { seedPurchasingMonthRangesForOrg } from "@/lib/purchasing-month-range-seed";
@@ -1592,6 +1594,71 @@ export async function saveReceiptVersion(
   });
 
   revalidatePath(`/dashboard/purchasing/quotations/${quotationId}/receipt`);
+}
+
+// ---------------------------------------------------------------------------
+// Quotation Receipt Layout -- the org-wide wording printed on every receipt
+// (banner, disclaimer, mint-condition policy, payment-timing note, footer).
+// One row per org (purchasing_receipt_settings); a null column falls back
+// to the built-in default text (see resolvePurchasingReceiptSettings).
+// ---------------------------------------------------------------------------
+
+async function ensurePurchasingReceiptSettings(organizationId: string) {
+  const existing = await getPurchasingReceiptSettings(organizationId);
+  if (existing) return existing;
+  const id = newId("preceiptset");
+  await db.insert(purchasingReceiptSettings).values({ id, organizationId });
+  return (await getPurchasingReceiptSettings(organizationId))!;
+}
+
+/**
+ * Saves whichever receipt-wording fields are present in formData, leaving
+ * every other field untouched -- each tab on the Quotation Receipt Layout
+ * page submits only its own fields, so this one action serves all of them.
+ * An empty submitted field is stored as null (falls back to the built-in
+ * default) rather than as an empty string, so "Reset to default" is just
+ * clearing the box and saving.
+ */
+export async function updatePurchasingReceiptSettings(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const org = await requireOrg();
+  const blocked = requireManager(org);
+  if (blocked) return blocked;
+
+  const fields = [
+    "bannerText",
+    "shippingSuffix",
+    "disclaimerIntro",
+    "disclaimerReturnPolicy",
+    "disclaimerDamageSummary",
+    "conditionHeading",
+    "conditionBullets",
+    "paymentTimingText",
+    "paymentTimingSubtext",
+    "footerThankYou",
+  ] as const;
+
+  const patch: Partial<Record<(typeof fields)[number], string | null>> = {};
+  for (const field of fields) {
+    if (formData.has(field)) {
+      patch[field] = trimmed(formData, field);
+    }
+  }
+  if (Object.keys(patch).length === 0) return { error: "Nothing to save." };
+
+  await ensurePurchasingReceiptSettings(org.organizationId);
+  await db
+    .update(purchasingReceiptSettings)
+    .set({ ...patch, updatedAt: new Date().toISOString() })
+    .where(eq(purchasingReceiptSettings.organizationId, org.organizationId));
+
+  await logAudit(org, "ReceiptSettings", org.organizationId, Object.keys(patch).join(", "), null, null, "Quotation Receipt Layout updated");
+
+  revalidatePath("/dashboard/purchasing/receipt-layout");
+  revalidatePath("/dashboard/purchasing/quotations");
+  return undefined;
 }
 
 export async function restorePurchasingQuotation(

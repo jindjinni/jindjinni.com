@@ -846,6 +846,47 @@ export const purchasingReceiptVersions = sqliteTable(
   (t) => [index("purchasing_receipt_versions_quotation_idx").on(t.quotationId)],
 );
 
+/**
+ * One row per org -- every piece of wording on the printed/exported
+ * quotation receipt that isn't per-quotation data (banner, disclaimer,
+ * mint-condition policy, payment-timing note, footer thank-you). Every
+ * column is nullable; a null column means "use the built-in default
+ * text" (see resolvePurchasingReceiptSettings), so a brand-new org's
+ * receipt looks exactly like it did before this was customizable, and an
+ * org only needs to set the fields it actually wants to change.
+ */
+export const purchasingReceiptSettings = sqliteTable(
+  "purchasing_receipt_settings",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .unique()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+
+    bannerText: text("banner_text"),
+    shippingSuffix: text("shipping_suffix"),
+
+    disclaimerIntro: text("disclaimer_intro"),
+    disclaimerReturnPolicy: text("disclaimer_return_policy"),
+    disclaimerDamageSummary: text("disclaimer_damage_summary"),
+
+    conditionHeading: text("condition_heading"),
+    // Newline-separated bullet list -- kept as one text column rather than
+    // a child table since it's short, always edited as a whole block, and
+    // never queried/filtered on its own.
+    conditionBullets: text("condition_bullets"),
+
+    paymentTimingText: text("payment_timing_text"),
+    paymentTimingSubtext: text("payment_timing_subtext"),
+
+    footerThankYou: text("footer_thank_you"),
+
+    ...timestamps,
+  },
+  (t) => [index("purchasing_receipt_settings_org_idx").on(t.organizationId)],
+);
+
 /** Generic audit trail for Purchasing edits that matter: prices, quantities, totals, tracking numbers, customer info, product rules, multipliers. */
 export const purchasingAuditLog = sqliteTable(
   "purchasing_audit_log",
