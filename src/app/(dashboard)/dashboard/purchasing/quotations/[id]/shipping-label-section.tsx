@@ -1,10 +1,36 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import Link from "next/link";
 import { generatePurchasingShippingLabel } from "@/app/actions/purchasing";
 
 type ActionState = { error?: string } | undefined;
+
+/** Copies the tracking link and flashes "Copied!" so the agent knows the paste will work before they switch over to a text/email to the customer. */
+function CopyLinkButton({ url }: { url: string }) {
+  const [copied, setCopied] = useState(false);
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard access can be blocked (e.g. insecure context) -- the link
+      // text itself is still selectable, so this is a soft failure.
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      className="shrink-0 rounded-md border border-emerald-300 bg-white px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:bg-slate-900 dark:text-emerald-400 dark:hover:bg-emerald-950"
+    >
+      {copied ? "Copied!" : "Copy link"}
+    </button>
+  );
+}
 
 export function ShippingLabelSection({
   quotationId,
@@ -71,22 +97,31 @@ export function ShippingLabelSection({
       )}
 
       {labelStatus === "GENERATED" && labelUrl ? (
-        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-md bg-emerald-50 px-4 py-3 text-sm dark:bg-emerald-950">
-          <span className="font-medium text-emerald-700 dark:text-emerald-400">Label ready</span>
-          <a href={labelUrl} target="_blank" rel="noreferrer" className="text-emerald-700 underline dark:text-emerald-400">
-            Open / print label
-          </a>
-          {labelTrackingNumber && (
-            <span className="text-slate-700 dark:text-slate-300">
-              Tracking:{" "}
-              {labelTrackingUrl ? (
-                <a href={labelTrackingUrl} target="_blank" rel="noreferrer" className="underline">
-                  {labelTrackingNumber}
-                </a>
-              ) : (
-                labelTrackingNumber
-              )}
-            </span>
+        <div className="mt-4 rounded-md bg-emerald-50 p-4 text-sm dark:bg-emerald-950">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="font-medium text-emerald-700 dark:text-emerald-400">Label ready</span>
+            <a href={labelUrl} target="_blank" rel="noreferrer" className="text-emerald-700 underline dark:text-emerald-400">
+              Open / print label
+            </a>
+            {labelTrackingNumber && !labelTrackingUrl && (
+              <span className="text-slate-700 dark:text-slate-300">Tracking: {labelTrackingNumber}</span>
+            )}
+          </div>
+          {labelTrackingUrl && (
+            <div className="mt-3 flex flex-wrap items-center gap-2 rounded-md border border-emerald-200 bg-white px-3 py-2 dark:border-emerald-900 dark:bg-slate-900">
+              <span className="shrink-0 text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                Tracking link -- send to customer
+              </span>
+              <a
+                href={labelTrackingUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="min-w-0 flex-1 truncate text-emerald-700 underline dark:text-emerald-400"
+              >
+                {labelTrackingUrl}
+              </a>
+              <CopyLinkButton url={labelTrackingUrl} />
+            </div>
           )}
         </div>
       ) : (

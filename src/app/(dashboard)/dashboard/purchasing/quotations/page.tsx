@@ -7,8 +7,14 @@ export default async function PurchasingQuotationsPage() {
   const quotations = await getPurchasingQuotationsSummary(org.organizationId);
 
   return (
-    <div>
-      <QuotationsTable quotations={quotations} />
+    // Breaks out of the dashboard shell's max-w-5xl so the wide summary
+    // table (10 columns) has real room, instead of squeezing every column
+    // or scrolling sideways. Capped at max-w-[100rem] so it doesn't stretch
+    // edge-to-edge on an ultra-wide monitor.
+    <div className="mx-[calc(50%-50vw)] w-screen px-4 sm:px-8">
+      <div className="mx-auto max-w-[100rem]">
+        <QuotationsTable quotations={quotations} />
+      </div>
     </div>
   );
 }

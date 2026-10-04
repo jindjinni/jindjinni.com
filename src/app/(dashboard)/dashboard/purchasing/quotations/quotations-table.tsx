@@ -100,25 +100,43 @@ export function QuotationsTable({ quotations }: { quotations: QuotationSummaryRo
 
   return (
     <div>
-      <div className="rounded-xl bg-blue-700 p-5 text-white shadow-sm">
+      <div className="rounded-xl bg-gradient-to-r from-blue-700 to-blue-600 p-6 text-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold">Quotation Summary</h1>
+          <div>
+            <h1 className="text-xl font-semibold">Quotation Summary</h1>
+            <p className="mt-0.5 text-sm text-blue-100">Every quotation, at a glance -- search, filter, and ship from one place.</p>
+          </div>
           <Link
             href="/dashboard/purchasing/quotations/new"
-            className="shrink-0 rounded-md bg-white px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50"
+            className="shrink-0 rounded-md bg-white px-4 py-2 text-sm font-medium text-blue-700 shadow-sm hover:bg-blue-50"
           >
             + New Quotation
           </Link>
         </div>
-        <input
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setPage(1);
-          }}
-          placeholder="Search by reference, customer, email, phone, or tracking #..."
-          className="mt-4 w-full rounded-md border-0 px-3 py-2 text-sm text-slate-900 outline-none ring-1 ring-blue-300 focus:ring-2 focus:ring-white"
-        />
+        <div className="relative mt-4">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+            aria-hidden="true"
+          >
+            <circle cx="7" cy="7" r="5.5" />
+            <path d="M11.5 11.5 15 15" strokeLinecap="round" />
+          </svg>
+          <input
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            placeholder="Search by reference, customer, email, phone, or tracking #..."
+            className="w-full rounded-md border-0 bg-white py-2.5 pl-9 pr-3 text-sm text-slate-900 outline-none ring-1 ring-blue-300 placeholder:text-slate-400 focus:ring-2 focus:ring-white"
+          />
+        </div>
       </div>
 
       <div className="mt-4 flex flex-wrap items-end justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
@@ -191,32 +209,35 @@ export function QuotationsTable({ quotations }: { quotations: QuotationSummaryRo
 
       <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
         <table className="w-full text-left text-sm">
-          <thead className="border-b border-slate-200 bg-blue-50 text-blue-900 dark:border-slate-800 dark:bg-blue-950 dark:text-blue-200">
+          <thead className="border-b border-slate-200 bg-blue-50 text-xs font-semibold uppercase tracking-wide text-blue-900 dark:border-slate-800 dark:bg-blue-950 dark:text-blue-200">
             <tr>
-              <th className="px-4 py-3 font-medium">Date</th>
-              <th className="px-4 py-3 font-medium">Reference #</th>
-              <th className="px-4 py-3 font-medium">Customer Name</th>
-              <th className="px-4 py-3 font-medium">Email</th>
-              <th className="px-4 py-3 font-medium">Phone</th>
-              <th className="px-4 py-3 text-right font-medium">Total Price</th>
-              <th className="px-4 py-3 font-medium">Shipping Info</th>
-              <th className="px-4 py-3 font-medium">Items Quoted For</th>
-              <th className="px-4 py-3 font-medium">Tracking #</th>
+              <th className="whitespace-nowrap px-4 py-3">Date</th>
+              <th className="whitespace-nowrap px-4 py-3">Reference #</th>
+              <th className="whitespace-nowrap px-4 py-3">Customer Name</th>
+              <th className="whitespace-nowrap px-4 py-3">Email</th>
+              <th className="whitespace-nowrap px-4 py-3">Phone</th>
+              <th className="whitespace-nowrap px-4 py-3 text-right">Total Price</th>
+              <th className="whitespace-nowrap px-4 py-3">Shipping Info</th>
+              <th className="px-4 py-3">Items Quoted For</th>
+              <th className="whitespace-nowrap px-4 py-3">Tracking #</th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
           <tbody>
             {visible.length === 0 && (
               <tr>
-                <td colSpan={10} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={10} className="px-4 py-10 text-center text-slate-400">
                   {quotations.length === 0 ? "No quotations yet -- generate one above." : "No matches for that search."}
                 </td>
               </tr>
             )}
             {visible.map((row) => (
-              <tr key={row.id} className="border-b border-slate-100 last:border-0 dark:border-slate-800">
-                <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{row.quotationDate}</td>
-                <td className="px-4 py-3">
+              <tr
+                key={row.id}
+                className="border-b border-slate-100 align-top last:border-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/60"
+              >
+                <td className="whitespace-nowrap px-4 py-3.5 text-slate-700 dark:text-slate-300">{row.quotationDate}</td>
+                <td className="whitespace-nowrap px-4 py-3.5">
                   <Link
                     href={`/dashboard/purchasing/quotations/${row.id}`}
                     className="font-medium text-emerald-700 hover:underline dark:text-emerald-400"
@@ -229,26 +250,26 @@ export function QuotationsTable({ quotations }: { quotations: QuotationSummaryRo
                     </span>
                   )}
                 </td>
-                <td className="px-4 py-3 text-slate-900 dark:text-slate-50">{row.customerName}</td>
-                <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{row.email ?? "—"}</td>
-                <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{row.phone ?? "—"}</td>
-                <td className="px-4 py-3 text-right tabular-nums text-slate-900 dark:text-slate-50">
+                <td className="whitespace-nowrap px-4 py-3.5 font-medium text-slate-900 dark:text-slate-50">{row.customerName}</td>
+                <td className="whitespace-nowrap px-4 py-3.5 text-slate-700 dark:text-slate-300">{row.email ?? "—"}</td>
+                <td className="whitespace-nowrap px-4 py-3.5 text-slate-700 dark:text-slate-300">{row.phone ?? "—"}</td>
+                <td className="whitespace-nowrap px-4 py-3.5 text-right tabular-nums text-slate-900 dark:text-slate-50">
                   ${row.grandTotal.toFixed(2)}
                 </td>
-                <td className="px-4 py-3 text-slate-700 dark:text-slate-300">
+                <td className="whitespace-nowrap px-4 py-3.5 text-slate-700 dark:text-slate-300">
                   {row.shippingInfo === "Not provided" ? (
-                    <span className="text-amber-600 dark:text-amber-400">Not provided</span>
+                    <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-950 dark:text-amber-400">
+                      Not provided
+                    </span>
                   ) : (
                     row.shippingInfo
                   )}
                 </td>
-                <td className="max-w-xs truncate px-4 py-3 text-slate-700 dark:text-slate-300" title={row.itemsSummary}>
-                  {row.itemsSummary}
-                </td>
-                <td className="px-4 py-3 text-slate-700 dark:text-slate-300">
+                <td className="min-w-[14rem] px-4 py-3.5 text-slate-700 dark:text-slate-300">{row.itemsSummary}</td>
+                <td className="whitespace-nowrap px-4 py-3.5 text-slate-700 dark:text-slate-300">
                   {row.trackingNumber ?? (row.labelStatus === "GENERATED" ? "Generated" : "—")}
                 </td>
-                <td className="px-4 py-3 text-right">
+                <td className="px-4 py-3.5 text-right">
                   <QuotationRowMenu quotationId={row.id} label={row.quotationNumber} />
                 </td>
               </tr>
