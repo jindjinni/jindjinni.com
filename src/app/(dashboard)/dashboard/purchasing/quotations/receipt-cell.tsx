@@ -54,12 +54,15 @@ export function ReceiptCell({
   label,
   receipt,
   stamp,
+  isImage = false,
   canWrite,
 }: {
   quotationId: string;
   label: string;
   receipt: ReceiptState;
   stamp: string;
+  /** The attached file is a photo/screenshot (shown to fit the window) rather than a PDF. */
+  isImage?: boolean;
   canWrite: boolean;
 }) {
   const router = useRouter();
@@ -68,6 +71,7 @@ export function ReceiptCell({
   const [pending, startTransition] = useTransition();
   const fileRef = useRef<HTMLInputElement>(null);
   const [version, setVersion] = useState(stamp);
+  const [actualSize, setActualSize] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -190,7 +194,28 @@ export function ReceiptCell({
               </div>
             </div>
             {error && <p role="alert" className="bg-red-50 px-4 py-2 text-xs text-red-700">{error}</p>}
-            <iframe key={version} title={`Receipt ${label}`} src={pdfUrl(quotationId, version)} className="min-h-0 flex-1 bg-slate-100" />
+            {isImage ? (
+              <div className="flex min-h-0 flex-1 flex-col bg-slate-100 dark:bg-slate-950">
+                <div className="flex items-center justify-between px-4 py-1.5 text-xs text-slate-500">
+                  <span>{actualSize ? "Actual size — scroll to move around" : "Fitted to the window"}</span>
+                  <button type="button" onClick={() => setActualSize((v) => !v)} className="font-medium text-blue-700 hover:underline dark:text-blue-400">
+                    {actualSize ? "Fit to window" : "Show actual size"}
+                  </button>
+                </div>
+                <div className={`min-h-0 flex-1 p-3 ${actualSize ? "overflow-auto" : "flex items-center justify-center overflow-hidden"}`}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    key={version}
+                    src={pdfUrl(quotationId, version)}
+                    alt={`Receipt for ${label}`}
+                    onClick={() => setActualSize((v) => !v)}
+                    className={actualSize ? "max-w-none cursor-zoom-out" : "max-h-full max-w-full cursor-zoom-in rounded object-contain shadow"}
+                  />
+                </div>
+              </div>
+            ) : (
+              <iframe key={version} title={`Receipt ${label}`} src={pdfUrl(quotationId, version)} className="min-h-0 flex-1 bg-slate-100" />
+            )}
           </div>
         </div>
       )}

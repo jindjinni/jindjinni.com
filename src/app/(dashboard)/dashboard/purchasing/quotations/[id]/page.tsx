@@ -93,6 +93,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
               label={quotation.quotationNumber}
               receipt={receiptState.receipt}
               stamp={receiptState.stamp}
+              isImage={receiptState.isImage}
               canWrite={canWritePurchasing(org.role)}
             />
           </div>

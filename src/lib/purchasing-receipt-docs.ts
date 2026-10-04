@@ -211,11 +211,11 @@ export async function getReceiptForViewing(
 /** Receipt state for one quotation (same meaning as the Quotation Summary column). */
 export async function getReceiptState(organizationId: string, quotationId: string, itemCount: number) {
   const docs = await db
-    .select({ kind: purchasingQuotationDocuments.kind, updatedAt: purchasingQuotationDocuments.updatedAt })
+    .select({ kind: purchasingQuotationDocuments.kind, filename: purchasingQuotationDocuments.filename, updatedAt: purchasingQuotationDocuments.updatedAt })
     .from(purchasingQuotationDocuments)
     .where(and(eq(purchasingQuotationDocuments.organizationId, organizationId), eq(purchasingQuotationDocuments.quotationId, quotationId)));
   const uploaded = docs.find((d) => d.kind === "UPLOADED");
   const generated = docs.find((d) => d.kind === "GENERATED");
   const receipt: "UPLOADED" | "GENERATED" | "AUTO" | null = uploaded ? "UPLOADED" : generated ? "GENERATED" : itemCount > 0 ? "AUTO" : null;
-  return { receipt, stamp: (uploaded ?? generated)?.updatedAt ?? "" };
+  return { receipt, stamp: (uploaded ?? generated)?.updatedAt ?? "", isImage: !!uploaded && !/\.pdf$/i.test(uploaded.filename) };
 }

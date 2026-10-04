@@ -985,14 +985,18 @@ export async function getPurchasingQuotationsSummary(organizationId: string, opt
     .select({
       quotationId: purchasingQuotationDocuments.quotationId,
       kind: purchasingQuotationDocuments.kind,
+      filename: purchasingQuotationDocuments.filename,
       updatedAt: purchasingQuotationDocuments.updatedAt,
     })
     .from(purchasingQuotationDocuments)
     .where(eq(purchasingQuotationDocuments.organizationId, organizationId));
-  const docsByQuotation = new Map<string, { uploaded?: string; generated?: string }>();
+  const docsByQuotation = new Map<string, { uploaded?: string; generated?: string; uploadedIsImage?: boolean }>();
   for (const d of docRows) {
     const cur = docsByQuotation.get(d.quotationId) ?? {};
-    if (d.kind === "UPLOADED") cur.uploaded = d.updatedAt;
+    if (d.kind === "UPLOADED") {
+      cur.uploaded = d.updatedAt;
+      cur.uploadedIsImage = !/\.pdf$/i.test(d.filename);
+    }
     else cur.generated = d.updatedAt;
     docsByQuotation.set(d.quotationId, cur);
   }
@@ -1038,6 +1042,7 @@ export async function getPurchasingQuotationsSummary(organizationId: string, opt
       imported: r.source === "IMPORTED",
       receipt,
       receiptStamp,
+      receiptIsImage: receipt === "UPLOADED" && !!docs?.uploadedIsImage,
       quotationNumber: r.quotationNumber,
       quotationDate: r.quotationDate,
       status: r.status,

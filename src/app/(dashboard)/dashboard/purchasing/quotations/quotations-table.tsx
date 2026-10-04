@@ -18,6 +18,7 @@ export type QuotationSummaryRow = {
   imported?: boolean;
   receipt?: ReceiptState;
   receiptStamp?: string;
+  receiptIsImage?: boolean;
   customerName: string;
   email: string | null;
   phone: string | null;
@@ -301,6 +302,7 @@ export function QuotationsTable({ quotations, canImport = false }: { quotations:
                     label={row.quotationNumber}
                     receipt={row.receipt ?? null}
                     stamp={row.receiptStamp ?? ""}
+                    isImage={row.receiptIsImage ?? false}
                     canWrite={canImport}
                   />
                 </td>
