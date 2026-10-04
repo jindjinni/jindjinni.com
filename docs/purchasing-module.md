@@ -186,6 +186,38 @@ Not touched this pass since it wasn't asked for and Buyback's label flow is
 already live/in use, but flag it for review if Buyback is supposed to work
 the same way.
 
+## Expiry options per product
+
+Each product has its own list of **expiry options** (month ranges, each with a
+payout multiplier) -- `purchasingProductMultipliers`, edited on the product
+page ("Expiry Options") or the Product Multipliers page. The quotation form's
+Expiry dropdown shows **only the chosen product's options** (a product with
+none set up yet falls back to every month range; a product with exactly one
+option preselects it). `purchasingProducts.noExpiration` marks items that
+never expire (receivers, readers): the Expiry field is replaced by "Does not
+expire" and no month range is stored.
+
+**Auto-assign by brand** (Product Multipliers page, manager+): rules in
+`src/lib/purchasing-expiry-rules.ts`, matched on product name/category, with a
+preview of exactly which products each rule covers before anything is written
+(`src/lib/purchasing-expiry-plan.ts`). Additive by default (never overwrites
+an option that's already set, including a hand-tuned multiplier); an optional
+checkbox also removes any other options so a product keeps only the rule's.
+Safe to run repeatedly; every change is written to the audit log. Current rules:
+
+| Products | Expiry options |
+| --- | --- |
+| Test strips (OneTouch, Freestyle, Contour, Accu-Chek, True Metrix; meters/lancets excluded) | 10+ months, 100% |
+| Dexcom G7 sensors (10 & 15 day) | 7+ months 100%; 5-6 months 50% |
+| Dexcom G7 receivers | does not expire |
+| Omnipod (all) | 8+ months 100%; 5-7 months 50% |
+| Medtronic (all) | 12+ months, 100% |
+| Freestyle Libre sensors | 4+ months, 100% |
+| Freestyle Libre readers | does not expire |
+
+Not covered by any rule yet (left untouched): Dexcom G6, Dexcom Stelo, BD pen
+needles, Tandem, meters, lancets. Add a rule in the rules file to cover them.
+
 ## Archive (`/dashboard/purchasing/archive`, manager+)
 
 One unified read + restore surface across every archivable record type in

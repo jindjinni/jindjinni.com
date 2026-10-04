@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { setProductMultiplier, removeProductMultiplier } from "@/app/actions/purchasing";
+import { setProductMultiplier, removeProductMultiplier, setProductNoExpiration } from "@/app/actions/purchasing";
 
 type Range = { id: string; label: string; defaultMultiplier: number };
 type Row = { id: string; expirationRangeId: string; multiplier: number };
@@ -17,15 +17,27 @@ type Row = { id: string; expirationRangeId: string; multiplier: number };
 export function MultipliersSection({
   productId,
   standardPrice,
+  noExpiration,
   ranges,
   rows,
 }: {
   productId: string;
   standardPrice: number;
+  noExpiration: boolean;
   ranges: Range[];
   rows: Row[];
 }) {
   const rowByRangeId = new Map(rows.map((r) => [r.expirationRangeId, r]));
+  const [togglePending, startToggle] = useTransition();
+  const [toggleError, setToggleError] = useState<string | null>(null);
+
+  function toggleNoExpiration(next: boolean) {
+    setToggleError(null);
+    startToggle(async () => {
+      const result = await setProductNoExpiration(productId, next);
+      if (result?.error) setToggleError(result.error);
+    });
+  }
 
   return (
     <div className="mt-6 rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
@@ -34,7 +46,18 @@ export function MultipliersSection({
         Check every month range this product is quoted at. Final unit price = standard price (${standardPrice.toFixed(2)}) × the multiplier below -- starts at that range&rsquo;s own default and is editable per product.
       </p>
 
-      <div className="mt-3 flex flex-col gap-2">
+      <label className="mt-3 flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+        <input
+          type="checkbox"
+          checked={noExpiration}
+          disabled={togglePending}
+          onChange={(e) => toggleNoExpiration(e.target.checked)}
+        />
+        This product does not expire (no expiration date is asked for when quoting it)
+      </label>
+      {toggleError && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{toggleError}</p>}
+
+      <div className={`mt-3 flex flex-col gap-2 ${noExpiration ? "pointer-events-none opacity-40" : ""}`}>
         {ranges.map((range) => (
           <ExpiryOptionRow key={range.id} productId={productId} standardPrice={standardPrice} range={range} row={rowByRangeId.get(range.id) ?? null} />
         ))}

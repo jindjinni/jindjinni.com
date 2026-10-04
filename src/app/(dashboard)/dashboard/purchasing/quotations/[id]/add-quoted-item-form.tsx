@@ -20,6 +20,8 @@ export function AddQuotedItemForm({
   conditions,
   productConditions,
   ranges,
+  productExpiryOptions,
+  noExpirationProductIds,
   canOverridePrice,
 }: {
   quotationId: string;
@@ -28,6 +30,8 @@ export function AddQuotedItemForm({
   /** productId -> the conditions that product carries. A product with no entry (or an empty list) offers the full `conditions` list instead -- see getProductConditionsMap. */
   productConditions: Record<string, { id: string; name: string }[]>;
   ranges: Range[];
+  productExpiryOptions: Record<string, string[]>;
+  noExpirationProductIds: string[];
   canOverridePrice: boolean;
 }) {
   const [state, formAction, pending] = useActionState<ActionState, FormData>(
@@ -42,6 +46,14 @@ export function AddQuotedItemForm({
     const assigned = productConditions[productId];
     return assigned && assigned.length > 0 ? assigned : conditions;
   }, [productId, productConditions, conditions]);
+
+  const productNeverExpires = noExpirationProductIds.includes(productId);
+  const availableRanges = useMemo(() => {
+    const ids = productExpiryOptions[productId];
+    return ids && ids.length > 0 ? ranges.filter((r) => ids.includes(r.id)) : ranges;
+  }, [productId, productExpiryOptions, ranges]);
+  // A product with exactly one option (e.g. test strips: 10+ months) preselects it.
+  const onlyOptionId = productExpiryOptions[productId]?.length === 1 && availableRanges.length === 1 ? availableRanges[0].id : "";
 
   return (
     <form action={formAction} className="mt-4 flex flex-wrap items-end gap-3 rounded-xl border border-dashed border-slate-300 p-4 dark:border-slate-700">
@@ -111,14 +123,18 @@ export function AddQuotedItemForm({
       )}
       <label className="flex flex-col gap-1 text-sm">
         <span className="text-slate-600 dark:text-slate-400">Expiry</span>
-        <select name="expirationRangeId" className={inputClass} defaultValue="">
-          <option value="">— None —</option>
-          {ranges.map((r) => (
-            <option key={r.id} value={r.id}>
-              {r.label}
-            </option>
-          ))}
-        </select>
+        {productNeverExpires ? (
+          <span className={`${inputClass} bg-slate-50 text-slate-500 dark:bg-slate-800/50 dark:text-slate-400`}>Does not expire</span>
+        ) : (
+          <select key={productId} name="expirationRangeId" className={inputClass} defaultValue={onlyOptionId}>
+            <option value="">— None —</option>
+            {availableRanges.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.label}
+              </option>
+            ))}
+          </select>
+        )}
       </label>
       <label className="flex flex-col gap-1 text-sm">
         <span className="text-slate-600 dark:text-slate-400">Qty</span>

@@ -7,6 +7,7 @@ import {
   getPurchasingConditions,
   getProductConditionsMap,
   getPurchasingExpirationRanges,
+  getAllProductMultipliersForOrg,
   purchasingCustomerName,
   getOrganization,
   hasShipFromAddress,
@@ -29,13 +30,21 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
   if (!data) notFound();
   const { quotation, items, customer } = data;
 
-  const [products, conditions, ranges, productConditionsMap, orgRow] = await Promise.all([
+  const [products, conditions, ranges, productConditionsMap, orgRow, multiplierRows] = await Promise.all([
     getPurchasingProducts(org.organizationId),
     getPurchasingConditions(org.organizationId),
     getPurchasingExpirationRanges(org.organizationId),
     getProductConditionsMap(org.organizationId),
     getOrganization(org.organizationId),
+    getAllProductMultipliersForOrg(org.organizationId),
   ]);
+
+  // Which month ranges each product is quoted at, and which products never
+  // expire -- the Expiry dropdown shows only these (falls back to every range
+  // for a product with no options set up yet).
+  const productExpiryOptions: Record<string, string[]> = {};
+  for (const m of multiplierRows) (productExpiryOptions[m.productId] ??= []).push(m.expirationRangeId);
+  const noExpirationProductIds = products.filter((p) => p.noExpiration).map((p) => p.id);
 
   return (
     <div>
@@ -128,6 +137,8 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
                 conditions={conditions}
                 productConditions={Object.fromEntries(productConditionsMap)}
                 ranges={ranges}
+                productExpiryOptions={productExpiryOptions}
+                noExpirationProductIds={noExpirationProductIds}
                 canOverridePrice={canEdit}
               />
             ))}
@@ -141,6 +152,8 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
         conditions={conditions}
         productConditions={Object.fromEntries(productConditionsMap)}
         ranges={ranges}
+        productExpiryOptions={productExpiryOptions}
+        noExpirationProductIds={noExpirationProductIds}
         canOverridePrice={canEdit}
       />
 

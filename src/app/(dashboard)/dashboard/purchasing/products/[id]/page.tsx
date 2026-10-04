@@ -72,7 +72,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
       </div>
 
       <EditProductForm productId={product.id} product={product} categories={categories} />
-      <MultipliersSection productId={product.id} standardPrice={product.standardPrice} ranges={ranges} rows={multiplierRows} />
+      <MultipliersSection productId={product.id} standardPrice={product.standardPrice} noExpiration={product.noExpiration} ranges={ranges} rows={multiplierRows} />
       <ConditionsSection productId={product.id} allConditions={allConditions} productConditions={productConditions} />
     </div>
   );

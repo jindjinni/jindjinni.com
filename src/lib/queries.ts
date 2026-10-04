@@ -747,6 +747,7 @@ export async function getPurchasingProducts(organizationId: string, opts: { incl
       productCode: purchasingProducts.productCode,
       standardPrice: purchasingProducts.standardPrice,
       notes: purchasingProducts.notes,
+      noExpiration: purchasingProducts.noExpiration,
       active: purchasingProducts.active,
       archivedAt: purchasingProducts.archivedAt,
     })

@@ -38,6 +38,8 @@ export function QuotedItemRow({
   conditions,
   productConditions,
   ranges,
+  productExpiryOptions,
+  noExpirationProductIds,
   canOverridePrice,
 }: {
   item: Item;
@@ -45,6 +47,8 @@ export function QuotedItemRow({
   conditions: Condition[];
   productConditions: Record<string, { id: string; name: string }[]>;
   ranges: Range[];
+  productExpiryOptions: Record<string, string[]>;
+  noExpirationProductIds: string[];
   canOverridePrice: boolean;
 }) {
   const [editing, setEditing] = useState(false);
@@ -55,6 +59,14 @@ export function QuotedItemRow({
     const assigned = item.productId ? productConditions[item.productId] : undefined;
     return assigned && assigned.length > 0 ? assigned : conditions;
   }, [item.productId, productConditions, conditions]);
+
+  const neverExpires = item.productId ? noExpirationProductIds.includes(item.productId) : false;
+  const availableRanges = useMemo(() => {
+    const ids = item.productId ? productExpiryOptions[item.productId] : undefined;
+    if (!ids || ids.length === 0) return ranges;
+    // Keep the line's current range selectable even if it's no longer one of the product's options.
+    return ranges.filter((r) => ids.includes(r.id) || r.id === item.expirationRangeId);
+  }, [item.productId, item.expirationRangeId, productExpiryOptions, ranges]);
 
   function handleRemove() {
     if (!window.confirm(`Remove ${item.productNameSnapshot} from this quotation?`)) return;
@@ -72,7 +84,8 @@ export function QuotedItemRow({
           <EditQuotedItemForm
             item={item}
             availableConditions={availableConditions}
-            ranges={ranges}
+            ranges={availableRanges}
+            neverExpires={neverExpires}
             canOverridePrice={canOverridePrice}
             onDone={() => setEditing(false)}
           />
@@ -122,12 +135,14 @@ function EditQuotedItemForm({
   item,
   availableConditions,
   ranges,
+  neverExpires,
   canOverridePrice,
   onDone,
 }: {
   item: Item;
   availableConditions: Condition[];
   ranges: Range[];
+  neverExpires: boolean;
   canOverridePrice: boolean;
   onDone: () => void;
 }) {
@@ -193,14 +208,18 @@ function EditQuotedItemForm({
 
       <label className="flex flex-col gap-1 text-xs text-slate-600 dark:text-slate-400">
         Expiry
-        <select name="expirationRangeId" className={inputClass} defaultValue={item.expirationRangeId ?? ""}>
-          <option value="">— None —</option>
-          {ranges.map((r) => (
-            <option key={r.id} value={r.id}>
-              {r.label}
-            </option>
-          ))}
-        </select>
+        {neverExpires ? (
+          <span className={`${inputClass} bg-slate-50 text-slate-500 dark:bg-slate-800/50 dark:text-slate-400`}>Does not expire</span>
+        ) : (
+          <select name="expirationRangeId" className={inputClass} defaultValue={item.expirationRangeId ?? ""}>
+            <option value="">— None —</option>
+            {ranges.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.label}
+              </option>
+            ))}
+          </select>
+        )}
       </label>
 
       <label className="flex flex-col gap-1 text-xs text-slate-600 dark:text-slate-400">

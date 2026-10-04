@@ -14,7 +14,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { requireOrg, type CurrentOrg } from "@/lib/tenant";
 import { db } from "@/db/client";
 import {
@@ -49,6 +49,7 @@ import { seedPurchasingProductCatalogForOrg } from "@/lib/purchasing-catalog-see
 import { seedPurchasingMonthRangesForOrg } from "@/lib/purchasing-month-range-seed";
 import { seedPurchasingConditionsForOrg } from "@/lib/purchasing-condition-seed";
 import { parseSpreadsheetFile, findColumn } from "@/lib/spreadsheet-import";
+import { applyExpiryRulesForOrg } from "@/lib/purchasing-expiry-plan";
 import {
   createShipment,
   createTransaction,
@@ -2181,4 +2182,49 @@ export async function importPurchasingCustomers(
     message += ` ${errors.length} row(s) had problems: ${errors.slice(0, 5).join(" ")}${errors.length > 5 ? " …" : ""}`;
   }
   return { message };
+}
+
+
+// ---------------------------------------------------------------------------
+// Brand-level expiry options (see src/lib/purchasing-expiry-rules.ts)
+// ---------------------------------------------------------------------------
+
+export type ApplyExpiryRulesState = { error?: string; message?: string } | undefined;
+
+/**
+ * Applies the brand rules to every active product in the org. Additive by
+ * default: it only adds the expiry options a product is missing, so options
+ * someone already set (including a hand-tuned multiplier) are left alone.
+ * With "removeOthers" checked it also removes any option the rule does not
+ * list, so the product ends up with exactly the rule's options.
+ */
+export async function applyExpiryRules(
+  _prevState: ApplyExpiryRulesState,
+  formData: FormData,
+): Promise<ApplyExpiryRulesState> {
+  const org = await requireOrg();
+  const blocked = requireManager(org);
+  if (blocked) return blocked;
+
+  const result = await applyExpiryRulesForOrg(org, formData.get("removeOthers") === "on");
+  revalidatePath("/dashboard/purchasing", "layout");
+  return result;
+}
+
+/** Per-product switch for items that never expire (receivers, readers, ...). */
+export async function setProductNoExpiration(productId: string, noExpiration: boolean): Promise<ActionState> {
+  const org = await requireOrg();
+  const blocked = requireManager(org);
+  if (blocked) return blocked;
+  const product = await requireOrgProduct(org.organizationId, productId);
+  if (!product) return { error: "Product not found." };
+
+  await db
+    .update(purchasingProducts)
+    .set({ noExpiration })
+    .where(and(eq(purchasingProducts.id, productId), eq(purchasingProducts.organizationId, org.organizationId)));
+  await logAudit(org, "product", productId, "no_expiration", product.noExpiration ? "yes" : "no", noExpiration ? "yes" : "no");
+
+  revalidatePath(`/dashboard/purchasing/products/${productId}`);
+  revalidatePath("/dashboard/purchasing", "layout");
 }

@@ -608,6 +608,9 @@ export const purchasingProducts = sqliteTable(
     productCode: text("product_code"),
     standardPrice: real("standard_price").notNull().default(0),
     notes: text("notes"),
+    // Products that never expire (receivers, readers, ...) -- the quotation
+    // form hides the Expiry field for them instead of offering month ranges.
+    noExpiration: integer("no_expiration", { mode: "boolean" }).notNull().default(false),
     active: integer("active", { mode: "boolean" }).notNull().default(true),
     archivedAt: text("archived_at"),
     ...timestamps,

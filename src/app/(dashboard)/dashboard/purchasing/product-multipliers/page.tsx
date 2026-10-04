@@ -3,6 +3,8 @@ import { requireOrg } from "@/lib/tenant";
 import { getAllProductMultipliersForOrg, getPurchasingProducts, getPurchasingExpirationRanges } from "@/lib/queries";
 import { AddMultiplierForm } from "./add-multiplier-form";
 import { ProductMultipliersTable } from "./product-multipliers-table";
+import { AutoExpiryCard } from "./auto-expiry-card";
+import { buildExpiryPlan } from "@/lib/purchasing-expiry-plan";
 
 export default async function ProductMultipliersPage() {
   const org = await requireOrg();
@@ -14,10 +16,11 @@ export default async function ProductMultipliersPage() {
     );
   }
 
-  const [rows, products, ranges] = await Promise.all([
+  const [rows, products, ranges, plan] = await Promise.all([
     getAllProductMultipliersForOrg(org.organizationId),
     getPurchasingProducts(org.organizationId),
     getPurchasingExpirationRanges(org.organizationId),
+    buildExpiryPlan(org.organizationId),
   ]);
 
   return (
@@ -36,6 +39,24 @@ export default async function ProductMultipliersPage() {
           ← Back
         </Link>
       </div>
+
+      <AutoExpiryCard
+        rules={plan.rules.map(({ rule, products: ps }) => ({
+          key: rule.key,
+          title: rule.title,
+          covers: rule.covers,
+          noExpiration: !!rule.noExpiration,
+          options: rule.options.map((o) => ({ label: o.label, multiplier: o.multiplier })),
+          products: ps.map((p) => ({
+            id: p.id,
+            name: p.name,
+            toAdd: p.toAdd.length,
+            extraLabels: p.extraLabels,
+            flagChange: p.flagChange,
+          })),
+        }))}
+        unmatched={plan.unmatched}
+      />
 
       <AddMultiplierForm products={products.map((p) => ({ id: p.id, name: p.name }))} ranges={ranges.map((r) => ({ id: r.id, label: r.label }))} />
 
