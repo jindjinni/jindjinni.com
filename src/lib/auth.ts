@@ -4,7 +4,8 @@ import { encode as defaultEncode } from "next-auth/jwt";
 import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
 import { db } from "@/db/client";
-import { users } from "@/db/schema";
+import { signInEvents, users } from "@/db/schema";
+import { newId } from "@/lib/ids";
 
 // "Remember me" on the login form: unchecked, a session is good for a day;
 // checked (the default -- see the login form and server action), it's good
@@ -71,6 +72,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           .set({ lastLoginAt: new Date().toISOString() })
           .where(eq(users.id, user.id))
           .catch(() => {});
+        await db.insert(signInEvents).values({ id: newId("signin"), userId: user.id }).catch(() => {});
         return { id: user.id, email: user.email, name: user.name, rememberMe };
       },
     }),

@@ -371,9 +371,12 @@ export default function Home() {
             Your business wishes, our command.
             <span className="block text-xs">© 2026 jindjinni. All rights reserved.</span>
           </p>
-          <div className="flex gap-5 font-semibold">
+          <div className="flex flex-wrap justify-center gap-x-5 gap-y-2 font-semibold">
             <Link href="/login" className="hover:text-ink">Sign In</Link>
             <Link href="/signup" className="hover:text-ink">Get Started</Link>
+            <Link href="/terms" className="hover:text-ink">Terms</Link>
+            <Link href="/privacy" className="hover:text-ink">Privacy</Link>
+            <Link href="/security" className="hover:text-ink">Security</Link>
           </div>
         </div>
       </footer>

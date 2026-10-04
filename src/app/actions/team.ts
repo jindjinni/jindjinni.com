@@ -16,6 +16,7 @@ import { newId } from "@/lib/ids";
 import { sendEmail } from "@/lib/email";
 import { ASSIGNABLE_ROLES, ROLE_LABELS, isAdmin, isRole, type Role } from "@/lib/permissions";
 import { getSeatUsage } from "@/lib/seats";
+import { TERMS_VERSION } from "@/lib/legal";
 import { INVITE_VALID_DAYS, lookupInvitation, newInviteToken } from "@/lib/invitations";
 
 export type TeamActionState =
@@ -304,6 +305,7 @@ export async function acceptInvitation(token: string, _prev: TeamActionState, fo
     password = String(formData.get("password") ?? "");
     if (!name) return { error: "Enter your name." };
     if (password.length < 8) return { error: "Choose a password of at least 8 characters." };
+    if (formData.get("acceptTerms") !== "on") return { error: "Please agree to the Terms of Service, Privacy Policy and Acceptable Use Policy." };
     userId = newId("user");
     await db.insert(users).values({
       id: userId,
@@ -311,6 +313,8 @@ export async function acceptInvitation(token: string, _prev: TeamActionState, fo
       name,
       passwordHash: await bcrypt.hash(password, 10),
       emailVerified: new Date().toISOString(),
+      termsAcceptedAt: new Date().toISOString(),
+      termsVersion: TERMS_VERSION,
     });
     needsSignIn = true;
   }

@@ -17,9 +17,9 @@ export default async function BusinessSettingsPage() {
   if (!isAdmin(org.role)) {
     return (
       <div>
-        <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-50">
+        <h2 className="text-2xl font-semibold text-slate-900 dark:text-slate-50">
           Business settings
-        </h1>
+        </h2>
         <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
           This page is limited to owners and admins.
         </p>
@@ -35,9 +35,9 @@ export default async function BusinessSettingsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-50">
+      <h2 className="text-2xl font-semibold text-slate-900 dark:text-slate-50">
         Business settings
-      </h1>
+      </h2>
       <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
         This is the return address and contact info printed as the sender on
         every shipping label the app generates for a seller -- fill it in

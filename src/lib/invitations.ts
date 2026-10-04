@@ -32,13 +32,14 @@ export type InviteLookup =
 export async function lookupInvitation(token: string): Promise<InviteLookup> {
   if (!token || token.length < 20 || token.length > 200) return { status: "invalid" };
   const [row] = await db
-    .select({ invitation: teamInvitations, organizationName: organizations.name })
+    .select({ invitation: teamInvitations, organizationName: organizations.name, closedAt: organizations.closedAt })
     .from(teamInvitations)
     .innerJoin(organizations, eq(teamInvitations.organizationId, organizations.id))
     .where(eq(teamInvitations.tokenHash, hashInviteToken(token)))
     .limit(1);
   if (!row) return { status: "invalid" };
-  const { invitation, organizationName } = row;
+  const { invitation, organizationName, closedAt } = row;
+  if (closedAt) return { status: "revoked", invitation, organizationName };
   if (invitation.acceptedAt) return { status: "used", invitation, organizationName };
   if (invitation.revokedAt) return { status: "revoked", invitation, organizationName };
   if (new Date(invitation.expiresAt).getTime() <= Date.now()) return { status: "expired", invitation, organizationName };

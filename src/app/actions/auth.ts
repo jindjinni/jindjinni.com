@@ -27,6 +27,7 @@ import {
 import { extractBusinessProfileIdentityFields } from "@/lib/business-profile-form";
 import { encodeLogoFile } from "@/lib/logo-validation";
 import { consumeSignupVerificationCode } from "@/lib/signup-verification";
+import { TERMS_VERSION } from "@/lib/legal";
 
 export type ActionState = { error?: string } | undefined;
 
@@ -84,6 +85,9 @@ export async function signUpOrganization(
   const password = String(formData.get("password") ?? "");
 
   if (!companyName) return { error: "Official Legal Business Name is required." };
+  if (formData.get("acceptTerms") !== "on") {
+    return { error: "Please agree to the Terms of Service, Privacy Policy and Acceptable Use Policy to create an account." };
+  }
   if (!email || !password || password.length < 8) {
     return { error: "Fill in your email and a password of at least 8 characters." };
   }
@@ -149,6 +153,8 @@ export async function signUpOrganization(
     name,
     passwordHash,
     emailVerified: new Date().toISOString(),
+    termsAcceptedAt: new Date().toISOString(),
+    termsVersion: TERMS_VERSION,
   });
   await db.insert(organizations).values({ id: orgId, name: companyName, slug });
   await db.insert(memberships).values({

@@ -76,3 +76,33 @@ export function departmentsFor(role: string): string[] {
   if (role === "receiver" || isAdmin(role)) out.push("receiving");
   return out;
 }
+
+/** Only the person who owns the company may close it. */
+export function isOwner(role: string): boolean {
+  return role === "owner";
+}
+
+export type SettingsSection = {
+  href: string;
+  label: string;
+  /** Short line shown under the title on the section's page. */
+  blurb: string;
+};
+
+/** Which Settings sections a role sees in the left menu (the pages re-check on the server). */
+export function settingsSectionsFor(role: string): SettingsSection[] {
+  const out: SettingsSection[] = [
+    { href: "/dashboard/settings/account", label: "My account", blurb: "Your name, password and role." },
+  ];
+  out.push({ href: "/dashboard/settings/business-profile", label: "Business profile", blurb: "Your company's official details." });
+  if (isAdmin(role)) {
+    out.push({ href: "/dashboard/settings/business", label: "Shipping & labels", blurb: "The return address printed on labels." });
+    out.push({ href: "/dashboard/settings/team", label: "Team & access", blurb: "Invite people and choose their role." });
+    out.push({ href: "/dashboard/settings/billing", label: "Plan & billing", blurb: "Your plan and team size." });
+  }
+  out.push({ href: "/dashboard/settings/activity", label: "Security & activity", blurb: "Sign-ins and changes." });
+  if (isOwner(role)) {
+    out.push({ href: "/dashboard/settings/close-company", label: "Close company", blurb: "Download your data or close the account." });
+  }
+  return out;
+}

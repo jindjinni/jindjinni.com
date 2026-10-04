@@ -58,6 +58,13 @@ export const organizations = sqliteTable("organizations", {
   // pending invitations). Nullable on purpose -- never NOT NULL on a table
   // that already has rows (see the note on drizzle-kit in scripts/safe-push.ts).
   seatLimit: integer("seat_limit"),
+  // Closing the company (Settings -> Close company). closedAt set = everyone
+  // is locked out; the owner can restore until purgeAfter (30 days later),
+  // after which the nightly clean-up deletes the company's data for good.
+  // All nullable -- same drizzle-kit rule as seatLimit above.
+  closedAt: text("closed_at"),
+  closedByUserId: text("closed_by_user_id"),
+  purgeAfter: text("purge_after"),
   ...timestamps,
 });
 
@@ -145,8 +152,26 @@ export const users = sqliteTable("users", {
   image: text("image"),
   // Stamped on every successful sign-in; shown in the Admin panel's team list.
   lastLoginAt: text("last_login_at"),
+  // Which version of the Terms/Privacy this person agreed to, and when.
+  termsAcceptedAt: text("terms_accepted_at"),
+  termsVersion: text("terms_version"),
   ...timestamps,
 });
+
+/** One row per successful sign-in -- powers Settings -> Security & activity. No IP address or device data is stored. */
+export const signInEvents = sqliteTable(
+  "sign_in_events",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(current_timestamp)`),
+  },
+  (t) => [index("sign_in_events_user_idx").on(t.userId, t.createdAt)],
+);
 
 /**
  * Short-lived codes emailed during signup to prove the account email is

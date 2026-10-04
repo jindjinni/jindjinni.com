@@ -1,7 +1,12 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { eq } from "drizzle-orm";
+import { db } from "@/db/client";
+import { users } from "@/db/schema";
+import { TERMS_VERSION } from "@/lib/legal";
 import { requireOrg } from "@/lib/tenant";
 import { logout } from "@/app/actions/auth";
-import { ROLE_LABELS, canViewPurchasing, isAdmin, isPurchasingManager } from "@/lib/permissions";
+import { ROLE_LABELS, canViewPurchasing, isPurchasingManager } from "@/lib/permissions";
 
 export default async function DashboardLayout({
   children,
@@ -10,6 +15,11 @@ export default async function DashboardLayout({
 }) {
   // Runs on every dashboard route: no session -> /login, no org -> /onboarding.
   const org = await requireOrg();
+
+  // Everyone agrees to the current Terms once (people who joined before they
+  // existed, or when they change, are asked here).
+  const [me] = await db.select({ termsVersion: users.termsVersion }).from(users).where(eq(users.id, org.userId)).limit(1);
+  if (me?.termsVersion !== TERMS_VERSION) redirect("/accept-terms");
 
   return (
     <div className="flex min-h-full flex-1 flex-col bg-slate-50 dark:bg-slate-950">
@@ -29,14 +39,9 @@ export default async function DashboardLayout({
                 Database
               </Link>
             )}
-            <Link href="/dashboard/profile" className="hover:text-emerald-700 dark:hover:text-emerald-400">
-              Profile
+            <Link href="/dashboard/settings" className="hover:text-emerald-700 dark:hover:text-emerald-400">
+              Settings
             </Link>
-            {isAdmin(org.role) && (
-              <Link href="/dashboard/admin" className="hover:text-emerald-700 dark:hover:text-emerald-400">
-                Admin
-              </Link>
-            )}
           </nav>
         </div>
         <div className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400">

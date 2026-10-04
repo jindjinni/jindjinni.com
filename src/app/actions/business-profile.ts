@@ -112,7 +112,7 @@ export async function updateBusinessProfile(
   await logAudit(org, "Tax ID / EIN", existing.taxId, patch.taxId);
   await logAudit(org, "Business registration number", existing.businessRegistrationNumber, patch.businessRegistrationNumber);
 
-  revalidatePath("/dashboard/profile");
+  revalidatePath("/dashboard/settings/business-profile");
   revalidatePath("/dashboard/database");
   return { message: "Business Profile saved." };
 }
@@ -148,7 +148,7 @@ export async function uploadBusinessLogo(
 
   await logAudit(org, "Logo", null, `uploaded (${file.name})`);
 
-  revalidatePath("/dashboard/profile");
+  revalidatePath("/dashboard/settings/business-profile");
   revalidatePath("/dashboard/database");
   return { message: "Logo uploaded." };
 }
@@ -168,7 +168,7 @@ export async function removeBusinessLogo(
 
   await logAudit(org, "Logo", "present", "removed");
 
-  revalidatePath("/dashboard/profile");
+  revalidatePath("/dashboard/settings/business-profile");
   revalidatePath("/dashboard/database");
   return { message: "Logo removed." };
 }

@@ -7,7 +7,7 @@
 // guarantee, in one place.
 
 import { redirect } from "next/navigation";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNotNull, isNull } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/db/client";
 import { memberships, organizations } from "@/db/schema";
@@ -35,8 +35,9 @@ export async function requireOrg(): Promise<CurrentOrg> {
   const userId = (session?.user as { id?: string } | undefined)?.id;
   if (!userId) redirect("/login");
 
-  // Only ACTIVE memberships count: an admin can switch someone's access off
-  // (deactivatedAt) without deleting their history.
+  // Only ACTIVE memberships in a company that isn't closed count: an admin can
+  // switch someone's access off (deactivatedAt) without deleting their
+  // history, and the owner can close the whole company (closedAt) for 30 days.
   const [row] = await db
     .select({
       organizationId: organizations.id,
@@ -45,10 +46,29 @@ export async function requireOrg(): Promise<CurrentOrg> {
     })
     .from(memberships)
     .innerJoin(organizations, eq(memberships.organizationId, organizations.id))
-    .where(and(eq(memberships.userId, userId!), isNull(memberships.deactivatedAt)))
+    .where(
+      and(
+        eq(memberships.userId, userId!),
+        isNull(memberships.deactivatedAt),
+        isNull(organizations.closedAt),
+      ),
+    )
     .limit(1);
 
   if (!row) {
+    const [closed] = await db
+      .select({ id: memberships.id })
+      .from(memberships)
+      .innerJoin(organizations, eq(memberships.organizationId, organizations.id))
+      .where(
+        and(
+          eq(memberships.userId, userId!),
+          isNull(memberships.deactivatedAt),
+          isNotNull(organizations.closedAt),
+        ),
+      )
+      .limit(1);
+    if (closed) redirect("/closed");
     // Had access once but it was removed -> explain, don't send them to
     // create a brand-new company by mistake.
     const [anyMembership] = await db
@@ -65,4 +85,39 @@ export async function requireOrg(): Promise<CurrentOrg> {
     organizationName: row!.organizationName,
     role: row!.role as CurrentOrg["role"],
   };
+}
+
+export type ClosedCompany = {
+  organizationId: string;
+  organizationName: string;
+  role: Role;
+  closedAt: string;
+  purgeAfter: string | null;
+  /** True once the 30 days are up (the company can no longer be reopened). */
+  expired: boolean;
+};
+
+/** The signed-in user's company that is currently closed (for the /closed page and the data export), or null. */
+export async function getClosedCompanyForUser(userId: string): Promise<ClosedCompany | null> {
+  const [row] = await db
+    .select({
+      organizationId: organizations.id,
+      organizationName: organizations.name,
+      role: memberships.role,
+      closedAt: organizations.closedAt,
+      purgeAfter: organizations.purgeAfter,
+    })
+    .from(memberships)
+    .innerJoin(organizations, eq(memberships.organizationId, organizations.id))
+    .where(and(eq(memberships.userId, userId), isNull(memberships.deactivatedAt), isNotNull(organizations.closedAt)))
+    .limit(1);
+  if (!row || !row.closedAt) return null;
+  const expired = !!row.purgeAfter && new Date(row.purgeAfter).getTime() <= Date.now();
+  return { ...row, role: row.role as Role, closedAt: row.closedAt, expired };
+}
+
+/** Current signed-in user id (no redirect), for pages that must work while the company is closed. */
+export async function getSessionUserId(): Promise<string | null> {
+  const session = await auth();
+  return (session?.user as { id?: string } | undefined)?.id ?? null;
 }

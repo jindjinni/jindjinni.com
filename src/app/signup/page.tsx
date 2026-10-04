@@ -7,6 +7,7 @@ import { sendSignupVerificationCode, type SendCodeState } from "@/app/actions/em
 import { AuthCard, AuthError, AuthField as Field, AuthSection as Section, AuthShell, authBtnPrimary, authBtnSecondary } from "@/components/auth/auth-ui";
 import { Icon } from "@/components/landing/icons";
 import { BusinessProfileSignupFields } from "@/components/business-profile-signup-fields";
+import { TermsCheckbox } from "@/components/legal/terms-checkbox";
 
 // Field styling comes from the .auth-theme scope in globals.css.
 const inputClass = "";
@@ -131,6 +132,8 @@ export default function SignupPage() {
           </Section>
 
           <BusinessProfileSignupFields accountName={accountName} accountEmail={accountEmail} />
+
+          <TermsCheckbox />
 
           {state?.error && <AuthError>{state.error}</AuthError>}
 
