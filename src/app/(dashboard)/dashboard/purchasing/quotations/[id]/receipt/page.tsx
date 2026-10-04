@@ -172,6 +172,12 @@ export default async function QuotationReceiptPage({ params }: { params: Promise
           <p className="text-sm font-bold text-blue-700">DISCLAIMER:</p>
           <p className="mt-1">By sending your items, you acknowledge and agree to all {business.displayName} policies.</p>
           <p>Supplies that are damaged, stained, ripped, torn, expired, or otherwise not accepted will be returned at the seller&rsquo;s expense.</p>
+          <p className="mt-1">
+            Hidden damage found under pharmacy labels or packaging damage caused by not following our packaging
+            instructions may each be subject to <strong className="text-red-600">up to a 50% deduction</strong> of the
+            quoted value, and packages lost in transit are covered by the carrier for{" "}
+            <strong className="text-red-600">up to $100</strong> only, unless additional coverage applies.
+          </p>
 
           <p className="mt-3 text-sm font-bold text-blue-700">MINT CONDITION SUPPLIES ONLY:</p>
           <ul className="mt-1 list-disc space-y-0.5 pl-5">
@@ -179,36 +185,6 @@ export default async function QuotationReceiptPage({ params }: { params: Promise
             <li>We do NOT accept re-glued or re-taped supplies.</li>
             <li className="font-bold">FACTORY SEALED ONLY</li>
           </ul>
-        </div>
-
-        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div className="rounded-md border border-amber-300 bg-amber-50 p-3">
-            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-900">
-              <BoxIcon /> Hidden Damage
-            </div>
-            <p className="mt-2 text-xs leading-relaxed text-slate-700">
-              Damage found underneath pharmacy labels when removing the labels at our office may be subject to{" "}
-              <strong className="text-red-600">up to a 50% deduction</strong> of the quoted value.
-            </p>
-          </div>
-          <div className="rounded-md border border-amber-300 bg-amber-50 p-3">
-            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-900">
-              <BoxIcon /> Packaging Damage
-            </div>
-            <p className="mt-2 text-xs leading-relaxed text-slate-700">
-              Supplies that arrive damaged due to failure to follow our packaging instructions may be subject to{" "}
-              <strong className="text-red-600">up to a 50% deduction</strong> of the quoted value.
-            </p>
-          </div>
-          <div className="rounded-md border border-amber-300 bg-amber-50 p-3">
-            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-900">
-              <TruckIcon /> Lost Packages
-            </div>
-            <p className="mt-2 text-xs leading-relaxed text-slate-700">
-              If a package is lost in transit, the carrier normally only covers{" "}
-              <strong className="text-red-600">up to $100</strong> for lost packages, unless additional coverage applies.
-            </p>
-          </div>
         </div>
 
         <p className="mt-4 text-center text-sm font-bold text-red-600">
@@ -238,24 +214,5 @@ export default async function QuotationReceiptPage({ params }: { params: Promise
         </div>
       )}
     </div>
-  );
-}
-
-function BoxIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M21 8 12 3 3 8v8l9 5 9-5V8Z" strokeLinejoin="round" />
-      <path d="M3 8l9 5 9-5M12 13v8" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function TruckIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M3 7h11v9H3zM14 11h4l3 3v2h-7z" strokeLinejoin="round" />
-      <circle cx="7" cy="18" r="1.6" />
-      <circle cx="17.5" cy="18" r="1.6" />
-    </svg>
   );
 }
