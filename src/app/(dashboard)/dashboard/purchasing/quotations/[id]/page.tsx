@@ -175,7 +175,6 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
         <ShippingLabelSection
           quotationId={quotation.id}
           customerId={customer.id}
-          labelCarrier={quotation.labelCarrier}
           parcelLengthIn={quotation.parcelLengthIn}
           parcelWidthIn={quotation.parcelWidthIn}
           parcelHeightIn={quotation.parcelHeightIn}

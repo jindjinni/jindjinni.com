@@ -35,7 +35,6 @@ function CopyLinkButton({ url }: { url: string }) {
 export function ShippingLabelSection({
   quotationId,
   customerId,
-  labelCarrier,
   parcelLengthIn,
   parcelWidthIn,
   parcelHeightIn,
@@ -50,7 +49,6 @@ export function ShippingLabelSection({
 }: {
   quotationId: string;
   customerId: string;
-  labelCarrier: "UPS_GROUND" | "USPS_GROUND";
   parcelLengthIn: number;
   parcelWidthIn: number;
   parcelHeightIn: number;
@@ -134,65 +132,80 @@ export function ShippingLabelSection({
         )
       )}
 
-      <form action={formAction} className="mt-4 flex flex-wrap items-end gap-3 text-sm">
-        <label className="flex flex-col gap-1">
-          <span className="text-slate-600 dark:text-slate-400">Service</span>
-          <select
-            name="labelCarrier"
-            defaultValue={labelCarrier}
-            className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-600 dark:border-slate-700 dark:bg-slate-800"
+      <form action={formAction} className="mt-4 text-sm">
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="flex flex-col gap-1">
+            <span className="text-slate-600 dark:text-slate-400">Service</span>
+            <select
+              name="labelCarrier"
+              // UPS Ground is always the default, regardless of what's
+              // stored from a prior attempt -- USPS stays one click away
+              // for whoever wants it.
+              defaultValue="UPS_GROUND"
+              className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-600 dark:border-slate-700 dark:bg-slate-800"
+            >
+              <option value="UPS_GROUND">UPS Ground</option>
+              <option value="USPS_GROUND">USPS Ground</option>
+            </select>
+          </label>
+          <button
+            type="submit"
+            disabled={pending || blocked}
+            className="rounded-md bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800 disabled:opacity-50"
           >
-            <option value="UPS_GROUND">UPS Ground</option>
-            <option value="USPS_GROUND">USPS Ground</option>
-          </select>
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-slate-600 dark:text-slate-400">L × W × H (in)</span>
-          <span className="flex gap-1">
-            <input
-              name="parcelLengthIn"
-              type="number"
-              min="1"
-              step="0.1"
-              defaultValue={parcelLengthIn}
-              className="w-16 rounded-md border border-slate-300 px-2 py-2 text-sm outline-none focus:border-emerald-600 dark:border-slate-700 dark:bg-slate-800"
-            />
-            <input
-              name="parcelWidthIn"
-              type="number"
-              min="1"
-              step="0.1"
-              defaultValue={parcelWidthIn}
-              className="w-16 rounded-md border border-slate-300 px-2 py-2 text-sm outline-none focus:border-emerald-600 dark:border-slate-700 dark:bg-slate-800"
-            />
-            <input
-              name="parcelHeightIn"
-              type="number"
-              min="1"
-              step="0.1"
-              defaultValue={parcelHeightIn}
-              className="w-16 rounded-md border border-slate-300 px-2 py-2 text-sm outline-none focus:border-emerald-600 dark:border-slate-700 dark:bg-slate-800"
-            />
-          </span>
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-slate-600 dark:text-slate-400">Weight (lb)</span>
-          <input
-            name="parcelWeightLb"
-            type="number"
-            min="0.1"
-            step="0.1"
-            defaultValue={parcelWeightLb}
-            className="w-20 rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-emerald-600 dark:border-slate-700 dark:bg-slate-800"
-          />
-        </label>
-        <button
-          type="submit"
-          disabled={pending || blocked}
-          className="rounded-md bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800 disabled:opacity-50"
-        >
-          {pending ? "Generating..." : labelStatus === "GENERATED" ? "Regenerate label" : "Generate shipping label"}
-        </button>
+            {pending ? "Generating..." : labelStatus === "GENERATED" ? "Regenerate label" : "Generate shipping label"}
+          </button>
+        </div>
+
+        {/* Package size defaults to a standard 10x10x10in / 3lb box -- tucked
+            away so generating a label is just "pick a carrier, go." */}
+        <details className="mt-3 text-slate-500 dark:text-slate-400">
+          <summary className="w-fit cursor-pointer select-none text-xs font-medium hover:text-slate-700 dark:hover:text-slate-200">
+            Package size (optional -- defaults to 10×10×10in, 3lb)
+          </summary>
+          <div className="mt-2 flex flex-wrap items-end gap-3">
+            <label className="flex flex-col gap-1">
+              <span className="text-slate-600 dark:text-slate-400">L × W × H (in)</span>
+              <span className="flex gap-1">
+                <input
+                  name="parcelLengthIn"
+                  type="number"
+                  min="1"
+                  step="0.1"
+                  defaultValue={parcelLengthIn}
+                  className="w-16 rounded-md border border-slate-300 px-2 py-2 text-sm outline-none focus:border-emerald-600 dark:border-slate-700 dark:bg-slate-800"
+                />
+                <input
+                  name="parcelWidthIn"
+                  type="number"
+                  min="1"
+                  step="0.1"
+                  defaultValue={parcelWidthIn}
+                  className="w-16 rounded-md border border-slate-300 px-2 py-2 text-sm outline-none focus:border-emerald-600 dark:border-slate-700 dark:bg-slate-800"
+                />
+                <input
+                  name="parcelHeightIn"
+                  type="number"
+                  min="1"
+                  step="0.1"
+                  defaultValue={parcelHeightIn}
+                  className="w-16 rounded-md border border-slate-300 px-2 py-2 text-sm outline-none focus:border-emerald-600 dark:border-slate-700 dark:bg-slate-800"
+                />
+              </span>
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-slate-600 dark:text-slate-400">Weight (lb)</span>
+              <input
+                name="parcelWeightLb"
+                type="number"
+                min="0.1"
+                step="0.1"
+                defaultValue={parcelWeightLb}
+                className="w-20 rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-emerald-600 dark:border-slate-700 dark:bg-slate-800"
+              />
+            </label>
+          </div>
+        </details>
       </form>
       {state?.error && <p className="mt-2 text-sm text-red-600 dark:text-red-400">{state.error}</p>}
     </div>
