@@ -1175,10 +1175,6 @@ async function recomputeQuotationTotals(org: CurrentOrg, quotationId: string) {
     .select({ lineTotal: purchasingQuotedItems.lineTotal })
     .from(purchasingQuotedItems)
     .where(eq(purchasingQuotedItems.quotationId, quotationId));
-  const itemsTotal = roundCents(items.reduce((sum, i) => sum + i.lineTotal, 0));
-
-  const tiers = await getPurchasingBonusTiers(org.organizationId);
-  const { bonusAmount, tier } = computeAutomaticBonus(itemsTotal, tiers);
 
   const [quotation] = await db
     .select()
@@ -1186,6 +1182,15 @@ async function recomputeQuotationTotals(org: CurrentOrg, quotationId: string) {
     .where(eq(purchasingQuotations.id, quotationId))
     .limit(1);
   if (!quotation) return;
+
+  // An imported order has no quoted lines -- its total came from the file and
+  // already includes whatever bonus was given, so keep it as the base instead
+  // of recomputing it down to $0.
+  const keepImportedTotal = quotation.source === "IMPORTED" && items.length === 0;
+  const itemsTotal = keepImportedTotal ? quotation.itemsTotal : roundCents(items.reduce((sum, i) => sum + i.lineTotal, 0));
+
+  const tiers = await getPurchasingBonusTiers(org.organizationId);
+  const { bonusAmount, tier } = keepImportedTotal ? { bonusAmount: 0, tier: null } : computeAutomaticBonus(itemsTotal, tiers);
 
   const deduction = quotation.deductionEnabled ? quotation.deductionAmount : 0;
   const grandTotal = roundCents(itemsTotal + bonusAmount - deduction + quotation.returnLabelCost);

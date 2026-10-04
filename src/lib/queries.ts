@@ -946,6 +946,9 @@ export async function getPurchasingQuotationsSummary(organizationId: string, opt
       labelUrl: purchasingQuotations.labelUrl,
       archivedAt: purchasingQuotations.archivedAt,
       createdAt: purchasingQuotations.createdAt,
+      source: purchasingQuotations.source,
+      importedItemsText: purchasingQuotations.importedItemsText,
+      importedShippingAddress: purchasingQuotations.importedShippingAddress,
       customerNameSnapshot: purchasingQuotations.customerNameSnapshot,
       customerEmailSnapshot: purchasingQuotations.customerEmailSnapshot,
       customerPhoneSnapshot: purchasingQuotations.customerPhoneSnapshot,
@@ -987,19 +990,24 @@ export async function getPurchasingQuotationsSummary(organizationId: string, opt
     const items = itemsByQuotation.get(r.id) ?? [];
     const itemsSummary =
       items.length === 0
-        ? "—"
+        ? r.importedItemsText?.trim()
+          ? r.importedItemsText.split(/\n+/).map((l) => l.trim()).filter(Boolean).join("; ")
+          : "—"
         : items.map((i) => `${i.productNameSnapshot} (x${i.quantity})`).join(", ");
     const customerName = r.customerFirstName
       ? [r.customerFirstName, r.customerLastName].filter(Boolean).join(" ")
       : r.customerNameSnapshot;
     const email = r.customerEmail ?? r.customerEmailSnapshot;
     const phone = r.customerPhone ?? r.customerPhoneSnapshot;
-    const shippingInfo =
-      r.addressStreet1 && r.addressCity && r.addressState && r.addressZip
+    // Imported orders carry the full address exactly as it came in the file.
+    const shippingInfo = r.importedShippingAddress
+      ? r.importedShippingAddress
+      : r.addressStreet1 && r.addressCity && r.addressState && r.addressZip
         ? `${r.addressCity}, ${r.addressState} ${r.addressZip}`
         : "Not provided";
     return {
       id: r.id,
+      imported: r.source === "IMPORTED",
       quotationNumber: r.quotationNumber,
       quotationDate: r.quotationDate,
       status: r.status,

@@ -887,6 +887,12 @@ export const purchasingQuotations = sqliteTable(
     labelError: text("label_error"),
     labelGeneratedAt: text("label_generated_at"),
     notes: text("notes"),
+    // Orders brought in from another website via Quotation Summary -> Import.
+    // null source = created in this app. All nullable (drizzle-kit rule).
+    source: text("source"),
+    importedItemsText: text("imported_items_text"),
+    importedShippingAddress: text("imported_shipping_address"),
+    importedAt: text("imported_at"),
     createdByUserId: text("created_by_user_id").references(() => users.id),
     archivedAt: text("archived_at"),
     ...timestamps,

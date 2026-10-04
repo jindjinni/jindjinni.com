@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { QuotationRowMenu } from "./quotation-row-menu";
+import { QuotationImportPanel } from "./quotation-import-panel";
 
 export type QuotationSummaryRow = {
   id: string;
@@ -13,6 +14,7 @@ export type QuotationSummaryRow = {
   trackingNumber: string | null;
   labelStatus: "NOT_GENERATED" | "GENERATED" | "ERROR";
   archivedAt: string | null;
+  imported?: boolean;
   customerName: string;
   email: string | null;
   phone: string | null;
@@ -27,7 +29,8 @@ function csvEscape(value: string) {
   return value;
 }
 
-export function QuotationsTable({ quotations }: { quotations: QuotationSummaryRow[] }) {
+export function QuotationsTable({ quotations, canImport = false }: { quotations: QuotationSummaryRow[]; canImport?: boolean }) {
+  const [showImport, setShowImport] = useState(false);
   const [search, setSearch] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
@@ -45,7 +48,8 @@ export function QuotationsTable({ quotations }: { quotations: QuotationSummaryRo
         row.customerName.toLowerCase().includes(q) ||
         (row.email ?? "").toLowerCase().includes(q) ||
         (row.phone ?? "").toLowerCase().includes(q) ||
-        (row.trackingNumber ?? "").toLowerCase().includes(q)
+        (row.trackingNumber ?? "").toLowerCase().includes(q) ||
+        (row.imported && row.itemsSummary.toLowerCase().includes(q))
       );
     });
   }, [quotations, search, fromDate, toDate]);
@@ -106,13 +110,26 @@ export function QuotationsTable({ quotations }: { quotations: QuotationSummaryRo
             <h1 className="text-xl font-semibold">Quotation Summary</h1>
             <p className="mt-0.5 text-sm text-blue-100">Every quotation, at a glance -- search, filter, and ship from one place.</p>
           </div>
-          <Link
-            href="/dashboard/purchasing/quotations/new"
-            className="shrink-0 rounded-md bg-white px-4 py-2 text-sm font-medium text-blue-700 shadow-sm hover:bg-blue-50"
-          >
-            + New Quotation
-          </Link>
+          <div className="flex shrink-0 flex-wrap gap-2">
+            {canImport && (
+              <button
+                type="button"
+                onClick={() => setShowImport((v) => !v)}
+                aria-expanded={showImport}
+                className="rounded-md border border-white/60 px-4 py-2 text-sm font-medium text-white hover:bg-white/10"
+              >
+                Import orders
+              </button>
+            )}
+            <Link
+              href="/dashboard/purchasing/quotations/new"
+              className="rounded-md bg-white px-4 py-2 text-sm font-medium text-blue-700 shadow-sm hover:bg-blue-50"
+            >
+              + New Quotation
+            </Link>
+          </div>
         </div>
+        {canImport && showImport && <QuotationImportPanel onClose={() => setShowImport(false)} />}
         <div className="relative mt-4">
           <svg
             width="16"
@@ -244,6 +261,11 @@ export function QuotationsTable({ quotations }: { quotations: QuotationSummaryRo
                   >
                     {row.quotationNumber}
                   </Link>
+                  {row.imported && (
+                    <span className="ml-2 rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+                      Imported
+                    </span>
+                  )}
                   {row.archivedAt && (
                     <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500 dark:bg-slate-800">
                       Archived

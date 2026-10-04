@@ -108,6 +108,28 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
         </div>
       </div>
 
+      {quotation.source === "IMPORTED" && (
+        <div className="mt-6 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-slate-800 dark:border-blue-900 dark:bg-blue-950/40 dark:text-slate-200">
+          <p className="font-medium text-blue-900 dark:text-blue-200">
+            Imported order
+            {quotation.importedAt ? <span className="ml-2 text-xs font-normal text-blue-800/70 dark:text-blue-300/70">added {quotation.importedAt.slice(0, 10)}</span> : null}
+          </p>
+          <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+            This order came in through a spreadsheet import, so its total and items below are kept as they were in the file.
+          </p>
+          <dl className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div>
+              <dt className="text-xs font-medium text-slate-500">Items quoted for</dt>
+              <dd className="mt-0.5 whitespace-pre-line">{quotation.importedItemsText || "—"}</dd>
+            </div>
+            <div>
+              <dt className="text-xs font-medium text-slate-500">Shipping info</dt>
+              <dd className="mt-0.5">{quotation.importedShippingAddress || "—"}</dd>
+            </div>
+          </dl>
+        </div>
+      )}
+
       <div className="mt-6 overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-slate-200 text-slate-500 dark:border-slate-800 dark:text-slate-400">
