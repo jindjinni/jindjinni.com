@@ -40,3 +40,81 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* ------------------------------------------------------------------
+   Sign-in / sign-up / onboarding: the landing page's light, branded look.
+   Several form pieces on those pages are shared with the dashboard (address
+   autocomplete, etc.) and carry dark:/slate classes, so this scope restyles
+   them in one place instead of touching the dashboard. These rules are
+   unlayered, so they win over Tailwind utilities.
+   ------------------------------------------------------------------ */
+.auth-theme {
+  color-scheme: light;
+  background: #fff;
+  color: var(--color-ink);
+}
+.auth-theme input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+.auth-theme select,
+.auth-theme textarea {
+  width: 100%;
+  border: 1px solid var(--color-line);
+  border-radius: 0.75rem;
+  background: #fff;
+  color: var(--color-ink);
+  padding: 0.7rem 0.9rem;
+  font-size: 1rem;
+  line-height: 1.4rem;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.auth-theme input::placeholder,
+.auth-theme textarea::placeholder {
+  color: #94a39b;
+}
+.auth-theme input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):focus,
+.auth-theme select:focus,
+.auth-theme textarea:focus {
+  border-color: var(--color-brand-deep);
+  box-shadow: 0 0 0 4px rgb(31 209 107 / 0.2);
+}
+.auth-theme input[type="checkbox"] {
+  accent-color: var(--color-brand-deep);
+  width: 1.1rem;
+  height: 1.1rem;
+}
+.auth-theme input[type="file"] {
+  width: 100%;
+  font-size: 0.875rem;
+  color: var(--color-muted);
+}
+.auth-theme input[type="file"]::file-selector-button {
+  margin-right: 0.75rem;
+  cursor: pointer;
+  border: 1px solid var(--color-mint-line);
+  border-radius: 9999px;
+  background: var(--color-mint);
+  padding: 0.45rem 1rem;
+  font-weight: 700;
+  color: var(--color-brand-deep);
+}
+.auth-theme span.font-medium {
+  color: var(--color-ink);
+  font-weight: 700;
+}
+.auth-theme .text-slate-400,
+.auth-theme .text-slate-500,
+.auth-theme .text-slate-600 {
+  color: var(--color-muted);
+}
+.auth-theme ul.absolute {
+  border: 1px solid var(--color-line);
+  border-radius: 0.75rem;
+  background: #fff;
+  box-shadow: 0 20px 40px -20px rgb(12 31 52 / 0.35);
+}
+.auth-theme ul.absolute button {
+  color: var(--color-ink);
+}
+.auth-theme ul.absolute button:hover {
+  background: var(--color-mint);
+}

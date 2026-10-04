@@ -1,11 +1,11 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Field, Section } from "@/components/form-section";
+import { AuthField as Field, AuthSection as Section } from "@/components/auth/auth-ui";
 import { AddressAutocompleteFields } from "@/components/address-autocomplete-fields";
 
-const inputClass =
-  "w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-emerald-600 dark:border-slate-700 dark:bg-slate-800";
+// Field styling comes from the .auth-theme scope in globals.css.
+const inputClass = "";
 
 /**
  * The Business Profile, collected up front when a new company signs up
@@ -61,7 +61,7 @@ export function BusinessProfileSignupFields({
           <input name="dbaName" className={inputClass} />
         </Field>
         <div className="flex items-center gap-4 sm:col-span-2">
-          <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-dashed border-slate-300 bg-slate-50 dark:border-slate-700 dark:bg-slate-800">
+          <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-dashed border-mint-line bg-white">
             {logoPreview ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={logoPreview} alt="Logo preview" className="h-full w-full object-contain" />
@@ -80,7 +80,7 @@ export function BusinessProfileSignupFields({
                 const file = logoInputRef.current?.files?.[0];
                 setLogoPreview(file ? URL.createObjectURL(file) : null);
               }}
-              className="text-sm text-slate-600 dark:text-slate-400"
+              className=""
             />
           </Field>
         </div>
@@ -103,9 +103,9 @@ export function BusinessProfileSignupFields({
             name="shippingSameAsBusiness"
             checked={shippingSame}
             onChange={(e) => setShippingSame(e.target.checked)}
-            className="h-4 w-4 rounded border-slate-300"
+            className=""
           />
-          <span className="text-slate-700 dark:text-slate-300">Same as Business Address</span>
+          <span className="font-semibold text-ink">Same as Business Address</span>
         </label>
         {!shippingSame && (
           <>
