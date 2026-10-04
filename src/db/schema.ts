@@ -632,6 +632,37 @@ export const purchasingConditions = sqliteTable(
   (t) => [index("purchasing_conditions_org_idx").on(t.organizationId)],
 );
 
+/**
+ * Which conditions a product "carries" -- shown on the product's own Conditions
+ * section and, once a product has at least one row here, the only conditions
+ * offered for that product on a quoted line (falls back to the full active
+ * list for a product with none assigned yet, so nothing already in use
+ * breaks). Pure membership, no per-product multiplier: a condition's payout
+ * is the same wherever it's used, per chat -- Mint pays 100% everywhere,
+ * Ding pays its set % everywhere. That's what makes this a join table
+ * instead of a second purchasing_product_multipliers-style override table.
+ */
+export const purchasingProductConditions = sqliteTable(
+  "purchasing_product_conditions",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    productId: text("product_id")
+      .notNull()
+      .references(() => purchasingProducts.id, { onDelete: "cascade" }),
+    conditionId: text("condition_id")
+      .notNull()
+      .references(() => purchasingConditions.id, { onDelete: "cascade" }),
+    ...timestamps,
+  },
+  (t) => [
+    index("purchasing_product_conditions_org_idx").on(t.organizationId),
+    uniqueIndex("purchasing_product_conditions_product_condition_unique").on(t.productId, t.conditionId),
+  ],
+);
+
 /** Selectable expiry buckets (e.g. "7+ months") used on a quoted line and keyed into Product Multipliers -- not a typed/raw date. */
 export const purchasingExpirationRanges = sqliteTable(
   "purchasing_expiration_ranges",

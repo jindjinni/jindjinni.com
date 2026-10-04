@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useMemo, useState } from "react";
 import { addPurchasingQuotedItem } from "@/app/actions/purchasing";
 
 type ActionState = { error?: string } | undefined;
@@ -18,12 +18,15 @@ export function AddQuotedItemForm({
   quotationId,
   products,
   conditions,
+  productConditions,
   ranges,
   canOverridePrice,
 }: {
   quotationId: string;
   products: Product[];
   conditions: Condition[];
+  /** productId -> the conditions that product carries. A product with no entry (or an empty list) offers the full `conditions` list instead -- see getProductConditionsMap. */
+  productConditions: Record<string, { id: string; name: string }[]>;
   ranges: Range[];
   canOverridePrice: boolean;
 }) {
@@ -31,14 +34,29 @@ export function AddQuotedItemForm({
     addPurchasingQuotedItem.bind(null, quotationId),
     undefined,
   );
+  const [productId, setProductId] = useState("");
   const [conditionSelection, setConditionSelection] = useState("");
   const isCustomCondition = conditionSelection === CUSTOM_CONDITION_VALUE;
+
+  const availableConditions = useMemo(() => {
+    const assigned = productConditions[productId];
+    return assigned && assigned.length > 0 ? assigned : conditions;
+  }, [productId, productConditions, conditions]);
 
   return (
     <form action={formAction} className="mt-4 flex flex-wrap items-end gap-3 rounded-xl border border-dashed border-slate-300 p-4 dark:border-slate-700">
       <label className="flex flex-col gap-1 text-sm">
         <span className="text-slate-600 dark:text-slate-400">Product</span>
-        <select name="productId" required className={`min-w-[12rem] ${inputClass}`}>
+        <select
+          name="productId"
+          required
+          className={`min-w-[12rem] ${inputClass}`}
+          value={productId}
+          onChange={(e) => {
+            setProductId(e.target.value);
+            setConditionSelection("");
+          }}
+        >
           <option value="" disabled>
             Choose a product
           </option>
@@ -58,7 +76,7 @@ export function AddQuotedItemForm({
           onChange={(e) => setConditionSelection(e.target.value)}
         >
           <option value="">— None —</option>
-          {conditions.map((c) => (
+          {availableConditions.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
             </option>

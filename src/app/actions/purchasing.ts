@@ -22,6 +22,7 @@ import {
   purchasingCategories,
   purchasingProducts,
   purchasingConditions,
+  purchasingProductConditions,
   purchasingExpirationRanges,
   purchasingProductMultipliers,
   purchasingBonusTiers,
@@ -684,6 +685,107 @@ export async function loadPurchasingConditionCatalog(
     return { message: "Already up to date -- both real conditions are already in your list." };
   }
   return { message: `Added ${inserted} condition(s) (${skipped} were already in your list).` };
+}
+
+// ---------------------------------------------------------------------------
+// Per-product condition membership (the product's own Conditions section) --
+// pure join to purchasing_conditions, no per-product multiplier: a
+// condition's payout is the same wherever it's offered, per chat.
+// ---------------------------------------------------------------------------
+
+/** Checks a condition on for this product (the Conditions section's checkbox turning on). */
+export async function addProductCondition(
+  productId: string,
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const org = await requireOrg();
+  const blocked = requireManager(org);
+  if (blocked) return blocked;
+
+  const product = await requireOrgProduct(org.organizationId, productId);
+  if (!product) return { error: "Product not found." };
+
+  const conditionId = String(formData.get("conditionId") ?? "");
+  if (!conditionId) return { error: "Choose a condition." };
+
+  const [existing] = await db
+    .select({ id: purchasingProductConditions.id })
+    .from(purchasingProductConditions)
+    .where(and(eq(purchasingProductConditions.productId, productId), eq(purchasingProductConditions.conditionId, conditionId)))
+    .limit(1);
+  if (existing) return undefined;
+
+  await db.insert(purchasingProductConditions).values({
+    id: newId("pprodcond"),
+    organizationId: org.organizationId,
+    productId,
+    conditionId,
+  });
+
+  revalidatePath(`/dashboard/purchasing/products/${productId}`);
+  revalidatePath("/dashboard/purchasing/products");
+}
+
+/** Unchecks a condition for this product (the join row id, not the condition id). Always safe: a quoted line freezes its own conditionNameSnapshot + conditionMultiplier, it never keeps a live reference back to this row. */
+export async function removeProductCondition(
+  joinRowId: string,
+  _prevState: ActionState,
+  _formData: FormData,
+): Promise<ActionState> {
+  const org = await requireOrg();
+  const blocked = requireManager(org);
+  if (blocked) return blocked;
+
+  const [row] = await db
+    .select({ id: purchasingProductConditions.id, productId: purchasingProductConditions.productId })
+    .from(purchasingProductConditions)
+    .where(and(eq(purchasingProductConditions.id, joinRowId), eq(purchasingProductConditions.organizationId, org.organizationId)))
+    .limit(1);
+  if (!row) return { error: "Not found." };
+
+  await db.delete(purchasingProductConditions).where(eq(purchasingProductConditions.id, joinRowId));
+
+  revalidatePath(`/dashboard/purchasing/products/${row.productId}`);
+  revalidatePath("/dashboard/purchasing/products");
+}
+
+/** Creates a brand-new condition (same as Manage Conditions' "+ Add Condition") and checks it on for this product in one step -- the "tier on box, custom price" case from chat: a one-off condition type the purchasing agent names and prices right from the product page, without a separate trip to Manage Conditions first. It then exists for every product, same as any other condition. */
+export async function createCustomProductCondition(
+  productId: string,
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const org = await requireOrg();
+  const blocked = requireManager(org);
+  if (blocked) return blocked;
+
+  const product = await requireOrgProduct(org.organizationId, productId);
+  if (!product) return { error: "Product not found." };
+
+  const name = String(formData.get("name") ?? "").trim();
+  if (!name) return { error: "Enter a name for the custom condition." };
+  const multiplier = Number(formData.get("multiplier"));
+  if (Number.isNaN(multiplier) || multiplier < 0) return { error: "Price multiplier must be a positive number." };
+
+  const conditionId = newId("pcond");
+  await db.insert(purchasingConditions).values({
+    id: conditionId,
+    organizationId: org.organizationId,
+    name,
+    multiplier,
+    sortOrder: 999,
+  });
+  await db.insert(purchasingProductConditions).values({
+    id: newId("pprodcond"),
+    organizationId: org.organizationId,
+    productId,
+    conditionId,
+  });
+
+  revalidatePath(`/dashboard/purchasing/products/${productId}`);
+  revalidatePath("/dashboard/purchasing/products");
+  revalidatePath("/dashboard/purchasing/conditions");
 }
 
 function parseMultiplier(formData: FormData): number {

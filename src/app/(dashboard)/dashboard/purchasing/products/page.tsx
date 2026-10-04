@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireOrg } from "@/lib/tenant";
-import { getPurchasingProducts, getPurchasingCategories, getProductExpiryOptionsMap } from "@/lib/queries";
+import { getPurchasingProducts, getPurchasingCategories, getProductExpiryOptionsMap, getProductConditionsMap } from "@/lib/queries";
 import { AddProductForm } from "./add-product-form";
 import { LoadCatalogButton } from "./load-catalog-button";
 import { ImportSpreadsheetForm } from "../import-spreadsheet-form";
@@ -10,10 +10,11 @@ import { importPurchasingProducts } from "@/app/actions/purchasing";
 export default async function PurchasingProductsPage() {
   const org = await requireOrg();
   const canEdit = org.role !== "staff";
-  const [products, categories, expiryOptionsMap] = await Promise.all([
+  const [products, categories, expiryOptionsMap, conditionsMap] = await Promise.all([
     getPurchasingProducts(org.organizationId, { includeInactive: canEdit }),
     getPurchasingCategories(org.organizationId),
     getProductExpiryOptionsMap(org.organizationId),
+    getProductConditionsMap(org.organizationId),
   ]);
 
   return (
@@ -45,6 +46,7 @@ export default async function PurchasingProductsPage() {
               <th className="px-4 py-3 font-medium">Code</th>
               <th className="px-4 py-3 text-right font-medium">Standard price</th>
               <th className="px-4 py-3 font-medium">Expiry options</th>
+              <th className="px-4 py-3 font-medium">Conditions</th>
               {canEdit && <th className="px-4 py-3 font-medium">Active</th>}
               {canEdit && <th className="px-4 py-3" />}
             </tr>
@@ -52,7 +54,7 @@ export default async function PurchasingProductsPage() {
           <tbody>
             {products.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={8} className="px-4 py-8 text-center text-slate-400">
                   No products yet -- add one above.
                 </td>
               </tr>
@@ -87,6 +89,19 @@ export default async function PurchasingProductsPage() {
                       </span>
                     ))}
                     {(expiryOptionsMap.get(p.id) ?? []).length === 0 && <span className="text-xs text-slate-400">—</span>}
+                  </div>
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex flex-wrap gap-1">
+                    {(conditionsMap.get(p.id) ?? []).map((c) => (
+                      <span
+                        key={c.id}
+                        className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                      >
+                        {c.name}
+                      </span>
+                    ))}
+                    {(conditionsMap.get(p.id) ?? []).length === 0 && <span className="text-xs text-slate-400">All conditions</span>}
                   </div>
                 </td>
                 {canEdit && (

@@ -6,10 +6,13 @@ import {
   getPurchasingCategories,
   getPurchasingExpirationRanges,
   getProductMultipliers,
+  getPurchasingConditions,
+  getProductConditions,
 } from "@/lib/queries";
 import { archivePurchasingProduct, restorePurchasingProduct } from "@/app/actions/purchasing";
 import { EditProductForm } from "./edit-product-form";
 import { MultipliersSection } from "./multipliers-section";
+import { ConditionsSection } from "./conditions-section";
 import { ActionButton } from "@/components/action-button";
 
 export default async function ProductDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -23,13 +26,17 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
     );
   }
 
-  const [product, categories, ranges] = await Promise.all([
+  const [product, categories, ranges, allConditions] = await Promise.all([
     getPurchasingProduct(org.organizationId, id),
     getPurchasingCategories(org.organizationId),
     getPurchasingExpirationRanges(org.organizationId),
+    getPurchasingConditions(org.organizationId),
   ]);
   if (!product) notFound();
-  const multiplierRows = await getProductMultipliers(org.organizationId, id);
+  const [multiplierRows, productConditions] = await Promise.all([
+    getProductMultipliers(org.organizationId, id),
+    getProductConditions(org.organizationId, id),
+  ]);
 
   return (
     <div>
@@ -66,6 +73,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
 
       <EditProductForm productId={product.id} product={product} categories={categories} />
       <MultipliersSection productId={product.id} standardPrice={product.standardPrice} ranges={ranges} rows={multiplierRows} />
+      <ConditionsSection productId={product.id} allConditions={allConditions} productConditions={productConditions} />
     </div>
   );
 }

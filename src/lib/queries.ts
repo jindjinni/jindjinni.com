@@ -20,6 +20,7 @@ import {
   purchasingCategories,
   purchasingProducts,
   purchasingConditions,
+  purchasingProductConditions,
   purchasingExpirationRanges,
   purchasingProductMultipliers,
   purchasingBonusTiers,
@@ -601,6 +602,43 @@ export async function getPurchasingConditions(organizationId: string, opts: { in
     .where(eq(purchasingConditions.organizationId, organizationId))
     .orderBy(purchasingConditions.sortOrder);
   return opts.includeInactive ? rows : rows.filter((r) => r.active);
+}
+
+/** The conditions one product carries -- for its own Conditions section (the join row id is what Remove deletes). */
+export async function getProductConditions(organizationId: string, productId: string) {
+  return db
+    .select({
+      id: purchasingProductConditions.id,
+      conditionId: purchasingProductConditions.conditionId,
+      conditionName: purchasingConditions.name,
+      conditionMultiplier: purchasingConditions.multiplier,
+    })
+    .from(purchasingProductConditions)
+    .innerJoin(purchasingConditions, eq(purchasingProductConditions.conditionId, purchasingConditions.id))
+    .where(and(eq(purchasingProductConditions.organizationId, organizationId), eq(purchasingProductConditions.productId, productId)))
+    .orderBy(purchasingConditions.sortOrder);
+}
+
+/** productId -> the conditions it carries, for filtering the quoted-line Condition dropdown to just that product's list (a product with none yet falls back to the full active list, so nothing already in use breaks). */
+export async function getProductConditionsMap(organizationId: string) {
+  const rows = await db
+    .select({
+      productId: purchasingProductConditions.productId,
+      conditionId: purchasingProductConditions.conditionId,
+      conditionName: purchasingConditions.name,
+    })
+    .from(purchasingProductConditions)
+    .innerJoin(purchasingConditions, eq(purchasingProductConditions.conditionId, purchasingConditions.id))
+    .where(eq(purchasingProductConditions.organizationId, organizationId))
+    .orderBy(purchasingConditions.sortOrder);
+
+  const map = new Map<string, { id: string; name: string }[]>();
+  for (const r of rows) {
+    const list = map.get(r.productId) ?? [];
+    list.push({ id: r.conditionId, name: r.conditionName });
+    map.set(r.productId, list);
+  }
+  return map;
 }
 
 export async function getPurchasingExpirationRanges(organizationId: string, opts: { includeInactive?: boolean } = {}) {

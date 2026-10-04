@@ -5,6 +5,7 @@ import {
   getPurchasingQuotationWithItems,
   getPurchasingProducts,
   getPurchasingConditions,
+  getProductConditionsMap,
   getPurchasingExpirationRanges,
   purchasingCustomerName,
 } from "@/lib/queries";
@@ -23,10 +24,11 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
   if (!data) notFound();
   const { quotation, items, customer } = data;
 
-  const [products, conditions, ranges] = await Promise.all([
+  const [products, conditions, ranges, productConditionsMap] = await Promise.all([
     getPurchasingProducts(org.organizationId),
     getPurchasingConditions(org.organizationId),
     getPurchasingExpirationRanges(org.organizationId),
+    getProductConditionsMap(org.organizationId),
   ]);
 
   return (
@@ -141,6 +143,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
         quotationId={quotation.id}
         products={products}
         conditions={conditions}
+        productConditions={Object.fromEntries(productConditionsMap)}
         ranges={ranges}
         canOverridePrice={canEdit}
       />
