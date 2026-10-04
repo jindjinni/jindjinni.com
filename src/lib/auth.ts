@@ -65,6 +65,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // Missing entirely (e.g. the sign-up flow's auto sign-in) defaults
         // to "remembered" -- only an explicit "false" shortens the session.
         const rememberMe = credentials?.rememberMe !== "false";
+        // Best effort -- never block a sign-in over a bookkeeping write.
+        await db
+          .update(users)
+          .set({ lastLoginAt: new Date().toISOString() })
+          .where(eq(users.id, user.id))
+          .catch(() => {});
         return { id: user.id, email: user.email, name: user.name, rememberMe };
       },
     }),

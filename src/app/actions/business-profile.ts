@@ -8,6 +8,7 @@
 // built -- at that point this should move to a dedicated
 // settings.business_profile.edit permission instead of a role check.
 
+import { isAdmin } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { requireOrg, type CurrentOrg } from "@/lib/tenant";
@@ -21,7 +22,7 @@ import { encodeLogoFile } from "@/lib/logo-validation";
 export type ActionState = { error?: string; message?: string } | undefined;
 
 function requireProfileEditor(org: CurrentOrg): ActionState {
-  if (org.role === "staff") {
+  if (!isAdmin(org.role)) {
     return { error: "Only an Administrator or Master Admin can edit the Business Profile." };
   }
   return undefined;

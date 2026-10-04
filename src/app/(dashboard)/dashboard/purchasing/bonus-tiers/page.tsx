@@ -1,3 +1,4 @@
+import { isPurchasingManager } from "@/lib/permissions";
 import { requireOrg } from "@/lib/tenant";
 import { getPurchasingBonusTiers } from "@/lib/queries";
 import { createPurchasingBonusTier } from "@/app/actions/purchasing";
@@ -9,7 +10,7 @@ const inputClass =
 export default async function PurchasingBonusTiersPage() {
   const org = await requireOrg();
   const tiers = await getPurchasingBonusTiers(org.organizationId, { includeInactive: true });
-  const canEdit = org.role !== "staff";
+  const canEdit = isPurchasingManager(org.role);
 
   return (
     <div>

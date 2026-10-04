@@ -1,3 +1,4 @@
+import { isPurchasingManager } from "@/lib/permissions";
 import { requireOrg } from "@/lib/tenant";
 import { getPurchasingCategories } from "@/lib/queries";
 import { createPurchasingCategory, updatePurchasingCategory } from "@/app/actions/purchasing";
@@ -5,7 +6,7 @@ import { createPurchasingCategory, updatePurchasingCategory } from "@/app/action
 export default async function PurchasingCategoriesPage() {
   const org = await requireOrg();
   const categories = await getPurchasingCategories(org.organizationId, { includeInactive: true });
-  const canEdit = org.role !== "staff";
+  const canEdit = isPurchasingManager(org.role);
 
   return (
     <div>

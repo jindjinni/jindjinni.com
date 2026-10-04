@@ -1,3 +1,4 @@
+import { isPurchasingManager } from "@/lib/permissions";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { requireOrg } from "@/lib/tenant";
@@ -18,7 +19,7 @@ import { ActionButton } from "@/components/action-button";
 export default async function ProductDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const org = await requireOrg();
-  if (org.role === "staff") {
+  if (!isPurchasingManager(org.role)) {
     return (
       <p className="text-sm text-slate-500 dark:text-slate-400">
         Only a Purchasing Manager or Master Admin can edit the product catalog.

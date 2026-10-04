@@ -1,13 +1,23 @@
 "use client";
 
-import { useActionState } from "react";
+import { Suspense, useActionState } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { login } from "@/app/actions/auth";
 import { AuthCard, AuthError, AuthField, AuthShell, BrandPanel, authBtnPrimary } from "@/components/auth/auth-ui";
 import { Icon } from "@/components/landing/icons";
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginScreen />
+    </Suspense>
+  );
+}
+
+function LoginScreen() {
   const [state, action, pending] = useActionState(login, undefined);
+  const next = useSearchParams().get("next") ?? "";
 
   return (
     <AuthShell headerLink={{ prompt: "New to jindjinni?", label: "Get Started", href: "/signup" }}>
@@ -22,6 +32,7 @@ export default function LoginPage() {
           <p className="mt-2 text-base text-muted">Sign in to pick up where you left off.</p>
 
           <form action={action} className="mt-8 flex flex-col gap-5">
+            <input type="hidden" name="next" value={next} />
             <AuthField label="Email">
               <input name="email" type="email" required autoComplete="email" placeholder="you@company.com" />
             </AuthField>

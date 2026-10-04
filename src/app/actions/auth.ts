@@ -48,7 +48,11 @@ export async function login(
     return { error: "That email and password don't match an account." };
   }
 
-  redirect("/dashboard/purchasing");
+  // Optional "come back to" page (e.g. an invitation link). Only same-site
+  // paths are honoured, never an outside address.
+  const next = String(formData.get("next") ?? "");
+  if (next.startsWith("/") && !next.startsWith("//") && !next.includes("\\")) redirect(next);
+  redirect("/dashboard");
 }
 
 export async function logout() {

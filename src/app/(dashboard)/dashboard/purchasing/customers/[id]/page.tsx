@@ -1,3 +1,4 @@
+import { isPurchasingManager } from "@/lib/permissions";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { requireOrg } from "@/lib/tenant";
@@ -51,7 +52,7 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
           >
             New quotation
           </Link>
-          {org.role !== "staff" && !customer.archivedAt && (
+          {isPurchasingManager(org.role) && !customer.archivedAt && (
             <ActionButton
               action={archivePurchasingCustomer.bind(null, customer.id)}
               label="Archive"
@@ -59,7 +60,7 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
               className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-600 hover:border-red-300 hover:text-red-600 dark:border-slate-700 dark:text-slate-300"
             />
           )}
-          {org.role !== "staff" && customer.archivedAt && (
+          {isPurchasingManager(org.role) && customer.archivedAt && (
             <ActionButton
               action={restorePurchasingCustomer.bind(null, customer.id)}
               label="Restore"

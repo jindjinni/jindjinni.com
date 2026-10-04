@@ -1,3 +1,4 @@
+import { isPurchasingManager } from "@/lib/permissions";
 import { requireOrg } from "@/lib/tenant";
 import { getPurchasingExpirationRanges } from "@/lib/queries";
 import { createPurchasingExpirationRange } from "@/app/actions/purchasing";
@@ -10,7 +11,7 @@ const inputClass =
 export default async function PurchasingExpirationRangesPage() {
   const org = await requireOrg();
   const ranges = await getPurchasingExpirationRanges(org.organizationId, { includeInactive: true });
-  const canEdit = org.role !== "staff";
+  const canEdit = isPurchasingManager(org.role);
 
   return (
     <div>

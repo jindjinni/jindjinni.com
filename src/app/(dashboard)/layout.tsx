@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireOrg } from "@/lib/tenant";
 import { logout } from "@/app/actions/auth";
+import { ROLE_LABELS, canViewPurchasing, isAdmin, isPurchasingManager } from "@/lib/permissions";
 
 export default async function DashboardLayout({
   children,
@@ -18,10 +19,12 @@ export default async function DashboardLayout({
             {org.organizationName}
           </span>
           <nav className="flex gap-4 text-sm text-slate-600 dark:text-slate-400">
-            <Link href="/dashboard/purchasing" className="hover:text-emerald-700 dark:hover:text-emerald-400">
-              Purchasing
-            </Link>
-            {org.role !== "staff" && (
+            {canViewPurchasing(org.role) && (
+              <Link href="/dashboard/purchasing" className="hover:text-emerald-700 dark:hover:text-emerald-400">
+                Purchasing
+              </Link>
+            )}
+            {isPurchasingManager(org.role) && (
               <Link href="/dashboard/database" className="hover:text-emerald-700 dark:hover:text-emerald-400">
                 Database
               </Link>
@@ -29,11 +32,16 @@ export default async function DashboardLayout({
             <Link href="/dashboard/profile" className="hover:text-emerald-700 dark:hover:text-emerald-400">
               Profile
             </Link>
+            {isAdmin(org.role) && (
+              <Link href="/dashboard/admin" className="hover:text-emerald-700 dark:hover:text-emerald-400">
+                Admin
+              </Link>
+            )}
           </nav>
         </div>
         <div className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
           <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">
-            {org.role}
+            {ROLE_LABELS[org.role] ?? org.role}
           </span>
           <form action={logout}>
             <button className="hover:text-emerald-700 dark:hover:text-emerald-400">

@@ -1,3 +1,4 @@
+import { isPurchasingManager } from "@/lib/permissions";
 import Link from "next/link";
 import { requireOrg } from "@/lib/tenant";
 import {
@@ -37,7 +38,7 @@ export default async function DatabasePage({
   searchParams: Promise<{ table?: string }>;
 }) {
   const org = await requireOrg();
-  if (org.role === "staff") {
+  if (!isPurchasingManager(org.role)) {
     return (
       <div>
         <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-50">Database</h1>

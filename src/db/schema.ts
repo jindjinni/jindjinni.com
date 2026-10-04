@@ -53,6 +53,11 @@ export const organizations = sqliteTable("organizations", {
   shipFromCountry: text("ship_from_country").notNull().default("US"),
   shipFromPhone: text("ship_from_phone"),
   shipFromEmail: text("ship_from_email"),
+  // Team-size cap. null = use the default for this company (see lib/seats.ts);
+  // -1 = unlimited; any other number = that many people (active members +
+  // pending invitations). Nullable on purpose -- never NOT NULL on a table
+  // that already has rows (see the note on drizzle-kit in scripts/safe-push.ts).
+  seatLimit: integer("seat_limit"),
   ...timestamps,
 });
 
@@ -138,6 +143,8 @@ export const users = sqliteTable("users", {
   passwordHash: text("password_hash"),
   emailVerified: text("email_verified"),
   image: text("image"),
+  // Stamped on every successful sign-in; shown in the Admin panel's team list.
+  lastLoginAt: text("last_login_at"),
   ...timestamps,
 });
 
@@ -174,12 +181,46 @@ export const memberships = sqliteTable(
     organizationId: text("organization_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
-    role: text("role", { enum: ["owner", "admin", "staff"] })
+    // See src/lib/permissions.ts for what each role can do. "staff" is the
+    // legacy pre-Admin-panel role and behaves like purchasing_agent.
+    role: text("role", {
+      enum: ["owner", "admin", "purchasing_manager", "purchasing_agent", "receiver", "accountant", "staff"],
+    })
       .notNull()
       .default("staff"),
+    // Set when an admin removes someone's access; the row (and their history) stays.
+    deactivatedAt: text("deactivated_at"),
     ...timestamps,
   },
   (t) => [uniqueIndex("membership_user_org_unique").on(t.userId, t.organizationId)],
+);
+
+/**
+ * A pending (or finished) invitation to join a company's workspace. The
+ * private link carries a random token; only its SHA-256 hash is stored, so
+ * a database leak can't be turned into working invite links. Valid while
+ * not accepted, not revoked and not past expiresAt.
+ */
+export const teamInvitations = sqliteTable(
+  "team_invitations",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    role: text("role", {
+      enum: ["admin", "purchasing_manager", "purchasing_agent", "receiver", "accountant"],
+    }).notNull(),
+    tokenHash: text("token_hash").notNull().unique(),
+    invitedByUserId: text("invited_by_user_id").references(() => users.id),
+    expiresAt: text("expires_at").notNull(),
+    acceptedAt: text("accepted_at"),
+    revokedAt: text("revoked_at"),
+    lastSentAt: text("last_sent_at"),
+    ...timestamps,
+  },
+  (t) => [index("team_invitations_org_idx").on(t.organizationId), index("team_invitations_email_idx").on(t.email)],
 );
 
 // ---------------------------------------------------------------------------

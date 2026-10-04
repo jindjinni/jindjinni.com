@@ -1,3 +1,4 @@
+import { isPurchasingManager } from "@/lib/permissions";
 import { requireOrg } from "@/lib/tenant";
 import { getPurchasingConditions } from "@/lib/queries";
 import { ConditionsManager } from "./conditions-manager";
@@ -5,7 +6,7 @@ import { ConditionsManager } from "./conditions-manager";
 export default async function PurchasingConditionsPage() {
   const org = await requireOrg();
   const conditions = await getPurchasingConditions(org.organizationId, { includeInactive: true });
-  const canEdit = org.role !== "staff";
+  const canEdit = isPurchasingManager(org.role);
 
   return (
     <div>

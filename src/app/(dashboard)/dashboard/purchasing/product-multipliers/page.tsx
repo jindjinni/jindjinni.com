@@ -1,3 +1,4 @@
+import { isPurchasingManager } from "@/lib/permissions";
 import Link from "next/link";
 import { requireOrg } from "@/lib/tenant";
 import { getAllProductMultipliersForOrg, getPurchasingProducts, getPurchasingExpirationRanges } from "@/lib/queries";
@@ -8,7 +9,7 @@ import { buildExpiryPlan } from "@/lib/purchasing-expiry-plan";
 
 export default async function ProductMultipliersPage() {
   const org = await requireOrg();
-  if (org.role === "staff") {
+  if (!isPurchasingManager(org.role)) {
     return (
       <p className="text-sm text-slate-500 dark:text-slate-400">
         Only a Purchasing Manager or Master Admin can edit product multipliers.

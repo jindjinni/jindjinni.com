@@ -1,5 +1,6 @@
 "use server";
 
+import { isAdmin } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { requireOrg } from "@/lib/tenant";
@@ -20,7 +21,7 @@ export async function updateBusinessSettings(
   formData: FormData,
 ): Promise<ActionState> {
   const org = await requireOrg();
-  if (org.role === "staff") return { error: "Only owners and admins can change this." };
+  if (!isAdmin(org.role)) return { error: "Only owners and admins can change this." };
 
   await db
     .update(organizations)

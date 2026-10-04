@@ -1,9 +1,14 @@
+import { redirect } from "next/navigation";
 import Link from "next/link";
 import { requireOrg } from "@/lib/tenant";
+import { canViewPurchasing, isPurchasingManager } from "@/lib/permissions";
 
 export default async function PurchasingLayout({ children }: { children: React.ReactNode }) {
   const org = await requireOrg();
-  const isManager = org.role !== "staff";
+  // Receivers (and any future role without Purchasing) are sent home.
+  if (!canViewPurchasing(org.role)) redirect("/dashboard");
+  const isManager = isPurchasingManager(org.role);
+  const viewOnly = org.role === "accountant";
 
   const links = [
     { href: "/dashboard/purchasing", label: "Dashboard" },
@@ -21,7 +26,9 @@ export default async function PurchasingLayout({ children }: { children: React.R
           { href: "/dashboard/purchasing/archive", label: "Archive" },
           { href: "/dashboard/purchasing/audit-log", label: "Audit log" },
         ]
-      : []),
+      : viewOnly
+        ? [{ href: "/dashboard/purchasing/audit-log", label: "Audit log" }]
+        : []),
   ];
 
   return (
@@ -37,6 +44,11 @@ export default async function PurchasingLayout({ children }: { children: React.R
           </Link>
         ))}
       </nav>
+      {viewOnly && (
+        <p className="mb-4 rounded-md bg-sky-50 px-3 py-2 text-sm text-sky-800 print:hidden dark:bg-sky-950 dark:text-sky-200">
+          You have view-only access to Purchasing. You can look at quotations, customers and receipts, but not change them.
+        </p>
+      )}
       {children}
     </div>
   );

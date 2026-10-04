@@ -1,3 +1,4 @@
+import { isPurchasingManager } from "@/lib/permissions";
 import Link from "next/link";
 import { requireOrg } from "@/lib/tenant";
 import {
@@ -50,7 +51,7 @@ function EmptyRow({ colSpan, label }: { colSpan: number; label: string }) {
  */
 export default async function PurchasingArchivePage() {
   const org = await requireOrg();
-  const canEdit = org.role !== "staff";
+  const canEdit = isPurchasingManager(org.role);
 
   if (!canEdit) {
     return (

@@ -1,3 +1,4 @@
+import { isPurchasingManager } from "@/lib/permissions";
 import { requireOrg } from "@/lib/tenant";
 import {
   getPurchasingReceiptSettings,
@@ -9,7 +10,7 @@ import { ReceiptLayoutTabs } from "./receipt-layout-tabs";
 
 export default async function ReceiptLayoutPage() {
   const org = await requireOrg();
-  const canEdit = org.role !== "staff";
+  const canEdit = isPurchasingManager(org.role);
 
   const [row, profile] = await Promise.all([
     getPurchasingReceiptSettings(org.organizationId),

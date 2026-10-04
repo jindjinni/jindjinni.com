@@ -12,6 +12,7 @@
 // quantities, totals, tracking numbers, customer info, product rules,
 // multipliers) records a row to purchasing_audit_log via logAudit() below.
 
+import { canWritePurchasing, isPurchasingManager } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { and, eq, inArray } from "drizzle-orm";
@@ -78,8 +79,22 @@ async function readUploadedFile(formData: FormData): Promise<{ buffer: Buffer; f
 /** Money is always whole cents: a unit price like $0.768 is stored as $0.77, so unit price x quantity on a receipt always equals the line total. */
 const roundCents = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
+/**
+ * Every Purchasing server action starts here. Server actions are always
+ * changes (the pages do the reading), so anyone whose role is view-only
+ * (accountant) or has no Purchasing access (receiver) is stopped before
+ * anything is touched, even if they craft the request by hand.
+ */
+async function requirePurchasingWriter(): Promise<CurrentOrg> {
+  const org = await requireOrg();
+  if (!canWritePurchasing(org.role)) {
+    throw new Error("Your role can't make changes in Purchasing.");
+  }
+  return org;
+}
+
 function requireManager(org: CurrentOrg): ActionState {
-  if (org.role === "staff") {
+  if (!isPurchasingManager(org.role)) {
     return { error: "Only a Purchasing Manager or Master Admin can do that." };
   }
   return undefined;
@@ -115,7 +130,7 @@ export async function createPurchasingCustomer(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const org = await requireOrg();
+  const org = await requirePurchasingWriter();
 
   const firstName = String(formData.get("firstName") ?? "").trim();
   const invalid = customerValidationError({
@@ -162,7 +177,7 @@ export async function updatePurchasingCustomer(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const org = await requireOrg();
+  const org = await requirePurchasingWriter();
   const customer = await requireOrgCustomer(org.organizationId, customerId);
   if (!customer) return { error: "Customer not found." };
 
@@ -209,7 +224,7 @@ export async function archivePurchasingCustomer(
   _prevState: ActionState,
   _formData: FormData,
 ): Promise<ActionState> {
-  const org = await requireOrg();
+  const org = await requirePurchasingWriter();
   const blocked = requireManager(org);
   if (blocked) return blocked;
   const customer = await requireOrgCustomer(org.organizationId, customerId);
@@ -228,7 +243,7 @@ export async function restorePurchasingCustomer(
   _prevState: ActionState,
   _formData: FormData,
 ): Promise<ActionState> {
-  const org = await requireOrg();
+  const org = await requirePurchasingWriter();
   const blocked = requireManager(org);
   if (blocked) return blocked;
 
@@ -246,8 +261,8 @@ export async function restorePurchasingCustomer(
 // ---------------------------------------------------------------------------
 
 export async function createPurchasingCategory(formData: FormData): Promise<void> {
-  const org = await requireOrg();
-  if (org.role === "staff") return;
+  const org = await requirePurchasingWriter();
+  if (!isPurchasingManager(org.role)) return;
 
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return;
@@ -263,8 +278,8 @@ export async function createPurchasingCategory(formData: FormData): Promise<void
 }
 
 export async function updatePurchasingCategory(categoryId: string, formData: FormData): Promise<void> {
-  const org = await requireOrg();
-  if (org.role === "staff") return;
+  const org = await requirePurchasingWriter();
+  if (!isPurchasingManager(org.role)) return;
 
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return;
@@ -284,7 +299,7 @@ export async function restorePurchasingCategory(
   _prevState: ActionState,
   _formData: FormData,
 ): Promise<ActionState> {
-  const org = await requireOrg();
+  const org = await requirePurchasingWriter();
   const blocked = requireManager(org);
   if (blocked) return blocked;
 
@@ -305,7 +320,7 @@ export async function createPurchasingProduct(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const org = await requireOrg();
+  const org = await requirePurchasingWriter();
   const blocked = requireManager(org);
   if (blocked) return blocked;
 
@@ -344,7 +359,7 @@ export async function updatePurchasingProduct(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const org = await requireOrg();
+  const org = await requirePurchasingWriter();
   const blocked = requireManager(org);
   if (blocked) return blocked;
   const product = await requireOrgProduct(org.organizationId, productId);
@@ -382,7 +397,7 @@ export async function archivePurchasingProduct(
   _prevState: ActionState,
   _formData: FormData,
 ): Promise<ActionState> {
-  const org = await requireOrg();
+  const org = await requirePurchasingWriter();
   const blocked = requireManager(org);
   if (blocked) return blocked;
 
@@ -399,7 +414,7 @@ export async function restorePurchasingProduct(
   _prevState: ActionState,
   _formData: FormData,
 ): Promise<ActionState> {
-  const org = await requireOrg();
+  const org = await requirePurchasingWriter();
   const blocked = requireManager(org);
   if (blocked) return blocked;
 
@@ -418,7 +433,7 @@ export async function duplicatePurchasingProduct(
   _prevState: ActionState,
   _formData: FormData,
 ): Promise<ActionState> {
-  const org = await requireOrg();
+  const org = await requirePurchasingWriter();
   const blocked = requireManager(org);
   if (blocked) return blocked;
   const product = await requireOrgProduct(org.organizationId, productId);
@@ -455,7 +470,7 @@ export async function deletePurchasingProduct(
   _prevState: ActionState,
   _formData: FormData,
 ): Promise<ActionState> {
-  const org = await requireOrg();
+  const org = await requirePurchasingWriter();
   const blocked = requireManager(org);
   if (blocked) return blocked;
   const product = await requireOrgProduct(org.organizationId, productId);
@@ -523,7 +538,7 @@ export async function setProductMultiplier(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const org = await requireOrg();
+  const org = await requirePurchasingWriter();
   const blocked = requireManager(org);
   if (blocked) return blocked;
   const product = await requireOrgProduct(org.organizationId, productId);
@@ -540,7 +555,7 @@ export async function setProductMultiplier(
 
 /** Same upsert, but for the standalone Product Multipliers page's "+ Add Multiplier" form, where the product itself is also picked on the form. */
 export async function createProductMultiplier(_prevState: ActionState, formData: FormData): Promise<ActionState> {
-  const org = await requireOrg();
+  const org = await requirePurchasingWriter();
   const blocked = requireManager(org);
   if (blocked) return blocked;
 
@@ -569,8 +584,8 @@ export async function createProductMultiplier(_prevState: ActionState, formData:
  * wired through useActionState.
  */
 export async function updateProductMultiplierValue(multiplierId: string, formData: FormData): Promise<void> {
-  const org = await requireOrg();
-  if (org.role === "staff") return;
+  const org = await requirePurchasingWriter();
+  if (!isPurchasingManager(org.role)) return;
 
   const multiplier = Number(formData.get("multiplier"));
   if (Number.isNaN(multiplier) || multiplier < 0) return;
@@ -596,7 +611,7 @@ export async function removeProductMultiplier(
   _prevState: ActionState,
   _formData: FormData,
 ): Promise<ActionState> {
-  const org = await requireOrg();
+  const org = await requirePurchasingWriter();
   const blocked = requireManager(org);
   if (blocked) return blocked;
 
@@ -622,8 +637,8 @@ export async function removeProductMultiplier(
 // ---------------------------------------------------------------------------
 
 export async function createPurchasingCondition(formData: FormData): Promise<void> {
-  const org = await requireOrg();
-  if (org.role === "staff") return;
+  const org = await requirePurchasingWriter();
+  if (!isPurchasingManager(org.role)) return;
 
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return;
@@ -641,8 +656,8 @@ export async function createPurchasingCondition(formData: FormData): Promise<voi
 }
 
 export async function updatePurchasingCondition(conditionId: string, formData: FormData): Promise<void> {
-  const org = await requireOrg();
-  if (org.role === "staff") return;
+  const org = await requirePurchasingWriter();
+  if (!isPurchasingManager(org.role)) return;
 
   const [existing] = await db
     .select()
@@ -670,7 +685,7 @@ export async function archivePurchasingCondition(
   _prevState: ActionState,
   _formData: FormData,
 ): Promise<ActionState> {
-  const org = await requireOrg();
+  const org = await requirePurchasingWriter();
   const blocked = requireManager(org);
   if (blocked) return blocked;
 
@@ -687,7 +702,7 @@ export async function restorePurchasingCondition(
   _prevState: ActionState,
   _formData: FormData,
 ): Promise<ActionState> {
-  const org = await requireOrg();
+  const org = await requirePurchasingWriter();
   const blocked = requireManager(org);
   if (blocked) return blocked;
 
@@ -706,7 +721,7 @@ export async function deletePurchasingCondition(
   _prevState: ActionState,
   _formData: FormData,
 ): Promise<ActionState> {
-  const org = await requireOrg();
+  const org = await requirePurchasingWriter();
   const blocked = requireManager(org);
   if (blocked) return blocked;
 
@@ -736,7 +751,7 @@ export async function loadPurchasingConditionCatalog(
   _prevState: SeedCatalogActionState,
   _formData: FormData,
 ): Promise<SeedCatalogActionState> {
-  const org = await requireOrg();
+  const org = await requirePurchasingWriter();
   const blocked = requireManager(org);
   if (blocked) return blocked;
 
@@ -761,7 +776,7 @@ export async function addProductCondition(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const org = await requireOrg();
+  const org = await requirePurchasingWriter();
   const blocked = requireManager(org);
   if (blocked) return blocked;
 
@@ -795,7 +810,7 @@ export async function removeProductCondition(
   _prevState: ActionState,
   _formData: FormData,
 ): Promise<ActionState> {
-  const org = await requireOrg();
+  const org = await requirePurchasingWriter();
   const blocked = requireManager(org);
   if (blocked) return blocked;
 
@@ -818,7 +833,7 @@ export async function createCustomProductCondition(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const org = await requireOrg();
+  const org = await requirePurchasingWriter();
   const blocked = requireManager(org);
   if (blocked) return blocked;
 
@@ -857,8 +872,8 @@ function parseMultiplier(formData: FormData): number {
 }
 
 export async function createPurchasingExpirationRange(formData: FormData): Promise<void> {
-  const org = await requireOrg();
-  if (org.role === "staff") return;
+  const org = await requirePurchasingWriter();
+  if (!isPurchasingManager(org.role)) return;
 
   const label = String(formData.get("label") ?? "").trim();
   if (!label) return;
@@ -880,8 +895,8 @@ export async function createPurchasingExpirationRange(formData: FormData): Promi
 }
 
 export async function updatePurchasingExpirationRange(rangeId: string, formData: FormData): Promise<void> {
-  const org = await requireOrg();
-  if (org.role === "staff") return;
+  const org = await requirePurchasingWriter();
+  if (!isPurchasingManager(org.role)) return;
 
   const label = String(formData.get("label") ?? "").trim();
   if (!label) return;
@@ -911,7 +926,7 @@ export async function loadPurchasingMonthRangeCatalog(
   _prevState: SeedCatalogActionState,
   _formData: FormData,
 ): Promise<SeedCatalogActionState> {
-  const org = await requireOrg();
+  const org = await requirePurchasingWriter();
   const blocked = requireManager(org);
   if (blocked) return blocked;
 
@@ -931,7 +946,7 @@ export async function duplicatePurchasingExpirationRange(
   _prevState: ActionState,
   _formData: FormData,
 ): Promise<ActionState> {
-  const org = await requireOrg();
+  const org = await requirePurchasingWriter();
   const blocked = requireManager(org);
   if (blocked) return blocked;
 
@@ -968,7 +983,7 @@ export async function deletePurchasingExpirationRange(
   _prevState: ActionState,
   _formData: FormData,
 ): Promise<ActionState> {
-  const org = await requireOrg();
+  const org = await requirePurchasingWriter();
   const blocked = requireManager(org);
   if (blocked) return blocked;
 
@@ -1002,7 +1017,7 @@ export async function restorePurchasingExpirationRange(
   _prevState: ActionState,
   _formData: FormData,
 ): Promise<ActionState> {
-  const org = await requireOrg();
+  const org = await requirePurchasingWriter();
   const blocked = requireManager(org);
   if (blocked) return blocked;
 
@@ -1020,8 +1035,8 @@ export async function restorePurchasingExpirationRange(
 // ---------------------------------------------------------------------------
 
 export async function createPurchasingBonusTier(formData: FormData): Promise<void> {
-  const org = await requireOrg();
-  if (org.role === "staff") return;
+  const org = await requirePurchasingWriter();
+  if (!isPurchasingManager(org.role)) return;
 
   const thresholdAmount = Number(formData.get("thresholdAmount"));
   const bonusAmount = Number(formData.get("bonusAmount"));
@@ -1041,8 +1056,8 @@ export async function createPurchasingBonusTier(formData: FormData): Promise<voi
 }
 
 export async function updatePurchasingBonusTier(tierId: string, formData: FormData): Promise<void> {
-  const org = await requireOrg();
-  if (org.role === "staff") return;
+  const org = await requirePurchasingWriter();
+  if (!isPurchasingManager(org.role)) return;
 
   const [existing] = await db
     .select()
@@ -1081,7 +1096,7 @@ export async function duplicatePurchasingBonusTier(
   _prevState: ActionState,
   _formData: FormData,
 ): Promise<ActionState> {
-  const org = await requireOrg();
+  const org = await requirePurchasingWriter();
   const blocked = requireManager(org);
   if (blocked) return blocked;
 
@@ -1111,7 +1126,7 @@ export async function deletePurchasingBonusTier(
   _prevState: ActionState,
   _formData: FormData,
 ): Promise<ActionState> {
-  const org = await requireOrg();
+  const org = await requirePurchasingWriter();
   const blocked = requireManager(org);
   if (blocked) return blocked;
 
@@ -1128,7 +1143,7 @@ export async function restorePurchasingBonusTier(
   _prevState: ActionState,
   _formData: FormData,
 ): Promise<ActionState> {
-  const org = await requireOrg();
+  const org = await requirePurchasingWriter();
   const blocked = requireManager(org);
   if (blocked) return blocked;
 
@@ -1196,7 +1211,7 @@ export async function createPurchasingQuotation(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const org = await requireOrg();
+  const org = await requirePurchasingWriter();
 
   let customerId = String(formData.get("customerId") ?? "");
   let customer: Awaited<ReturnType<typeof getPurchasingCustomer>>;
@@ -1439,7 +1454,7 @@ export async function addPurchasingQuotedItem(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const org = await requireOrg();
+  const org = await requirePurchasingWriter();
   const quotation = await requireOrgQuotation(org.organizationId, quotationId);
   if (!quotation) return { error: "Quotation not found." };
 
@@ -1466,7 +1481,7 @@ export async function addPurchasingQuotedItem(
   const hasOverride = overrideRaw !== null && String(overrideRaw).trim() !== "";
   let finalUnitPrice = computedUnitPrice;
   if (hasOverride) {
-    if (org.role === "staff") return { error: "Only a Purchasing Manager or Master Admin can override a price." };
+    if (!isPurchasingManager(org.role)) return { error: "Only a Purchasing Manager or Master Admin can override a price." };
     const override = Number(overrideRaw);
     if (Number.isNaN(override) || override < 0) return { error: "Override price must be a positive number." };
     finalUnitPrice = roundCents(override);
@@ -1525,7 +1540,7 @@ export async function updatePurchasingQuotedItem(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const org = await requireOrg();
+  const org = await requirePurchasingWriter();
 
   const [existing] = await db
     .select({
@@ -1567,7 +1582,7 @@ export async function updatePurchasingQuotedItem(
   const hasOverride = overrideRaw !== null && String(overrideRaw).trim() !== "";
   let finalUnitPrice = computedUnitPrice;
   if (hasOverride) {
-    if (org.role === "staff") return { error: "Only a Purchasing Manager or Master Admin can override a price." };
+    if (!isPurchasingManager(org.role)) return { error: "Only a Purchasing Manager or Master Admin can override a price." };
     const override = Number(overrideRaw);
     if (Number.isNaN(override) || override < 0) return { error: "Override price must be a positive number." };
     finalUnitPrice = roundCents(override);
@@ -1613,7 +1628,7 @@ export async function removePurchasingQuotedItem(
   _prevState: ActionState,
   _formData: FormData,
 ): Promise<ActionState> {
-  const org = await requireOrg();
+  const org = await requirePurchasingWriter();
 
   const [item] = await db
     .select({ id: purchasingQuotedItems.id, quotationId: purchasingQuotedItems.quotationId })
@@ -1633,7 +1648,7 @@ export async function updatePurchasingQuotationHeader(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const org = await requireOrg();
+  const org = await requirePurchasingWriter();
   const quotation = await requireOrgQuotation(org.organizationId, quotationId);
   if (!quotation) return { error: "Quotation not found." };
 
@@ -1684,7 +1699,7 @@ export async function generatePurchasingShippingLabel(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const org = await requireOrg();
+  const org = await requirePurchasingWriter();
   const quotation = await requireOrgQuotation(org.organizationId, quotationId);
   if (!quotation) return { error: "Quotation not found." };
 
@@ -1822,7 +1837,7 @@ export async function setPurchasingQuotationDeduction(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const org = await requireOrg();
+  const org = await requirePurchasingWriter();
   const quotation = await requireOrgQuotation(org.organizationId, quotationId);
   if (!quotation) return { error: "Quotation not found." };
 
@@ -1863,7 +1878,7 @@ export async function archivePurchasingQuotation(
   _prevState: ActionState,
   _formData: FormData,
 ): Promise<ActionState> {
-  const org = await requireOrg();
+  const org = await requirePurchasingWriter();
   const blocked = requireManager(org);
   if (blocked) return blocked;
 
@@ -1881,7 +1896,7 @@ export async function saveReceiptVersion(
   _prevState: ActionState,
   _formData: FormData,
 ): Promise<ActionState> {
-  const org = await requireOrg();
+  const org = await requirePurchasingWriter();
   const [quotation] = await db
     .select()
     .from(purchasingQuotations)
@@ -1945,7 +1960,7 @@ export async function updatePurchasingReceiptSettings(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const org = await requireOrg();
+  const org = await requirePurchasingWriter();
   const blocked = requireManager(org);
   if (blocked) return blocked;
 
@@ -1988,7 +2003,7 @@ export async function restorePurchasingQuotation(
   _prevState: ActionState,
   _formData: FormData,
 ): Promise<ActionState> {
-  const org = await requireOrg();
+  const org = await requirePurchasingWriter();
   const blocked = requireManager(org);
   if (blocked) return blocked;
 
@@ -2013,7 +2028,7 @@ export async function loadPurchasingProductCatalog(
   _prevState: SeedCatalogActionState,
   _formData: FormData,
 ): Promise<SeedCatalogActionState> {
-  const org = await requireOrg();
+  const org = await requirePurchasingWriter();
   const blocked = requireManager(org);
   if (blocked) return blocked;
 
@@ -2044,7 +2059,7 @@ export async function importPurchasingProducts(
   _prevState: ImportActionState,
   formData: FormData,
 ): Promise<ImportActionState> {
-  const org = await requireOrg();
+  const org = await requirePurchasingWriter();
   const blocked = requireManager(org);
   if (blocked) return blocked;
 
@@ -2178,7 +2193,7 @@ export async function updatePurchasingProductsFromFile(
   _prevState: ImportActionState,
   formData: FormData,
 ): Promise<ImportActionState> {
-  const org = await requireOrg();
+  const org = await requirePurchasingWriter();
   const blocked = requireManager(org);
   if (blocked) return blocked;
 
@@ -2322,7 +2337,7 @@ export async function importPurchasingCustomers(
   _prevState: ImportActionState,
   formData: FormData,
 ): Promise<ImportActionState> {
-  const org = await requireOrg();
+  const org = await requirePurchasingWriter();
 
   const file = await readUploadedFile(formData);
   if ("error" in file) return file;
@@ -2462,7 +2477,7 @@ export async function applyExpiryRules(
   _prevState: ApplyExpiryRulesState,
   formData: FormData,
 ): Promise<ApplyExpiryRulesState> {
-  const org = await requireOrg();
+  const org = await requirePurchasingWriter();
   const blocked = requireManager(org);
   if (blocked) return blocked;
 
@@ -2473,7 +2488,7 @@ export async function applyExpiryRules(
 
 /** Per-product switch for items that never expire (receivers, readers, ...). */
 export async function setProductNoExpiration(productId: string, noExpiration: boolean): Promise<ActionState> {
-  const org = await requireOrg();
+  const org = await requirePurchasingWriter();
   const blocked = requireManager(org);
   if (blocked) return blocked;
   const product = await requireOrgProduct(org.organizationId, productId);

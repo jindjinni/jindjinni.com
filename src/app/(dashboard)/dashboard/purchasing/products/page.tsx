@@ -1,3 +1,4 @@
+import { isPurchasingManager } from "@/lib/permissions";
 import Link from "next/link";
 import { requireOrg } from "@/lib/tenant";
 import { getPurchasingProducts, getPurchasingCategories, getProductExpiryOptionsMap, getProductConditionsMap } from "@/lib/queries";
@@ -12,7 +13,7 @@ const payoutPct = (m: number) => `${Math.round(m * 1000) / 10}%`;
 
 export default async function PurchasingProductsPage() {
   const org = await requireOrg();
-  const canEdit = org.role !== "staff";
+  const canEdit = isPurchasingManager(org.role);
   // Moves any "NDC ..." typed into Notes (or known from the catalog) into the
   // real NDC column. Only fills blanks; cheap and safe to repeat.
   await backfillProductNdcs(org.organizationId);

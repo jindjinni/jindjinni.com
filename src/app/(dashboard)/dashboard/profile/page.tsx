@@ -1,3 +1,4 @@
+import { isAdmin } from "@/lib/permissions";
 import { requireOrg } from "@/lib/tenant";
 import { getBusinessProfile } from "@/lib/queries";
 import { BusinessProfileForm } from "./business-profile-form";
@@ -13,7 +14,7 @@ import { LogoUploadForm } from "./logo-upload-form";
 export default async function ProfilePage() {
   const org = await requireOrg();
   const profile = await getBusinessProfile(org.organizationId);
-  const canEdit = org.role !== "staff";
+  const canEdit = isAdmin(org.role);
 
   const logoDataUrl = profile?.logoData && profile.logoContentType
     ? `data:${profile.logoContentType};base64,${profile.logoData}`

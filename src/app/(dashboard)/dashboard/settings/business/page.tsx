@@ -1,3 +1,4 @@
+import { isAdmin } from "@/lib/permissions";
 import { requireOrg } from "@/lib/tenant";
 import { db } from "@/db/client";
 import { organizations } from "@/db/schema";
@@ -13,7 +14,7 @@ import { BusinessSettingsForm } from "./business-settings-form";
  */
 export default async function BusinessSettingsPage() {
   const org = await requireOrg();
-  if (org.role === "staff") {
+  if (!isAdmin(org.role)) {
     return (
       <div>
         <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-50">

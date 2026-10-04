@@ -1,3 +1,4 @@
+import { isPurchasingManager } from "@/lib/permissions";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { requireOrg } from "@/lib/tenant";
@@ -24,7 +25,7 @@ import { ActionButton } from "@/components/action-button";
 export default async function QuotationDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const org = await requireOrg();
-  const canEdit = org.role !== "staff";
+  const canEdit = isPurchasingManager(org.role);
 
   const data = await getPurchasingQuotationWithItems(org.organizationId, id);
   if (!data) notFound();

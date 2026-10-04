@@ -7,16 +7,17 @@
 // guarantee, in one place.
 
 import { redirect } from "next/navigation";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/db/client";
 import { memberships, organizations } from "@/db/schema";
+import type { Role } from "@/lib/permissions";
 
 export type CurrentOrg = {
   userId: string;
   organizationId: string;
   organizationName: string;
-  role: "owner" | "admin" | "staff";
+  role: Role;
 };
 
 /**
@@ -34,6 +35,8 @@ export async function requireOrg(): Promise<CurrentOrg> {
   const userId = (session?.user as { id?: string } | undefined)?.id;
   if (!userId) redirect("/login");
 
+  // Only ACTIVE memberships count: an admin can switch someone's access off
+  // (deactivatedAt) without deleting their history.
   const [row] = await db
     .select({
       organizationId: organizations.id,
@@ -42,15 +45,24 @@ export async function requireOrg(): Promise<CurrentOrg> {
     })
     .from(memberships)
     .innerJoin(organizations, eq(memberships.organizationId, organizations.id))
-    .where(eq(memberships.userId, userId!))
+    .where(and(eq(memberships.userId, userId!), isNull(memberships.deactivatedAt)))
     .limit(1);
 
-  if (!row) redirect("/onboarding");
+  if (!row) {
+    // Had access once but it was removed -> explain, don't send them to
+    // create a brand-new company by mistake.
+    const [anyMembership] = await db
+      .select({ id: memberships.id })
+      .from(memberships)
+      .where(eq(memberships.userId, userId!))
+      .limit(1);
+    redirect(anyMembership ? "/no-access" : "/onboarding");
+  }
 
   return {
     userId: userId!,
-    organizationId: row.organizationId,
-    organizationName: row.organizationName,
-    role: row.role as CurrentOrg["role"],
+    organizationId: row!.organizationId,
+    organizationName: row!.organizationName,
+    role: row!.role as CurrentOrg["role"],
   };
 }

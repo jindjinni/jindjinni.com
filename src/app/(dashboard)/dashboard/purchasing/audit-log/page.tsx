@@ -1,9 +1,10 @@
+import { isPurchasingManager } from "@/lib/permissions";
 import { requireOrg } from "@/lib/tenant";
 import { getPurchasingAuditLog } from "@/lib/queries";
 
 export default async function PurchasingAuditLogPage() {
   const org = await requireOrg();
-  if (org.role === "staff") {
+  if (!(isPurchasingManager(org.role) || org.role === "accountant")) {
     return (
       <p className="text-sm text-slate-500 dark:text-slate-400">
         Only a Purchasing Manager or Master Admin can view the audit log.
