@@ -3,7 +3,7 @@
 // An order is never copied into Receiving: each package points at its quotation
 // in the Purchasing Quotation Summary and reads the order details from there.
 
-import { and, desc, eq, inArray, isNull, like, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, like, ne, or, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import {
   receivingPackages,
@@ -11,10 +11,24 @@ import {
   purchasingQuotations,
   purchasingQuotedItems,
   purchasingCustomers,
+  purchasingProducts,
+  receivingItems,
+  receivingExpirationLots,
+  receivingSettings,
+  memberships,
   users,
 } from "@/db/schema";
+import { newId } from "@/lib/ids";
 import { getReceiptState } from "@/lib/purchasing-receipt-docs";
-import { computeMissingInfo, parseDamageTypes, type PhotoKind } from "@/lib/receiving-rules";
+import {
+  computeMissingInfo,
+  itemDiscrepancy,
+  lotsMismatch,
+  parseDamageTypes,
+  parseStringList,
+  summarizeItems,
+  type PhotoKind,
+} from "@/lib/receiving-rules";
 
 export type QuotationBrief = {
   quotationId: string;
@@ -169,27 +183,96 @@ export async function getReceivingBoard(organizationId: string): Promise<BoardCa
   });
 }
 
-export type PackagePhoto = { id: string; kind: PhotoKind; filename: string; contentType: string; sizeBytes: number };
+export type PackagePhoto = {
+  id: string;
+  kind: PhotoKind;
+  itemId: string | null;
+  filename: string;
+  contentType: string;
+  sizeBytes: number;
+};
+
+export type ItemLot = {
+  id: string;
+  label: string;
+  lotNumber: string;
+  expirationDate: string;
+  expirationEndDate: string;
+  quantity: number | null;
+};
+
+export type ItemView = {
+  id: string;
+  productId: string | null;
+  productName: string;
+  itemSource: "QUOTED" | "EXTRA";
+  quotedQuantity: number | null;
+  quotedAmount: number | null;
+  wasReceived: string;
+  quantityReceived: number | null;
+  condition: string;
+  needsReturn: string;
+  notes: string;
+  ndc: string;
+  lotNumber: string;
+  codeMatches: string;
+  expirationQualifies: string;
+  expirationEntryType: string;
+  expirationDate: string;
+  discrepancyCategories: string[];
+  discrepancyNotes: string;
+  adjustmentRequired: string;
+  managementReview: string;
+  returnRequired: string;
+  quotationAdjusted: string;
+  proposedRevisedAmount: number | null;
+  adjustmentReason: string;
+  adjustmentNotes: string;
+  quantityToReturn: number | null;
+  returnStatus: string;
+  returnTracking: string;
+  returnNotes: string;
+  lots: ItemLot[];
+  flagged: boolean;
+  lotsMismatch: boolean;
+};
+
+export type TeamMember = { userId: string; name: string };
+
+export async function getReceivingSettings(organizationId: string) {
+  const [row] = await db.select().from(receivingSettings).where(eq(receivingSettings.organizationId, organizationId)).limit(1);
+  return {
+    emailsEnabled: row?.emailsEnabled ?? false,
+    fromName: row?.fromName ?? "",
+    replyTo: row?.replyTo ?? "",
+    bccEmails: row?.bccEmails ?? "",
+    quoteLinkUrl: row?.quoteLinkUrl ?? "",
+    packagingGuideUrl: row?.packagingGuideUrl ?? "",
+  };
+}
 
 export async function getReceivingPackage(organizationId: string, packageId: string) {
   const [row] = await db
     .select({
       pkg: receivingPackages,
-      receivedByName: users.name,
-      receivedByEmail: users.email,
+      quotationStatus: purchasingQuotations.status,
+      packageStatus: purchasingQuotations.packageStatus,
+      lastTrackingUpdate: purchasingQuotations.lastTrackingUpdate,
+      deliveredAt: purchasingQuotations.deliveredAt,
       ...briefSelect,
     })
     .from(receivingPackages)
     .innerJoin(purchasingQuotations, eq(purchasingQuotations.id, receivingPackages.quotationId))
     .leftJoin(purchasingCustomers, eq(purchasingCustomers.id, purchasingQuotations.customerId))
-    .leftJoin(users, eq(users.id, receivingPackages.receivedByUserId))
     .where(and(eq(receivingPackages.id, packageId), eq(receivingPackages.organizationId, organizationId)))
     .limit(1);
   if (!row) return null;
+
   const photoRows = await db
     .select({
       id: receivingPackagePhotos.id,
       kind: receivingPackagePhotos.kind,
+      itemId: receivingPackagePhotos.itemId,
       filename: receivingPackagePhotos.filename,
       contentType: receivingPackagePhotos.contentType,
       sizeBytes: receivingPackagePhotos.sizeBytes,
@@ -197,26 +280,148 @@ export async function getReceivingPackage(organizationId: string, packageId: str
     .from(receivingPackagePhotos)
     .where(and(eq(receivingPackagePhotos.packageId, packageId), eq(receivingPackagePhotos.organizationId, organizationId)))
     .orderBy(receivingPackagePhotos.createdAt);
-  const items = await itemsTextFor([row.quotationId], new Map([[row.quotationId, row.importedItems]]));
-  const brief = toBrief(row, items.get(row.quotationId) ?? "—");
+
+  const itemRows = await db
+    .select()
+    .from(receivingItems)
+    .where(and(eq(receivingItems.packageId, packageId), eq(receivingItems.organizationId, organizationId)))
+    .orderBy(receivingItems.sortOrder, receivingItems.createdAt);
+  const lotRows = itemRows.length
+    ? await db
+        .select()
+        .from(receivingExpirationLots)
+        .where(and(eq(receivingExpirationLots.organizationId, organizationId), inArray(receivingExpirationLots.itemId, itemRows.map((i) => i.id))))
+        .orderBy(receivingExpirationLots.sortOrder, receivingExpirationLots.createdAt)
+    : [];
+  const items: ItemView[] = itemRows.map((i) => {
+    const lots = lotRows
+      .filter((l) => l.itemId === i.id)
+      .map((l) => ({
+        id: l.id,
+        label: l.label ?? "",
+        lotNumber: l.lotNumber ?? "",
+        expirationDate: l.expirationDate ?? "",
+        expirationEndDate: l.expirationEndDate ?? "",
+        quantity: l.quantity,
+      }));
+    return {
+      id: i.id,
+      productId: i.productId,
+      productName: i.productName,
+      itemSource: i.itemSource,
+      quotedQuantity: i.quotedQuantity,
+      quotedAmount: i.quotedAmount,
+      wasReceived: i.wasReceived ?? "",
+      quantityReceived: i.quantityReceived,
+      condition: i.condition ?? "",
+      needsReturn: i.needsReturn ?? "",
+      notes: i.notes ?? "",
+      ndc: i.ndc ?? "",
+      lotNumber: i.lotNumber ?? "",
+      codeMatches: i.codeMatches ?? "",
+      expirationQualifies: i.expirationQualifies ?? "",
+      expirationEntryType: i.expirationEntryType ?? "",
+      expirationDate: i.expirationDate ?? "",
+      discrepancyCategories: parseStringList(i.discrepancyCategories),
+      discrepancyNotes: i.discrepancyNotes ?? "",
+      adjustmentRequired: i.adjustmentRequired ?? "",
+      managementReview: i.managementReview ?? "",
+      returnRequired: i.returnRequired ?? "",
+      quotationAdjusted: i.quotationAdjusted ?? "",
+      proposedRevisedAmount: i.proposedRevisedAmount,
+      adjustmentReason: i.adjustmentReason ?? "",
+      adjustmentNotes: i.adjustmentNotes ?? "",
+      quantityToReturn: i.quantityToReturn,
+      returnStatus: i.returnStatus ?? "",
+      returnTracking: i.returnTracking ?? "",
+      returnNotes: i.returnNotes ?? "",
+      lots,
+      flagged: itemDiscrepancy(i),
+      lotsMismatch: lotsMismatch(i.quantityReceived, lots.map((l) => l.quantity)),
+    };
+  });
+
+  const members = await db
+    .select({ userId: users.id, name: users.name, email: users.email })
+    .from(memberships)
+    .innerJoin(users, eq(users.id, memberships.userId))
+    .where(and(eq(memberships.organizationId, organizationId), isNull(memberships.deactivatedAt)));
+  const team: TeamMember[] = members.map((m) => ({ userId: m.userId, name: m.name || m.email }));
+
+  const itemsText = await itemsTextFor([row.quotationId], new Map([[row.quotationId, row.importedItems]]));
+  const brief = toBrief(row, itemsText.get(row.quotationId) ?? "—");
   const [{ n: lineCount }] = await db
     .select({ n: sql<number>`count(*)` })
     .from(purchasingQuotedItems)
     .where(eq(purchasingQuotedItems.quotationId, row.quotationId));
   const receipt = await getReceiptState(organizationId, row.quotationId, Number(lineCount));
+
+  // Another order in this company with the same tracking # or reference # (the old "Flag Duplicate Order" check).
+  const dupeTerms = [row.pkg.trackingNumber ?? row.trackingNumber].filter((t): t is string => !!t && t.trim().length > 0);
+  const dupeConds = [sql`lower(${purchasingQuotations.quotationNumber}) = lower(${row.quotationNumber})`];
+  for (const t of dupeTerms) dupeConds.push(sql`lower(${purchasingQuotations.trackingNumber}) = lower(${t.trim()})`);
+  const dupes = await db
+    .select({ number: purchasingQuotations.quotationNumber, tracking: purchasingQuotations.trackingNumber })
+    .from(purchasingQuotations)
+    .where(and(eq(purchasingQuotations.organizationId, organizationId), ne(purchasingQuotations.id, row.quotationId), isNull(purchasingQuotations.archivedAt), or(...dupeConds)))
+    .limit(5);
+
   const photoCounts: Partial<Record<PhotoKind, number>> = {};
-  for (const p of photoRows) photoCounts[p.kind] = (photoCounts[p.kind] ?? 0) + 1;
+  for (const p of photoRows) if (!p.itemId) photoCounts[p.kind] = (photoCounts[p.kind] ?? 0) + 1;
   const pkg = row.pkg;
   const damageTypes = parseDamageTypes(pkg.damageTypes);
+  const settings = await getReceivingSettings(organizationId);
   return {
     pkg,
     damageTypes,
     brief,
-    receivedByName: row.receivedByName ?? row.receivedByEmail ?? "—",
+    quotationStatus: row.quotationStatus,
+    tracking: { packageStatus: row.packageStatus, lastUpdate: row.lastTrackingUpdate, deliveredAt: row.deliveredAt },
+    team,
+    items,
+    summary: summarizeItems(itemRows),
     photos: photoRows as PackagePhoto[],
     receipt,
-    missing: computeMissingInfo({ ...pkg, damageTypes }, photoCounts),
+    duplicates: dupes,
+    settings,
+    missing: computeMissingInfo({ ...pkg, damageTypes }, photoCounts, itemRows),
   };
+}
+
+/** Pre-fill Step 6 from the quotation's own lines (one row per quoted line). Safe to call twice: it only fills an empty list. */
+export async function ensureItemsFromQuotation(organizationId: string, packageId: string, quotationId: string) {
+  const [{ n }] = await db.select({ n: sql<number>`count(*)` }).from(receivingItems).where(eq(receivingItems.packageId, packageId));
+  if (Number(n) > 0) return 0;
+  const lines = await db
+    .select({
+      id: purchasingQuotedItems.id,
+      productId: purchasingQuotedItems.productId,
+      name: purchasingQuotedItems.productNameSnapshot,
+      quantity: purchasingQuotedItems.quantity,
+      lineTotal: purchasingQuotedItems.lineTotal,
+      ndc: purchasingProducts.ndc,
+    })
+    .from(purchasingQuotedItems)
+    .leftJoin(purchasingProducts, eq(purchasingProducts.id, purchasingQuotedItems.productId))
+    .where(eq(purchasingQuotedItems.quotationId, quotationId))
+    .orderBy(purchasingQuotedItems.createdAt);
+  let order = 0;
+  for (const l of lines) {
+    await db.insert(receivingItems).values({
+      id: newId("ritem"),
+      organizationId,
+      packageId,
+      quotedItemId: l.id,
+      productId: l.productId,
+      productName: l.name,
+      itemSource: "QUOTED",
+      quotedQuantity: l.quantity,
+      quotedAmount: l.lineTotal,
+      ndc: l.ndc || null,
+      sortOrder: order++,
+    });
+  }
+  return lines.length;
 }
 
 /** Find orders in the Quotation Summary to start receiving: by reference #, customer, email or any part of the tracking #. */

@@ -995,6 +995,22 @@ export const RECEIVING_PHOTO_KINDS = [
   "PACKAGING_ISSUE",
   "COMPLETE_CONTENTS",
   "PACKING_SHEET",
+  // Step 6 (per product line, tied to itemId)
+  "ITEM_PRODUCT",
+  "ITEM_DAMAGE",
+  "ITEM_DISCREPANCY",
+  "ITEM_EXPIRATION",
+  // Step 7 / 8 / 9
+  "REVISED_INVOICE",
+  "CUSTOMER_NOTE",
+  "PAYMENT_CONFIRMATION",
+] as const;
+export const RECEIVING_ACCOUNTS_DECISIONS = [
+  "NEED_TO_BE_REVIEWED",
+  "NEED_ADJUSTED_QUOTATION",
+  "NEED_TO_BE_RETURNED",
+  "NEED_TO_BE_PAID",
+  "PAID",
 ] as const;
 
 export const receivingPackages = sqliteTable(
@@ -1030,6 +1046,19 @@ export const receivingPackages = sqliteTable(
     receivingNotes: text("receiving_notes"),
     submittedByUserId: text("submitted_by_user_id").references(() => users.id),
     submittedAt: text("submitted_at"),
+    // Step 7 -- adjustments (dollar amounts the customer is told / actually paid)
+    adjustedOrderTotal: real("adjusted_order_total"),
+    adjustmentAmountEmail: real("adjustment_amount_email"),
+    // Step 8 -- the agent's own words for the customer email
+    customerEmailNote: text("customer_email_note"),
+    // Step 9 -- accounts
+    accountsDecision: text("accounts_decision", { enum: RECEIVING_ACCOUNTS_DECISIONS }),
+    accountsStatus: text("accounts_status", { enum: ["IN_REVIEW", "PAID"] }),
+    paidAt: text("paid_at"),
+    // Customer notification (set by the app when the email goes out)
+    customerNotifiedAt: text("customer_notified_at"),
+    packagingWarningSentAt: text("packaging_warning_sent_at"),
+    customerTexted: integer("customer_texted", { mode: "boolean" }),
     ...timestamps,
   },
   (t) => [
@@ -1050,6 +1079,8 @@ export const receivingPackagePhotos = sqliteTable(
       .notNull()
       .references(() => receivingPackages.id, { onDelete: "cascade" }),
     kind: text("kind", { enum: RECEIVING_PHOTO_KINDS }).notNull(),
+    // Set for the per-product photo kinds (Step 6); null for shipment-level photos.
+    itemId: text("item_id"),
     filename: text("filename").notNull(),
     contentType: text("content_type").notNull(),
     sizeBytes: integer("size_bytes").notNull(),
@@ -1062,6 +1093,197 @@ export const receivingPackagePhotos = sqliteTable(
     index("receiving_package_photos_package_idx").on(t.packageId),
   ],
 );
+
+export const RECEIVING_CONDITIONS = [
+  "Mint",
+  "Dinged",
+  "Minor Damage",
+  "Damaged",
+  "Stained",
+  "Torn",
+  "Crushed",
+  "Opened",
+  "Unsealed",
+  "Expired",
+  "Other",
+] as const;
+export const RECEIVING_DISCREPANCY_CATEGORIES = [
+  "Product Mismatch",
+  "Quantity Mismatch",
+  "Product Code Mismatch",
+  "Variant Mismatch",
+  "Expiration Issue",
+  "Mixed Expiration Dates",
+  "Expiration Quantity Mismatch",
+  "Product Damage",
+  "Packaging Damage",
+  "Packaging Non-Compliance",
+  "Missing Product",
+  "Extra Product",
+  "Open Product",
+  "Other",
+] as const;
+export const RECEIVING_ADJUSTMENT_REASONS = [
+  "Incorrect Product",
+  "Wrong Quantity",
+  "Wrong Code",
+  "Wrong Variant",
+  "Expiration Issue",
+  "Short-Dated Product",
+  "Product Damage",
+  "Packaging Damage",
+  "Packaging Non-Compliance",
+  "Product Not Eligible",
+  "Missing Item",
+  "Extra Item",
+  "Other",
+] as const;
+
+/** Step 6 -- one row per product verified on a shipment: quoted lines (pre-filled from the quotation) and anything extra that arrived. */
+export const receivingItems = sqliteTable(
+  "receiving_items",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    packageId: text("package_id")
+      .notNull()
+      .references(() => receivingPackages.id, { onDelete: "cascade" }),
+    quotedItemId: text("quoted_item_id").references(() => purchasingQuotedItems.id, { onDelete: "set null" }),
+    productId: text("product_id").references(() => purchasingProducts.id, { onDelete: "set null" }),
+    productName: text("product_name").notNull(),
+    itemSource: text("item_source", { enum: ["QUOTED", "EXTRA"] }).notNull().default("QUOTED"),
+    // Copied from the quotation line when the row is created, so a later edit to the quotation never rewrites what was verified.
+    quotedQuantity: integer("quoted_quantity"),
+    quotedAmount: real("quoted_amount"),
+    wasReceived: text("was_received", { enum: ["YES", "NO", "PARTIALLY"] }),
+    quantityReceived: integer("quantity_received"),
+    condition: text("condition", { enum: RECEIVING_CONDITIONS }),
+    needsReturn: text("needs_return", { enum: ["YES", "NO", "PENDING_REVIEW"] }),
+    notes: text("notes"),
+    // Identification the agent reads off the product
+    ndc: text("ndc"),
+    lotNumber: text("lot_number"),
+    codeMatches: text("code_matches", { enum: ["YES", "NO", "NA"] }),
+    expirationQualifies: text("expiration_qualifies", { enum: ["YES", "NO", "REVIEW_REQUIRED", "NA"] }),
+    expirationEntryType: text("expiration_entry_type", { enum: ["SINGLE", "RANGE", "MULTIPLE", "NA"] }),
+    expirationDate: text("expiration_date"), // YYYY-MM-DD (single date)
+    discrepancyCategories: text("discrepancy_categories"), // JSON array of labels
+    discrepancyNotes: text("discrepancy_notes"),
+    adjustmentRequired: text("adjustment_required", { enum: ["YES", "NO"] }),
+    managementReview: text("management_review", { enum: ["YES", "NO"] }),
+    returnRequired: text("return_required", { enum: ["YES", "NO"] }),
+    quotationAdjusted: text("quotation_adjusted", { enum: ["YES", "NO", "PENDING"] }),
+    proposedRevisedAmount: real("proposed_revised_amount"),
+    adjustmentReason: text("adjustment_reason", { enum: RECEIVING_ADJUSTMENT_REASONS }),
+    adjustmentNotes: text("adjustment_notes"),
+    quantityToReturn: integer("quantity_to_return"),
+    returnStatus: text("return_status", { enum: ["NOT_APPLICABLE", "RETURN_REQUESTED", "RETURN_SHIPPED", "RETURNED"] }),
+    returnTracking: text("return_tracking"),
+    returnNotes: text("return_notes"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    ...timestamps,
+  },
+  (t) => [
+    index("receiving_items_org_idx").on(t.organizationId),
+    index("receiving_items_package_idx").on(t.packageId),
+  ],
+);
+
+/** One row per expiration date / lot of a received product (a single date, a range, or several lots). */
+export const receivingExpirationLots = sqliteTable(
+  "receiving_expiration_lots",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    itemId: text("item_id")
+      .notNull()
+      .references(() => receivingItems.id, { onDelete: "cascade" }),
+    label: text("label"),
+    lotNumber: text("lot_number"),
+    expirationDate: text("expiration_date"),
+    expirationEndDate: text("expiration_end_date"),
+    quantity: integer("quantity"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    ...timestamps,
+  },
+  (t) => [index("receiving_expiration_lots_item_idx").on(t.itemId)],
+);
+
+/**
+ * The inventory ledger for received shipments: one header per shipment
+ * (who sent it, when, what was paid) and one line per product received.
+ * Written when a shipment is submitted; feeds the Weekly Received and
+ * Products Received trackers.
+ */
+export const receivingIntakeLogs = sqliteTable(
+  "receiving_intake_logs",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    packageId: text("package_id")
+      .notNull()
+      .references(() => receivingPackages.id, { onDelete: "cascade" }),
+    receivedFrom: text("received_from").notNull(),
+    receivedAt: text("received_at"),
+    pricePaid: real("price_paid"),
+    notes: text("notes"),
+    loggedByUserId: text("logged_by_user_id").references(() => users.id),
+    ...timestamps,
+  },
+  (t) => [
+    index("receiving_intake_logs_org_idx").on(t.organizationId),
+    uniqueIndex("receiving_intake_logs_package_idx").on(t.packageId),
+  ],
+);
+
+export const receivingIntakeLines = sqliteTable(
+  "receiving_intake_lines",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    logId: text("log_id")
+      .notNull()
+      .references(() => receivingIntakeLogs.id, { onDelete: "cascade" }),
+    productId: text("product_id").references(() => purchasingProducts.id, { onDelete: "set null" }),
+    productName: text("product_name").notNull(),
+    ndc: text("ndc"),
+    lotNumber: text("lot_number"),
+    quantity: integer("quantity").notNull().default(0),
+    condition: text("condition"),
+    expirationEarliest: text("expiration_earliest"),
+    expirationLatest: text("expiration_latest"),
+    weekOf: text("week_of"), // the Monday of the week it was received, YYYY-MM-DD
+    receivedFrom: text("received_from"),
+    receivedAt: text("received_at"),
+    ...timestamps,
+  },
+  (t) => [
+    index("receiving_intake_lines_org_idx").on(t.organizationId),
+    index("receiving_intake_lines_log_idx").on(t.logId),
+  ],
+);
+
+/** Per-company switches and wording for the customer emails Receiving sends. All optional. */
+export const receivingSettings = sqliteTable("receiving_settings", {
+  organizationId: text("organization_id")
+    .primaryKey()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  emailsEnabled: integer("emails_enabled", { mode: "boolean" }).notNull().default(false),
+  fromName: text("from_name"),
+  replyTo: text("reply_to"),
+  bccEmails: text("bcc_emails"), // comma separated
+  quoteLinkUrl: text("quote_link_url"),
+  packagingGuideUrl: text("packaging_guide_url"),
+  ...timestamps,
+});
 
 /**
  * One row per org -- every piece of wording on the printed/exported

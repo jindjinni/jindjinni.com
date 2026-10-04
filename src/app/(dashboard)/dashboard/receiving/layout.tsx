@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { requireOrg } from "@/lib/tenant";
-import { canViewReceiving, canWriteReceiving } from "@/lib/permissions";
+import { canViewReceiving, canWriteReceiving, isAdmin } from "@/lib/permissions";
 import { storage } from "@/lib/receiving-storage";
 import { ReceivingNav } from "./receiving-nav";
 
@@ -12,7 +12,7 @@ export default async function ReceivingLayout({ children }: { children: React.Re
 
   return (
     <div className="-my-8 mx-[calc(50%-50vw)] flex min-h-[calc(100vh-3.4rem)] w-screen flex-col md:flex-row print:m-0 print:w-auto">
-      <ReceivingNav orgName={org.organizationName} />
+      <ReceivingNav orgName={org.organizationName} isAdminUser={isAdmin(org.role)} />
       <div className="min-w-0 flex-1 bg-stone-50 dark:bg-slate-950">
         {showStorageNote && (
           <p className="border-b border-amber-300 bg-amber-100 px-6 py-2 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">

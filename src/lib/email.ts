@@ -59,3 +59,62 @@ export async function sendEmail({
     return { ok: false, error: "Couldn't send that email right now. Please try again." };
   }
 }
+
+export type EmailAttachment = { filename: string; content: Buffer };
+
+/** "Name <a@b.com>" or "a@b.com" -> "a@b.com" */
+function addressOf(from: string): string {
+  const m = /<([^>]+)>/.exec(from);
+  return (m ? m[1] : from).trim();
+}
+
+/**
+ * Customer-facing email from a company: its own display name, optional reply-to,
+ * a hidden copy (BCC) to the team, and attachments (payment confirmation, revised
+ * invoice, photos). The sending address still comes from RESEND_FROM_EMAIL so it
+ * only ever goes out from a verified domain.
+ */
+export async function sendCustomerEmail(args: {
+  to: string;
+  subject: string;
+  text: string;
+  html: string;
+  fromName?: string | null;
+  replyTo?: string | null;
+  bcc?: string[];
+  attachments?: EmailAttachment[];
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const apiKey = process.env.RESEND_API_KEY;
+  const fromName = (args.fromName ?? "").replace(/[<>"\r\n]/g, "").trim();
+  const from = fromName ? `${fromName} <${addressOf(FROM_EMAIL)}>` : FROM_EMAIL;
+
+  if (!apiKey) {
+    if (process.env.VERCEL) {
+      console.error("[email] RESEND_API_KEY is not set -- cannot send:", args.subject);
+      return { ok: false, error: "Email sending isn't configured yet. Please contact support." };
+    }
+    console.log(`[email:dev] From: ${from}\nTo: ${args.to}\nBcc: ${(args.bcc ?? []).join(", ")}\nSubject: ${args.subject}\nAttachments: ${(args.attachments ?? []).map((a) => a.filename).join(", ")}\n${args.text}`);
+    return { ok: true };
+  }
+  try {
+    const resend = new Resend(apiKey);
+    const result = await resend.emails.send({
+      from,
+      to: args.to,
+      subject: args.subject,
+      html: args.html,
+      text: args.text,
+      ...(args.replyTo ? { replyTo: args.replyTo } : {}),
+      ...(args.bcc && args.bcc.length ? { bcc: args.bcc } : {}),
+      ...(args.attachments && args.attachments.length ? { attachments: args.attachments } : {}),
+    });
+    if (result.error) {
+      console.error("[email] Resend error:", result.error);
+      return { ok: false, error: "The email service refused that message. Check the sending domain is verified and the customer's address is valid." };
+    }
+    return { ok: true };
+  } catch (err) {
+    console.error("[email] Unexpected error sending email:", err);
+    return { ok: false, error: "Couldn't send that email right now. Please try again." };
+  }
+}

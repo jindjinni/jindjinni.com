@@ -32,7 +32,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   return new NextResponse(file.stream, {
     headers: {
       "Content-Type": ph.contentType,
-      "Content-Security-Policy": "default-src 'none'; img-src 'self' data:; sandbox",
+      // Images are locked down; PDFs can't open in the browser's viewer under a sandbox, so they're served plainly (nosniff still applies).
+      ...(ph.contentType.startsWith("image/") ? { "Content-Security-Policy": "default-src 'none'; img-src 'self' data:; sandbox" } : {}),
       "Content-Disposition": `inline; filename="${safeName}"`,
       "Cache-Control": "private, max-age=300",
       "X-Content-Type-Options": "nosniff",

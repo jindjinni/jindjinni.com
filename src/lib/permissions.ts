@@ -79,6 +79,11 @@ export function canWriteReceiving(role: string): boolean {
   return role === "receiver" || isAdmin(role);
 }
 
+/** May change the Accounts part of a shipment (decision, status, payment proof): everyone who can write in Receiving, plus the accountant. */
+export function canWriteAccounts(role: string): boolean {
+  return canWriteReceiving(role) || role === "accountant";
+}
+
 /** Which departments a role can open, for the menu and the home redirect. */
 export function departmentsFor(role: string): string[] {
   const out: string[] = [];

@@ -8,8 +8,11 @@ const ITEMS = [
   { href: "/dashboard/receiving/intake", label: "Receiving Intake Form", icon: "📝", exact: false },
 ];
 
-export function ReceivingNav({ orgName }: { orgName: string }) {
+const ADMIN_ITEMS = [{ href: "/dashboard/receiving/email-settings", label: "Email Settings", icon: "✉️", exact: false }];
+
+export function ReceivingNav({ orgName, isAdminUser }: { orgName: string; isAdminUser: boolean }) {
   const path = usePathname();
+  const items = isAdminUser ? [...ITEMS, ...ADMIN_ITEMS] : ITEMS;
   return (
     <aside className="shrink-0 bg-[#F7B838] text-amber-950 md:w-60 print:hidden">
       <div className="px-5 pb-3 pt-5 md:pt-6">
@@ -17,7 +20,7 @@ export function ReceivingNav({ orgName }: { orgName: string }) {
         <p className="mt-1 text-lg font-bold leading-tight">{orgName}</p>
       </div>
       <nav className="flex gap-1 overflow-x-auto px-3 pb-3 md:flex-col md:pb-6" aria-label="Receiving">
-        {ITEMS.map((i) => {
+        {items.map((i) => {
           const active = i.exact ? path === i.href : path.startsWith(i.href);
           return (
             <Link

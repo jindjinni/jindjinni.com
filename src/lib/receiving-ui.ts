@@ -34,3 +34,11 @@ export function formatStamp(v: string | null | undefined): string {
   const h = Number(m[4]);
   return `${months[Number(m[2]) - 1]} ${Number(m[3])}, ${m[1]} ${h % 12 || 12}:${m[5]} ${h < 12 ? "AM" : "PM"}`;
 }
+
+/** A system time stamp ("YYYY-MM-DD HH:MM:SS", stored in UTC) shown in the viewer's own time zone. Use inside an element with suppressHydrationWarning. */
+export function formatUtcStamp(v: string | null | undefined): string {
+  const m = v ? /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):?(\d{2})?/.exec(v) : null;
+  if (!m) return "—";
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]), Number(m[6] ?? 0)));
+  return d.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
+}
