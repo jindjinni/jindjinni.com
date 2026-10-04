@@ -202,6 +202,7 @@ export async function restorePurchasingCustomer(
     .where(and(eq(purchasingCustomers.id, customerId), eq(purchasingCustomers.organizationId, org.organizationId)));
 
   revalidatePath("/dashboard/purchasing/customers");
+  revalidatePath("/dashboard/purchasing/archive");
 }
 
 // ---------------------------------------------------------------------------
@@ -239,6 +240,25 @@ export async function updatePurchasingCategory(categoryId: string, formData: For
     .where(and(eq(purchasingCategories.id, categoryId), eq(purchasingCategories.organizationId, org.organizationId)));
 
   revalidatePath("/dashboard/purchasing/categories");
+}
+
+/** One-click restore from the Archive page -- same effect as checking "Active" in the edit form, without opening it. */
+export async function restorePurchasingCategory(
+  categoryId: string,
+  _prevState: ActionState,
+  _formData: FormData,
+): Promise<ActionState> {
+  const org = await requireOrg();
+  const blocked = requireManager(org);
+  if (blocked) return blocked;
+
+  await db
+    .update(purchasingCategories)
+    .set({ active: true })
+    .where(and(eq(purchasingCategories.id, categoryId), eq(purchasingCategories.organizationId, org.organizationId)));
+
+  revalidatePath("/dashboard/purchasing/categories");
+  revalidatePath("/dashboard/purchasing/archive");
 }
 
 // ---------------------------------------------------------------------------
@@ -351,6 +371,7 @@ export async function restorePurchasingProduct(
     .where(and(eq(purchasingProducts.id, productId), eq(purchasingProducts.organizationId, org.organizationId)));
 
   revalidatePath("/dashboard/purchasing/products");
+  revalidatePath("/dashboard/purchasing/archive");
 }
 
 /** Makes an independent copy of a product -- own id, own price, own multipliers never carried over (intentionally: a copy shouldn't silently inherit pricing rules the person may be about to change). Lands on the new product's own page so it can be tweaked right away. */
@@ -638,6 +659,7 @@ export async function restorePurchasingCondition(
     .where(and(eq(purchasingConditions.id, conditionId), eq(purchasingConditions.organizationId, org.organizationId)));
 
   revalidatePath("/dashboard/purchasing/conditions");
+  revalidatePath("/dashboard/purchasing/archive");
 }
 
 /** Permanent delete -- blocked once a quoted line has actually used this condition (it keeps conditionNameSnapshot for display, but the live conditionId foreign key would dangle). Use Archive instead for a condition you just don't want offered anymore. */
@@ -936,6 +958,25 @@ export async function deletePurchasingExpirationRange(
   revalidatePath("/dashboard/purchasing/expiration-ranges");
 }
 
+/** One-click restore from the Archive page -- same effect as checking "Active" in the edit form, without opening it. */
+export async function restorePurchasingExpirationRange(
+  rangeId: string,
+  _prevState: ActionState,
+  _formData: FormData,
+): Promise<ActionState> {
+  const org = await requireOrg();
+  const blocked = requireManager(org);
+  if (blocked) return blocked;
+
+  await db
+    .update(purchasingExpirationRanges)
+    .set({ active: true })
+    .where(and(eq(purchasingExpirationRanges.id, rangeId), eq(purchasingExpirationRanges.organizationId, org.organizationId)));
+
+  revalidatePath("/dashboard/purchasing/expiration-ranges");
+  revalidatePath("/dashboard/purchasing/archive");
+}
+
 // ---------------------------------------------------------------------------
 // Bonus tiers
 // ---------------------------------------------------------------------------
@@ -1041,6 +1082,25 @@ export async function deletePurchasingBonusTier(
     .where(and(eq(purchasingBonusTiers.id, tierId), eq(purchasingBonusTiers.organizationId, org.organizationId)));
 
   revalidatePath("/dashboard/purchasing/bonus-tiers");
+}
+
+/** One-click restore from the Archive page -- same effect as checking "Active" in the edit form, without opening it. */
+export async function restorePurchasingBonusTier(
+  tierId: string,
+  _prevState: ActionState,
+  _formData: FormData,
+): Promise<ActionState> {
+  const org = await requireOrg();
+  const blocked = requireManager(org);
+  if (blocked) return blocked;
+
+  await db
+    .update(purchasingBonusTiers)
+    .set({ active: true })
+    .where(and(eq(purchasingBonusTiers.id, tierId), eq(purchasingBonusTiers.organizationId, org.organizationId)));
+
+  revalidatePath("/dashboard/purchasing/bonus-tiers");
+  revalidatePath("/dashboard/purchasing/archive");
 }
 
 // ---------------------------------------------------------------------------
@@ -1676,6 +1736,7 @@ export async function restorePurchasingQuotation(
     .where(and(eq(purchasingQuotations.id, quotationId), eq(purchasingQuotations.organizationId, org.organizationId)));
 
   revalidatePath("/dashboard/purchasing/quotations");
+  revalidatePath("/dashboard/purchasing/archive");
 }
 
 /**
