@@ -15,7 +15,7 @@ export type TestOrdersState = {
   loaded?: number;
   prepare?: PrepareResult;
   results?: TestOrderResult[];
-  removed?: { orders: number; customers: number };
+  removed?: { orders: number; customers: number; pricesReset: number };
 };
 
 /** Only the platform owner, signed in as an Owner / Admin of the company they are testing in. */

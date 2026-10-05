@@ -568,12 +568,12 @@ async function receiveOrder(
 // ---- remove -------------------------------------------------------------------------------------------------------------
 
 /** Deletes every test order (and everything under them) and the TEST customers. Real data is never matched. */
-export async function removeAllTestOrders(org: CurrentOrg): Promise<{ orders: number; customers: number }> {
+export async function removeAllTestOrders(org: CurrentOrg): Promise<{ orders: number; customers: number; pricesReset: number }> {
   const custs = await db
     .select({ id: purchasingCustomers.id })
     .from(purchasingCustomers)
     .where(and(eq(purchasingCustomers.organizationId, org.organizationId), like(purchasingCustomers.customerReferenceNumber, `${TEST_PREFIX}-%`), like(purchasingCustomers.firstName, `${TEST_PREFIX} - %`)));
-  if (custs.length === 0) return { orders: 0, customers: 0 };
+  if (custs.length === 0) return { orders: 0, customers: 0, pricesReset: await resetTestPrices(org) };
   const ids = custs.map((c) => c.id);
   let orders = 0;
   const leftover = new Set<string>();
@@ -610,5 +610,21 @@ export async function removeAllTestOrders(org: CurrentOrg): Promise<{ orders: nu
       // ignore
     }
   }
-  return { orders, customers: custs.length };
+  return { orders, customers: custs.length, pricesReset: await resetTestPrices(org) };
+}
+
+/**
+ * Loading test orders puts a made-up price on products that had none ($0). Put those back to $0 -- only products whose price is
+ * still exactly the made-up one, so a price you set yourself is never touched.
+ */
+async function resetTestPrices(org: CurrentOrg): Promise<number> {
+  const products = await db.select({ id: purchasingProducts.id, name: purchasingProducts.name, price: purchasingProducts.standardPrice }).from(purchasingProducts).where(eq(purchasingProducts.organizationId, org.organizationId));
+  let n = 0;
+  for (const p of products) {
+    if (p.price <= 0 || !Object.values(POOL_PATTERNS).some((re) => re.test(p.name))) continue;
+    if (Math.abs(p.price - Math.round(testPriceFor(p.name) * 100) / 100) > 0.0049) continue;
+    await db.update(purchasingProducts).set({ standardPrice: 0 }).where(and(eq(purchasingProducts.id, p.id), eq(purchasingProducts.organizationId, org.organizationId)));
+    n++;
+  }
+  return n;
 }

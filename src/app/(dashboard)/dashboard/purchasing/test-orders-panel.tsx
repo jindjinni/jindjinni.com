@@ -43,12 +43,16 @@ export function TestOrdersPanel({ existing }: { existing: number }) {
   }
 
   async function remove() {
-    if (!window.confirm("Remove every TEST order and TEST customer from this company? Nothing else is touched.")) return;
+    if (!window.confirm("Remove every TEST order and TEST customer from this company, and put made-up product prices back to $0? Prices you set yourself are not touched.")) return;
     setBusy(true);
     setError(null);
     try {
       const out = await removeTestOrders();
-      setMessage(`Removed ${out.removed?.orders ?? 0} test orders and ${out.removed?.customers ?? 0} test customers.`);
+      setMessage(
+        `Removed ${out.removed?.orders ?? 0} test orders and ${out.removed?.customers ?? 0} test customers.${
+          out.removed?.pricesReset ? ` ${out.removed.pricesReset} made-up product prices were set back to $0.` : ""
+        }`,
+      );
       setResults([]);
       setDone(0);
     } catch (e) {
@@ -64,7 +68,7 @@ export function TestOrdersPanel({ existing }: { existing: number }) {
     <section className="mt-6 max-w-3xl rounded-md border border-amber-300 bg-amber-50 p-4 dark:border-amber-700/60 dark:bg-amber-950/30">
       <h2 className="text-sm font-semibold text-amber-900 dark:text-amber-200">Platform owner: test orders</h2>
       <p className="mt-1 text-xs text-amber-800 dark:text-amber-300">
-        Creates 100 different orders through the real Purchasing and Receiving screens: every customer is named &ldquo;TEST &hellip;&rdquo;, tracking numbers are made up, and they run through quoting, recall checks, receiving, adjustments and Accounts. Best used in a test company.
+        Creates 100 different orders through the real Purchasing and Receiving screens: every customer is named &ldquo;TEST &hellip;&rdquo;, tracking numbers are made up, and they run through quoting, recall checks, receiving, adjustments and Accounts. Best used in a test company: it also puts made-up prices on products that have no price yet (Remove puts them back to $0) and adds the public recall numbers to your recall lists.
         {existing > 0 ? ` ${existing} test customer(s) are already here; loading again skips them.` : ""}
       </p>
       <div className="mt-3 flex flex-wrap gap-2">
