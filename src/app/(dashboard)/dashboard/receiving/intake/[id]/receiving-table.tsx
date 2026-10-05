@@ -9,7 +9,7 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { addReceivingItem, setReceivingItemProduct } from "@/app/actions/receiving";
 import type { CatalogProduct, PackagePhoto, QuotedLine } from "@/lib/receiving-queries";
-import { CONDITION_OPTIONS, expirationMonth, suggestDisposition } from "@/lib/receiving-rules";
+import { CONDITION_OPTIONS, expirationMonth, formatDateUS, parseDateInput, suggestDisposition } from "@/lib/receiving-rules";
 import { ItemDetailsPanel, type ItemState } from "./item-card";
 
 const toInt = (s: string): number | null => (s.trim() !== "" && Number.isInteger(Number(s)) ? Number(s) : null);
@@ -112,6 +112,48 @@ const RETURN_PILLS: PillOption[] = [
   { value: "NO", label: "No", cls: "bg-slate-200 text-slate-800 dark:bg-slate-700 dark:text-slate-100" },
   { value: "PENDING_REVIEW", label: "Pending Review", cls: "bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-100" },
 ];
+
+/** A date typed like Airtable shows it (8/20/2027). Saved as a real date when you leave the cell; stays red until it is one. */
+function DateCell({ id, label, value, disabled, onCommit }: { id: string; label: string; value: string; disabled: boolean; onCommit: (iso: string) => void }) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const [bad, setBad] = useState(false);
+  return (
+    <input
+      id={id}
+      aria-label={label}
+      aria-invalid={bad}
+      inputMode="numeric"
+      autoComplete="off"
+      placeholder="M/D/YYYY"
+      maxLength={10}
+      disabled={disabled}
+      value={draft ?? formatDateUS(value)}
+      title={bad ? "Type the date like 8/20/2027" : undefined}
+      onChange={(e) => {
+        setDraft(e.target.value);
+        setBad(false);
+      }}
+      onBlur={() => {
+        if (draft === null) return;
+        const t = draft.trim();
+        if (t === "") {
+          onCommit("");
+          setDraft(null);
+          return;
+        }
+        const iso = parseDateInput(t);
+        if (iso) {
+          onCommit(iso);
+          setDraft(null);
+        } else setBad(true);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") e.currentTarget.blur();
+      }}
+      className={`${cellInput} tabular-nums ${bad ? "bg-red-50 ring-2 ring-inset ring-red-500 dark:bg-red-950/30" : ""}`}
+    />
+  );
+}
 
 // ---- the product cell: "+" -> searchable list --------------------------------
 
@@ -540,7 +582,7 @@ export function ReceivedItemsGrid({
                           {it.expirationEntryType === "RANGE" ? "Date range" : "Several lots"} (see details)
                         </button>
                       ) : (
-                        <input aria-label={`Expiration Date, ${label}`} id={`exp-${it.id}`} type="date" className={cellInput} disabled={!editable || notReceived} value={it.expirationDate} onChange={(e) => onDate(it, e.target.value)} />
+                        <DateCell id={`exp-${it.id}`} label={`Expiration Date, ${label}`} value={it.expirationDate} disabled={!editable || notReceived} onCommit={(iso) => onDate(it, iso)} />
                       )}
                     </td>
                     <td className={`${td} px-2 text-slate-800 dark:text-slate-100`}>{month || <span className="text-slate-300 dark:text-slate-600">&nbsp;</span>}</td>

@@ -20,7 +20,7 @@ export function Row({ label, children, hint }: { label: string; children: ReactN
         {label}
         {hint && <p className="mt-0.5 text-xs font-normal text-slate-500">{hint}</p>}
       </div>
-      <div className="min-w-0 text-sm text-slate-900 dark:text-slate-50">{children}</div>
+      <div className="min-w-0 max-w-3xl text-sm text-slate-900 dark:text-slate-50">{children}</div>
     </div>
   );
 }

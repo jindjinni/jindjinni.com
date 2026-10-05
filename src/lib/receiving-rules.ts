@@ -393,3 +393,31 @@ export function buildDbLines(i: DbLineInput): DbLine[] {
     };
   });
 }
+
+// ---- typing dates like the Airtable form ----------------------------------------
+
+/** "2027-08-20" -> "8/20/2027" (blank for anything that isn't a full date). */
+export function formatDateUS(iso: string | null | undefined): string {
+  const m = iso ? /^(\d{4})-(\d{2})-(\d{2})/.exec(iso) : null;
+  return m ? `${Number(m[2])}/${Number(m[3])}/${m[1]}` : "";
+}
+
+/**
+ * What an agent types into a date cell -> "YYYY-MM-DD", or null when it isn't a real date.
+ * Accepts 8/20/2027, 8-20-2027, 8/20/27 and 2027-08-20.
+ */
+export function parseDateInput(text: string): string | null {
+  const t = text.trim();
+  let y: number, mo: number, d: number;
+  let m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(t);
+  if (m) [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  else if ((m = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})$/.exec(t))) {
+    mo = Number(m[1]);
+    d = Number(m[2]);
+    y = m[3].length === 2 ? 2000 + Number(m[3]) : Number(m[3]);
+  } else return null;
+  if (y < 1900 || y > 2200 || mo < 1 || mo > 12 || d < 1) return null;
+  const dim = new Date(Date.UTC(y, mo, 0)).getUTCDate();
+  if (d > dim) return null;
+  return `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
