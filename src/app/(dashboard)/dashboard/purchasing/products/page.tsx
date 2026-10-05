@@ -4,6 +4,12 @@ import { requireOrg } from "@/lib/tenant";
 import { getPurchasingProducts, getPurchasingCategories, getProductExpiryOptionsMap, getProductConditionsMap } from "@/lib/queries";
 import { AddProductForm } from "./add-product-form";
 import { LoadCatalogButton } from "./load-catalog-button";
+import { GetNewProductsButton } from "./get-new-products-button";
+import { PublishMasterPanel } from "./publish-master-panel";
+import { db } from "@/db/client";
+import { users } from "@/db/schema";
+import { eq } from "drizzle-orm";
+import { getLatestTemplate, isPlatformAdminEmail, planNewProducts } from "@/lib/catalog-template";
 import { ImportSpreadsheetForm } from "../import-spreadsheet-form";
 import { ProductRowActions } from "./product-row-actions";
 import { importPurchasingProducts, updatePurchasingProductsFromFile } from "@/app/actions/purchasing";
@@ -17,6 +23,14 @@ export default async function PurchasingProductsPage() {
   // Moves any "NDC ..." typed into Notes (or known from the catalog) into the
   // real NDC column. Only fills blanks; cheap and safe to repeat.
   await backfillProductNdcs(org.organizationId);
+  const [plan, latestTemplate, [me]] = canEdit
+    ? await Promise.all([
+        planNewProducts(org.organizationId),
+        getLatestTemplate(),
+        db.select({ email: users.email }).from(users).where(eq(users.id, org.userId)).limit(1),
+      ])
+    : [null, null, [undefined]];
+  const platformAdmin = canEdit && isPlatformAdminEmail(me?.email);
   const [products, categories, expiryOptionsMap, conditionsMap] = await Promise.all([
     getPurchasingProducts(org.organizationId, { includeInactive: canEdit }),
     getPurchasingCategories(org.organizationId),
@@ -31,7 +45,10 @@ export default async function PurchasingProductsPage() {
         One unified catalog, priced from a standard price × an expiration-range multiplier you set per product.
       </p>
 
-      {canEdit && <LoadCatalogButton />}
+      {canEdit && (plan?.hasTemplate ? <GetNewProductsButton available={plan.products.length} /> : <LoadCatalogButton />)}
+      {platformAdmin && (
+        <PublishMasterPanel latest={latestTemplate ? { version: latestTemplate.version, publishedAt: latestTemplate.publishedAt } : null} />
+      )}
       {canEdit && (
         <ImportSpreadsheetForm
           action={importPurchasingProducts}

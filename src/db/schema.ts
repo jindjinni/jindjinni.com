@@ -65,6 +65,10 @@ export const organizations = sqliteTable("organizations", {
   closedAt: text("closed_at"),
   closedByUserId: text("closed_by_user_id"),
   purgeAfter: text("purge_after"),
+  // Which version of the platform's shared default catalog this company has
+  // received (see platformCatalogTemplates). null = never. Plain nullable
+  // integer on purpose -- same drizzle-kit rule as seatLimit above.
+  catalogTemplateVersion: integer("catalog_template_version"),
   ...timestamps,
 });
 
@@ -1578,3 +1582,23 @@ export const invoiceLineItems = sqliteTable(
   },
   (t) => [index("line_items_invoice_idx").on(t.invoiceId)],
 );
+
+/**
+ * The platform's shared DEFAULT catalog -- the one table in this app that
+ * deliberately has no organization_id. Each published version is a snapshot
+ * (JSON) of one company's products / brands / NDCs, conditions, month ranges,
+ * starter recalls and receipt wording, with every price stripped. New
+ * companies get a COPY of the latest snapshot when they sign up; nothing is
+ * shared live afterwards, so a company that edits or removes things never
+ * affects anyone else. Only platform admins (PLATFORM_ADMIN_EMAILS) publish.
+ */
+export const platformCatalogTemplates = sqliteTable("platform_catalog_templates", {
+  id: text("id").primaryKey(),
+  version: integer("version").notNull().unique(),
+  payload: text("payload").notNull(),
+  publishedByEmail: text("published_by_email"),
+  publishedFromOrganizationId: text("published_from_organization_id"),
+  publishedAt: text("published_at")
+    .notNull()
+    .default(sql`(current_timestamp)`),
+});

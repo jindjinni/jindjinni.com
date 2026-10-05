@@ -9,9 +9,6 @@ import {
   users,
   memberships,
   conditions,
-  purchasingCategories,
-  purchasingConditions,
-  purchasingExpirationRanges,
   purchasingBonusTiers,
   businessProfiles,
 } from "@/db/schema";
@@ -19,11 +16,9 @@ import { signIn, signOut } from "@/lib/auth";
 import {
   newId,
   defaultConditionRows,
-  defaultPurchasingCategoryRows,
-  defaultPurchasingConditionRows,
-  defaultPurchasingExpirationRangeRows,
   defaultPurchasingBonusTierRows,
 } from "@/lib/ids";
+import { setupNewOrgCatalog } from "@/lib/catalog-template";
 import { extractBusinessProfileIdentityFields } from "@/lib/business-profile-form";
 import { encodeLogoFile } from "@/lib/logo-validation";
 import { consumeSignupVerificationCode } from "@/lib/signup-verification";
@@ -164,9 +159,9 @@ export async function signUpOrganization(
     role: "owner",
   });
   await db.insert(conditions).values(defaultConditionRows(orgId));
-  await db.insert(purchasingCategories).values(defaultPurchasingCategoryRows(orgId));
-  await db.insert(purchasingConditions).values(defaultPurchasingConditionRows(orgId));
-  await db.insert(purchasingExpirationRanges).values(defaultPurchasingExpirationRangeRows(orgId));
+  // A copy of the platform's default catalog (brands, products at $0, conditions, month ranges, starter recalls,
+  // receipt wording) -- or the built-in starter lists when none is published. See lib/catalog-template.ts.
+  await setupNewOrgCatalog(orgId);
   await db.insert(purchasingBonusTiers).values(defaultPurchasingBonusTierRows(orgId));
   await db.insert(businessProfiles).values({
     id: newId("bizprofile"),
