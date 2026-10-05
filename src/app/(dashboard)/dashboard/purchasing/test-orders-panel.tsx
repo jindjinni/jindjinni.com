@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { loadTestOrdersChunk, removeTestOrders, startTestOrders, type TestOrdersState } from "@/app/actions/test-orders";
 import type { TestOrderResult } from "@/lib/test-orders-run";
 
@@ -14,6 +14,17 @@ export function TestOrdersPanel({ existing }: { existing: number }) {
   const [notes, setNotes] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+
+  // Reloading or closing the page stops the loading; ask first while it is running.
+  useEffect(() => {
+    if (!busy) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [busy]);
 
   async function load() {
     setBusy(true);
@@ -69,8 +80,9 @@ export function TestOrdersPanel({ existing }: { existing: number }) {
       <h2 className="text-sm font-semibold text-amber-900 dark:text-amber-200">Platform owner: test orders</h2>
       <p className="mt-1 text-xs text-amber-800 dark:text-amber-300">
         Creates 100 different orders through the real Purchasing and Receiving screens: every customer is named &ldquo;TEST &hellip;&rdquo;, tracking numbers are made up, and they run through quoting, recall checks, receiving, adjustments and Accounts. Best used in a test company: it also puts made-up prices on products that have no price yet (Remove puts them back to $0) and adds the public recall numbers to your recall lists.
-        {existing > 0 ? ` ${existing} test customer(s) are already here; loading again skips them.` : ""}
+        {existing > 0 ? ` ${existing} test customer(s) are already here; loading again skips finished ones and rebuilds any that were cut off.` : ""}
       </p>
+      <p className="mt-1 text-xs font-medium text-amber-900 dark:text-amber-200">While it loads (about 25 seconds per order), stay on this page. Use another browser tab for anything else.</p>
       <div className="mt-3 flex flex-wrap gap-2">
         <button type="button" onClick={load} disabled={busy} className="rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-60">
           {busy ? `Loading… ${done} of ${TOTAL}` : "Load 100 test orders"}

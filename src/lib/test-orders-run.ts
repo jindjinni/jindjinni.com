@@ -15,6 +15,7 @@ import {
   purchasingQuotations,
   purchasingQuotedItems,
   receivingPackagePhotos,
+  receivingAdjustments,
   receivingPackages,
   receivingItems,
   receivingRecalls,
@@ -243,11 +244,16 @@ export async function runTestOrder(org: CurrentOrg, cat: Catalog, index: number)
     .limit(1);
   if (already) {
     const [q] = await db.select({ id: purchasingQuotations.id, n: purchasingQuotations.quotationNumber, t: purchasingQuotations.grandTotal }).from(purchasingQuotations).where(and(eq(purchasingQuotations.organizationId, org.organizationId), eq(purchasingQuotations.customerId, already.id))).limit(1);
-    res.quotationId = q?.id ?? null;
-    res.quotationNumber = q?.n ?? null;
-    res.total = q?.t ?? null;
-    res.notes.push("Already loaded earlier -- skipped.");
-    return res;
+    if (q && (await orderIsComplete(org, sc, q.id))) {
+      res.quotationId = q.id;
+      res.quotationNumber = q.n;
+      res.total = q.t;
+      res.notes.push("Already loaded earlier -- skipped.");
+      return res;
+    }
+    // Cut off half way last time: remove the unfinished copy and build it again from the start.
+    await deleteTestCustomers(org, [already.id]);
+    res.notes.push("An unfinished copy from an earlier run was removed and rebuilt.");
   }
 
   // 1. The customer (tagged TEST, with a TEST-nnnn reference so they can all be found and removed), then the quotation.
@@ -574,7 +580,22 @@ export async function removeAllTestOrders(org: CurrentOrg): Promise<{ orders: nu
     .from(purchasingCustomers)
     .where(and(eq(purchasingCustomers.organizationId, org.organizationId), like(purchasingCustomers.customerReferenceNumber, `${TEST_PREFIX}-%`), like(purchasingCustomers.firstName, `${TEST_PREFIX} - %`)));
   if (custs.length === 0) return { orders: 0, customers: 0, pricesReset: await resetTestPrices(org) };
-  const ids = custs.map((c) => c.id);
+  const orders = await deleteTestCustomers(org, custs.map((c) => c.id));
+  // The shared placeholder picture can go once nothing points at it.
+  const path = `receiving/${org.organizationId}/test-placeholder.png`;
+  const [left] = await db.select({ n: sql<number>`count(*)` }).from(receivingPackagePhotos).where(eq(receivingPackagePhotos.storagePath, path));
+  if (Number(left?.n ?? 0) === 0 && storage.configured()) {
+    try {
+      await storage.remove(path);
+    } catch {
+      // ignore
+    }
+  }
+  return { orders, customers: custs.length, pricesReset: await resetTestPrices(org) };
+}
+
+/** Deletes these test customers and every order under them (shipments, photos, lots, recall checks, adjustments and inventory entries cascade). Returns the number of orders removed. */
+async function deleteTestCustomers(org: CurrentOrg, ids: string[]): Promise<number> {
   let orders = 0;
   const leftover = new Set<string>();
   for (let i = 0; i < ids.length; i += 50) {
@@ -589,7 +610,6 @@ export async function removeAllTestOrders(org: CurrentOrg): Promise<{ orders: nu
         for (const f of files) if (!f.path.endsWith("/test-placeholder.png")) leftover.add(f.path);
       }
     }
-    // Receiving shipments, their photos, lots, recall checks, adjustments and inventory entries all cascade from the quotation.
     if (qs.length) await db.delete(purchasingQuotations).where(and(eq(purchasingQuotations.organizationId, org.organizationId), inArray(purchasingQuotations.id, qs.map((q) => q.id))));
     await db.delete(purchasingCustomers).where(and(eq(purchasingCustomers.organizationId, org.organizationId), inArray(purchasingCustomers.id, slice)));
   }
@@ -600,17 +620,30 @@ export async function removeAllTestOrders(org: CurrentOrg): Promise<{ orders: nu
       // a leftover private file is harmless
     }
   }
-  // The shared placeholder picture can go once nothing points at it.
-  const path = `receiving/${org.organizationId}/test-placeholder.png`;
-  const [left] = await db.select({ n: sql<number>`count(*)` }).from(receivingPackagePhotos).where(eq(receivingPackagePhotos.storagePath, path));
-  if (Number(left?.n ?? 0) === 0 && storage.configured()) {
-    try {
-      await storage.remove(path);
-    } catch {
-      // ignore
-    }
+  return orders;
+}
+
+/** Did this order get all the way to where its scenario ends? (An order cut off half way -- e.g. the page was closed -- is rebuilt.) */
+async function orderIsComplete(org: CurrentOrg, sc: Scenario, quotationId: string): Promise<boolean> {
+  const [lines] = await db.select({ n: sql<number>`count(*)` }).from(purchasingQuotedItems).where(eq(purchasingQuotedItems.quotationId, quotationId));
+  if (Number(lines?.n ?? 0) === 0) return false;
+  if (sc.kind === "PURCHASING_ONLY") return true;
+  const [pk] = await db.select().from(receivingPackages).where(and(eq(receivingPackages.organizationId, org.organizationId), eq(receivingPackages.quotationId, quotationId))).limit(1);
+  if (!pk) return false;
+  if (sc.kind === "OPEN") return pk.status === "IN_PROGRESS";
+  const [q] = await db.select({ status: purchasingQuotations.status }).from(purchasingQuotations).where(eq(purchasingQuotations.id, quotationId)).limit(1);
+  if (pk.status === "IN_PROGRESS" || q?.status !== "RECEIVED") return false;
+  if (sc.kind === "CLEAN_PAID") return pk.accountsStatus === "PAID";
+  if (sc.kind === "CLEAN_UNPAID") return pk.accountsDecision === "NEED_TO_BE_PAID";
+  if (sc.kind === "SHORT_DRAFT" || sc.kind === "SHORT_FINAL") {
+    const [adj] = await db.select({ status: receivingAdjustments.status }).from(receivingAdjustments).where(eq(receivingAdjustments.packageId, pk.id)).limit(1);
+    return !!adj && (sc.kind === "SHORT_DRAFT" || adj.status === "FINAL");
   }
-  return { orders, customers: custs.length, pricesReset: await resetTestPrices(org) };
+  if (sc.kind === "OMNIPOD_RECALL" || sc.kind === "LIBRE_RECALL" || sc.kind === "RECEIVER_LOOKUP") {
+    const [flagged] = await db.select({ id: receivingItems.id }).from(receivingItems).where(and(eq(receivingItems.packageId, pk.id), eq(receivingItems.needsReturn, "YES"))).limit(1);
+    return !flagged || pk.accountsDecision === "NEED_TO_BE_RETURNED";
+  }
+  return true;
 }
 
 /**
