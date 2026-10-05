@@ -163,7 +163,7 @@ export async function deliverCustomerEmail(org: OrgRef, packageId: string, kind:
     built = buildPackagingWarning({ companyName, customerName: brief.customerName, orderLabel, packagingGuideUrl: settings.packagingGuideUrl || null });
   } else {
     if (pkg.status === "IN_PROGRESS") return { ok: false, error: "Submit receiving first. The customer isn't told anything until the package is processed." };
-    if (pkg.accountsStatus !== "PAID") return { ok: false, error: "Accounts Status must be Paid before the customer is notified." };
+    if (pkg.accountsStatus !== "PAID") return { ok: false, error: "Order Status must be Paid before the customer is notified." };
     const key = pickEmailTemplate(pkg);
     template = key;
     built = buildCustomerEmail(key, {

@@ -546,7 +546,7 @@ export function IntakeForm(props: Props) {
       </Step>
 
       {/* STEP 9 */}
-      <Step n={9} id="step-9" title="Completion and accounts">
+      <Step n={9} id="step-9" title="Completion">
         <fieldset disabled={!editable} className="min-w-0 border-0 p-0">
           <Row label="Receiving Notes">{textInput("receivingNotes", 3)}</Row>
         </fieldset>
@@ -566,13 +566,13 @@ export function IntakeForm(props: Props) {
           </Row>
         )}
         <fieldset disabled={!canAccounts} className="min-w-0 border-0 p-0">
-          <Row label="Accounts Decision">
+          <Row label="Receiving Decision">
             <select id="accountsDecision" className={`${field} sm:w-72`} value={v.accountsDecision} onChange={(e) => set("accountsDecision", e.target.value)}>
               <option value="">Choose…</option>
               {Object.entries(ACCOUNTS_DECISION_LABELS).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
             </select>
           </Row>
-          <Row label="Accounts Status">
+          <Row label="Order Status">
             <select id="accountsStatus" className={`${field} sm:w-72`} value={v.accountsStatus} onChange={(e) => set("accountsStatus", e.target.value)}>
               <option value="">Choose…</option>
               {Object.entries(ACCOUNTS_STATUS_LABELS).map(([k, label]) => <option key={k} value={k}>{label}</option>)}

@@ -171,7 +171,7 @@ export function BoardView({ cards, canMove }: { cards: BoardCard[]; canMove: boo
                           </div>
                           {c.accountsStatus && (
                             <div>
-                              <dt>Accounts Status</dt>
+                              <dt>Order Status</dt>
                               <dd><span className="inline-block rounded-full bg-slate-200 px-2.5 py-0.5 text-xs font-medium text-slate-800 dark:bg-slate-800 dark:text-slate-100">{c.accountsStatus === "PAID" ? "Paid" : "In Review"}</span></dd>
                             </div>
                           )}
