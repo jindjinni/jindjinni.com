@@ -2,6 +2,8 @@ import Link from "next/link";
 import { requireOrg } from "@/lib/tenant";
 import { getPurchasingCustomers } from "@/lib/queries";
 import { missingCustomerFields } from "@/lib/purchasing-customer-rules";
+import { listRecalls } from "@/lib/receiving-recall-service";
+import { QuickRecallCheck } from "../quick-recall-check";
 import { NewQuotationForm } from "./new-quotation-form";
 
 export default async function NewQuotationPage({
@@ -11,6 +13,7 @@ export default async function NewQuotationPage({
 }) {
   const org = await requireOrg();
   const { customerId } = await searchParams;
+  const recalls = await listRecalls(org.organizationId);
   const customers = (await getPurchasingCustomers(org.organizationId)).map((c) => ({
     id: c.id,
     firstName: c.firstName,
@@ -37,6 +40,10 @@ export default async function NewQuotationPage({
       <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
         Enter the customer&rsquo;s name and address (a single name is fine; email and phone can be added later) -- new or existing -- then add the products they&rsquo;re selling on the next step.
       </p>
+
+      <div className="mt-5 max-w-4xl">
+        <QuickRecallCheck recalls={recalls} idPrefix="qrc-new" />
+      </div>
 
       <NewQuotationForm customers={customers} preselectedCustomerId={customerId} />
     </div>

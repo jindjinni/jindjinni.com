@@ -2,6 +2,8 @@
 
 import { useActionState, useMemo, useState } from "react";
 import { addPurchasingQuotedItem } from "@/app/actions/purchasing";
+import type { RecallView } from "@/lib/receiving-recall-service";
+import { QuickRecallCheck } from "../quick-recall-check";
 
 type ActionState = { error?: string } | undefined;
 
@@ -23,6 +25,7 @@ export function AddQuotedItemForm({
   productExpiryOptions,
   noExpirationProductIds,
   canOverridePrice,
+  recalls,
 }: {
   quotationId: string;
   products: Product[];
@@ -33,6 +36,8 @@ export function AddQuotedItemForm({
   productExpiryOptions: Record<string, string[]>;
   noExpirationProductIds: string[];
   canOverridePrice: boolean;
+  /** The company's recalls, for the quick recall check shown above the form. */
+  recalls: RecallView[];
 }) {
   const [state, formAction, pending] = useActionState<ActionState, FormData>(
     addPurchasingQuotedItem.bind(null, quotationId),
@@ -55,7 +60,13 @@ export function AddQuotedItemForm({
   // A product with exactly one option (e.g. test strips: 10+ months) preselects it.
   const onlyOptionId = productExpiryOptions[productId]?.length === 1 && availableRanges.length === 1 ? availableRanges[0].id : "";
 
+  const productName = products.find((p) => p.id === productId)?.name;
+
   return (
+    <>
+    <div className="mt-4">
+      <QuickRecallCheck key={productId} recalls={recalls} productName={productName} idPrefix="qrc-line" />
+    </div>
     <form action={formAction} className="mt-4 flex flex-wrap items-end gap-3 rounded-xl border border-dashed border-slate-300 p-4 dark:border-slate-700">
       <label className="flex flex-col gap-1 text-sm">
         <span className="text-slate-600 dark:text-slate-400">Product</span>
@@ -155,5 +166,6 @@ export function AddQuotedItemForm({
       </button>
       {state?.error && <p className="w-full text-sm text-red-600 dark:text-red-400">{state.error}</p>}
     </form>
+    </>
   );
 }

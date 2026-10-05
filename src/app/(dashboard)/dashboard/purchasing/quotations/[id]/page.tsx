@@ -23,6 +23,7 @@ import { DeductionForm } from "./deduction-form";
 import { QuotedItemRow } from "./quoted-item-row";
 import { ShippingLabelSection } from "./shipping-label-section";
 import { ActionButton } from "@/components/action-button";
+import { listRecalls } from "@/lib/receiving-recall-service";
 
 export default async function QuotationDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -34,13 +35,14 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
   const { quotation, items, customer } = data;
   const receiptState = await getReceiptState(org.organizationId, quotation.id, items.length);
 
-  const [products, conditions, ranges, productConditionsMap, orgRow, multiplierRows] = await Promise.all([
+  const [products, conditions, ranges, productConditionsMap, orgRow, multiplierRows, recalls] = await Promise.all([
     getPurchasingProducts(org.organizationId),
     getPurchasingConditions(org.organizationId),
     getPurchasingExpirationRanges(org.organizationId),
     getProductConditionsMap(org.organizationId),
     getOrganization(org.organizationId),
     getAllProductMultipliersForOrg(org.organizationId),
+    listRecalls(org.organizationId),
   ]);
 
   // Which month ranges each product is quoted at, and which products never
@@ -192,6 +194,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
         productExpiryOptions={productExpiryOptions}
         noExpirationProductIds={noExpirationProductIds}
         canOverridePrice={canEdit}
+        recalls={recalls}
       />
 
       <DeductionForm
