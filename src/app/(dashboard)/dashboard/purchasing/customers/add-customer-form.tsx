@@ -14,7 +14,7 @@ export function AddCustomerForm() {
     <form action={action} className="mt-6 rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
       <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Add customer</h2>
       <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-        A name and a full address are required (that is all a free shipping label needs). Email and phone can be added later if you don&rsquo;t have them yet.
+        Only a name is required. Address, email and phone can be added later; the full address is needed before you can make the customer&rsquo;s free shipping label.
       </p>
       <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="flex flex-col gap-1 text-sm">
@@ -33,7 +33,7 @@ export function AddCustomerForm() {
           <span className="text-slate-600 dark:text-slate-400">Phone (add later if unknown)</span>
           <input name="phone" type="tel" className={inputClass} />
         </label>
-        <AddressAutocompleteFields prefix="address" required />
+        <AddressAutocompleteFields prefix="address" />
         <label className="flex items-center gap-2 text-sm text-slate-700 sm:col-span-2 dark:text-slate-300">
           <input type="checkbox" name="isResidential" defaultChecked /> Residential address
         </label>

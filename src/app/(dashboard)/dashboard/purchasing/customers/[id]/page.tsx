@@ -25,7 +25,7 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
     state: customer.addressState,
     zip: customer.addressZip,
   });
-  const missingContact = missingContactDetails({ email: customer.email, phone: customer.phone });
+  const missingContact = missingContactDetails({ email: customer.email, phone: customer.phone, street1: customer.addressStreet1, city: customer.addressCity, state: customer.addressState, zip: customer.addressZip });
   const money = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const statusLabel: Record<string, string> = { QUOTED: "Quoted", CONFIRMED: "Confirmed", RECEIVED: "Received", CANCELLED: "Cancelled" };
 
@@ -73,12 +73,12 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
 
       {missing.length > 0 && (
         <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-200">
-          This profile is incomplete. Still needed: {missing.join(", ")}. Fill these in and save before starting a new quotation or label.
+          This profile is incomplete. Still needed: {missing.join(", ")}. Fill these in and save before starting a new quotation.
         </p>
       )}
       {missing.length === 0 && missingContact.length > 0 && (
         <p className="mt-3 rounded-md bg-sky-50 px-3 py-2 text-sm text-sky-800 dark:bg-sky-950 dark:text-sky-200">
-          Still to collect: {missingContact.join(" and ")}. Quotations and shipping labels work without it &mdash; add it below whenever you get it.
+          Still to collect: {missingContact.join(" and ")}. Quotations can be started without it &mdash; add it below whenever you get it. The full address is needed before you can make their free shipping label.
         </p>
       )}
 

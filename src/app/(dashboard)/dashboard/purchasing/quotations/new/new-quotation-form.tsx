@@ -9,7 +9,7 @@ type ActionState = { error?: string } | undefined;
 const inputClass =
   "rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-emerald-600 dark:border-slate-700 dark:bg-slate-800";
 
-type Customer = { id: string; firstName: string; lastName: string | null; incomplete?: boolean };
+type Customer = { id: string; firstName: string; lastName: string | null; noAddress?: boolean };
 
 export function NewQuotationForm({
   customers,
@@ -46,7 +46,7 @@ export function NewQuotationForm({
             </option>
             {customers.map((c) => (
               <option key={c.id} value={c.id}>
-                {[c.firstName, c.lastName].filter(Boolean).join(" ")}{c.incomplete ? " — name/address incomplete" : ""}
+                {[c.firstName, c.lastName].filter(Boolean).join(" ")}{c.noAddress ? " — address not added yet" : ""}
               </option>
             ))}
           </select>
@@ -62,14 +62,17 @@ export function NewQuotationForm({
             <input name="newCustomerLastName" className={inputClass} />
           </label>
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-slate-600 dark:text-slate-400">Email (add later if unknown)</span>
+            <span className="text-slate-600 dark:text-slate-400">Email (optional — add later)</span>
             <input name="newCustomerEmail" type="email" className={inputClass} />
           </label>
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-slate-600 dark:text-slate-400">Phone (add later if unknown)</span>
+            <span className="text-slate-600 dark:text-slate-400">Phone (optional — add later)</span>
             <input name="newCustomerPhone" type="tel" className={inputClass} />
           </label>
-          <AddressAutocompleteFields prefix="newCustomerAddress" required />
+          <p className="text-xs text-slate-500 sm:col-span-2 dark:text-slate-400">
+            Address (optional — leave it blank if you don&rsquo;t have it yet; you&rsquo;ll need it to make their free shipping label).
+          </p>
+          <AddressAutocompleteFields prefix="newCustomerAddress" />
           <label className="flex items-center gap-2 text-sm text-slate-700 sm:col-span-2 dark:text-slate-300">
             <input type="checkbox" name="newCustomerIsResidential" defaultChecked /> Residential address
           </label>

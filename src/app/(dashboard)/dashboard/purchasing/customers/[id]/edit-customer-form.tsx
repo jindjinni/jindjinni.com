@@ -55,7 +55,7 @@ export function EditCustomerForm({ customerId, customer }: { customerId: string;
         </label>
       </div>
 
-      <h3 className="mt-5 text-sm font-semibold text-slate-900 dark:text-slate-50">Address *</h3>
+      <h3 className="mt-5 text-sm font-semibold text-slate-900 dark:text-slate-50">Address (add when you have it)</h3>
       <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <AddressAutocompleteFields
           prefix="address"
@@ -66,7 +66,6 @@ export function EditCustomerForm({ customerId, customer }: { customerId: string;
             state: customer.addressState,
             zip: customer.addressZip,
           }}
-          required
         />
       </div>
       <label className="mt-3 flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">

@@ -1239,13 +1239,13 @@ export async function createPurchasingQuotation(
     });
     if (missing.length > 0) {
       return {
-        error: `This customer's profile is missing their ${missing.join(", ")}. Open their profile and fill that in before starting a quotation (email and phone can wait).`,
+        error: `This customer's profile is missing their ${missing.join(", ")}. Open their profile and fill that in before starting a quotation (address, email and phone can wait).`,
       };
     }
   } else {
     const firstName = String(formData.get("newCustomerFirstName") ?? "").trim();
     if (!firstName && !String(formData.get("newCustomerLastName") ?? "").trim()) {
-      return { error: "Choose an existing customer, or enter the new customer's details." };
+      return { error: "Choose an existing customer, or enter the new customer's name." };
     }
     const invalid = customerValidationError({
       firstName,
@@ -2424,7 +2424,7 @@ export async function importPurchasingCustomers(
       zip: zipCol ? row[zipCol] : null,
     });
     if (importProblem) {
-      errors.push(`Row ${rowNumber}: ${importProblem.replace("A customer needs a name and a full address. ", "")}`);
+      errors.push(`Row ${rowNumber}: ${importProblem}`);
       continue;
     }
 

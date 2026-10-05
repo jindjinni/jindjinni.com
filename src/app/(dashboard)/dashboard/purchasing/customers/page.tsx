@@ -17,7 +17,7 @@ export default async function PurchasingCustomersPage() {
     <div>
       <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-50">Customers</h1>
       <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-        Everyone we&rsquo;ve bought from. Every customer needs a name (one name is fine) and a full address; email and phone can be added later. Open a customer to edit them and see all of their quotations.
+        Everyone we&rsquo;ve bought from. Every customer needs a name (one name is fine); address, email and phone can be added later, once they decide to go ahead. Open a customer to edit them and see all of their quotations.
       </p>
 
       <ImportSpreadsheetForm
@@ -71,9 +71,9 @@ export default async function PurchasingCustomersPage() {
                       Incomplete
                     </span>
                   ) : (
-                    missingContactDetails({ email: c.email, phone: c.phone }).length > 0 && (
+                    missingContactDetails({ email: c.email, phone: c.phone, street1: c.addressStreet1, city: c.addressCity, state: c.addressState, zip: c.addressZip }).length > 0 && (
                       <span className="ml-2 rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-800 dark:bg-sky-950 dark:text-sky-200">
-                        Needs {missingContactDetails({ email: c.email, phone: c.phone }).join(" & ")}
+                        Needs {missingContactDetails({ email: c.email, phone: c.phone, street1: c.addressStreet1, city: c.addressCity, state: c.addressState, zip: c.addressZip }).join(" & ")}
                       </span>
                     )
                   )}
