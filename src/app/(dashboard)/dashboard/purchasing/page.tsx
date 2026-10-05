@@ -1,6 +1,16 @@
 import Link from "next/link";
 import { requireOrg } from "@/lib/tenant";
 import { getPurchasingDashboardCounts, getPurchasingQuotations } from "@/lib/queries";
+import { and, eq, like, sql } from "drizzle-orm";
+import { db } from "@/db/client";
+import { purchasingCustomers, users } from "@/db/schema";
+import { isAdmin } from "@/lib/permissions";
+import { isPlatformAdminEmail } from "@/lib/catalog-template";
+import { TEST_PREFIX } from "@/lib/test-orders-data";
+import { TestOrdersPanel } from "./test-orders-panel";
+
+// Loading test orders runs a few orders per request; give each request room.
+export const maxDuration = 60;
 
 export default async function PurchasingDashboardPage() {
   const org = await requireOrg();
@@ -8,6 +18,19 @@ export default async function PurchasingDashboardPage() {
     getPurchasingDashboardCounts(org.organizationId),
     getPurchasingQuotations(org.organizationId),
   ]);
+
+  // Platform-owner-only test tool (hidden for everyone else).
+  let testTool: { existing: number } | null = null;
+  if (isAdmin(org.role)) {
+    const [u] = await db.select({ email: users.email }).from(users).where(eq(users.id, org.userId)).limit(1);
+    if (isPlatformAdminEmail(u?.email)) {
+      const [r] = await db
+        .select({ n: sql<number>`count(*)` })
+        .from(purchasingCustomers)
+        .where(and(eq(purchasingCustomers.organizationId, org.organizationId), like(purchasingCustomers.customerReferenceNumber, `${TEST_PREFIX}-%`)));
+      testTool = { existing: Number(r?.n ?? 0) };
+    }
+  }
 
   const tiles = [
     { label: "Open quotations", value: counts.openQuotations, href: "/dashboard/purchasing/quotations" },
@@ -91,6 +114,8 @@ export default async function PurchasingDashboardPage() {
           </tbody>
         </table>
       </div>
+
+      {testTool && <TestOrdersPanel existing={testTool.existing} />}
     </div>
   );
 }

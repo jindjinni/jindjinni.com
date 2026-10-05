@@ -847,10 +847,18 @@ export async function deleteReceivingPhoto(photoId: string): Promise<ReceivingAc
     if (!p || p.status !== "IN_PROGRESS") return { error: "This shipment was already submitted. Reopen it to change photos." };
   }
   await db.delete(receivingPackagePhotos).where(eq(receivingPackagePhotos.id, photoId));
-  try {
-    await storage.remove(ph.storagePath);
-  } catch {
-    // The record is gone either way; a leftover private file is harmless.
+  // Test orders share one placeholder image; only remove a stored file when no other photo still points at it.
+  const [stillUsed] = await db
+    .select({ id: receivingPackagePhotos.id })
+    .from(receivingPackagePhotos)
+    .where(eq(receivingPackagePhotos.storagePath, ph.storagePath))
+    .limit(1);
+  if (!stillUsed) {
+    try {
+      await storage.remove(ph.storagePath);
+    } catch {
+      // The record is gone either way; a leftover private file is harmless.
+    }
   }
   refresh(ph.packageId);
   return { ok: true, id: ph.packageId };
