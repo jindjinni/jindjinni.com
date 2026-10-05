@@ -7,7 +7,7 @@
 // listed in the report; new customers are added automatically.
 
 import { revalidatePath } from "next/cache";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { purchasingCustomers, purchasingQuotations, purchasingAuditLog } from "@/db/schema";
 import { requireOrg, type CurrentOrg } from "@/lib/tenant";

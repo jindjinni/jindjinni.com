@@ -6,13 +6,12 @@
 import type { ItemView, PackagePhoto } from "@/lib/receiving-queries";
 import {
   ADJUSTMENT_REASON_OPTIONS,
-  CONDITION_OPTIONS,
   DISCREPANCY_OPTIONS,
   RETURN_STATUS_LABELS,
   lotsMismatch,
   type ItemFacts,
 } from "@/lib/receiving-rules";
-import { Choice, PhotoSlot, YN, YN_RISK, YN_NA, field, type ChoiceOption } from "./intake-parts";
+import { Choice, PhotoSlot, YN_RISK, YN_NA, field, type ChoiceOption } from "./intake-parts";
 
 export type LotState = { label: string; lotNumber: string; expirationDate: string; expirationEndDate: string; quantity: string };
 export type ItemState = {
@@ -122,11 +121,6 @@ const RECEIVED: ChoiceOption[] = [
   { value: "YES", label: "Yes", tone: "good" },
   { value: "PARTIALLY", label: "Partially", tone: "warn" },
   { value: "NO", label: "No", tone: "bad" },
-];
-const RETURN_NEEDED: ChoiceOption[] = [
-  { value: "YES", label: "Yes", tone: "bad" },
-  { value: "NO", label: "No", tone: "good" },
-  { value: "PENDING_REVIEW", label: "Pending review", tone: "warn" },
 ];
 const EXP_OK: ChoiceOption[] = [
   { value: "YES", label: "Yes", tone: "good" },

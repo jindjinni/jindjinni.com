@@ -101,7 +101,6 @@ export function ScanTools({
       started.current = true;
       void startScan();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoStart]);
 
   async function onPhoto(file: File | undefined) {

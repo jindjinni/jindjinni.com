@@ -18,7 +18,7 @@ import { RECALL_RESULT_LABELS, isRecalledResult, normalizeNumber, recallsForProd
 import type { ItemState } from "./item-card";
 import { field } from "./intake-parts";
 import { ScanTools } from "./scan-tools";
-import { useRecallRunner, type Outcome } from "./use-recall-runner";
+import { useRecallRunner } from "./use-recall-runner";
 
 const btn =
   "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-600 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800";

@@ -5,7 +5,7 @@
 // Nothing here runs for a company that is still open or still inside its
 // 30 days, and a company the owner reopened has purgeAfter cleared.
 
-import { and, eq, inArray, isNotNull, lte, lt, notInArray } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, lte, lt } from "drizzle-orm";
 import { getTableColumns } from "drizzle-orm";
 import { db } from "@/db/client";
 import { memberships, organizations, signInEvents, users } from "@/db/schema";

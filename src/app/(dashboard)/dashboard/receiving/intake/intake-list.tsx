@@ -7,6 +7,7 @@ import { startReceiving, searchOrdersToReceive } from "@/app/actions/receiving";
 import type { BoardCard, QuotationBrief } from "@/lib/receiving-queries";
 import { STATUS_LABELS } from "@/lib/receiving-rules";
 import { STATUS_PILL, chipClass } from "@/lib/receiving-ui";
+import { ShipmentMenu } from "../shipment-menu";
 
 type Found = QuotationBrief & { packageId: string | null };
 
@@ -17,12 +18,15 @@ export function IntakeList({ cards, canWrite }: { cards: BoardCard[]; canWrite: 
   const [term, setTerm] = useState("");
   const [found, setFound] = useState<Found[] | null>(null);
   const [error, setError] = useState("");
+  const [deleted, setDeleted] = useState<Set<string>>(new Set());
+  const [listError, setListError] = useState("");
   const [pending, startTransition] = useTransition();
 
   const shown = useMemo(() => {
     const t = q.trim().toLowerCase();
-    return t ? cards.filter((c) => c.searchText.includes(t)) : cards;
-  }, [cards, q]);
+    const live = cards.filter((c) => !deleted.has(c.id));
+    return t ? live.filter((c) => c.searchText.includes(t)) : live;
+  }, [cards, q, deleted]);
 
   function search() {
     setError("");
@@ -114,16 +118,17 @@ export function IntakeList({ cards, canWrite }: { cards: BoardCard[]; canWrite: 
       </div>
 
       <ul>
-        {shown.length === 0 && <li className="p-4 text-sm text-slate-500">{cards.length === 0 ? "No shipments yet. Find an order above to start receiving it." : "No shipments match."}</li>}
+        {listError && <li role="alert" className="border-b border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/50 dark:text-red-200">{listError}</li>}
+        {shown.length === 0 && <li className="p-4 text-sm text-slate-500">{cards.length - deleted.size === 0 ? "No shipments yet. Find an order above to start receiving it." : "No shipments match."}</li>}
         {shown.map((c) => {
           const href = `/dashboard/receiving/intake/${c.id}`;
           const active = path === href;
           return (
-            <li key={c.id}>
+            <li key={c.id} className="relative">
               <Link
                 href={href}
                 aria-current={active ? "page" : undefined}
-                className={`flex gap-3 border-b border-slate-100 p-3 hover:bg-amber-50 dark:border-slate-800/70 dark:hover:bg-slate-900 ${active ? "bg-amber-100/70 dark:bg-amber-950/40" : ""}`}
+                className={`flex gap-3 border-b border-slate-100 p-3 pr-12 hover:bg-amber-50 dark:border-slate-800/70 dark:hover:bg-slate-900 ${active ? "bg-amber-100/70 dark:bg-amber-950/40" : ""}`}
               >
                 {c.coverPhotoId ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -142,6 +147,21 @@ export function IntakeList({ cards, canWrite }: { cards: BoardCard[]; canWrite: 
                   </div>
                 </div>
               </Link>
+              {canWrite && (
+                <ShipmentMenu
+                  id={c.id}
+                  label={[c.customerName, c.quotationNumber, c.trackingNumber].filter(Boolean).join(" — ")}
+                  submitted={c.status !== "IN_PROGRESS"}
+                  className="absolute right-2 top-2"
+                  onError={setListError}
+                  onDeleted={(id) => {
+                    setListError("");
+                    setDeleted((d) => new Set(d).add(id));
+                    if (active) router.push("/dashboard/receiving/intake");
+                    router.refresh();
+                  }}
+                />
+              )}
             </li>
           );
         })}

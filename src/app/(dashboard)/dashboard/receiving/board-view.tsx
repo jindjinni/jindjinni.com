@@ -7,6 +7,7 @@ import { moveReceivingCard } from "@/app/actions/receiving";
 import type { BoardCard } from "@/lib/receiving-queries";
 import { BOARD_COLUMNS, BOARD_COLUMN_LABELS, STATUS_LABELS, type BoardColumn } from "@/lib/receiving-rules";
 import { MONEY, STATUS_PILL, chipClass, formatStamp } from "@/lib/receiving-ui";
+import { ShipmentMenu } from "./shipment-menu";
 
 const PILL: Record<BoardColumn, string> = {
   UNCATEGORIZED: "border border-slate-400 text-slate-800 dark:text-slate-100",
@@ -17,10 +18,11 @@ const PILL: Record<BoardColumn, string> = {
   PAID: "bg-green-600 text-white",
 };
 
-export function BoardView({ cards, canMove }: { cards: BoardCard[]; canMove: boolean }) {
+export function BoardView({ cards, canMove, canDelete }: { cards: BoardCard[]; canMove: boolean; canDelete: boolean }) {
   const router = useRouter();
   const [q, setQ] = useState("");
   const [moved, setMoved] = useState<Record<string, BoardColumn>>({});
+  const [deleted, setDeleted] = useState<Set<string>>(new Set());
   const [dragId, setDragId] = useState<string | null>(null);
   const [overCol, setOverCol] = useState<BoardColumn | null>(null);
   const [error, setError] = useState("");
@@ -30,8 +32,10 @@ export function BoardView({ cards, canMove }: { cards: BoardCard[]; canMove: boo
   const colOf = (c: BoardCard): BoardColumn => moved[c.id] ?? c.column;
   const shown = useMemo(() => {
     const t = q.trim().toLowerCase();
-    return t ? cards.filter((c) => c.searchText.includes(t)) : cards;
-  }, [cards, q]);
+    const live = cards.filter((c) => !deleted.has(c.id));
+    return t ? live.filter((c) => c.searchText.includes(t)) : live;
+  }, [cards, q, deleted]);
+  const total = cards.filter((c) => !deleted.has(c.id)).length;
 
   function move(id: string, to: BoardColumn) {
     const card = cards.find((c) => c.id === id);
@@ -63,8 +67,8 @@ export function BoardView({ cards, canMove }: { cards: BoardCard[]; canMove: boo
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">All Shipments</h1>
           <p className="text-sm text-slate-600 dark:text-slate-400">
-            {cards.length} {cards.length === 1 ? "shipment" : "shipments"}
-            {canMove ? " · drag a shipment to another column to change where it stands" : ""}
+            {total} {total === 1 ? "shipment" : "shipments"}
+            {canMove ? " · drag a shipment to another column to change where it stands" : ""}{canDelete ? " · use the ⋯ on a card to delete one pulled over by mistake" : ""}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -129,12 +133,12 @@ export function BoardView({ cards, canMove }: { cards: BoardCard[]; canMove: boo
                       setDragId(null);
                       setOverCol(null);
                     }}
-                    className={`overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition hover:shadow-md dark:border-slate-800 dark:bg-slate-900 ${canMove ? "cursor-grab active:cursor-grabbing" : ""} ${dragId === c.id ? "opacity-40" : ""}`}
+                    className={`relative rounded-xl border border-slate-200 bg-white shadow-sm transition hover:shadow-md dark:border-slate-800 dark:bg-slate-900 ${canMove ? "cursor-grab active:cursor-grabbing" : ""} ${dragId === c.id ? "opacity-40" : ""}`}
                   >
                     <Link
                       href={`/dashboard/receiving/intake/${c.id}`}
                       draggable={false}
-                      className="block focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-600"
+                      className="block overflow-hidden rounded-t-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-600"
                     >
                       {c.coverPhotoId ? (
                         // eslint-disable-next-line @next/next/no-img-element
@@ -190,6 +194,24 @@ export function BoardView({ cards, canMove }: { cards: BoardCard[]; canMove: boo
                         </dl>
                       </div>
                     </Link>
+                    {canDelete && (
+                      <ShipmentMenu
+                        id={c.id}
+                        label={[c.customerName, c.quotationNumber, c.trackingNumber].filter(Boolean).join(" — ")}
+                        submitted={c.status !== "IN_PROGRESS"}
+                        className="absolute right-2 top-2 z-10"
+                        onError={(m) => {
+                          setNotice("");
+                          setError(m);
+                        }}
+                        onDeleted={(id) => {
+                          setError("");
+                          setNotice("Shipment deleted. The order is back in Purchasing and can be received again.");
+                          setDeleted((d) => new Set(d).add(id));
+                          router.refresh();
+                        }}
+                      />
+                    )}
                     {canMove && (
                       <div className="border-t border-slate-100 px-3 py-2 dark:border-slate-800">
                         <label className="sr-only" htmlFor={`move-${c.id}`}>Move {c.customerName} to</label>

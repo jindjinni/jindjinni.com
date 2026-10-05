@@ -14,6 +14,7 @@ import {
   purchasingProducts,
   purchasingQuotations,
   purchasingQuotedItems,
+  receivingAdjustments,
   receivingExpirationLots,
   receivingItems,
   receivingPackagePhotos,
@@ -40,7 +41,6 @@ import {
   DOCUMENT_PHOTO_KINDS,
   ITEM_PHOTO_KINDS,
   MAX_PHOTOS_PER_KIND,
-  computeMissingInfo,
   finalStatusFor,
   quotedNotEntered,
   type PhotoKind,
@@ -141,17 +141,6 @@ function listOf<T extends string>(raw: unknown, allowed: readonly T[]): T[] {
   return Array.from(new Set(raw.filter((v): v is T => typeof v === "string" && (allowed as readonly string[]).includes(v))));
 }
 
-async function photoCountsFor(packageId: string) {
-  const rows = await db
-    .select({ kind: receivingPackagePhotos.kind, n: sql<number>`count(*)` })
-    .from(receivingPackagePhotos)
-    .where(and(eq(receivingPackagePhotos.packageId, packageId), isNull(receivingPackagePhotos.itemId)))
-    .groupBy(receivingPackagePhotos.kind);
-  const out: Partial<Record<PhotoKind, number>> = {};
-  for (const r of rows) out[r.kind] = Number(r.n);
-  return out;
-}
-
 // ---- start ------------------------------------------------------------------
 
 /** Start receiving an order from the Quotation Summary. If it's already started, just returns the existing package. */
@@ -203,6 +192,56 @@ export async function startReceiving(quotationId: string, localNow?: string | nu
   await auditReceiving(org, quotationId, "receiving", `Receiving started (${q.number})`);
   refresh(id);
   return { ok: true, id };
+}
+
+// ---- delete a shipment pulled over by mistake -------------------------------
+
+/**
+ * Removes a shipment from Receiving (for an order pulled over by mistake). The order itself stays in Purchasing and can
+ * be received again; if it had been marked Received, it goes back to Quoted. Photos, product lines, lots, recall checks,
+ * draft adjustment quotations and the inventory-log entry go with it.
+ *
+ * Receiving staff can delete a shipment that is still In Progress. A shipment that was already submitted needs an Admin or
+ * Owner, and one that is Paid or has a final adjustment quotation can't be deleted from here.
+ */
+export async function deleteReceivingShipment(packageId: string): Promise<ReceivingActionState> {
+  const org = await requireWriter();
+  const p = await ownPackage(org.organizationId, packageId);
+  if (!p) return { error: "That shipment was already removed." };
+  if (p.accountsDecision === "PAID" || p.accountsStatus === "PAID") {
+    return { error: "This shipment is marked Paid, so it can't be deleted. Accounts must take it out of Paid first." };
+  }
+  if (p.status !== "IN_PROGRESS" && !isAdmin(org.role)) {
+    return { error: "This shipment was already submitted. Only an Admin or Owner can delete it." };
+  }
+  const [finalAdj] = await db
+    .select({ number: receivingAdjustments.number })
+    .from(receivingAdjustments)
+    .where(and(eq(receivingAdjustments.packageId, packageId), eq(receivingAdjustments.status, "FINAL")))
+    .limit(1);
+  if (finalAdj) return { error: `Adjustment quotation ${finalAdj.number} was already finalized for this shipment, so it can't be deleted.` };
+
+  // Stored files first (so we know what to clean up), then the rows; everything under the shipment cascades.
+  const files = await db.select({ path: receivingPackagePhotos.storagePath }).from(receivingPackagePhotos).where(eq(receivingPackagePhotos.packageId, packageId));
+  await db.delete(receivingPackages).where(and(eq(receivingPackages.id, packageId), eq(receivingPackages.organizationId, org.organizationId)));
+  await db
+    .update(purchasingQuotations)
+    .set({ status: "QUOTED", updatedAt: sql`(current_timestamp)` })
+    .where(and(eq(purchasingQuotations.id, p.quotationId), eq(purchasingQuotations.organizationId, org.organizationId), eq(purchasingQuotations.status, "RECEIVED")));
+  if (storage.configured()) {
+    for (const path of new Set(files.map((f) => f.path))) {
+      const [stillUsed] = await db.select({ id: receivingPackagePhotos.id }).from(receivingPackagePhotos).where(eq(receivingPackagePhotos.storagePath, path)).limit(1);
+      if (stillUsed) continue;
+      try {
+        await storage.remove(path);
+      } catch {
+        // The record is gone either way; a leftover private file is harmless.
+      }
+    }
+  }
+  await auditReceiving(org, p.quotationId, "receiving", `Shipment deleted from Receiving${p.status === "IN_PROGRESS" ? "" : " (it had been submitted)"}; the order is back to ready-to-receive`);
+  refresh();
+  return { ok: true, id: packageId };
 }
 
 // ---- save / submit -----------------------------------------------------------

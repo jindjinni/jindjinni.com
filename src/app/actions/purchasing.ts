@@ -15,7 +15,7 @@
 import { canWritePurchasing, isPurchasingManager } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { requireOrg, type CurrentOrg } from "@/lib/tenant";
 import { db } from "@/db/client";
 import {
