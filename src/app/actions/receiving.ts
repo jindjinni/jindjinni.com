@@ -13,6 +13,7 @@ import {
   memberships,
   purchasingProducts,
   purchasingQuotations,
+  purchasingQuotedItems,
   receivingExpirationLots,
   receivingItems,
   receivingPackagePhotos,
@@ -26,7 +27,7 @@ import {
 } from "@/db/schema";
 import { requireOrg, type CurrentOrg } from "@/lib/tenant";
 import { canViewReceiving, canWriteAccounts, canWriteReceiving, isAdmin } from "@/lib/permissions";
-import { ensureItemsFromQuotation, getReceivingPackage, searchQuotationsForReceiving } from "@/lib/receiving-queries";
+import { getReceivingPackage, searchQuotationsForReceiving } from "@/lib/receiving-queries";
 import { newId } from "@/lib/ids";
 import { sniffReceiptType } from "@/lib/purchasing-receipt-docs";
 import { detectCarrier, normalizeTracking } from "@/lib/purchasing-quotation-import";
@@ -41,13 +42,23 @@ import {
   MAX_PHOTOS_PER_KIND,
   computeMissingInfo,
   finalStatusFor,
+  quotedNotEntered,
   type PhotoKind,
 } from "@/lib/receiving-rules";
 import { storage, STORAGE_NOT_CONNECTED } from "@/lib/receiving-storage";
 import { auditReceiving, deleteIntakeLog, deliverCustomerEmail, refreshIntakeLogPrice, writeIntakeLog } from "@/lib/receiving-service";
 import { finalPayout } from "@/lib/receiving-rules";
 
-export type ReceivingActionState = { error?: string; ok?: boolean; id?: string; missing?: string[]; notice?: string };
+export type ReceivingActionState = {
+  error?: string;
+  ok?: boolean;
+  id?: string;
+  missing?: string[];
+  notice?: string;
+  /** After a row is added / its product is set / a row is removed: how every row now relates to the quotation. */
+  quoted?: Record<string, { quotedItemId: string | null; itemSource: "QUOTED" | "EXTRA"; quotedQuantity: number | null; quotedAmount: number | null }>;
+  item?: { productId: string | null; productName: string; ndc: string };
+};
 
 const MAX_PHOTO_BYTES = 4 * 1024 * 1024;
 const YES_NO = ["YES", "NO"] as const;
@@ -188,8 +199,7 @@ export async function startReceiving(quotationId: string, localNow?: string | nu
     if (again) return { ok: true, id: again.id };
     return { error: "Couldn't start receiving. Try again." };
   }
-  // Auto-populate Step 6 from the quotation's own lines.
-  await ensureItemsFromQuotation(org.organizationId, id, quotationId);
+  // Step 6 starts empty, like the Airtable form: the agent adds what actually arrived.
   await auditReceiving(org, quotationId, "receiving", `Receiving started (${q.number})`);
   refresh(id);
   return { ok: true, id };
@@ -447,7 +457,7 @@ export async function submitReceiving(packageId: string, formData: FormData): Pr
   if (data.missing.length > 0) return { error: "Some required information is still missing.", missing: data.missing };
 
   const { pkg } = data;
-  const status = finalStatusFor({ ...pkg, damageTypes: data.damageTypes }, data.items);
+  const status = finalStatusFor({ ...pkg, damageTypes: data.damageTypes }, data.items, quotedNotEntered(data.quotedLines, data.items).length);
   await db
     .update(receivingPackages)
     .set({
@@ -539,66 +549,104 @@ export async function moveReceivingCard(packageId: string, target: string): Prom
  * Adds a product line. A product that was on the quotation gets another row for the same quoted line
  * (e.g. the same product received in a second lot); anything else is an extra product that wasn't quoted.
  */
+/** How a received row relates to the quotation (the client keeps these in step after the server changes them). */
+export type QuotedLink = { quotedItemId: string | null; itemSource: "QUOTED" | "EXTRA"; quotedQuantity: number | null; quotedAmount: number | null };
+
+/**
+ * Ties every received row to the quotation line for the same product (or leaves it as "not on the order").
+ * When several rows are the same product (two lots), the first carries the quoted quantity and the rest are split lines.
+ * Returns every row's link so the form can follow along.
+ */
+async function regroupQuoted(organizationId: string, packageId: string, quotationId: string): Promise<Record<string, QuotedLink>> {
+  const rows = await db
+    .select()
+    .from(receivingItems)
+    .where(and(eq(receivingItems.packageId, packageId), eq(receivingItems.organizationId, organizationId)))
+    .orderBy(receivingItems.sortOrder, receivingItems.createdAt);
+  const lines = await db
+    .select({ id: purchasingQuotedItems.id, productId: purchasingQuotedItems.productId, name: purchasingQuotedItems.productNameSnapshot, quantity: purchasingQuotedItems.quantity, lineTotal: purchasingQuotedItems.lineTotal })
+    .from(purchasingQuotedItems)
+    .where(eq(purchasingQuotedItems.quotationId, quotationId))
+    .orderBy(purchasingQuotedItems.createdAt);
+  const claimed = new Set<string>();
+  const out: Record<string, QuotedLink> = {};
+  for (const r of rows) {
+    const name = r.productName.trim().toLowerCase();
+    const line = name
+      ? lines.find((l) => (r.productId ? l.productId === r.productId : l.productId == null ? l.name.trim().toLowerCase() === name : false))
+      : undefined;
+    let link: QuotedLink;
+    if (!line) link = { quotedItemId: null, itemSource: "EXTRA", quotedQuantity: null, quotedAmount: null };
+    else if (!claimed.has(line.id)) {
+      claimed.add(line.id);
+      link = { quotedItemId: line.id, itemSource: "QUOTED", quotedQuantity: line.quantity, quotedAmount: line.lineTotal };
+    } else link = { quotedItemId: line.id, itemSource: "QUOTED", quotedQuantity: null, quotedAmount: null };
+    out[r.id] = link;
+    if (r.quotedItemId !== link.quotedItemId || r.itemSource !== link.itemSource || r.quotedQuantity !== link.quotedQuantity || r.quotedAmount !== link.quotedAmount) {
+      await db.update(receivingItems).set({ ...link, updatedAt: sql`(current_timestamp)` }).where(eq(receivingItems.id, r.id));
+    }
+  }
+  return out;
+}
+
+/** The product a row can be set to: from the company's catalog, or just a typed name. */
+async function resolveProduct(organizationId: string, input: { productId?: string | null; name?: string | null }) {
+  if (input.productId) {
+    const [prod] = await db
+      .select({ id: purchasingProducts.id, name: purchasingProducts.name, ndc: purchasingProducts.ndc })
+      .from(purchasingProducts)
+      .where(and(eq(purchasingProducts.id, input.productId), eq(purchasingProducts.organizationId, organizationId)))
+      .limit(1);
+    if (!prod) return { error: "That product wasn't found." as const };
+    return { productId: prod.id, name: prod.name, ndc: prod.ndc || null };
+  }
+  const name = (input.name ?? "").trim().slice(0, 160);
+  if (!name) return { error: "Choose a product or type its name." as const };
+  return { productId: null, name, ndc: null };
+}
+
+/**
+ * Adds a received-items row. With nothing given it is a blank row (the agent then picks the product in the row, like the
+ * Airtable grid). With a product or a name it is that product; with a quoted line it is another row for that quoted product.
+ */
 export async function addReceivingItem(
   packageId: string,
-  input: { productId?: string | null; name?: string | null; quotedItemId?: string | null },
+  input: { productId?: string | null; name?: string | null; quotedItemId?: string | null; blank?: boolean },
 ): Promise<ReceivingActionState> {
   const org = await requireWriter();
   const p = await ownPackage(org.organizationId, packageId);
   if (!p) return { error: "That shipment wasn't found." };
   if (p.status !== "IN_PROGRESS") return { error: "This shipment was already submitted. Reopen it to change the products." };
 
-  const existing = await db
-    .select()
-    .from(receivingItems)
-    .where(and(eq(receivingItems.packageId, packageId), eq(receivingItems.organizationId, org.organizationId)))
-    .orderBy(receivingItems.sortOrder);
-  const quotedRows = existing.filter((r) => r.quotedItemId);
-  const sibling =
-    (input.quotedItemId ? quotedRows.find((r) => r.quotedItemId === input.quotedItemId) : null) ??
-    (input.productId ? quotedRows.find((r) => r.productId === input.productId) : null) ??
-    null;
-  if (input.quotedItemId && !sibling) return { error: "That quoted product wasn't found on this order." };
-
+  const [{ n }] = await db.select({ n: sql<number>`count(*)` }).from(receivingItems).where(eq(receivingItems.packageId, packageId));
   const id = newId("ritem");
-  if (sibling) {
-    // The product's NDC from the catalog fills in when the earlier row doesn't have one.
-    let siblingNdc = sibling.ndc;
-    if (!siblingNdc && sibling.productId) {
-      const [prod] = await db.select({ ndc: purchasingProducts.ndc }).from(purchasingProducts).where(and(eq(purchasingProducts.id, sibling.productId), eq(purchasingProducts.organizationId, org.organizationId))).limit(1);
-      siblingNdc = prod?.ndc || null;
-    }
-    await db.insert(receivingItems).values({
-      id,
-      organizationId: org.organizationId,
-      packageId,
-      quotedItemId: sibling.quotedItemId,
-      productId: sibling.productId,
-      productName: sibling.productName,
-      itemSource: "QUOTED",
-      ndc: siblingNdc,
-      sortOrder: existing.length,
-    });
-    await auditReceiving(org, p.quotationId, "receiving", `Another line added for ${sibling.productName}`);
-    refresh(packageId);
-    return { ok: true, id };
-  }
-
   let productId: string | null = null;
-  let name = (input.name ?? "").trim().slice(0, 160);
+  let name = "";
   let ndc: string | null = null;
-  if (input.productId) {
-    const [prod] = await db
-      .select({ id: purchasingProducts.id, name: purchasingProducts.name, ndc: purchasingProducts.ndc })
-      .from(purchasingProducts)
-      .where(and(eq(purchasingProducts.id, input.productId), eq(purchasingProducts.organizationId, org.organizationId)))
+  let label = "Blank line";
+
+  if (input.quotedItemId) {
+    const [line] = await db
+      .select({ productId: purchasingQuotedItems.productId, name: purchasingQuotedItems.productNameSnapshot })
+      .from(purchasingQuotedItems)
+      .where(and(eq(purchasingQuotedItems.id, input.quotedItemId), eq(purchasingQuotedItems.quotationId, p.quotationId)))
       .limit(1);
-    if (!prod) return { error: "That product wasn't found." };
-    productId = prod.id;
-    name = prod.name;
-    ndc = prod.ndc || null;
+    if (!line) return { error: "That quoted product wasn't found on this order." };
+    productId = line.productId;
+    name = line.name;
+    if (productId) {
+      const [prod] = await db.select({ ndc: purchasingProducts.ndc }).from(purchasingProducts).where(and(eq(purchasingProducts.id, productId), eq(purchasingProducts.organizationId, org.organizationId))).limit(1);
+      ndc = prod?.ndc || null;
+    }
+    label = `Another line added for ${name}`;
+  } else if (!input.blank) {
+    const r = await resolveProduct(org.organizationId, input);
+    if ("error" in r) return { error: r.error };
+    productId = r.productId;
+    name = r.name;
+    ndc = r.ndc;
+    label = `Product added: ${name}`;
   }
-  if (!name) return { error: "Choose a product or type its name." };
 
   await db.insert(receivingItems).values({
     id,
@@ -608,11 +656,41 @@ export async function addReceivingItem(
     productName: name,
     itemSource: "EXTRA",
     ndc,
-    sortOrder: existing.length,
+    sortOrder: Number(n),
   });
-  await auditReceiving(org, p.quotationId, "receiving", `Extra product added: ${name}`);
+  const quoted = await regroupQuoted(org.organizationId, packageId, p.quotationId);
+  await auditReceiving(org, p.quotationId, "receiving", label);
   refresh(packageId);
-  return { ok: true, id };
+  return { ok: true, id, quoted, item: { productId, productName: name, ndc: ndc ?? "" } };
+}
+
+/** Sets (or changes) the product on a received-items row; the product's NDC fills in on the row. */
+export async function setReceivingItemProduct(
+  packageId: string,
+  itemId: string,
+  input: { productId?: string | null; name?: string | null },
+): Promise<ReceivingActionState> {
+  const org = await requireWriter();
+  const p = await ownPackage(org.organizationId, packageId);
+  if (!p) return { error: "That shipment wasn't found." };
+  if (p.status !== "IN_PROGRESS") return { error: "This shipment was already submitted. Reopen it to change the products." };
+  const [it] = await db
+    .select({ id: receivingItems.id })
+    .from(receivingItems)
+    .where(and(eq(receivingItems.id, itemId), eq(receivingItems.packageId, packageId), eq(receivingItems.organizationId, org.organizationId)))
+    .limit(1);
+  if (!it) return { error: "That product line wasn't found." };
+  const r = await resolveProduct(org.organizationId, input);
+  if ("error" in r) return { error: r.error };
+
+  await db
+    .update(receivingItems)
+    .set({ productId: r.productId, productName: r.name, ndc: r.ndc, updatedAt: sql`(current_timestamp)` })
+    .where(eq(receivingItems.id, itemId));
+  const quoted = await regroupQuoted(org.organizationId, packageId, p.quotationId);
+  await auditReceiving(org, p.quotationId, "receiving", `Product chosen: ${r.name}`);
+  refresh(packageId);
+  return { ok: true, id: itemId, quoted, item: { productId: r.productId, productName: r.name, ndc: r.ndc ?? "" } };
 }
 
 export async function deleteReceivingItem(packageId: string, itemId: string): Promise<ReceivingActionState> {
@@ -642,9 +720,10 @@ export async function deleteReceivingItem(packageId: string, itemId: string): Pr
     }
   }
   await db.delete(receivingItems).where(eq(receivingItems.id, itemId));
-  await auditReceiving(org, p.quotationId, "receiving", `Product line removed: ${it.name}`);
+  const quoted = await regroupQuoted(org.organizationId, packageId, p.quotationId);
+  await auditReceiving(org, p.quotationId, "receiving", `Product line removed: ${it.name || "blank line"}`);
   refresh(packageId);
-  return { ok: true, id: packageId };
+  return { ok: true, id: packageId, quoted };
 }
 
 /** Catalog lookup for "add a product that wasn't on the order". */

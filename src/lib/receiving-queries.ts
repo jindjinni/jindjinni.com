@@ -33,6 +33,7 @@ import {
   parseDamageTypes,
   parseStringList,
   summarizeItems,
+  quotedNotEntered,
   type PhotoKind,
 } from "@/lib/receiving-rules";
 
@@ -442,7 +443,7 @@ export async function getReceivingPackage(organizationId: string, packageId: str
     team,
     quotedLines,
     items,
-    summary: summarizeItems(itemRows),
+    summary: summarizeItems(itemRows, quotedNotEntered(quotedLines, itemRows).length),
     photos: photoRows as PackagePhoto[],
     receipt,
     duplicates: dupes,

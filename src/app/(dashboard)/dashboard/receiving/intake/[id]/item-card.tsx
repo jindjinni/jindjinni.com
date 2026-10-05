@@ -18,6 +18,7 @@ export type LotState = { label: string; lotNumber: string; expirationDate: strin
 export type ItemState = {
   id: string;
   quotedItemId: string | null;
+  productId: string | null;
   productName: string;
   itemSource: "QUOTED" | "EXTRA";
   quotedQuantity: number | null;
@@ -55,6 +56,7 @@ export function toItemState(i: ItemView): ItemState {
   return {
     id: i.id,
     quotedItemId: i.quotedItemId,
+    productId: i.productId,
     productName: i.productName,
     itemSource: i.itemSource,
     quotedQuantity: i.quotedQuantity,

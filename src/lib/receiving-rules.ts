@@ -157,13 +157,22 @@ export function lotsMismatch(quantityReceived: number | null | undefined, lotQua
   return total !== quantityReceived;
 }
 
-export function summarizeItems(items: ItemFacts[]) {
+/**
+ * Quotation lines that no received row is tied to yet (the agent hasn't entered anything for them).
+ * Each one is a shortage: the product was quoted and has not been entered as received.
+ */
+export function quotedNotEntered<L extends { id: string; name: string }>(quotedLines: L[], items: ItemFacts[]): L[] {
+  const entered = new Set(items.map((i) => i.quotedItemId).filter((x): x is string => !!x));
+  return quotedLines.filter((l) => !entered.has(l.id));
+}
+
+export function summarizeItems(items: ItemFacts[], notEntered = 0) {
   const returned = items.reduce((a, i) => a + (i.quantityToReturn ?? 0), 0);
   const statuses = Array.from(new Set(items.map((i) => i.returnStatus).filter((s): s is string => !!s && s !== "NOT_APPLICABLE")));
   return {
     lines: items.length,
     quantityReceived: items.reduce((a, i) => a + (i.quantityReceived ?? 0), 0),
-    anyDiscrepancy: discrepancyFlags(items).some(Boolean),
+    anyDiscrepancy: notEntered > 0 || discrepancyFlags(items).some(Boolean),
     quantityToReturn: returned,
     returnStatuses: statuses,
   };
@@ -197,8 +206,12 @@ export function computeMissingInfo(
   if (!s.quantityMatches) out.push("Does Quantity Match What Was Quoted?");
   if (items.length === 0) out.push("At least one product line in Verify What Arrived");
   for (const i of items) {
-    const name = i.productName?.trim() || "A product line";
-    if (!i.wasReceived) out.push(`${name}: Was Product Received?`);
+    if (!i.productName?.trim()) {
+      out.push("A received line has no product chosen (pick one or remove the line)");
+      continue;
+    }
+    const name = i.productName.trim();
+    if (!i.wasReceived) out.push(`${name}: Quantity Received`);
     else if (i.wasReceived !== "NO" && (i.quantityReceived == null || i.quantityReceived < 0)) out.push(`${name}: Quantity Received`);
   }
   if (!s.adjustmentNeeded) out.push("Adjustment Needed?");
@@ -208,8 +221,9 @@ export function computeMissingInfo(
 }
 
 /** Clean vs. discrepancy: anything that differs from what was quoted or arrived badly makes it a discrepancy. */
-export function finalStatusFor(s: ShipmentFacts, items: ItemFacts[] = []): "RECEIVING_COMPLETE" | "RECEIVING_COMPLETE_WITH_DISCREPANCY" {
+export function finalStatusFor(s: ShipmentFacts, items: ItemFacts[] = [], notEntered = 0): "RECEIVING_COMPLETE" | "RECEIVING_COMPLETE_WITH_DISCREPANCY" {
   const discrepancy =
+    notEntered > 0 ||
     s.externalDamage === "YES" ||
     s.overallPackaging === "NOT_ACCEPTABLE" ||
     s.quantityMatches === "NO" ||

@@ -25,6 +25,7 @@ import {
   formatMoney,
   pickEmailTemplate,
   summarizeItems,
+  quotedNotEntered,
   RETURN_STATUS_LABELS,
   type EmailTemplateKey,
   type PhotoKind,
@@ -33,7 +34,7 @@ import { MONEY, STATUS_PILL, chipClass, formatUtcStamp } from "@/lib/receiving-u
 import { LocalTime } from "@/components/local-time";
 import { Choice, PhotoSlot, Row, Step, YN, YN_RISK, field } from "./intake-parts";
 import { ItemAdjustmentCard, itemFactsOf, toItemState, type ItemState } from "./item-card";
-import { QuotedPanel, ReceivedTable } from "./receiving-table";
+import { ReceiptPreview, ReceivedItemsGrid } from "./receiving-table";
 import { StartAdjustmentButton } from "../../adjustments/start-button";
 
 export type FormValues = {
@@ -150,11 +151,14 @@ export function IntakeForm(props: Props) {
   const flags = discrepancyFlags(itemFacts);
   const facts = { ...v };
   const missing = computeMissingInfo(facts, counts, itemFacts);
-  const finalStatus = finalStatusFor(facts, itemFacts);
-  const summary = summarizeItems(itemFacts);
+  // Quoted products nothing has been entered for yet count as shortages. Blank rows (no product chosen) are not lines yet.
+  const namedFacts = itemFacts.filter((f) => f.productName?.trim());
+  const notEntered = quotedNotEntered(props.quotedLines, namedFacts);
+  const finalStatus = finalStatusFor(facts, namedFacts, notEntered.length);
+  const summary = summarizeItems(namedFacts, notEntered.length);
   // Received lines (something actually arrived) with no lot number typed on the line or on any of its expiration lots.
   const missingLots = items
-    .filter((i) => i.wasReceived !== "NO" && (parseInt(i.quantityReceived, 10) || 0) > 0 && !i.lotNumber.trim() && !i.lots.some((l) => l.lotNumber.trim()))
+    .filter((i) => i.productName.trim() && i.wasReceived !== "NO" && (parseInt(i.quantityReceived, 10) || 0) > 0 && !i.lotNumber.trim() && !i.lots.some((l) => l.lotNumber.trim()))
     .map((i) => i.productName);
 
   const total = brief.grandTotal;
@@ -213,13 +217,26 @@ export function IntakeForm(props: Props) {
     });
   }
 
-  function removeItem(id: string) {
-    if (!window.confirm("Remove this product line and its photos?")) return;
+  function removeItems(ids: string[]) {
+    const one = ids.length === 1;
+    if (!window.confirm(one ? "Remove this record and its photos?" : `Remove these ${ids.length} records and their photos?`)) return;
     setError("");
     startTransition(async () => {
-      const res = await deleteReceivingItem(packageId, id);
-      if (res.error) setError(res.error);
-      else router.refresh();
+      let quoted: Awaited<ReturnType<typeof deleteReceivingItem>>["quoted"];
+      for (const id of ids) {
+        const res = await deleteReceivingItem(packageId, id);
+        if (res.error) {
+          setError(res.error);
+          break;
+        }
+        quoted = res.quoted;
+      }
+      if (quoted) {
+        const updates: Record<string, Partial<ItemState>> = {};
+        for (const [id, link] of Object.entries(quoted)) updates[id] = { ...link };
+        patchMany(updates);
+      }
+      router.refresh();
     });
   }
 
@@ -444,9 +461,10 @@ export function IntakeForm(props: Props) {
         </Step>
 
         {/* STEP 6 */}
-        <Step n={6} id="step-6" title="Verify what arrived" note="Compare what arrived with the quotation below, then fill in the received items like a quotation: product, quantity, condition, lot number, and whether it is accepted or returned.">
-          <QuotedPanel packageId={packageId} receipt={receipt} quotedLines={props.quotedLines} itemsText={brief.itemsText} orderTotal={total} items={items} />
-          <ReceivedTable
+        <Step n={6} id="step-6" title="Verify what arrived" note="Add a record for each product that arrived. Choose the product from the list (its NDC fills in), then enter the quantity, condition, lot number and expiration date.">
+          <Row label="Items Quoted For This Order"><span className="whitespace-pre-line">{brief.itemsText}</span></Row>
+          <Row label="Quotation / Invoice Photo (from Order)"><ReceiptPreview packageId={packageId} receipt={receipt} /></Row>
+          <ReceivedItemsGrid
             packageId={packageId}
             items={items}
             flags={flags}
@@ -457,27 +475,33 @@ export function IntakeForm(props: Props) {
             storageOk={storageOk}
             onError={setError}
             onPatchMany={patchMany}
-            onRemove={removeItem}
+            onRemoveMany={removeItems}
           />
 
-          <div className="mt-5 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Verification Summary</h3>
-            <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-5">
-              <div><dt className="text-xs text-slate-500">Total product lines</dt><dd className="text-lg font-semibold tabular-nums">{summary.lines}</dd></div>
-              <div><dt className="text-xs text-slate-500">Total quantity received</dt><dd className="text-lg font-semibold tabular-nums">{summary.quantityReceived}</dd></div>
-              <div>
-                <dt className="text-xs text-slate-500">Discrepancy status</dt>
-                <dd className={`text-lg font-semibold ${summary.anyDiscrepancy ? "text-orange-700 dark:text-orange-300" : "text-green-700 dark:text-green-400"}`}>{summary.anyDiscrepancy ? "Discrepancy" : "None"}</dd>
-              </div>
-              <div><dt className="text-xs text-slate-500">Total quantity to be returned</dt><dd className="text-lg font-semibold tabular-nums">{summary.quantityToReturn}</dd></div>
-              <div>
-                <dt className="text-xs text-slate-500">Return status summary</dt>
-                <dd className="text-sm font-medium">{summary.returnStatuses.length ? summary.returnStatuses.map((x) => RETURN_STATUS_LABELS[x as keyof typeof RETURN_STATUS_LABELS] ?? x).join(", ") : "—"}</dd>
-              </div>
+          <div className="mt-8">
+            <h3 className="text-lg font-bold text-slate-900 dark:text-slate-50">Verification Summary</h3>
+            <dl className="mt-3 text-sm">
+              {[
+                ["Total Product Lines", String(summary.lines)],
+                ["Total Quantity", String(summary.quantityReceived)],
+                ["Discrepancy Status", summary.anyDiscrepancy ? "Discrepancy" : "None"],
+                ["Total Quantity To Be Returned", String(summary.quantityToReturn)],
+                ["Return Status Summary", summary.returnStatuses.length ? summary.returnStatuses.map((x) => RETURN_STATUS_LABELS[x as keyof typeof RETURN_STATUS_LABELS] ?? x).join(", ") : "—"],
+              ].map(([label, value]) => (
+                <div key={label} className="grid grid-cols-[minmax(0,15rem)_1fr] gap-4 border-b border-slate-100 py-2.5 dark:border-slate-800/70">
+                  <dt className="text-slate-700 dark:text-slate-200">{label}</dt>
+                  <dd className={`font-medium tabular-nums ${label === "Discrepancy Status" ? (summary.anyDiscrepancy ? "text-orange-700 dark:text-orange-300" : "text-green-700 dark:text-green-400") : ""}`}>{value}</dd>
+                </div>
+              ))}
             </dl>
+            {notEntered.length > 0 && (
+              <p role="status" className="mt-3 rounded-lg bg-orange-50 px-3 py-2 text-sm text-orange-900 dark:bg-orange-950/40 dark:text-orange-100">
+                Quoted but not entered as received: {notEntered.map((l) => l.name).join(", ")}. If it didn&apos;t arrive, that is a shortage and the order is marked with a discrepancy.
+              </p>
+            )}
             {missingLots.length > 0 && (
               <p role="status" className="mt-3 rounded-lg bg-orange-50 px-3 py-2 text-sm text-orange-900 dark:bg-orange-950/40 dark:text-orange-100">
-                Lot number missing on {missingLots.length === 1 ? "1 line" : `${missingLots.length} lines`}: {missingLots.join(", ")}. Supplies normally come with a lot number. Type it in the Lot column.
+                Lot number missing on {missingLots.length === 1 ? "1 line" : `${missingLots.length} lines`}: {missingLots.join(", ")}. Supplies normally come with a lot number. Type it in the Lot Number column.
               </p>
             )}
           </div>
@@ -491,9 +515,9 @@ export function IntakeForm(props: Props) {
               <Row label="Adjustment Details">{textInput("adjustmentDetails", 3)}</Row>
               {items.length > 0 && (
                 <div className="mt-3 space-y-3">
-                  {items.map((it, idx) => (
+                  {items.map((it, idx) => it.productName.trim() ? (
                     <ItemAdjustmentCard key={it.id} item={it} flagged={flags[idx]} editable={editable} onChange={(patch) => patchMany({ [it.id]: patch })} />
-                  ))}
+                  ) : null)}
                 </div>
               )}
             </>
