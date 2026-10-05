@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { requireOrg } from "@/lib/tenant";
-import { canWriteAccounts, canWriteReceiving, isAdmin } from "@/lib/permissions";
+import { canWriteAccounts, canWritePayment, canWriteReceiving, isAdmin } from "@/lib/permissions";
 import { getReceivingCatalog, getReceivingPackage } from "@/lib/receiving-queries";
 import { getAdjustmentForPackage } from "@/lib/receiving-adjustment-service";
 import { storage } from "@/lib/receiving-storage";
@@ -56,6 +56,7 @@ export default async function IntakeDetailPage({ params }: { params: Promise<{ i
       status={pkg.status}
       canWrite={canWriteReceiving(org.role)}
       canAccounts={canWriteAccounts(org.role)}
+      canPayment={canWritePayment(org.role)}
       isAdminUser={isAdmin(org.role)}
       storageOk={storage.configured()}
       brief={data.brief}

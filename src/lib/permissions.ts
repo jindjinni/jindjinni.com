@@ -84,6 +84,14 @@ export function canWriteAccounts(role: string): boolean {
   return canWriteReceiving(role) || role === "accountant";
 }
 
+/**
+ * May change the payment part of a shipment -- Step 10 "Accounts" (Accounts Status, Paid date, payment confirmation
+ * photo) and moving an order into or out of Paid. Receiving staff can't: only the accountant, Admin and Owner.
+ */
+export function canWritePayment(role: string): boolean {
+  return role === "accountant" || isAdmin(role);
+}
+
 /** Which departments a role can open, for the menu and the home redirect. */
 export function departmentsFor(role: string): string[] {
   const out: string[] = [];

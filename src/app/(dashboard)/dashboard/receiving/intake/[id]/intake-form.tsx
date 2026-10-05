@@ -71,6 +71,8 @@ type Props = {
   status: keyof typeof STATUS_LABELS;
   canWrite: boolean;
   canAccounts: boolean;
+  /** Accounts team only (accountant, Admin, Owner): may change Step 10. */
+  canPayment: boolean;
   isAdminUser: boolean;
   storageOk: boolean;
   brief: QuotationBrief;
@@ -112,12 +114,13 @@ const STEPS = [
   "Adjustments",
   "Customer Note",
   "Completion",
+  "Accounts",
 ];
 
 const fieldKeysForAccounts = ["adjustedOrderTotal", "adjustmentAmountEmail", "customerEmailNote", "accountsDecision", "accountsStatus"] as const;
 
 export function IntakeForm(props: Props) {
-  const { packageId, status, canWrite, canAccounts, storageOk, brief, receipt, photos, saved } = props;
+  const { packageId, status, canWrite, canAccounts, canPayment, storageOk, brief, receipt, photos, saved } = props;
   const router = useRouter();
   const [v, setV] = useState<FormValues>(props.initial);
   const [edits, setEdits] = useState<Record<string, ItemState>>({});
@@ -276,8 +279,8 @@ export function IntakeForm(props: Props) {
     });
   }
 
-  const slot = (kind: PhotoKind, opts?: { accounts?: boolean }) => (
-    <PhotoSlot packageId={packageId} kind={kind} photos={photos} editable={opts?.accounts ? canAccounts : editable} storageOk={storageOk} onError={setError} />
+  const slot = (kind: PhotoKind, opts?: { accounts?: boolean; payment?: boolean }) => (
+    <PhotoSlot packageId={packageId} kind={kind} photos={photos} editable={opts?.payment ? canPayment : opts?.accounts ? canAccounts : editable} storageOk={storageOk} onError={setError} />
   );
   const textInput = (id: keyof FormValues, rows?: number) =>
     rows ? (
@@ -640,6 +643,15 @@ export function IntakeForm(props: Props) {
               {Object.entries(ACCOUNTS_DECISION_LABELS).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
             </select>
           </Row>
+        </fieldset>
+      </Step>
+
+      {/* STEP 10 */}
+      <Step n={10} id="step-10" title="Accounts">
+        <p role="note" className="mt-2 rounded-lg border border-sky-300 bg-sky-50 px-3 py-2 text-sm font-medium text-sky-950 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-100">
+          For Accounts purposes only. The Accounts team works in this step. Receiving: please don&apos;t change anything here.
+        </p>
+        <fieldset disabled={!canPayment} className="min-w-0 border-0 p-0">
           <Row label="Accounts Status">
             <select id="accountsStatus" className={`${field} sm:w-72`} value={v.accountsStatus} onChange={(e) => set("accountsStatus", e.target.value)}>
               <option value="">Choose…</option>
@@ -650,7 +662,7 @@ export function IntakeForm(props: Props) {
             <span suppressHydrationWarning>{formatUtcStamp(saved.paidAt)}</span>
             <span className="ml-2 text-xs text-slate-500">Filled in automatically when the status is saved as Paid.</span>
           </Row>
-          <Row label="Payment Confirmation Photo">{slot("PAYMENT_CONFIRMATION", { accounts: true })}</Row>
+          <Row label="Payment Confirmation Photo">{slot("PAYMENT_CONFIRMATION", { accounts: true, payment: true })}</Row>
         </fieldset>
         <Row label="Submitted By">{locked ? submittedBy ?? "—" : "—"}</Row>
         <Row label="Submission Date/Time">{locked ? <span suppressHydrationWarning>{formatUtcStamp(saved.submittedAt)}</span> : "—"}</Row>

@@ -26,7 +26,7 @@ import {
   RECEIVING_PHOTO_KINDS,
 } from "@/db/schema";
 import { requireOrg, type CurrentOrg } from "@/lib/tenant";
-import { canViewReceiving, canWriteAccounts, canWriteReceiving, isAdmin } from "@/lib/permissions";
+import { canViewReceiving, canWriteAccounts, canWritePayment, canWriteReceiving, isAdmin } from "@/lib/permissions";
 import { getReceivingPackage, searchQuotationsForReceiving } from "@/lib/receiving-queries";
 import { newId } from "@/lib/ids";
 import { sniffReceiptType } from "@/lib/purchasing-receipt-docs";
@@ -340,6 +340,10 @@ async function applyAccountsFields(org: CurrentOrg, p: typeof receivingPackages.
     let status = formData.has("accountsStatus") ? pick(formData.get("accountsStatus"), ["IN_REVIEW", "PAID"] as const) : p.accountsStatus;
     const decChanged = decision !== p.accountsDecision;
     const stChanged = status !== p.accountsStatus;
+    // Step 10 is for Accounts only: Receiving staff can't change the payment status or move an order into / out of Paid.
+    if (!canWritePayment(org.role) && (stChanged || (decChanged && (decision === "PAID" || p.accountsDecision === "PAID")))) {
+      return { error: "Only Accounts can change the payment status or mark an order Paid." };
+    }
     if (stChanged && status === "PAID") decision = "PAID";
     else if (decChanged && decision === "PAID") status = "PAID";
     else if (stChanged && p.accountsStatus === "PAID" && decision === "PAID") decision = "NEED_TO_BE_REVIEWED";
@@ -759,7 +763,7 @@ export async function uploadReceivingPhoto(packageId: string, kind: string, form
   if (!(RECEIVING_PHOTO_KINDS as readonly string[]).includes(kind)) return { error: "Unknown photo type." };
   const k = kind as PhotoKind;
   const accountsKind = ACCOUNTS_PHOTO_KINDS.includes(k);
-  if (accountsKind ? !canWriteAccounts(org.role) : !canWriteReceiving(org.role)) {
+  if (k === "PAYMENT_CONFIRMATION" ? !canWritePayment(org.role) : accountsKind ? !canWriteAccounts(org.role) : !canWriteReceiving(org.role)) {
     return { error: "Your role can view Receiving but can't make changes." };
   }
   const p = await ownPackage(org.organizationId, packageId);
@@ -835,7 +839,7 @@ export async function deleteReceivingPhoto(photoId: string): Promise<ReceivingAc
     .limit(1);
   if (!ph) return { error: "That photo wasn't found." };
   const accountsKind = ACCOUNTS_PHOTO_KINDS.includes(ph.kind);
-  if (accountsKind ? !canWriteAccounts(org.role) : !canWriteReceiving(org.role)) {
+  if (ph.kind === "PAYMENT_CONFIRMATION" ? !canWritePayment(org.role) : accountsKind ? !canWriteAccounts(org.role) : !canWriteReceiving(org.role)) {
     return { error: "Your role can view Receiving but can't make changes." };
   }
   if (!accountsKind) {
