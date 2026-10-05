@@ -420,7 +420,7 @@ export async function saveReceiving(packageId: string, formData: FormData): Prom
   const org = await requireWriter();
   const p = await ownPackage(org.organizationId, packageId);
   if (!p) return { error: "That shipment wasn't found." };
-  if (await isShipmentLocked(p)) return { error: "This shipment was already submitted. Reopen it to change the receiving steps." };
+  if (p.status !== "IN_PROGRESS") await auditReceiving(org, p.quotationId, "receiving", "Receiving details edited after the shipment was submitted");
 
   // Items first, so a bad quantity stops the whole save.
   const itemsRaw = formData.get("itemsJson");

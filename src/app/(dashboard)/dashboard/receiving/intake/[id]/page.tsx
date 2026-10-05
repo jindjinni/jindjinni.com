@@ -6,7 +6,6 @@ import { getAdjustmentForPackage } from "@/lib/receiving-adjustment-service";
 import { storage } from "@/lib/receiving-storage";
 import { listChecks, listRecalls } from "@/lib/receiving-recall-service";
 import { listSerials } from "@/lib/receiving-serial-service";
-import { isTestQuotation } from "@/lib/receiving-test-lock";
 import { photoReadingOn } from "@/lib/receiving-recall-photo";
 import { IntakeForm, type FormValues } from "./intake-form";
 
@@ -18,7 +17,6 @@ export default async function IntakeDetailPage({ params }: { params: Promise<{ i
   const data = await getReceivingPackage(org.organizationId, id);
   if (!data) notFound();
   const { pkg } = data;
-  const testShipment = await isTestQuotation(org.organizationId, pkg.quotationId);
   const catalog = await getReceivingCatalog(org.organizationId);
   const adjustmentView = await getAdjustmentForPackage(org.organizationId, id);
   const [recalls, recallChecks, serials] = await Promise.all([listRecalls(org.organizationId), listChecks(org.organizationId, id), listSerials(org.organizationId, id)]);
@@ -76,7 +74,6 @@ export default async function IntakeDetailPage({ params }: { params: Promise<{ i
       recalls={recalls}
       recallChecks={recallChecks}
       serials={serials}
-      testShipment={testShipment}
       photoReading={photoReadingOn()}
       started={data.started}
       catalog={catalog}

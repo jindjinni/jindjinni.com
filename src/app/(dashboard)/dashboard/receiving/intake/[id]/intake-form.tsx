@@ -89,8 +89,6 @@ type Props = {
   recalls: RecallView[];
   recallChecks: RecallCheckView[];
   serials: SerialView[];
-  /** A built-in TEST order: stays editable after it has been submitted. */
-  testShipment: boolean;
   photoReading: boolean;
   photos: PackagePhoto[];
   items: ItemView[];
@@ -136,7 +134,7 @@ export function IntakeForm(props: Props) {
   const [missingAfterSubmit, setMissingAfterSubmit] = useState<string[] | null>(null);
 
   const locked = status !== "IN_PROGRESS";
-  const editable = canWrite && (!locked || props.testShipment);
+  const editable = canWrite;
   const set = <K extends keyof FormValues>(k: K, val: FormValues[K]) => setV((p) => ({ ...p, [k]: val }));
 
   // Product lines: the server's list, with whatever the agent has typed over the top.
@@ -307,7 +305,6 @@ export function IntakeForm(props: Props) {
             {v.trackingNumber ? ` — ${v.trackingNumber}` : ""}
           </h1>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-            {props.testShipment && <span className="rounded-full bg-violet-100 px-2.5 py-1 font-medium text-violet-900 dark:bg-violet-900/40 dark:text-violet-100">Test order — always editable</span>}
             <span className={`rounded-full px-2.5 py-1 font-medium ${chipClass(brief.customerName)}`}>{brief.customerName}</span>
             <span className={`rounded-full px-2.5 py-1 font-medium ${STATUS_PILL[status]}`}>{STATUS_LABELS[status]}</span>
             {v.accountsStatus && (
