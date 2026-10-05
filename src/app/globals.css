@@ -118,3 +118,44 @@ body {
 .auth-theme ul.absolute button:hover {
   background: var(--color-mint);
 }
+
+/* ------------------------------------------------------------------
+   Company theme: the page ground is a whisper of the theme color.
+   The "emerald" shades are re-pointed per company (see lib/theme.ts).
+   ------------------------------------------------------------------ */
+.themed-page {
+  background: color-mix(in oklab, var(--color-emerald-50) 45%, #f8fafc);
+}
+@media (prefers-color-scheme: dark) {
+  .themed-page {
+    background: #020617;
+  }
+}
+
+/* Purchasing tables: one soft, consistent look for every tab (header band, quiet row hover). */
+.pz table thead {
+  background: color-mix(in oklab, var(--color-emerald-50) 80%, #fff);
+  color: var(--color-emerald-900);
+}
+.pz table thead th {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.pz table tbody tr {
+  transition: background-color 0.12s;
+}
+.pz table tbody tr:hover {
+  background: color-mix(in oklab, var(--color-emerald-50) 55%, transparent);
+}
+@media (prefers-color-scheme: dark) {
+  .pz table thead {
+    background: color-mix(in oklab, var(--color-emerald-950) 70%, #0f172a);
+    color: var(--color-emerald-100);
+  }
+  .pz table tbody tr:hover {
+    background: color-mix(in oklab, var(--color-emerald-950) 45%, transparent);
+  }
+}

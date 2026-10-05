@@ -22,7 +22,7 @@ export function NewQuotationForm({
   const [state, formAction, pending] = useActionState<ActionState, FormData>(createPurchasingQuotation, undefined);
 
   return (
-    <form action={formAction} className="mt-6 rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
+    <form action={formAction} className="mt-6 rounded-2xl border border-slate-200 bg-white shadow-sm p-6 dark:border-slate-800 dark:bg-slate-900">
       <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Customer</h2>
       {customers.length > 0 && (
         <div className="mt-2 flex gap-4 text-sm">

@@ -5,6 +5,8 @@ import { missingContactDetails, missingCustomerFields } from "@/lib/purchasing-c
 import { AddCustomerForm } from "./add-customer-form";
 import { ImportSpreadsheetForm } from "../import-spreadsheet-form";
 import { importPurchasingCustomers } from "@/app/actions/purchasing";
+import { chipClass } from "@/lib/receiving-ui";
+import { PILL_BASE } from "@/lib/purchasing-ui";
 
 export default async function PurchasingCustomersPage() {
   const org = await requireOrg();
@@ -31,7 +33,7 @@ export default async function PurchasingCustomersPage() {
 
       <AddCustomerForm />
 
-      <div className="mt-6 overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+      <div className="mt-6 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-slate-200 text-slate-500 dark:border-slate-800 dark:text-slate-400">
             <tr>
@@ -55,7 +57,7 @@ export default async function PurchasingCustomersPage() {
                 <td className="px-4 py-3">
                   <Link
                     href={`/dashboard/purchasing/customers/${c.id}`}
-                    className="font-medium text-emerald-700 hover:underline dark:text-emerald-400"
+                    className={`${PILL_BASE} ${chipClass(purchasingCustomerName(c))} hover:underline`}
                   >
                     {purchasingCustomerName(c)}
                   </Link>
@@ -78,15 +80,19 @@ export default async function PurchasingCustomersPage() {
                     )
                   )}
                 </td>
-                <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{c.email ?? "—"}</td>
+                <td className="px-4 py-3 text-slate-700 dark:text-slate-300">
+                  {c.email ? <span className={`${PILL_BASE} ${chipClass(purchasingCustomerName(c))}`}>{c.email}</span> : <span className="text-slate-300 dark:text-slate-600">—</span>}
+                </td>
                 <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{c.phone ?? "—"}</td>
                 <td className="px-4 py-3 text-slate-700 dark:text-slate-300">
                   {[c.addressStreet1, c.addressCity, [c.addressState, c.addressZip].filter(Boolean).join(" ")]
                     .filter(Boolean)
                     .join(", ") || "—"}
                 </td>
-                <td className="px-4 py-3 text-right tabular-nums text-slate-700 dark:text-slate-300">
-                  {quoteCounts.get(c.id) ?? 0}
+                <td className="px-4 py-3 text-right tabular-nums">
+                  <span className={`${PILL_BASE} ${(quoteCounts.get(c.id) ?? 0) > 0 ? "bg-emerald-100 text-emerald-900 dark:bg-emerald-900/50 dark:text-emerald-100" : "bg-slate-100 text-slate-500 dark:bg-slate-800"}`}>
+                    {quoteCounts.get(c.id) ?? 0}
+                  </span>
                 </td>
               </tr>
             ))}

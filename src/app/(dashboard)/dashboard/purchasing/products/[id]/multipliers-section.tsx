@@ -40,7 +40,7 @@ export function MultipliersSection({
   }
 
   return (
-    <div className="mt-6 rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
+    <div className="mt-6 rounded-2xl border border-slate-200 bg-white shadow-sm p-6 dark:border-slate-800 dark:bg-slate-900">
       <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Expiry Options</h2>
       <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
         Check every month range this product is quoted at. Final unit price = standard price (${standardPrice.toFixed(2)}) × the multiplier below -- starts at that range&rsquo;s own default and is editable per product.

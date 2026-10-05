@@ -28,8 +28,8 @@ export function Row({ label, children, hint }: { label: string; children: ReactN
 export function Step({ n, id, title, note, children }: { n: number; id: string; title: string; note?: string; children: ReactNode }) {
   return (
     <section id={id} className="mt-7 scroll-mt-28">
-      <h2 className="flex items-baseline gap-2 border-b-2 border-[#F7B838] pb-1.5 text-xs font-bold uppercase tracking-wider text-amber-900 dark:text-amber-300">
-        <span className="rounded bg-[#F7B838] px-1.5 py-0.5 text-amber-950">Step {n}</span>
+      <h2 className="flex items-baseline gap-2 border-b-2 border-[var(--dept-accent,#F7B838)] pb-1.5 text-xs font-bold uppercase tracking-wider text-amber-900 dark:text-amber-300">
+        <span className="rounded bg-[var(--dept-accent,#F7B838)] px-1.5 py-0.5 text-amber-950">Step {n}</span>
         {title}
       </h2>
       {note && <p className="mt-2 text-xs text-slate-500">{note}</p>}

@@ -29,7 +29,7 @@ export function ProductMultipliersTable({ rows }: { rows: MultiplierRow[] }) {
 
   return (
     <div>
-      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white shadow-sm p-4 dark:border-slate-800 dark:bg-slate-900">
         <input
           value={search}
           onChange={(e) => {
@@ -58,7 +58,7 @@ export function ProductMultipliersTable({ rows }: { rows: MultiplierRow[] }) {
         </label>
       </div>
 
-      <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+      <div className="mt-4 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-slate-200 text-slate-500 dark:border-slate-800 dark:text-slate-400">
             <tr>

@@ -11,7 +11,7 @@ export function AddCustomerForm() {
   const [state, action, pending] = useActionState(createPurchasingCustomer, undefined);
 
   return (
-    <form action={action} className="mt-6 rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
+    <form action={action} className="mt-6 rounded-2xl border border-slate-200 bg-white shadow-sm p-6 dark:border-slate-800 dark:bg-slate-900">
       <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Add customer</h2>
       <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
         Only a name is required. Address, email and phone can be added later; the full address is needed before you can make the customer&rsquo;s free shipping label.

@@ -29,7 +29,7 @@ export function ConditionsSection({
   const joinByConditionId = new Map(productConditions.map((pc) => [pc.conditionId, pc]));
 
   return (
-    <div className="mt-6 rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
+    <div className="mt-6 rounded-2xl border border-slate-200 bg-white shadow-sm p-6 dark:border-slate-800 dark:bg-slate-900">
       <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Conditions</h2>
       <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
         Check every condition this product can be quoted at. Leave none checked to offer the full Conditions list at quote time instead.

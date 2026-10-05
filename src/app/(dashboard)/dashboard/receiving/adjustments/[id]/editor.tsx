@@ -271,7 +271,7 @@ export function AdjustmentEditor({ adjustment: a, canWrite, embedded = false, be
       <div className="mt-6 flex flex-wrap items-center gap-3">
         {editable ? (
           <>
-            <button type="button" disabled={pending} onClick={() => run("finalize")} className="rounded-lg bg-[#F7B838] px-4 py-2 text-sm font-semibold text-amber-950 hover:brightness-95 disabled:opacity-60">
+            <button type="button" disabled={pending} onClick={() => run("finalize")} className="rounded-lg bg-[var(--dept-accent,#F7B838)] px-4 py-2 text-sm font-semibold text-amber-950 hover:brightness-95 disabled:opacity-60">
               {pending ? "Working…" : a.status === "FINAL" ? "Finalize again & re-attach" : "Finalize & attach to the order"}
             </button>
             <button type="button" disabled={pending} onClick={() => run("save")} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:hover:bg-slate-800">Save adjustment draft</button>

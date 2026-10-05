@@ -15,7 +15,7 @@ export default async function ReceivingLayout({ children }: { children: React.Re
       <ReceivingNav orgName={org.organizationName} isAdminUser={isAdmin(org.role)} />
       <div className="min-w-0 flex-1 bg-stone-50 dark:bg-slate-950">
         {showStorageNote && (
-          <p className="border-b border-amber-300 bg-amber-100 px-6 py-2 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
+          <p className="border-b border-yellow-300 bg-yellow-100 px-6 py-2 text-sm text-yellow-950 dark:border-yellow-800 dark:bg-yellow-950 dark:text-yellow-100">
             Photo storage isn&apos;t connected yet, so photos can&apos;t be added. Everything else in Receiving works.
           </p>
         )}

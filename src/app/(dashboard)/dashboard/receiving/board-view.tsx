@@ -80,7 +80,7 @@ export function BoardView({ cards, canMove, canDelete }: { cards: BoardCard[]; c
             placeholder="Search customer, order # or tracking"
             className="w-64 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
           />
-          <Link href="/dashboard/receiving/intake" className="rounded-lg bg-[#F7B838] px-3 py-2 text-sm font-semibold text-amber-950 hover:brightness-95">
+          <Link href="/dashboard/receiving/intake" className="rounded-lg bg-[var(--dept-accent,#F7B838)] px-3 py-2 text-sm font-semibold text-amber-950 hover:brightness-95">
             Receive an order
           </Link>
         </div>

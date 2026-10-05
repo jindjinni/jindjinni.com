@@ -118,6 +118,7 @@ export function settingsSectionsFor(role: string): SettingsSection[] {
     { href: "/dashboard/settings/account", label: "My account", blurb: "Your name, password and role." },
   ];
   out.push({ href: "/dashboard/settings/business-profile", label: "Business profile", blurb: "Your company's official details." });
+  out.push({ href: "/dashboard/settings/appearance", label: "Appearance", blurb: "Your company's color theme." });
   if (isAdmin(role)) {
     out.push({ href: "/dashboard/settings/business", label: "Shipping & labels", blurb: "The return address printed on labels." });
     out.push({ href: "/dashboard/settings/team", label: "Team & access", blurb: "Invite people and choose their role." });

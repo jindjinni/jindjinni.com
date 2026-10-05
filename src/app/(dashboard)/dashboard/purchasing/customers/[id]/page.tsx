@@ -7,6 +7,7 @@ import { missingContactDetails, missingCustomerFields } from "@/lib/purchasing-c
 import { archivePurchasingCustomer, restorePurchasingCustomer } from "@/app/actions/purchasing";
 import { EditCustomerForm } from "./edit-customer-form";
 import { ActionButton } from "@/components/action-button";
+import { PILL_BASE, QUOTATION_STATUS_PILL } from "@/lib/purchasing-ui";
 
 export default async function CustomerDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -94,7 +95,7 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
           Every reference number created for {purchasingCustomerName(customer)}.
         </p>
-        <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+        <div className="mt-3 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <table className="w-full text-left text-sm">
             <thead className="border-b border-slate-200 text-slate-500 dark:border-slate-800 dark:text-slate-400">
               <tr>
@@ -129,7 +130,7 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
                     )}
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-slate-700 dark:text-slate-300">{q.quotationDate}</td>
-                  <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{statusLabel[q.status] ?? q.status}</td>
+                  <td className="px-4 py-3"><span className={`${PILL_BASE} ${QUOTATION_STATUS_PILL[q.status] ?? "bg-slate-100 text-slate-700"}`}>{statusLabel[q.status] ?? q.status}</span></td>
                   <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{q.trackingNumber ?? "—"}</td>
                   <td className="px-4 py-3 text-right tabular-nums text-slate-900 dark:text-slate-50">{money(q.grandTotal)}</td>
                 </tr>

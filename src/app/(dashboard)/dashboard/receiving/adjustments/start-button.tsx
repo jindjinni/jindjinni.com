@@ -22,7 +22,7 @@ export function StartAdjustmentButton({ packageId, label = "Create adjustment qu
             else router.push(`/dashboard/receiving/adjustments/${r.id}`);
           })
         }
-        className={className ?? "rounded-lg bg-[#F7B838] px-3 py-2 text-sm font-semibold text-amber-950 hover:brightness-95 disabled:opacity-60"}
+        className={className ?? "rounded-lg bg-[var(--dept-accent,#F7B838)] px-3 py-2 text-sm font-semibold text-amber-950 hover:brightness-95 disabled:opacity-60"}
       >
         {pending ? "Opening…" : label}
       </button>

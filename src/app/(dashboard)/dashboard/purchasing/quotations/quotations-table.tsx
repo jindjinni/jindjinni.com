@@ -5,7 +5,8 @@ import Link from "next/link";
 import { QuotationRowMenu } from "./quotation-row-menu";
 import { QuotationImportPanel } from "./quotation-import-panel";
 import { STATUS_LABELS } from "@/lib/receiving-rules";
-import { STATUS_PILL } from "@/lib/receiving-ui";
+import { STATUS_PILL, chipClass } from "@/lib/receiving-ui";
+import { PILL_BASE, QUOTATION_STATUS_LABELS, QUOTATION_STATUS_PILL, totalPillClass } from "@/lib/purchasing-ui";
 import { ReceiptCell, type ReceiptState } from "./receipt-cell";
 
 export type QuotationSummaryRow = {
@@ -111,11 +112,11 @@ export function QuotationsTable({ quotations, canImport = false }: { quotations:
 
   return (
     <div>
-      <div className="rounded-xl bg-gradient-to-r from-blue-700 to-blue-600 p-6 text-white shadow-sm">
+      <div className="rounded-2xl bg-gradient-to-r from-emerald-700 to-emerald-500 p-6 text-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-xl font-semibold">Quotation Summary</h1>
-            <p className="mt-0.5 text-sm text-blue-100">Every quotation, at a glance -- search, filter, and ship from one place.</p>
+            <p className="mt-0.5 text-sm text-emerald-50">Every quotation, at a glance -- search, filter, and ship from one place.</p>
           </div>
           <div className="flex shrink-0 flex-wrap gap-2">
             {canImport && (
@@ -123,14 +124,14 @@ export function QuotationsTable({ quotations, canImport = false }: { quotations:
                 type="button"
                 onClick={() => setShowImport((v) => !v)}
                 aria-expanded={showImport}
-                className="rounded-md border border-white/60 px-4 py-2 text-sm font-medium text-white hover:bg-white/10"
+                className="rounded-lg border border-white/60 px-4 py-2 text-sm font-medium text-white hover:bg-white/10"
               >
                 Import orders
               </button>
             )}
             <Link
               href="/dashboard/purchasing/quotations/new"
-              className="rounded-md bg-white px-4 py-2 text-sm font-medium text-blue-700 shadow-sm hover:bg-blue-50"
+              className="rounded-lg bg-white px-4 py-2 text-sm font-medium text-emerald-800 shadow-sm hover:bg-emerald-50"
             >
               + New Quotation
             </Link>
@@ -158,12 +159,12 @@ export function QuotationsTable({ quotations, canImport = false }: { quotations:
               setPage(1);
             }}
             placeholder="Search by reference, customer, email, phone, or tracking #..."
-            className="w-full rounded-md border-0 bg-white py-2.5 pl-9 pr-3 text-sm text-slate-900 outline-none ring-1 ring-blue-300 placeholder:text-slate-400 focus:ring-2 focus:ring-white"
+            className="w-full rounded-lg border-0 bg-white py-2.5 pl-9 pr-3 text-sm text-slate-900 outline-none ring-1 ring-emerald-300 placeholder:text-slate-400 focus:ring-2 focus:ring-white"
           />
         </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-end justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+      <div className="mt-4 flex flex-wrap items-end justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
         <div className="flex flex-wrap items-end gap-3">
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-slate-600 dark:text-slate-400">From</span>
@@ -231,12 +232,13 @@ export function QuotationsTable({ quotations, canImport = false }: { quotations:
         </div>
       </div>
 
-      <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+      <div className="mt-4 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <table className="w-full text-left text-sm">
-          <thead className="border-b border-slate-200 bg-blue-50 text-xs font-semibold uppercase tracking-wide text-blue-900 dark:border-slate-800 dark:bg-blue-950 dark:text-blue-200">
+          <thead className="border-b border-emerald-100 dark:border-slate-800">
             <tr>
               <th className="whitespace-nowrap px-4 py-3">Date</th>
               <th className="whitespace-nowrap px-4 py-3">Reference #</th>
+              <th className="whitespace-nowrap px-4 py-3">Status</th>
               <th className="whitespace-nowrap px-4 py-3">Customer Name</th>
               <th className="whitespace-nowrap px-4 py-3">Email</th>
               <th className="whitespace-nowrap px-4 py-3">Phone</th>
@@ -252,7 +254,7 @@ export function QuotationsTable({ quotations, canImport = false }: { quotations:
           <tbody>
             {visible.length === 0 && (
               <tr>
-                <td colSpan={12} className="px-4 py-10 text-center text-slate-400">
+                <td colSpan={13} className="px-4 py-10 text-center text-slate-400">
                   {quotations.length === 0 ? "No quotations yet -- generate one above." : "No matches for that search."}
                 </td>
               </tr>
@@ -263,7 +265,7 @@ export function QuotationsTable({ quotations, canImport = false }: { quotations:
                 className="border-b border-slate-100 align-top last:border-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/60"
               >
                 <td className="whitespace-nowrap px-4 py-3.5 text-slate-700 dark:text-slate-300">{row.quotationDate}</td>
-                <td className="whitespace-nowrap px-4 py-3.5">
+                <td className="whitespace-nowrap bg-emerald-50/70 px-4 py-3.5 dark:bg-emerald-950/30">
                   <Link
                     href={`/dashboard/purchasing/quotations/${row.id}`}
                     className="font-medium text-emerald-700 hover:underline dark:text-emerald-400"
@@ -271,7 +273,7 @@ export function QuotationsTable({ quotations, canImport = false }: { quotations:
                     {row.quotationNumber}
                   </Link>
                   {row.imported && (
-                    <span className="ml-2 rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+                    <span className="ml-2 rounded-full bg-sky-100 px-2 py-0.5 text-xs text-sky-800 dark:bg-sky-950 dark:text-sky-300">
                       Imported
                     </span>
                   )}
@@ -281,11 +283,20 @@ export function QuotationsTable({ quotations, canImport = false }: { quotations:
                     </span>
                   )}
                 </td>
-                <td className="whitespace-nowrap px-4 py-3.5 font-medium text-slate-900 dark:text-slate-50">{row.customerName}</td>
-                <td className="whitespace-nowrap px-4 py-3.5 text-slate-700 dark:text-slate-300">{row.email ?? "—"}</td>
+                <td className="whitespace-nowrap px-4 py-3.5">
+                  <span className={`${PILL_BASE} ${QUOTATION_STATUS_PILL[row.status] ?? "bg-slate-100 text-slate-700"}`}>
+                    {QUOTATION_STATUS_LABELS[row.status] ?? row.status}
+                  </span>
+                </td>
+                <td className="whitespace-nowrap px-4 py-3.5">
+                  <span className={`${PILL_BASE} ${chipClass(row.customerName)}`}>{row.customerName}</span>
+                </td>
+                <td className="whitespace-nowrap px-4 py-3.5 text-slate-700 dark:text-slate-300">
+                  {row.email ? <span className={`${PILL_BASE} ${chipClass(row.customerName)}`}>{row.email}</span> : <span className="text-slate-300 dark:text-slate-600">—</span>}
+                </td>
                 <td className="whitespace-nowrap px-4 py-3.5 text-slate-700 dark:text-slate-300">{row.phone ?? "—"}</td>
-                <td className="whitespace-nowrap px-4 py-3.5 text-right tabular-nums text-slate-900 dark:text-slate-50">
-                  ${row.grandTotal.toFixed(2)}
+                <td className="whitespace-nowrap px-4 py-3.5 text-right tabular-nums">
+                  <span className={`${PILL_BASE} ${totalPillClass(row.grandTotal)}`}>${row.grandTotal.toFixed(2)}</span>
                 </td>
                 <td className="whitespace-nowrap px-4 py-3.5 text-slate-700 dark:text-slate-300">
                   {row.shippingInfo === "Not provided" ? (

@@ -8,9 +8,18 @@ import { isAdmin } from "@/lib/permissions";
 import { isPlatformAdminEmail } from "@/lib/catalog-template";
 import { TEST_PREFIX } from "@/lib/test-orders-data";
 import { TestOrdersPanel } from "./test-orders-panel";
+import { chipClass } from "@/lib/receiving-ui";
+import { PILL_BASE, QUOTATION_STATUS_LABELS, QUOTATION_STATUS_PILL, totalPillClass } from "@/lib/purchasing-ui";
 
 // Loading test orders runs a few orders per request; give each request room.
 export const maxDuration = 60;
+
+const TILE_COLORS = [
+  "border-emerald-200 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/40",
+  "border-sky-200 bg-sky-50 dark:border-sky-900 dark:bg-sky-950/40",
+  "border-violet-200 bg-violet-50 dark:border-violet-900 dark:bg-violet-950/40",
+  "border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/40",
+];
 
 export default async function PurchasingDashboardPage() {
   const org = await requireOrg();
@@ -61,11 +70,11 @@ export default async function PurchasingDashboardPage() {
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {tiles.map((tile) => (
+        {tiles.map((tile, i) => (
           <Link
             key={tile.label}
             href={tile.href}
-            className="rounded-xl border border-slate-200 bg-white p-5 hover:border-emerald-300 dark:border-slate-800 dark:bg-slate-900"
+            className={`rounded-2xl border p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow ${TILE_COLORS[i % TILE_COLORS.length]}`}
           >
             <p className="text-3xl font-semibold tabular-nums text-slate-900 dark:text-slate-50">{tile.value}</p>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{tile.label}</p>
@@ -74,7 +83,7 @@ export default async function PurchasingDashboardPage() {
       </div>
 
       <h2 className="mt-8 text-lg font-semibold text-slate-900 dark:text-slate-50">Recent quotations</h2>
-      <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+      <div className="mt-3 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-slate-200 text-slate-500 dark:border-slate-800 dark:text-slate-400">
             <tr>
@@ -103,11 +112,13 @@ export default async function PurchasingDashboardPage() {
                     {q.quotationNumber}
                   </Link>
                 </td>
-                <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{q.customerNameSnapshot}</td>
+                <td className="px-4 py-3"><span className={`${PILL_BASE} ${chipClass(q.customerNameSnapshot ?? "")}`}>{q.customerNameSnapshot}</span></td>
                 <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{q.quotationDate}</td>
-                <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{q.status}</td>
-                <td className="px-4 py-3 text-right tabular-nums text-slate-900 dark:text-slate-50">
-                  ${q.grandTotal.toFixed(2)}
+                <td className="px-4 py-3">
+                  <span className={`${PILL_BASE} ${QUOTATION_STATUS_PILL[q.status] ?? "bg-slate-100 text-slate-700"}`}>{QUOTATION_STATUS_LABELS[q.status] ?? q.status}</span>
+                </td>
+                <td className="px-4 py-3 text-right tabular-nums">
+                  <span className={`${PILL_BASE} ${totalPillClass(q.grandTotal)}`}>${q.grandTotal.toFixed(2)}</span>
                 </td>
               </tr>
             ))}

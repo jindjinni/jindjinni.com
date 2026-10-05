@@ -73,7 +73,7 @@ export function IntakeList({ cards, canWrite }: { cards: BoardCard[]; canWrite: 
               placeholder="Order #, customer or tracking #"
               className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
             />
-            <button disabled={pending || term.trim().length < 2} className="rounded-lg bg-[#F7B838] px-3 py-2 text-sm font-semibold text-amber-950 hover:brightness-95 disabled:opacity-50">
+            <button disabled={pending || term.trim().length < 2} className="rounded-lg bg-[var(--dept-accent,#F7B838)] px-3 py-2 text-sm font-semibold text-amber-950 hover:brightness-95 disabled:opacity-50">
               Find
             </button>
           </form>

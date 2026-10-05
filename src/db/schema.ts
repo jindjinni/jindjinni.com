@@ -53,6 +53,9 @@ export const organizations = sqliteTable("organizations", {
   shipFromCountry: text("ship_from_country").notNull().default("US"),
   shipFromPhone: text("ship_from_phone"),
   shipFromEmail: text("ship_from_email"),
+  // Each department's color theme as JSON, e.g. {"purchasing":"blue"} (see lib/theme.ts).
+  // null = every department uses its own default color. Nullable on purpose.
+  departmentThemes: text("department_themes"),
   // Team-size cap. null = use the default for this company (see lib/seats.ts);
   // -1 = unlimited; any other number = that many people (active members +
   // pending invitations). Nullable on purpose -- never NOT NULL on a table

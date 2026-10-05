@@ -37,7 +37,7 @@ export function ConditionsManager({ conditions }: { conditions: Condition[] }) {
 
       {tab === "manage" && (
         <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[20rem_1fr]">
-          <div className="flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white shadow-sm p-6 dark:border-slate-800 dark:bg-slate-900">
             <div>
               <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Add New Condition Type</h2>
               <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Create a product condition for pricing.</p>
@@ -60,7 +60,7 @@ export function ConditionsManager({ conditions }: { conditions: Condition[] }) {
             </div>
           </div>
 
-          <div className="rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
+          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6 dark:border-slate-800 dark:bg-slate-900">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Existing Conditions</h2>
@@ -90,7 +90,7 @@ export function ConditionsManager({ conditions }: { conditions: Condition[] }) {
       )}
 
       {tab === "archived" && (
-        <div className="mt-6 rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-white shadow-sm p-6 dark:border-slate-800 dark:bg-slate-900">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Archived Conditions</h2>

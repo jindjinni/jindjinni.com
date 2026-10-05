@@ -12,7 +12,7 @@ export function AddProductForm({ categories }: { categories: Category[] }) {
   const [state, action, pending] = useActionState(createPurchasingProduct, undefined);
 
   return (
-    <form action={action} className="mt-6 rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
+    <form action={action} className="mt-6 rounded-2xl border border-slate-200 bg-white shadow-sm p-6 dark:border-slate-800 dark:bg-slate-900">
       <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Add product</h2>
       <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="flex flex-col gap-1 text-sm sm:col-span-2">

@@ -77,7 +77,7 @@ export default async function ReceivedItemsPage({ searchParams }: { searchParams
             {CONDITION_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
-        <button className="rounded-lg bg-[#F7B838] px-4 py-2 text-sm font-semibold text-amber-950 hover:brightness-95">Filter</button>
+        <button className="rounded-lg bg-[var(--dept-accent,#F7B838)] px-4 py-2 text-sm font-semibold text-amber-950 hover:brightness-95">Filter</button>
         {(f.q || f.from || f.to || f.agentId || f.condition) && <Link href="/dashboard/receiving/received-items" className="pb-2 text-sm text-amber-800 underline dark:text-amber-300">Clear</Link>}
       </form>
 

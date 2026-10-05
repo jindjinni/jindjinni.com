@@ -16,7 +16,7 @@ export function AddMultiplierForm({
   const [state, action, pending] = useActionState<ActionState, FormData>(createProductMultiplier, undefined);
 
   return (
-    <form action={action} className="mt-6 flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
+    <form action={action} className="mt-6 flex flex-wrap items-end gap-3 rounded-2xl border border-slate-200 bg-white shadow-sm p-6 dark:border-slate-800 dark:bg-slate-900">
       <label className="flex min-w-[14rem] flex-1 flex-col gap-1 text-sm">
         <span className="font-medium text-slate-700 dark:text-slate-300">Product</span>
         <select name="productId" required defaultValue="" className={inputClass}>

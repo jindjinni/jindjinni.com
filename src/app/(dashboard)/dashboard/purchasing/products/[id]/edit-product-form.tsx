@@ -34,7 +34,7 @@ export function EditProductForm({
   );
 
   return (
-    <form action={action} className="mt-4 rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
+    <form action={action} className="mt-4 rounded-2xl border border-slate-200 bg-white shadow-sm p-6 dark:border-slate-800 dark:bg-slate-900">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="flex flex-col gap-1 text-sm sm:col-span-2">
           <span className="text-slate-600 dark:text-slate-400">Product name</span>

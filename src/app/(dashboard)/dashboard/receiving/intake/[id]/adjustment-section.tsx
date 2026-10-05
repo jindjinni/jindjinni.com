@@ -73,7 +73,7 @@ export function AdjustmentSection({
                 router.refresh();
               })
             }
-            className="rounded-lg bg-[#F7B838] px-4 py-2 text-sm font-semibold text-amber-950 hover:brightness-95 disabled:opacity-60"
+            className="rounded-lg bg-[var(--dept-accent,#F7B838)] px-4 py-2 text-sm font-semibold text-amber-950 hover:brightness-95 disabled:opacity-60"
           >
             {pending ? "Creating…" : "Create adjustment quotation"}
           </button>

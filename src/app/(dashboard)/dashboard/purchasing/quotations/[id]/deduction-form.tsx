@@ -23,7 +23,7 @@ export function DeductionForm({
   );
 
   return (
-    <form action={formAction} className="mt-4 rounded-xl border border-slate-200 bg-white p-4 text-sm dark:border-slate-800 dark:bg-slate-900">
+    <form action={formAction} className="mt-4 rounded-2xl border border-slate-200 bg-white shadow-sm p-4 text-sm dark:border-slate-800 dark:bg-slate-900">
       <label className="flex items-center gap-2 font-medium text-slate-700 dark:text-slate-300">
         <input
           type="checkbox"

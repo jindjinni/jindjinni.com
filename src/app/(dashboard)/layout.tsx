@@ -1,11 +1,13 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { db } from "@/db/client";
-import { users } from "@/db/schema";
+import { organizations, users } from "@/db/schema";
 import { TERMS_VERSION } from "@/lib/legal";
 import { requireOrg } from "@/lib/tenant";
 import { logout } from "@/app/actions/auth";
+import { parseDepartmentThemes } from "@/lib/theme";
+import { ThemeScope } from "@/components/theme-scope";
+import { MainNav, type NavItem } from "./main-nav";
 import { ROLE_LABELS, canViewPurchasing, canViewReceiving, isPurchasingManager } from "@/lib/permissions";
 
 export default async function DashboardLayout({
@@ -21,46 +23,37 @@ export default async function DashboardLayout({
   const [me] = await db.select({ termsVersion: users.termsVersion }).from(users).where(eq(users.id, org.userId)).limit(1);
   if (me?.termsVersion !== TERMS_VERSION) redirect("/accept-terms");
 
+  const [orgRow] = await db.select({ departmentThemes: organizations.departmentThemes }).from(organizations).where(eq(organizations.id, org.organizationId)).limit(1);
+
+  const navItems: NavItem[] = [
+    ...(canViewPurchasing(org.role) ? [{ href: "/dashboard/purchasing", label: "Purchasing" }] : []),
+    ...(canViewReceiving(org.role) ? [{ href: "/dashboard/receiving", label: "Receiving" }] : []),
+    ...(isPurchasingManager(org.role) ? [{ href: "/dashboard/database", label: "Database" }] : []),
+    { href: "/dashboard/settings", label: "Settings" },
+  ];
+
   return (
-    <div className="flex min-h-full flex-1 flex-col bg-slate-50 dark:bg-slate-950">
-      <header className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-3 print:hidden dark:border-slate-800 dark:bg-slate-900">
-        <div className="flex items-center gap-6">
-          <span className="font-semibold text-slate-900 dark:text-slate-50">
+    <ThemeScope themes={parseDepartmentThemes(orgRow?.departmentThemes)}>
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-emerald-100 bg-white px-6 py-3 shadow-sm print:hidden dark:border-emerald-900/60 dark:bg-slate-900">
+        <div className="flex flex-wrap items-center gap-5">
+          <span className="flex items-center gap-2.5 font-semibold text-slate-900 dark:text-slate-50">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 text-sm font-bold text-white" aria-hidden="true">
+              {org.organizationName.trim().charAt(0).toUpperCase() || "•"}
+            </span>
             {org.organizationName}
           </span>
-          <nav className="flex gap-4 text-sm text-slate-600 dark:text-slate-400">
-            {canViewPurchasing(org.role) && (
-              <Link href="/dashboard/purchasing" className="hover:text-emerald-700 dark:hover:text-emerald-400">
-                Purchasing
-              </Link>
-            )}
-            {canViewReceiving(org.role) && (
-              <Link href="/dashboard/receiving" className="hover:text-emerald-700 dark:hover:text-emerald-400">
-                Receiving
-              </Link>
-            )}
-            {isPurchasingManager(org.role) && (
-              <Link href="/dashboard/database" className="hover:text-emerald-700 dark:hover:text-emerald-400">
-                Database
-              </Link>
-            )}
-            <Link href="/dashboard/settings" className="hover:text-emerald-700 dark:hover:text-emerald-400">
-              Settings
-            </Link>
-          </nav>
+          <MainNav items={navItems} />
         </div>
         <div className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
-          <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">
+          <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
             {ROLE_LABELS[org.role] ?? org.role}
           </span>
           <form action={logout}>
-            <button className="hover:text-emerald-700 dark:hover:text-emerald-400">
-              Sign out
-            </button>
+            <button className="rounded-md px-2 py-1 hover:bg-emerald-50 hover:text-emerald-800 dark:hover:bg-emerald-950 dark:hover:text-emerald-300">Sign out</button>
           </form>
         </div>
       </header>
       <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-8 print:max-w-none print:p-0">{children}</main>
-    </div>
+    </ThemeScope>
   );
 }

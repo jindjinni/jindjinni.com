@@ -28,7 +28,7 @@ export default async function PurchasingExpirationRangesPage() {
       {canEdit && (
         <form
           action={createPurchasingExpirationRange}
-          className="mt-6 flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900"
+          className="mt-6 flex flex-wrap items-end gap-3 rounded-2xl border border-slate-200 bg-white shadow-sm p-6 dark:border-slate-800 dark:bg-slate-900"
         >
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium text-slate-700 dark:text-slate-300">Expiration Option</span>
@@ -53,7 +53,7 @@ export default async function PurchasingExpirationRangesPage() {
         </form>
       )}
 
-      <div className="mt-6 overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+      <div className="mt-6 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-slate-200 text-slate-500 dark:border-slate-800 dark:text-slate-400">
             <tr>
