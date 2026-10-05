@@ -131,6 +131,7 @@ export async function removeRecallCheck(packageId: string, checkId: string): Pro
     .limit(1);
   if (!p) return { error: "That shipment wasn't found." };
   if (await isShipmentLocked({ ...p, organizationId: org.organizationId })) return { error: "This shipment was already submitted. Reopen it to change recall checks." };
+  if (p.status !== "IN_PROGRESS") await auditReceiving(org, p.quotationId, "Recall check", "A recall check was removed after the shipment was submitted.");
   await deleteCheck(org.organizationId, packageId, String(checkId));
   refresh(packageId);
   return { ok: true, checks: await listChecks(org.organizationId, packageId) };

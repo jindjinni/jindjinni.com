@@ -179,6 +179,7 @@ export async function removeScannedUnit(packageId: string, serialId: string): Pr
     .limit(1);
   if (!p) return { error: "That shipment wasn't found." };
   if (await isShipmentLocked({ ...p, organizationId: org.organizationId })) return { error: "This shipment was already submitted. Reopen it to change scans." };
+  if (p.status !== "IN_PROGRESS") await auditReceiving(org, p.quotationId, "Scan removed", "A scanned unit was removed after the shipment was submitted.");
   const r = await removeScan(org.organizationId, packageId, String(serialId));
   if (!r.removed) return { error: "That scan wasn't found." };
   refresh(packageId);

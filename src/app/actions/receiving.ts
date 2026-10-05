@@ -99,6 +99,11 @@ async function ownPackage(organizationId: string, packageId: string) {
   return p ?? null;
 }
 
+/** A submitted shipment that is edited keeps its inventory record in step (the same rewrite Submit does). */
+async function resyncInventory(org: CurrentOrg, p: { status: string }, packageId: string) {
+  if (p.status !== "IN_PROGRESS") await writeIntakeLog(org, packageId);
+}
+
 function refresh(packageId?: string) {
   revalidatePath("/dashboard/receiving", "layout");
   revalidatePath("/dashboard/purchasing/quotations");
@@ -487,6 +492,7 @@ export async function saveReceiving(packageId: string, formData: FormData): Prom
 
   const acc = await applyAccountsFields(org, p, formData);
   if (acc.error) return acc;
+  await resyncInventory(org, p, packageId);
   refresh(packageId);
   return { ok: true, id: packageId };
 }
@@ -704,6 +710,7 @@ export async function addReceivingItem(
   });
   const quoted = await regroupQuoted(org.organizationId, packageId, p.quotationId);
   await auditReceiving(org, p.quotationId, "receiving", label);
+  await resyncInventory(org, p, packageId);
   refresh(packageId);
   return { ok: true, id, quoted, item: { productId, productName: name, ndc: ndc ?? "" } };
 }
@@ -733,6 +740,7 @@ export async function setReceivingItemProduct(
     .where(eq(receivingItems.id, itemId));
   const quoted = await regroupQuoted(org.organizationId, packageId, p.quotationId);
   await auditReceiving(org, p.quotationId, "receiving", `Product chosen: ${r.name}`);
+  await resyncInventory(org, p, packageId);
   refresh(packageId);
   return { ok: true, id: itemId, quoted, item: { productId: r.productId, productName: r.name, ndc: r.ndc ?? "" } };
 }
@@ -766,6 +774,7 @@ export async function deleteReceivingItem(packageId: string, itemId: string): Pr
   await db.delete(receivingItems).where(eq(receivingItems.id, itemId));
   const quoted = await regroupQuoted(org.organizationId, packageId, p.quotationId);
   await auditReceiving(org, p.quotationId, "receiving", `Product line removed: ${it.name || "blank line"}`);
+  await resyncInventory(org, p, packageId);
   refresh(packageId);
   return { ok: true, id: packageId, quoted };
 }
@@ -889,6 +898,10 @@ export async function deleteReceivingPhoto(photoId: string): Promise<ReceivingAc
     if (!p || (await isShipmentLocked(p))) return { error: "This shipment was already submitted. Reopen it to change photos." };
   }
   await db.delete(receivingPackagePhotos).where(eq(receivingPackagePhotos.id, photoId));
+  {
+    const pk = await ownPackage(org.organizationId, ph.packageId);
+    if (pk && pk.status !== "IN_PROGRESS") await auditReceiving(org, pk.quotationId, "Photo removed", `${ph.filename || "A photo"} was removed after the shipment was submitted.`);
+  }
   // Test orders share one placeholder image; only remove a stored file when no other photo still points at it.
   const [stillUsed] = await db
     .select({ id: receivingPackagePhotos.id })
