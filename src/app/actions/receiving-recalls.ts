@@ -28,6 +28,7 @@ import {
   type RecallView,
 } from "@/lib/receiving-recall-service";
 import { PHOTO_MAX_BYTES, readLabelPhoto, type LabelRead } from "@/lib/receiving-recall-photo";
+import { isShipmentLocked } from "@/lib/receiving-test-lock";
 
 export type RecallItemPatch = { needsReturn: string; returnStatus: string; quantityToReturn: string; returnNotes: string };
 export type RecallActionState = {
@@ -68,7 +69,7 @@ async function openRow(org: CurrentOrg, packageId: string, itemId: string): Prom
     .where(and(eq(receivingPackages.id, packageId), eq(receivingPackages.organizationId, org.organizationId)))
     .limit(1);
   if (!p) return { error: "That shipment wasn't found." };
-  if (p.status !== "IN_PROGRESS") return { error: "This shipment was already submitted. Reopen it to check recalls." };
+  if (await isShipmentLocked({ ...p, organizationId: org.organizationId })) return { error: "This shipment was already submitted. Reopen it to check recalls." };
   const [it] = await db
     .select({ name: receivingItems.productName })
     .from(receivingItems)
@@ -124,12 +125,12 @@ export async function confirmRecallLookup(packageId: string, itemId: string, rec
 export async function removeRecallCheck(packageId: string, checkId: string): Promise<RecallActionState> {
   const org = await requireWriter();
   const [p] = await db
-    .select({ status: receivingPackages.status })
+    .select({ status: receivingPackages.status, quotationId: receivingPackages.quotationId })
     .from(receivingPackages)
     .where(and(eq(receivingPackages.id, packageId), eq(receivingPackages.organizationId, org.organizationId)))
     .limit(1);
   if (!p) return { error: "That shipment wasn't found." };
-  if (p.status !== "IN_PROGRESS") return { error: "This shipment was already submitted. Reopen it to change recall checks." };
+  if (await isShipmentLocked({ ...p, organizationId: org.organizationId })) return { error: "This shipment was already submitted. Reopen it to change recall checks." };
   await deleteCheck(org.organizationId, packageId, String(checkId));
   refresh(packageId);
   return { ok: true, checks: await listChecks(org.organizationId, packageId) };

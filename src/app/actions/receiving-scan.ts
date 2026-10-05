@@ -14,6 +14,7 @@ import { auditReceiving } from "@/lib/receiving-service";
 import { normalizeNumber, numbersToCheck } from "@/lib/receiving-recall";
 import { listChecks, markRowForReturn, runRecallCheck, type RecallCheckView } from "@/lib/receiving-recall-service";
 import { FLAG_LABELS, inspectScan, isCounterfeitSuspect, parseScan, severityOf, type ScanKind, type SerialFlag } from "@/lib/receiving-serial-rules";
+import { isShipmentLocked } from "@/lib/receiving-test-lock";
 import {
   addFlag,
   gtinsForItem,
@@ -63,7 +64,7 @@ async function openRow(org: CurrentOrg, packageId: string, itemId: string): Prom
     .where(and(eq(receivingPackages.id, packageId), eq(receivingPackages.organizationId, org.organizationId)))
     .limit(1);
   if (!p) return { error: "That shipment wasn't found." };
-  if (p.status !== "IN_PROGRESS") return { error: "This shipment was already submitted. Reopen it to scan more." };
+  if (await isShipmentLocked({ ...p, organizationId: org.organizationId })) return { error: "This shipment was already submitted. Reopen it to scan more." };
   const [it] = await db
     .select({ name: receivingItems.productName })
     .from(receivingItems)
@@ -172,12 +173,12 @@ export async function scanUnit(packageId: string, itemId: string, text: string, 
 export async function removeScannedUnit(packageId: string, serialId: string): Promise<ScanResult> {
   const org = await requireWriter();
   const [p] = await db
-    .select({ status: receivingPackages.status })
+    .select({ status: receivingPackages.status, quotationId: receivingPackages.quotationId })
     .from(receivingPackages)
     .where(and(eq(receivingPackages.id, packageId), eq(receivingPackages.organizationId, org.organizationId)))
     .limit(1);
   if (!p) return { error: "That shipment wasn't found." };
-  if (p.status !== "IN_PROGRESS") return { error: "This shipment was already submitted. Reopen it to change scans." };
+  if (await isShipmentLocked({ ...p, organizationId: org.organizationId })) return { error: "This shipment was already submitted. Reopen it to change scans." };
   const r = await removeScan(org.organizationId, packageId, String(serialId));
   if (!r.removed) return { error: "That scan wasn't found." };
   refresh(packageId);

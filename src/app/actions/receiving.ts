@@ -48,6 +48,7 @@ import {
 import { storage, STORAGE_NOT_CONNECTED } from "@/lib/receiving-storage";
 import { auditReceiving, deleteIntakeLog, deliverCustomerEmail, refreshIntakeLogPrice, writeIntakeLog } from "@/lib/receiving-service";
 import { finalPayout } from "@/lib/receiving-rules";
+import { isShipmentLocked } from "@/lib/receiving-test-lock";
 
 export type ReceivingActionState = {
   error?: string;
@@ -419,7 +420,7 @@ export async function saveReceiving(packageId: string, formData: FormData): Prom
   const org = await requireWriter();
   const p = await ownPackage(org.organizationId, packageId);
   if (!p) return { error: "That shipment wasn't found." };
-  if (p.status !== "IN_PROGRESS") return { error: "This shipment was already submitted. Reopen it to change the receiving steps." };
+  if (await isShipmentLocked(p)) return { error: "This shipment was already submitted. Reopen it to change the receiving steps." };
 
   // Items first, so a bad quantity stops the whole save.
   const itemsRaw = formData.get("itemsJson");
@@ -659,7 +660,7 @@ export async function addReceivingItem(
   const org = await requireWriter();
   const p = await ownPackage(org.organizationId, packageId);
   if (!p) return { error: "That shipment wasn't found." };
-  if (p.status !== "IN_PROGRESS") return { error: "This shipment was already submitted. Reopen it to change the products." };
+  if (await isShipmentLocked(p)) return { error: "This shipment was already submitted. Reopen it to change the products." };
 
   const [{ n }] = await db.select({ n: sql<number>`count(*)` }).from(receivingItems).where(eq(receivingItems.packageId, packageId));
   const id = newId("ritem");
@@ -716,7 +717,7 @@ export async function setReceivingItemProduct(
   const org = await requireWriter();
   const p = await ownPackage(org.organizationId, packageId);
   if (!p) return { error: "That shipment wasn't found." };
-  if (p.status !== "IN_PROGRESS") return { error: "This shipment was already submitted. Reopen it to change the products." };
+  if (await isShipmentLocked(p)) return { error: "This shipment was already submitted. Reopen it to change the products." };
   const [it] = await db
     .select({ id: receivingItems.id })
     .from(receivingItems)
@@ -740,7 +741,7 @@ export async function deleteReceivingItem(packageId: string, itemId: string): Pr
   const org = await requireWriter();
   const p = await ownPackage(org.organizationId, packageId);
   if (!p) return { error: "That shipment wasn't found." };
-  if (p.status !== "IN_PROGRESS") return { error: "This shipment was already submitted. Reopen it to change the products." };
+  if (await isShipmentLocked(p)) return { error: "This shipment was already submitted. Reopen it to change the products." };
   const [it] = await db
     .select({ id: receivingItems.id, name: receivingItems.productName })
     .from(receivingItems)
@@ -885,7 +886,7 @@ export async function deleteReceivingPhoto(photoId: string): Promise<ReceivingAc
   }
   if (!accountsKind) {
     const p = await ownPackage(org.organizationId, ph.packageId);
-    if (!p || p.status !== "IN_PROGRESS") return { error: "This shipment was already submitted. Reopen it to change photos." };
+    if (!p || (await isShipmentLocked(p))) return { error: "This shipment was already submitted. Reopen it to change photos." };
   }
   await db.delete(receivingPackagePhotos).where(eq(receivingPackagePhotos.id, photoId));
   // Test orders share one placeholder image; only remove a stored file when no other photo still points at it.

@@ -89,6 +89,8 @@ type Props = {
   recalls: RecallView[];
   recallChecks: RecallCheckView[];
   serials: SerialView[];
+  /** A built-in TEST order: stays editable after it has been submitted. */
+  testShipment: boolean;
   photoReading: boolean;
   photos: PackagePhoto[];
   items: ItemView[];
@@ -134,7 +136,7 @@ export function IntakeForm(props: Props) {
   const [missingAfterSubmit, setMissingAfterSubmit] = useState<string[] | null>(null);
 
   const locked = status !== "IN_PROGRESS";
-  const editable = canWrite && !locked;
+  const editable = canWrite && (!locked || props.testShipment);
   const set = <K extends keyof FormValues>(k: K, val: FormValues[K]) => setV((p) => ({ ...p, [k]: val }));
 
   // Product lines: the server's list, with whatever the agent has typed over the top.
@@ -305,6 +307,7 @@ export function IntakeForm(props: Props) {
             {v.trackingNumber ? ` — ${v.trackingNumber}` : ""}
           </h1>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+            {props.testShipment && <span className="rounded-full bg-violet-100 px-2.5 py-1 font-medium text-violet-900 dark:bg-violet-900/40 dark:text-violet-100">Test order — always editable</span>}
             <span className={`rounded-full px-2.5 py-1 font-medium ${chipClass(brief.customerName)}`}>{brief.customerName}</span>
             <span className={`rounded-full px-2.5 py-1 font-medium ${STATUS_PILL[status]}`}>{STATUS_LABELS[status]}</span>
             {v.accountsStatus && (
@@ -702,11 +705,11 @@ export function IntakeForm(props: Props) {
           {editable ? (
             <>
               <button onClick={() => run("save")} disabled={pending} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900">
-                {pending ? "Working…" : "Save draft"}
+                {pending ? "Working…" : locked ? "Save changes" : "Save draft"}
               </button>
-              <button onClick={() => run("submit")} disabled={pending || missing.length > 0} title={missing.length ? "Fill in everything listed under Missing Info first" : undefined} className="rounded-lg bg-[var(--dept-accent,#F7B838)] px-4 py-2 text-sm font-semibold text-amber-950 hover:brightness-95 disabled:opacity-50">
+              {!locked && <button onClick={() => run("submit")} disabled={pending || missing.length > 0} title={missing.length ? "Fill in everything listed under Missing Info first" : undefined} className="rounded-lg bg-[var(--dept-accent,#F7B838)] px-4 py-2 text-sm font-semibold text-amber-950 hover:brightness-95 disabled:opacity-50">
                 Submit receiving
-              </button>
+              </button>}
             </>
           ) : (
             <button onClick={() => run("accounts")} disabled={pending} className="rounded-lg bg-[var(--dept-accent,#F7B838)] px-4 py-2 text-sm font-semibold text-amber-950 hover:brightness-95 disabled:opacity-50">
