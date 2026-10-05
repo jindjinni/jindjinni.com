@@ -32,6 +32,9 @@ import { LocalTime } from "@/components/local-time";
 import { Choice, PhotoSlot, Row, Step, YN, YN_RISK, field } from "./intake-parts";
 import { ItemAdjustmentCard, itemFactsOf, toItemState, type ItemState } from "./item-card";
 import { ReceiptPreview, ReceivedItemsGrid } from "./receiving-table";
+import { RecallCheck } from "./recall-check";
+import type { RecallCheckView, RecallView } from "@/lib/receiving-recall-service";
+import { recallsForProduct, rowRecallState } from "@/lib/receiving-recall";
 
 export type FormValues = {
   trackingNumber: string;
@@ -77,6 +80,9 @@ type Props = {
   settings: { emailsEnabled: boolean };
   /** The full adjustment quotation (built inline in Step 7), or null when none has been started. */
   adjustmentView: AdjustmentView | null;
+  recalls: RecallView[];
+  recallChecks: RecallCheckView[];
+  photoReading: boolean;
   photos: PackagePhoto[];
   items: ItemView[];
   quotedLines: QuotedLine[];
@@ -135,6 +141,20 @@ export function IntakeForm(props: Props) {
       return next;
     });
   }
+
+  // Recall checks made in Step 6 (saved on the server as they are made).
+  const [recallChecks, setRecallChecks] = useState<RecallCheckView[]>(props.recallChecks);
+  const recallStates: Record<string, "RECALLED" | "CHECKED"> = {};
+  for (const it of props.items) {
+    const st = rowRecallState(recallChecks.filter((c) => c.itemId === it.id));
+    if (st !== "NONE") recallStates[it.id] = st;
+  }
+  const recalledNames = items.filter((i) => recallStates[i.id] === "RECALLED").map((i) => i.productName);
+  const checkedCount = Object.keys(recallStates).length;
+  // Products that point at a recall (by name) but were never checked.
+  const unchecked = items
+    .filter((i) => i.productName.trim() && i.wasReceived !== "NO" && !recallStates[i.id] && recallsForProduct(i.productName, props.recalls.filter((r) => r.active)).length > 0)
+    .map((i) => i.productName);
 
   const counts: Partial<Record<PhotoKind, number>> = {};
   for (const p of photos) if (!p.itemId) counts[p.kind] = (counts[p.kind] ?? 0) + 1;
@@ -474,6 +494,20 @@ export function IntakeForm(props: Props) {
             onError={setError}
             onPatchMany={patchMany}
             onRemoveMany={removeItems}
+            recallStates={recallStates}
+          />
+
+          <RecallCheck
+            packageId={packageId}
+            items={items}
+            editable={editable}
+            isAdminUser={props.isAdminUser}
+            photoReading={props.photoReading}
+            initialRecalls={props.recalls}
+            initialChecks={recallChecks}
+            onPatchMany={patchMany}
+            onChecks={setRecallChecks}
+            onError={setError}
           />
 
           <div className="mt-8">
@@ -484,14 +518,20 @@ export function IntakeForm(props: Props) {
                 ["Total Quantity", String(summary.quantityReceived)],
                 ["Discrepancy Status", summary.anyDiscrepancy ? "Discrepancy" : "None"],
                 ["Total Quantity To Be Returned", String(summary.quantityToReturn)],
+                ["Recall Check", recalledNames.length ? `RECALLED: ${recalledNames.join(", ")}` : checkedCount ? `${checkedCount} product${checkedCount === 1 ? "" : "s"} checked, none on the lists we have` : "Not checked"],
                 ["Return Status Summary", summary.returnStatuses.length ? summary.returnStatuses.map((x) => RETURN_STATUS_LABELS[x as keyof typeof RETURN_STATUS_LABELS] ?? x).join(", ") : "—"],
               ].map(([label, value]) => (
                 <div key={label} className="grid grid-cols-[minmax(0,15rem)_1fr] gap-4 border-b border-slate-100 py-2.5 dark:border-slate-800/70">
                   <dt className="text-slate-700 dark:text-slate-200">{label}</dt>
-                  <dd className={`font-medium tabular-nums ${label === "Discrepancy Status" ? (summary.anyDiscrepancy ? "text-orange-700 dark:text-orange-300" : "text-green-700 dark:text-green-400") : ""}`}>{value}</dd>
+                  <dd className={`font-medium tabular-nums ${label === "Discrepancy Status" ? (summary.anyDiscrepancy ? "text-orange-700 dark:text-orange-300" : "text-green-700 dark:text-green-400") : label === "Recall Check" && recalledNames.length ? "text-red-700 dark:text-red-300" : ""}`}>{value}</dd>
                 </div>
               ))}
             </dl>
+            {unchecked.length > 0 && (
+              <p role="status" className="mt-3 rounded-lg bg-orange-50 px-3 py-2 text-sm text-orange-900 dark:bg-orange-950/40 dark:text-orange-100">
+                Recall check not done yet for: {unchecked.join(", ")}. These products have recalls in progress. Check their lot or serial number above.
+              </p>
+            )}
             {notEntered.length > 0 && (
               <p role="status" className="mt-3 rounded-lg bg-orange-50 px-3 py-2 text-sm text-orange-900 dark:bg-orange-950/40 dark:text-orange-100">
                 Quoted but not entered as received: {notEntered.map((l) => l.name).join(", ")}. If it didn&apos;t arrive, that is a shortage and the order is marked with a discrepancy.

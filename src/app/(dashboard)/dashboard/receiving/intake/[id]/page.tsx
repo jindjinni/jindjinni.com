@@ -4,6 +4,8 @@ import { canWriteAccounts, canWriteReceiving, isAdmin } from "@/lib/permissions"
 import { getReceivingCatalog, getReceivingPackage } from "@/lib/receiving-queries";
 import { getAdjustmentForPackage } from "@/lib/receiving-adjustment-service";
 import { storage } from "@/lib/receiving-storage";
+import { listChecks, listRecalls } from "@/lib/receiving-recall-service";
+import { photoReadingOn } from "@/lib/receiving-recall-photo";
 import { IntakeForm, type FormValues } from "./intake-form";
 
 export const dynamic = "force-dynamic";
@@ -16,6 +18,7 @@ export default async function IntakeDetailPage({ params }: { params: Promise<{ i
   const { pkg } = data;
   const catalog = await getReceivingCatalog(org.organizationId);
   const adjustmentView = await getAdjustmentForPackage(org.organizationId, id);
+  const [recalls, recallChecks] = await Promise.all([listRecalls(org.organizationId), listChecks(org.organizationId, id)]);
 
   const initial: FormValues = {
     trackingNumber: pkg.trackingNumber ?? "",
@@ -66,6 +69,9 @@ export default async function IntakeDetailPage({ params }: { params: Promise<{ i
       quotedLines={data.quotedLines}
       adjustment={data.adjustment}
       adjustmentView={adjustmentView}
+      recalls={recalls}
+      recallChecks={recallChecks}
+      photoReading={photoReadingOn()}
       started={data.started}
       catalog={catalog}
       saved={{

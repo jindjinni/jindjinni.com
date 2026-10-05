@@ -268,7 +268,7 @@ function ProductPopup({ catalog, pos, popRef, onChoose, onClose }: { catalog: Ca
   );
 }
 
-function ProductCell({ item, catalog, editable, busy, autoOpen, onChoose }: { item: ItemState; catalog: CatalogProduct[]; editable: boolean; busy: boolean; autoOpen: boolean; onChoose: (c: Choice) => void }) {
+function ProductCell({ item, catalog, editable, busy, autoOpen, recall, onChoose }: { item: ItemState; catalog: CatalogProduct[]; editable: boolean; busy: boolean; autoOpen: boolean; recall?: "RECALLED" | "CHECKED"; onChoose: (c: Choice) => void }) {
   const [pos, setPos] = useState<Pos | null>(null);
   const btnRef = useRef<HTMLButtonElement | null>(null);
   const popRef = useRef<HTMLDivElement | null>(null);
@@ -339,6 +339,12 @@ function ProductCell({ item, catalog, editable, busy, autoOpen, onChoose }: { it
       ) : has ? (
         <span className="max-w-full truncate rounded bg-sky-100 px-2 py-1 text-sm text-sky-950 dark:bg-sky-900/40 dark:text-sky-50">{item.productName}</span>
       ) : null}
+      {recall === "RECALLED" && (
+        <span title="On a recall list. Marked for return." className="ml-1.5 shrink-0 rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">Recall</span>
+      )}
+      {recall === "CHECKED" && (
+        <span title="Recall-checked: not on the lists we have loaded." className="ml-1.5 shrink-0 rounded border border-slate-300 px-1 py-0.5 text-[10px] font-semibold text-slate-600 dark:border-slate-600 dark:text-slate-300">Checked</span>
+      )}
       {pos &&
         createPortal(
         <ProductPopup
@@ -374,6 +380,7 @@ export function ReceivedItemsGrid({
   onError,
   onPatchMany,
   onRemoveMany,
+  recallStates,
 }: {
   packageId: string;
   items: ItemState[];
@@ -386,6 +393,8 @@ export function ReceivedItemsGrid({
   onError: (m: string) => void;
   onPatchMany: (updates: Record<string, Partial<ItemState>>) => void;
   onRemoveMany: (ids: string[]) => void;
+  /** Recall-check result per row id (rows never checked are absent). */
+  recallStates?: Record<string, "RECALLED" | "CHECKED">;
 }) {
   const router = useRouter();
   const [busy, startTransition] = useTransition();
@@ -562,7 +571,7 @@ export function ReceivedItemsGrid({
                       </div>
                     </td>
                     <td className={`${td} sticky left-[7.25rem] z-10 bg-white dark:bg-slate-900`}>
-                      <ProductCell item={it} catalog={catalog} editable={editable} busy={busy} autoOpen={justAdded === it.id && !it.productName} onChoose={(c) => chooseProduct(it, c)} />
+                      <ProductCell item={it} catalog={catalog} editable={editable} busy={busy} autoOpen={justAdded === it.id && !it.productName} recall={recallStates?.[it.id]} onChoose={(c) => chooseProduct(it, c)} />
                     </td>
                     <td className={td}>
                       <input aria-label={`NDC, ${label}`} id={`ndc-${it.id}`} className={cellInput} maxLength={40} disabled={!editable || notReceived} value={it.ndc} onChange={(e) => patch(it.id, { ndc: e.target.value })} />

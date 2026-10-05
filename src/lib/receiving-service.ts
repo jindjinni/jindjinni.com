@@ -13,11 +13,13 @@ import {
   receivingIntakeLogs,
   receivingPackagePhotos,
   receivingPackages,
+  receivingRecallChecks,
 } from "@/db/schema";
 import { newId } from "@/lib/ids";
 import { sendCustomerEmail, type EmailAttachment } from "@/lib/email";
 import { getReceivingPackage } from "@/lib/receiving-queries";
 import { buildCustomerEmail, buildPackagingWarning } from "@/lib/receiving-emails";
+import { isRecalledResult, rowRecallState } from "@/lib/receiving-recall";
 import { buildDbLines, finalPayout, pickEmailTemplate, weekOf } from "@/lib/receiving-rules";
 import { storage } from "@/lib/receiving-storage";
 
@@ -75,9 +77,13 @@ export async function writeIntakeLog(org: OrgRef, packageId: string) {
     for (const r of rows) meta.set(r.id, { code: r.code, brand: r.brand });
   }
   const agent = data.pkg.receivedByUserId ?? data.pkg.startedByUserId ?? null;
+  const checks = await db.select().from(receivingRecallChecks).where(and(eq(receivingRecallChecks.packageId, packageId), eq(receivingRecallChecks.organizationId, org.organizationId)));
   for (const i of data.items) {
     if (!i.productName.trim() || i.wasReceived === "NO" || !i.quantityReceived || i.quantityReceived <= 0) continue;
     const m = i.productId ? meta.get(i.productId) : undefined;
+    const rowChecks = checks.filter((c) => c.itemId === i.id);
+    const recallState = rowRecallState(rowChecks);
+    const recallName = rowChecks.filter((c) => isRecalledResult(c.result) && c.recallName).map((c) => c.recallName as string)[0] ?? null;
     for (const l of buildDbLines({
       quantityReceived: i.quantityReceived,
       needsReturn: i.needsReturn,
@@ -111,6 +117,8 @@ export async function writeIntakeLog(org: OrgRef, packageId: string) {
         returnStatus: i.returnStatus || null,
         itemNotes: i.notes || null,
         sourceItemId: i.id,
+        recallStatus: recallState === "NONE" ? null : recallState,
+        recallName,
       });
     }
   }

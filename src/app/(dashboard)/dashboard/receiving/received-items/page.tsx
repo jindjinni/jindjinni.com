@@ -99,6 +99,7 @@ export default async function ReceivedItemsPage({ searchParams }: { searchParams
               <th className="px-3 py-2">Condition</th>
               <th className="px-3 py-2">Expiration</th>
               <th className="px-3 py-2">Accepted / return</th>
+              <th className="px-3 py-2">Recall check</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
@@ -120,9 +121,10 @@ export default async function ReceivedItemsPage({ searchParams }: { searchParams
                 <td className="whitespace-nowrap px-3 py-2">{r.condition || "—"}</td>
                 <td className="whitespace-nowrap px-3 py-2 tabular-nums">{r.expirationEarliest ? (r.expirationLatest && r.expirationLatest !== r.expirationEarliest ? `${r.expirationEarliest} – ${r.expirationLatest}` : r.expirationEarliest) : "—"}</td>
                 <td className="whitespace-nowrap px-3 py-2">{dispositionLabel(r.needsReturn, r.quantityToReturn)}</td>
+                <td className="whitespace-nowrap px-3 py-2">{recallLabel(r.recallStatus, r.recallName)}</td>
               </tr>
             ))}
-            {rows.length === 0 && <tr><td colSpan={13} className="px-3 py-10 text-center text-slate-500">No received items match.</td></tr>}
+            {rows.length === 0 && <tr><td colSpan={14} className="px-3 py-10 text-center text-slate-500">No received items match.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -141,5 +143,11 @@ function dispositionLabel(needsReturn: string | null, qty: number | null) {
   if (needsReturn === "YES") return <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-900 dark:bg-red-900/40 dark:text-red-100">Return{qty ? ` ${qty}` : ""}</span>;
   if (needsReturn === "PENDING_REVIEW") return <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-900 dark:bg-yellow-900/40 dark:text-yellow-100">Pending review</span>;
   if (needsReturn === "NO") return <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-900 dark:bg-green-900/40 dark:text-green-100">Accepted</span>;
+  return <span className="text-slate-400">—</span>;
+}
+
+function recallLabel(status: string | null, name: string | null) {
+  if (status === "RECALLED") return <span title={name ?? undefined} className="rounded-full bg-red-600 px-2 py-0.5 text-xs font-bold text-white">Recalled</span>;
+  if (status === "CHECKED") return <span className="text-xs text-slate-600 dark:text-slate-300">Checked</span>;
   return <span className="text-slate-400">—</span>;
 }

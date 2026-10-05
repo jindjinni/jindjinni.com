@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
     condition: p.get("condition") ?? "",
     limit: 5000,
   });
-  const head = ["Line ID", "Date received", "Received by", "Package opened (UTC)", "Customer", "Order", "Tracking", "Brand", "Product", "Product code", "NDC", "Lot number", "Quantity received", "Quantity accepted", "Quantity to return", "Condition", "Expiration date", "Earliest expiration", "Latest expiration", "Accepted / return", "Return status", "Notes", "Product ID", "Package ID"];
+  const head = ["Line ID", "Date received", "Received by", "Package opened (UTC)", "Customer", "Order", "Tracking", "Brand", "Product", "Product code", "NDC", "Lot number", "Quantity received", "Quantity accepted", "Quantity to return", "Condition", "Expiration date", "Earliest expiration", "Latest expiration", "Accepted / return", "Return status", "Recall check", "Recall", "Notes", "Product ID", "Package ID"];
   const lines = [head.map(cell).join(",")];
   for (const r of rows) {
     lines.push(
@@ -52,6 +52,8 @@ export async function GET(req: NextRequest) {
         r.expirationLatest,
         r.needsReturn === "YES" ? "Return" : r.needsReturn === "PENDING_REVIEW" ? "Pending review" : r.needsReturn === "NO" ? "Accepted" : "",
         r.returnStatus,
+        r.recallStatus === "RECALLED" ? "Recalled" : r.recallStatus === "CHECKED" ? "Checked, not on lists" : "",
+        r.recallName,
         r.notes,
         r.productId,
         r.packageId,

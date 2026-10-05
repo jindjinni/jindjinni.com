@@ -586,6 +586,9 @@ export type ReceivedItemRow = {
   /** Received minus returned; null while the return decision is still pending. */
   quantityAccepted: number | null;
   returnStatus: string | null;
+  /** RECALLED / CHECKED from the Step 6 recall check; null when it wasn't checked. */
+  recallStatus: string | null;
+  recallName: string | null;
   notes: string | null;
   receivedBy: string | null;
   receivedByUserId: string | null;
@@ -642,6 +645,8 @@ export async function getReceivedItems(organizationId: string, f: ReceivedItemsF
       quantityToReturn: receivingIntakeLines.quantityToReturn,
       quantityAccepted: receivingIntakeLines.quantityAccepted,
       returnStatus: receivingIntakeLines.returnStatus,
+      recallStatus: receivingIntakeLines.recallStatus,
+      recallName: receivingIntakeLines.recallName,
       notes: receivingIntakeLines.itemNotes,
       agentId: sql<string | null>`${agentExpr}`,
       receivedByName: users.name,
@@ -693,6 +698,8 @@ export async function getReceivedItems(organizationId: string, f: ReceivedItemsF
       needsReturn: r.needsReturn,
       quantityToReturn: r.quantityToReturn,
       quantityAccepted: r.quantityAccepted ?? (r.needsReturn === "PENDING_REVIEW" ? null : acceptedQuantity(r.quantity, r.needsReturn, r.quantityToReturn)),
+      recallStatus: r.recallStatus,
+      recallName: r.recallName,
       returnStatus: r.returnStatus,
       notes: r.notes,
       receivedBy: r.receivedByName || r.receivedByEmail || null,

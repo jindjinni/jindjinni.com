@@ -1218,6 +1218,77 @@ export const receivingExpirationLots = sqliteTable(
 );
 
 /**
+ * A product recall the receiving team checks received products against (Omnipod 5 pods, Libre 3 sensors, Dexcom G7
+ * receivers ...). A recall can carry a list of affected lot / serial numbers (pasted in by an admin) and/or point at the
+ * manufacturer's own lookup page, for manufacturers that don't publish a list.
+ */
+export const receivingRecalls = sqliteTable(
+  "receiving_recalls",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    manufacturer: text("manufacturer").notNull().default(""),
+    /** Comma-separated words in a product name that point at this recall ("omnipod, pod"). */
+    keywords: text("keywords").notNull().default(""),
+    numberHint: text("number_hint"),
+    lookupUrl: text("lookup_url"),
+    lookupLabel: text("lookup_label"),
+    noticeUrl: text("notice_url"),
+    active: integer("active", { mode: "boolean" }).notNull().default(true),
+    /** When the pasted list was last replaced / added to. */
+    listUpdatedAt: text("list_updated_at"),
+    ...timestamps,
+  },
+  (t) => [index("receiving_recalls_org_idx").on(t.organizationId)],
+);
+
+/** One affected lot / serial number of a recall, normalised (upper case, letters and digits only). A prefix covers every number that starts with it. */
+export const receivingRecallNumbers = sqliteTable(
+  "receiving_recall_numbers",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    recallId: text("recall_id")
+      .notNull()
+      .references(() => receivingRecalls.id, { onDelete: "cascade" }),
+    value: text("value").notNull(),
+    isPrefix: integer("is_prefix", { mode: "boolean" }).notNull().default(false),
+  },
+  (t) => [uniqueIndex("receiving_recall_numbers_unique").on(t.recallId, t.value), index("receiving_recall_numbers_org_idx").on(t.organizationId)],
+);
+
+/** Every recall check made on a received row: the number checked and what was found. */
+export const receivingRecallChecks = sqliteTable(
+  "receiving_recall_checks",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    packageId: text("package_id")
+      .notNull()
+      .references(() => receivingPackages.id, { onDelete: "cascade" }),
+    itemId: text("item_id")
+      .notNull()
+      .references(() => receivingItems.id, { onDelete: "cascade" }),
+    /** The recall it matched or was confirmed against; null when nothing matched. */
+    recallId: text("recall_id"),
+    recallName: text("recall_name"),
+    enteredNumber: text("entered_number").notNull(),
+    result: text("result", { enum: ["ON_LIST", "NOT_ON_LIST", "CONFIRMED_AFFECTED", "CONFIRMED_OK"] }).notNull(),
+    note: text("note"),
+    checkedByUserId: text("checked_by_user_id"),
+    checkedAt: text("checked_at").notNull().default(sql`(current_timestamp)`),
+  },
+  (t) => [index("receiving_recall_checks_item_idx").on(t.itemId), index("receiving_recall_checks_pkg_idx").on(t.packageId)],
+);
+
+/**
  * The inventory ledger for received shipments: one header per shipment
  * (who sent it, when, what was paid) and one line per product received.
  * Written when a shipment is submitted; feeds the Weekly Received and
@@ -1282,6 +1353,9 @@ export const receivingIntakeLines = sqliteTable(
     returnStatus: text("return_status"),
     itemNotes: text("item_notes"),
     sourceItemId: text("source_item_id"),
+    // Recall check result for the row at submit time: RECALLED or CHECKED (null = not checked). Plain nullable, no FK.
+    recallStatus: text("recall_status"),
+    recallName: text("recall_name"),
     ...timestamps,
   },
   (t) => [
