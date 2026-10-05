@@ -1030,7 +1030,8 @@ export const receivingPackages = sqliteTable(
     receivedByUserId: text("received_by_user_id").references(() => users.id),
     // Set once, by the app, the moment an agent opens the package: server time (UTC) and the signed-in agent. Never edited.
     startedAt: text("started_at"),
-    startedByUserId: text("started_by_user_id").references(() => users.id),
+    // No FK on purpose: this column was added to a live table by ALTER ... ADD, which cannot attach one, and a declared FK makes every later deploy plan a table rebuild.
+    startedByUserId: text("started_by_user_id"),
     externalDamage: text("external_damage", { enum: ["YES", "NO"] }),
     damageTypes: text("damage_types"), // JSON array of labels
     damageNotes: text("damage_notes"),
@@ -1234,7 +1235,7 @@ export const receivingIntakeLogs = sqliteTable(
       .references(() => receivingPackages.id, { onDelete: "cascade" }),
     receivedFrom: text("received_from").notNull(),
     receivedAt: text("received_at"),
-    receivedByUserId: text("received_by_user_id").references(() => users.id),
+    receivedByUserId: text("received_by_user_id"),
     startedAt: text("started_at"),
     pricePaid: real("price_paid"),
     notes: text("notes"),
@@ -1268,7 +1269,7 @@ export const receivingIntakeLines = sqliteTable(
     weekOf: text("week_of"), // the Monday of the week it was received, YYYY-MM-DD
     receivedFrom: text("received_from"),
     receivedAt: text("received_at"),
-    receivedByUserId: text("received_by_user_id").references(() => users.id),
+    receivedByUserId: text("received_by_user_id"),
     needsReturn: text("needs_return"),
     quantityToReturn: integer("quantity_to_return"),
     ...timestamps,
