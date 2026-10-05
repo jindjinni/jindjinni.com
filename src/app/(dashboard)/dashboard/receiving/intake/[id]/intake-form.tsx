@@ -566,13 +566,13 @@ export function IntakeForm(props: Props) {
           </Row>
         )}
         <fieldset disabled={!canAccounts} className="min-w-0 border-0 p-0">
-          <Row label="Receiving Decision">
+          <Row label="Order Final Decision">
             <select id="accountsDecision" className={`${field} sm:w-72`} value={v.accountsDecision} onChange={(e) => set("accountsDecision", e.target.value)}>
               <option value="">Choose…</option>
               {Object.entries(ACCOUNTS_DECISION_LABELS).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
             </select>
           </Row>
-          <Row label="Order Status">
+          <Row label="Accounts Status">
             <select id="accountsStatus" className={`${field} sm:w-72`} value={v.accountsStatus} onChange={(e) => set("accountsStatus", e.target.value)}>
               <option value="">Choose…</option>
               {Object.entries(ACCOUNTS_STATUS_LABELS).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
