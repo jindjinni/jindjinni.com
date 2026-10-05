@@ -357,7 +357,7 @@ export function RecallCheck({
           </div>
           <p className="mt-2 max-w-3xl rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-950 dark:bg-sky-950/30 dark:text-sky-100">
             <strong>Photo tip:</strong> frame only the side of the box or product with the lot number, serial number or barcode. Keep pharmacy stickers and anything with a patient&apos;s name out of the picture.
-            {photoReading ? " If no barcode is found, the photo is sent to a reading service to pick out the numbers, and it is not saved." : ""}
+            {photoReading ? " If no barcode is found, the photo is sent to an outside reading service (Anthropic) to pick out the numbers. This app does not store it, but the service may keep it for a short time." : ""}
             {" "}A USB or Bluetooth barcode scanner works too: click the number box, scan, and the check runs by itself.
           </p>
           {scanMsg && <p role="status" className="mt-2 text-sm text-slate-700 dark:text-slate-200">{scanMsg}</p>}
