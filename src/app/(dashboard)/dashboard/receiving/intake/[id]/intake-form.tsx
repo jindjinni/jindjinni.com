@@ -33,6 +33,9 @@ import { Choice, PhotoSlot, Row, Step, YN, YN_RISK, field } from "./intake-parts
 import { ItemAdjustmentCard, itemFactsOf, toItemState, type ItemState } from "./item-card";
 import { ReceiptPreview, ReceivedItemsGrid } from "./receiving-table";
 import { RecallCheck } from "./recall-check";
+import { ScanStation } from "./scan-station";
+import type { SerialView } from "@/lib/receiving-serial-service";
+import { severityOf } from "@/lib/receiving-serial-rules";
 import { RowScanDialog } from "./row-scan-dialog";
 import type { RecallCheckView, RecallView } from "@/lib/receiving-recall-service";
 import { recallsForProduct, rowRecallState } from "@/lib/receiving-recall";
@@ -85,6 +88,7 @@ type Props = {
   adjustmentView: AdjustmentView | null;
   recalls: RecallView[];
   recallChecks: RecallCheckView[];
+  serials: SerialView[];
   photoReading: boolean;
   photos: PackagePhoto[];
   items: ItemView[];
@@ -148,6 +152,7 @@ export function IntakeForm(props: Props) {
 
   // Recall checks made in Step 6 (saved on the server as they are made).
   const [recallChecks, setRecallChecks] = useState<RecallCheckView[]>(props.recallChecks);
+  const [serials, setSerials] = useState<SerialView[]>(props.serials);
   const [recalls, setRecalls] = useState<RecallView[]>(props.recalls);
   const [scanItemId, setScanItemId] = useState<string | null>(null);
   const recallStates: Record<string, "RECALLED" | "CHECKED"> = {};
@@ -155,6 +160,7 @@ export function IntakeForm(props: Props) {
     const st = rowRecallState(recallChecks.filter((c) => c.itemId === it.id));
     if (st !== "NONE") recallStates[it.id] = st;
   }
+  const scanFlagged = serials.filter((x) => severityOf(x.flags) === "stop").length;
   const recalledNames = items.filter((i) => recallStates[i.id] === "RECALLED").map((i) => i.productName);
   const checkedCount = Object.keys(recallStates).length;
   // Products that point at a recall (by name) but were never checked.
@@ -504,6 +510,18 @@ export function IntakeForm(props: Props) {
             onScanRow={editable ? setScanItemId : undefined}
           />
 
+          <ScanStation
+            packageId={packageId}
+            items={items}
+            editable={editable}
+            photoReading={props.photoReading}
+            serials={serials}
+            onSerials={setSerials}
+            onChecks={setRecallChecks}
+            onPatchMany={patchMany}
+            onError={setError}
+          />
+
           <RecallCheck
             packageId={packageId}
             items={items}
@@ -539,11 +557,12 @@ export function IntakeForm(props: Props) {
                 ["Discrepancy Status", summary.anyDiscrepancy ? "Discrepancy" : "None"],
                 ["Total Quantity To Be Returned", String(summary.quantityToReturn)],
                 ["Recall Check", recalledNames.length ? `RECALLED: ${recalledNames.join(", ")}` : checkedCount ? `${checkedCount} product${checkedCount === 1 ? "" : "s"} checked, none on the lists we have` : "Not checked"],
+                ["Units Scanned", serials.length ? `${serials.length} scanned${scanFlagged ? `, ${scanFlagged} flagged (repeated, made-up or wrong serial, recalled or expired)` : ", none flagged"}` : "None scanned"],
                 ["Return Status Summary", summary.returnStatuses.length ? summary.returnStatuses.map((x) => RETURN_STATUS_LABELS[x as keyof typeof RETURN_STATUS_LABELS] ?? x).join(", ") : "—"],
               ].map(([label, value]) => (
                 <div key={label} className="grid grid-cols-[minmax(0,15rem)_1fr] gap-4 border-b border-slate-100 py-2.5 dark:border-slate-800/70">
                   <dt className="text-slate-700 dark:text-slate-200">{label}</dt>
-                  <dd className={`font-medium tabular-nums ${label === "Discrepancy Status" ? (summary.anyDiscrepancy ? "text-orange-700 dark:text-orange-300" : "text-green-700 dark:text-green-400") : label === "Recall Check" && recalledNames.length ? "text-red-700 dark:text-red-300" : ""}`}>{value}</dd>
+                  <dd className={`font-medium tabular-nums ${label === "Discrepancy Status" ? (summary.anyDiscrepancy ? "text-orange-700 dark:text-orange-300" : "text-green-700 dark:text-green-400") : (label === "Recall Check" && recalledNames.length) || (label === "Units Scanned" && scanFlagged) ? "text-red-700 dark:text-red-300" : ""}`}>{value}</dd>
                 </div>
               ))}
             </dl>

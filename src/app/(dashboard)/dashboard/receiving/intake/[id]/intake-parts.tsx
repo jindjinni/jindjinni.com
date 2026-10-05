@@ -9,6 +9,7 @@ import { deleteReceivingPhoto, uploadReceivingPhoto } from "@/app/actions/receiv
 import { prepareUploadFile } from "@/lib/client-image";
 import type { PackagePhoto } from "@/lib/receiving-queries";
 import { DOCUMENT_PHOTO_KINDS, MAX_PHOTOS_PER_KIND, type PhotoKind } from "@/lib/receiving-rules";
+import { CameraCapture, useCameraSupported } from "./camera-capture";
 
 export const field =
   "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm disabled:bg-slate-100 disabled:text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:disabled:bg-slate-800";
@@ -128,19 +129,24 @@ export function PhotoSlot({
   const [pending, startTransition] = useTransition();
   const [busy, setBusy] = useState(false);
   const input = useRef<HTMLInputElement>(null);
+  const [camOpen, setCamOpen] = useState(false);
+  const canCam = useCameraSupported();
   const mine = photos.filter((p) => p.kind === kind && (p.itemId ?? null) === (itemId ?? null));
   const pdfOk = DOCUMENT_PHOTO_KINDS.includes(kind);
   const size = compact ? "h-20 w-20" : "h-24 w-24";
 
-  async function add(files: FileList | null) {
-    if (!files || files.length === 0) return;
+  /** Uploads each file (chosen from the computer, or taken with the live camera) one after the other. Returns true when all went through. */
+  async function addFiles(files: File[]): Promise<boolean> {
+    if (files.length === 0) return true;
     onError("");
     setBusy(true);
+    let ok = true;
     try {
-      for (const file of Array.from(files)) {
+      for (const file of files) {
         const prepared = await prepareUploadFile(file);
         if ("error" in prepared) {
           onError(prepared.error);
+          ok = false;
           break;
         }
         const fd = new FormData();
@@ -148,15 +154,21 @@ export function PhotoSlot({
         const res = await uploadReceivingPhoto(packageId, kind, fd, itemId ?? null);
         if (res.error) {
           onError(res.error);
+          ok = false;
           break;
         }
       }
     } catch {
       onError("Couldn't add that file. Try again.");
+      ok = false;
     }
     setBusy(false);
     if (input.current) input.current.value = "";
     router.refresh();
+    return ok;
+  }
+  async function add(files: FileList | null) {
+    await addFiles(files ? Array.from(files) : []);
   }
 
   function remove(id: string) {
@@ -205,7 +217,7 @@ export function PhotoSlot({
             }`}
           >
             <span className="text-xl leading-none" aria-hidden="true">{busy ? "…" : "+"}</span>
-            {busy ? "Adding" : pdfOk ? "Add file" : "Add photo"}
+            {busy ? "Adding" : pdfOk ? "Choose file" : "Choose photo"}
             <input
               ref={input}
               id={`photo-${kind}${itemId ? `-${itemId}` : ""}`}
@@ -218,7 +230,29 @@ export function PhotoSlot({
             />
           </label>
         )}
+        {editable && mine.length < MAX_PHOTOS_PER_KIND && canCam && (
+          <button
+            type="button"
+            disabled={!storageOk || busy}
+            onClick={() => setCamOpen(true)}
+            className={`flex ${size} flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed text-center text-xs font-medium ${
+              storageOk ? "cursor-pointer border-sky-400 text-sky-900 hover:bg-sky-50 dark:text-sky-200 dark:hover:bg-sky-950/40" : "cursor-not-allowed border-slate-300 text-slate-400"
+            }`}
+          >
+            <span className="text-xl leading-none" aria-hidden="true">◉</span>
+            Live camera
+          </button>
+        )}
       </div>
+      {camOpen && (
+        <CameraCapture
+          title="Take photos with the camera"
+          onClose={() => setCamOpen(false)}
+          onCapture={async (file) => {
+            await addFiles([file]);
+          }}
+        />
+      )}
       {editable && !storageOk && <p className="mt-1 text-xs text-slate-500">Photo storage isn&apos;t connected yet.</p>}
     </div>
   );

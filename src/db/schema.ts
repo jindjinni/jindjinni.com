@@ -1296,6 +1296,45 @@ export const receivingRecallChecks = sqliteTable(
 );
 
 /**
+ * Step 6 scanner: one row per unit scanned (or typed) while receiving. The serial number is stored normalised so the
+ * same serial turning up twice -- in one shipment or in any earlier one -- can be found with a single indexed lookup.
+ * A serial that repeats is the main sign of a counterfeit or re-boxed product, so `flag` says what was found.
+ */
+export const receivingItemSerials = sqliteTable(
+  "receiving_item_serials",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    packageId: text("package_id")
+      .notNull()
+      .references(() => receivingPackages.id, { onDelete: "cascade" }),
+    itemId: text("item_id")
+      .notNull()
+      .references(() => receivingItems.id, { onDelete: "cascade" }),
+    /** As scanned or typed. */
+    serial: text("serial"),
+    /** Upper case, letters and digits only. Null when the barcode had no serial (a lot-only product). */
+    serialNorm: text("serial_norm"),
+    lot: text("lot"),
+    gtin: text("gtin"),
+    expiry: text("expiry"),
+    source: text("source", { enum: ["SCANNER", "CAMERA", "PHOTO", "TYPED"] }).notNull().default("SCANNER"),
+    /** OK, or a short code list (DUPLICATE_SHIPMENT, DUPLICATE_PRIOR, BAD_FORMAT, BAD_GTIN, PLACEHOLDER, RECALLED), comma separated. */
+    flag: text("flag").notNull().default("OK"),
+    flagNote: text("flag_note"),
+    scannedByUserId: text("scanned_by_user_id"),
+    scannedAt: text("scanned_at").notNull().default(sql`(current_timestamp)`),
+  },
+  (t) => [
+    index("receiving_item_serials_item_idx").on(t.itemId),
+    index("receiving_item_serials_pkg_idx").on(t.packageId),
+    index("receiving_item_serials_org_serial_idx").on(t.organizationId, t.serialNorm),
+  ],
+);
+
+/**
  * The inventory ledger for received shipments: one header per shipment
  * (who sent it, when, what was paid) and one line per product received.
  * Written when a shipment is submitted; feeds the Weekly Received and

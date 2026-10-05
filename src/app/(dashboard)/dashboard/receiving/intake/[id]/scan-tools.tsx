@@ -7,6 +7,7 @@
 import { useEffect, useRef, useState } from "react";
 import { readRecallPhoto } from "@/app/actions/receiving-recalls";
 import { parseGs1 } from "@/lib/receiving-recall";
+import { CameraCapture, useCameraSupported } from "./camera-capture";
 
 export const scanBtn =
   "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-600 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800";
@@ -40,15 +41,18 @@ export function ScanTools({
   onText,
   onError,
   autoStart,
+  continuous,
   idPrefix = "scan",
 }: {
   disabled?: boolean;
   photoReading: boolean;
-  /** Called with the text of a barcode / QR code, or the numbers read from a photo. */
-  onText: (text: string) => void;
+  /** Called with the text of a barcode / QR code, or the numbers read from a photo; `source` says which. */
+  onText: (text: string, source: "CAMERA" | "PHOTO") => void;
   onError: (m: string) => void;
   /** Opens the camera as soon as this appears. */
   autoStart?: boolean;
+  /** Keep the camera open after a barcode is read, so a stack of boxes can be scanned one after another. */
+  continuous?: boolean;
   idPrefix?: string;
 }) {
   const [scanning, setScanning] = useState(false);
@@ -56,6 +60,9 @@ export function ScanTools({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const stopRef = useRef<(() => void) | null>(null);
   const photoRef = useRef<HTMLInputElement | null>(null);
+  const lastRead = useRef({ text: "", at: 0 });
+  const [liveShot, setLiveShot] = useState(false);
+  const canCam = useCameraSupported();
   const onTextRef = useRef(onText);
   useEffect(() => {
     onTextRef.current = onText;
@@ -76,10 +83,22 @@ export function ScanTools({
       if (!videoRef.current) return;
       const controls = await reader.decodeFromConstraints({ video: { facingMode: { ideal: "environment" } } }, videoRef.current, (result, _err, c) => {
         if (result) {
+          const text = result.getText();
+          if (continuous) {
+            // The same code stays in view for a second or two: only count it once.
+            const now = Date.now();
+            if (text === lastRead.current.text && now - lastRead.current.at < 2500) {
+              lastRead.current.at = now;
+              return;
+            }
+            lastRead.current = { text, at: now };
+            onTextRef.current(text, "CAMERA");
+            return;
+          }
           c.stop();
           stopRef.current = null;
           setScanning(false);
-          onTextRef.current(result.getText());
+          onTextRef.current(text, "CAMERA");
         }
       });
       stopRef.current = () => controls.stop();
@@ -101,6 +120,7 @@ export function ScanTools({
       started.current = true;
       void startScan();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoStart]);
 
   async function onPhoto(file: File | undefined) {
@@ -112,7 +132,7 @@ export function ScanTools({
       try {
         const res = await (await readers()).decodeFromImageUrl(url);
         setMsg("");
-        onTextRef.current(res.getText());
+        onTextRef.current(res.getText(), "PHOTO");
         return;
       } finally {
         URL.revokeObjectURL(url);
@@ -134,24 +154,28 @@ export function ScanTools({
     }
     const l = r.label;
     setMsg(`Read from the photo: ${[l.lot && `lot ${l.lot}`, l.serial && `serial ${l.serial}`].filter(Boolean).join(", ")}. Check it matches the label.`);
-    onTextRef.current(l.barcodeText && parseGs1(l.barcodeText) ? l.barcodeText : [l.lot, l.serial].filter(Boolean).join(" "));
+    onTextRef.current(l.barcodeText && parseGs1(l.barcodeText) ? l.barcodeText : [l.lot, l.serial].filter(Boolean).join(" "), "PHOTO");
   }
 
   return (
     <div>
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" className={scanBtn} disabled={disabled || scanning} onClick={startScan}>
-          <span aria-hidden>▣</span> Scan barcode with camera
+          <span aria-hidden>▣</span> {scanning ? "Camera is on" : "Scan barcode with camera"}
         </button>
+        {canCam && (
+          <button type="button" className={scanBtn} disabled={disabled} onClick={() => setLiveShot(true)}>
+            <span aria-hidden>◉</span> Take a photo with the camera
+          </button>
+        )}
         <button type="button" className={scanBtn} disabled={disabled} onClick={() => photoRef.current?.click()}>
-          <span aria-hidden>◉</span> Take or choose a photo of the label
+          <span aria-hidden>▤</span> Choose a photo of the label
         </button>
         <input
           ref={photoRef}
           id={`${idPrefix}-photo`}
           type="file"
           accept="image/*"
-          capture="environment"
           className="sr-only"
           tabIndex={-1}
           aria-label="Photo of the label"
@@ -167,6 +191,17 @@ export function ScanTools({
         <strong>Photo tip:</strong> frame only the side of the box or product with the lot number, serial number or barcode. Keep pharmacy stickers and anything with a patient&apos;s name out of the picture.
         {photoReading ? " If no barcode is found, the photo is sent to an outside reading service (Anthropic) to pick out the numbers. This app does not store it, but the service may keep it for a short time." : ""}
       </p>
+      {liveShot && (
+        <CameraCapture
+          title="Photo of the label"
+          multiple={false}
+          onClose={() => setLiveShot(false)}
+          onCapture={(file) => {
+            setLiveShot(false);
+            void onPhoto(file);
+          }}
+        />
+      )}
       {msg && (
         <p role="status" className="mt-2 text-sm text-slate-700 dark:text-slate-200">
           {msg}
