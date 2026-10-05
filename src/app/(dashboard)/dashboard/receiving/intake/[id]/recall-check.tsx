@@ -320,7 +320,7 @@ export function RecallCheck({
                   id="recall-number"
                   className={`${field} min-w-[12rem] flex-1 font-mono uppercase`}
                   value={input}
-                  placeholder={row?.lotNumber ? `e.g. ${row.lotNumber}` : "Type, scan or take a photo"}
+                  placeholder={row?.lotNumber ? `e.g. ${row.lotNumber}` : "Type, use a barcode scanner, or take a photo"}
                   autoComplete="off"
                   autoCapitalize="characters"
                   spellCheck={false}
@@ -329,11 +329,11 @@ export function RecallCheck({
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault();
-                      if (editable && !pending) run(input);
+                      if (editable && !pending) applyScanned(input);
                     }
                   }}
                 />
-                <button type="button" className={btnPrimary} disabled={!editable || pending || !input.trim()} onClick={() => run(input)}>
+                <button type="button" className={btnPrimary} disabled={!editable || pending || !input.trim()} onClick={() => applyScanned(input)}>
                   {pending ? "Checking…" : "Check"}
                 </button>
               </div>
@@ -353,15 +353,20 @@ export function RecallCheck({
               <span aria-hidden>◉</span> Take or choose a photo of the label
             </button>
             <input ref={photoRef} id="recall-photo" type="file" accept="image/*" capture="environment" className="sr-only" tabIndex={-1} aria-label="Photo of the label" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; void onPhoto(f); }} />
-            <span className="text-xs text-slate-500">{photoReading ? "Photos are read for the lot and serial number." : "Photos: barcodes only (text reading is not switched on)."}</span>
+            <span className="text-xs text-slate-500">{photoReading ? "If there is no barcode, the label text is read for the lot and serial number." : "Photos work for barcodes and QR codes."}</span>
           </div>
+          <p className="mt-2 max-w-3xl rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-950 dark:bg-sky-950/30 dark:text-sky-100">
+            <strong>Photo tip:</strong> frame only the side of the box or product with the lot number, serial number or barcode. Keep pharmacy stickers and anything with a patient&apos;s name out of the picture.
+            {photoReading ? " If no barcode is found, the photo is sent to a reading service to pick out the numbers, and it is not saved." : ""}
+            {" "}A USB or Bluetooth barcode scanner works too: click the number box, scan, and the check runs by itself.
+          </p>
           {scanMsg && <p role="status" className="mt-2 text-sm text-slate-700 dark:text-slate-200">{scanMsg}</p>}
 
           {scanning && (
             <div className="mt-3 max-w-md overflow-hidden rounded-xl border border-slate-300 bg-black dark:border-slate-600">
               <video ref={videoRef} className="aspect-[4/3] w-full object-cover" muted playsInline aria-label="Camera view: point at the barcode" />
               <div className="flex items-center justify-between gap-2 bg-slate-900 px-3 py-2 text-xs text-slate-200">
-                <span>Hold the barcode or QR code inside the picture.</span>
+                <span>Hold the barcode or QR code inside the picture. Keep patient stickers out of view.</span>
                 <button type="button" className="rounded border border-slate-500 px-2 py-1 font-medium text-white hover:bg-slate-800" onClick={stopScan}>
                   Stop
                 </button>
