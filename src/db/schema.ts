@@ -1272,6 +1272,16 @@ export const receivingIntakeLines = sqliteTable(
     receivedByUserId: text("received_by_user_id"),
     needsReturn: text("needs_return"),
     quantityToReturn: integer("quantity_to_return"),
+    // What inventory will use: the units that are accepted (received minus returned; empty while the return decision is
+    // still pending), plus a snapshot of the product and the receiving row this came from. Plain columns (no FK) on purpose:
+    // they were added to a live table, and ALTER ... ADD can't attach a foreign key.
+    quantityAccepted: integer("quantity_accepted"),
+    expirationDate: text("expiration_date"),
+    productCode: text("product_code"),
+    brand: text("brand"),
+    returnStatus: text("return_status"),
+    itemNotes: text("item_notes"),
+    sourceItemId: text("source_item_id"),
     ...timestamps,
   },
   (t) => [

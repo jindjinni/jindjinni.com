@@ -313,3 +313,83 @@ export function suggestDisposition(condition: string | null | undefined): "NO" |
   if (condition === "Mint" || condition === "Dinged") return "NO";
   return "PENDING_REVIEW";
 }
+
+// ---- received items database ---------------------------------------------------
+
+export type DbLineInput = {
+  quantityReceived: number;
+  needsReturn?: string | null;
+  quantityToReturn?: number | null;
+  lotNumber?: string | null;
+  expirationDate?: string | null;
+  lots?: { lotNumber?: string | null; expirationDate?: string | null; expirationEndDate?: string | null; quantity?: number | null }[];
+};
+export type DbLine = {
+  lotNumber: string | null;
+  expirationDate: string | null;
+  expirationEarliest: string | null;
+  expirationLatest: string | null;
+  quantity: number;
+  quantityToReturn: number | null;
+  /** What goes into stock: received minus returned. Null while the return decision is still "Pending Review". */
+  quantityAccepted: number | null;
+};
+
+/** How many of `quantity` count as accepted (null when still undecided). */
+export function acceptedQuantity(quantity: number, needsReturn?: string | null, quantityToReturn?: number | null): number | null {
+  if (needsReturn === "PENDING_REVIEW") return null;
+  if (needsReturn === "YES") return Math.max(0, quantity - Math.min(quantity, quantityToReturn ?? quantity));
+  return quantity;
+}
+
+/**
+ * The rows the Received Items database gets for one received product line. Normally one row; a product received in
+ * several lots (each with its own count) becomes one row per lot, so inventory can track each lot and expiration on its own.
+ * Returned units are taken off the first lots first.
+ */
+export function buildDbLines(i: DbLineInput): DbLine[] {
+  const total = i.quantityReceived;
+  const dates = (xs: (string | null | undefined)[]) => xs.filter((x): x is string => !!x).sort();
+  const lots = i.lots ?? [];
+  const counted = lots.filter((l) => (l.quantity ?? 0) > 0);
+  const lotSum = counted.reduce((a, l) => a + (l.quantity ?? 0), 0);
+
+  type Seg = { lotNumber: string | null; expirationDate: string | null; earliest: string | null; latest: string | null; quantity: number };
+  let segs: Seg[];
+  if (counted.length > 0 && lotSum <= total) {
+    segs = counted.map((l) => {
+      const d = dates([l.expirationDate, l.expirationEndDate]);
+      return { lotNumber: l.lotNumber?.trim() || null, expirationDate: l.expirationDate || null, earliest: d[0] ?? null, latest: d[d.length - 1] ?? null, quantity: l.quantity ?? 0 };
+    });
+    if (lotSum < total) {
+      const d = dates([i.expirationDate]);
+      segs.push({ lotNumber: i.lotNumber?.trim() || null, expirationDate: i.expirationDate || null, earliest: d[0] ?? null, latest: d[d.length - 1] ?? null, quantity: total - lotSum });
+    }
+  } else {
+    const d = dates([i.expirationDate, ...lots.flatMap((l) => [l.expirationDate, l.expirationEndDate])]);
+    segs = [
+      {
+        lotNumber: i.lotNumber?.trim() || lots.map((l) => l.lotNumber?.trim()).find(Boolean) || null,
+        expirationDate: i.expirationDate || lots.map((l) => l.expirationDate).find(Boolean) || null,
+        earliest: d[0] ?? null,
+        latest: d[d.length - 1] ?? null,
+        quantity: total,
+      },
+    ];
+  }
+
+  let toReturn = i.needsReturn === "YES" ? Math.min(total, i.quantityToReturn ?? total) : 0;
+  return segs.map((g) => {
+    const r = Math.min(g.quantity, toReturn);
+    toReturn -= r;
+    return {
+      lotNumber: g.lotNumber,
+      expirationDate: g.expirationDate,
+      expirationEarliest: g.earliest,
+      expirationLatest: g.latest,
+      quantity: g.quantity,
+      quantityToReturn: i.needsReturn === "YES" ? r : null,
+      quantityAccepted: acceptedQuantity(g.quantity, i.needsReturn, i.needsReturn === "YES" ? r : null),
+    };
+  });
+}

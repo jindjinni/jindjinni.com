@@ -3,10 +3,12 @@
 // Nothing here checks the signed-in user -- callers (the actions) do that and
 // pass the company in.
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import {
   purchasingAuditLog,
+  purchasingCategories,
+  purchasingProducts,
   receivingIntakeLines,
   receivingIntakeLogs,
   receivingPackagePhotos,
@@ -16,7 +18,7 @@ import { newId } from "@/lib/ids";
 import { sendCustomerEmail, type EmailAttachment } from "@/lib/email";
 import { getReceivingPackage } from "@/lib/receiving-queries";
 import { buildCustomerEmail, buildPackagingWarning } from "@/lib/receiving-emails";
-import { finalPayout, pickEmailTemplate, weekOf } from "@/lib/receiving-rules";
+import { buildDbLines, finalPayout, pickEmailTemplate, weekOf } from "@/lib/receiving-rules";
 import { storage } from "@/lib/receiving-storage";
 
 export type OrgRef = { organizationId: string; userId: string; organizationName: string };
@@ -61,28 +63,56 @@ export async function writeIntakeLog(org: OrgRef, packageId: string) {
     notes: `Auto-logged from Receiving. Order: ${data.brief.quotationNumber}`,
     loggedByUserId: org.userId,
   });
+  // Product code + brand as they are right now, saved on the line so later catalog edits never rewrite history.
+  const productIds = Array.from(new Set(data.items.map((i) => i.productId).filter((x): x is string => !!x)));
+  const meta = new Map<string, { code: string | null; brand: string | null }>();
+  if (productIds.length > 0) {
+    const rows = await db
+      .select({ id: purchasingProducts.id, code: purchasingProducts.productCode, brand: purchasingCategories.name })
+      .from(purchasingProducts)
+      .leftJoin(purchasingCategories, eq(purchasingCategories.id, purchasingProducts.categoryId))
+      .where(and(inArray(purchasingProducts.id, productIds), eq(purchasingProducts.organizationId, org.organizationId)));
+    for (const r of rows) meta.set(r.id, { code: r.code, brand: r.brand });
+  }
+  const agent = data.pkg.receivedByUserId ?? data.pkg.startedByUserId ?? null;
   for (const i of data.items) {
-    if (i.wasReceived === "NO" || !i.quantityReceived || i.quantityReceived <= 0) continue;
-    const dates = [i.expirationDate, ...i.lots.flatMap((l) => [l.expirationDate, l.expirationEndDate])].filter(Boolean).sort();
-    await db.insert(receivingIntakeLines).values({
-      id: newId("rline"),
-      organizationId: org.organizationId,
-      logId,
-      productId: i.productId,
-      productName: i.productName,
-      ndc: i.ndc || null,
-      lotNumber: i.lotNumber || i.lots.map((l) => l.lotNumber).find(Boolean) || null,
-      quantity: i.quantityReceived,
-      condition: i.condition || null,
-      expirationEarliest: dates[0] ?? null,
-      expirationLatest: dates[dates.length - 1] ?? null,
-      weekOf: weekOf(data.pkg.receivedAt),
-      receivedFrom,
-      receivedAt: data.pkg.receivedAt,
-      receivedByUserId: data.pkg.receivedByUserId ?? data.pkg.startedByUserId ?? null,
-      needsReturn: i.needsReturn || null,
-      quantityToReturn: i.quantityToReturn ?? null,
-    });
+    if (!i.productName.trim() || i.wasReceived === "NO" || !i.quantityReceived || i.quantityReceived <= 0) continue;
+    const m = i.productId ? meta.get(i.productId) : undefined;
+    for (const l of buildDbLines({
+      quantityReceived: i.quantityReceived,
+      needsReturn: i.needsReturn,
+      quantityToReturn: i.quantityToReturn,
+      lotNumber: i.lotNumber,
+      expirationDate: i.expirationDate,
+      lots: i.lots,
+    })) {
+      await db.insert(receivingIntakeLines).values({
+        id: newId("rline"),
+        organizationId: org.organizationId,
+        logId,
+        productId: i.productId,
+        productName: i.productName,
+        productCode: m?.code ?? null,
+        brand: m?.brand ?? null,
+        ndc: i.ndc || null,
+        lotNumber: l.lotNumber,
+        quantity: l.quantity,
+        condition: i.condition || null,
+        expirationDate: l.expirationDate,
+        expirationEarliest: l.expirationEarliest,
+        expirationLatest: l.expirationLatest,
+        weekOf: weekOf(data.pkg.receivedAt),
+        receivedFrom,
+        receivedAt: data.pkg.receivedAt,
+        receivedByUserId: agent,
+        needsReturn: i.needsReturn || null,
+        quantityToReturn: l.quantityToReturn,
+        quantityAccepted: l.quantityAccepted,
+        returnStatus: i.returnStatus || null,
+        itemNotes: i.notes || null,
+        sourceItemId: i.id,
+      });
+    }
   }
 }
 

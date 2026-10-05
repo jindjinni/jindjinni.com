@@ -42,7 +42,7 @@ export default async function ReceivedItemsPage({ searchParams }: { searchParams
         <div>
           <h1 className="text-xl font-bold text-slate-900 dark:text-slate-50">Received Items</h1>
           <p className="mt-1 max-w-3xl text-sm text-slate-600 dark:text-slate-400">
-            Every product that has been received, with the date, condition, lot number and the receiving agent who handled the package. A shipment appears here once receiving is submitted.
+            The permanent record of everything received: product, NDC, lot number, quantity, condition, expiration and the receiving agent who handled it. Each lot of a product is its own line, and the accepted quantity (received minus returned) is what the Inventory department will draw from. A shipment appears here once receiving is submitted.
           </p>
         </div>
         <a href={`/api/receiving/received-items/csv${qs({ page: "" })}`} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800">
@@ -83,7 +83,7 @@ export default async function ReceivedItemsPage({ searchParams }: { searchParams
 
       <p className="mt-4 text-xs text-slate-500">{total} product lines · {totalQuantity} units</p>
       <div className="mt-2 overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-        <table className="w-full min-w-[72rem] text-sm">
+        <table className="w-full min-w-[78rem] text-sm">
           <thead>
             <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
               <th className="px-3 py-2">Date received</th>
@@ -94,7 +94,8 @@ export default async function ReceivedItemsPage({ searchParams }: { searchParams
               <th className="px-3 py-2">Product</th>
               <th className="px-3 py-2">NDC</th>
               <th className="px-3 py-2">Lot #</th>
-              <th className="px-3 py-2 text-right">Qty</th>
+              <th className="px-3 py-2 text-right">Qty received</th>
+              <th className="px-3 py-2 text-right">Qty accepted</th>
               <th className="px-3 py-2">Condition</th>
               <th className="px-3 py-2">Expiration</th>
               <th className="px-3 py-2">Accepted / return</th>
@@ -108,16 +109,20 @@ export default async function ReceivedItemsPage({ searchParams }: { searchParams
                 <td className="whitespace-nowrap px-3 py-2 text-xs text-slate-500"><LocalTime value={r.startedAt} /></td>
                 <td className="px-3 py-2"><span className={`rounded-full px-2 py-0.5 text-xs font-medium ${chipClass(r.customer)}`}>{r.customer || "—"}</span></td>
                 <td className="whitespace-nowrap px-3 py-2"><Link href={`/dashboard/receiving/intake/${r.packageId}`} className="text-amber-800 underline dark:text-amber-300">{r.orderNumber}</Link></td>
-                <td className="px-3 py-2 font-medium">{r.productName}</td>
+                <td className="px-3 py-2">
+                  <span className="font-medium">{r.productName}</span>
+                  {(r.brand || r.productCode) && <span className="block text-xs text-slate-500">{[r.brand, r.productCode].filter(Boolean).join(" · ")}</span>}
+                </td>
                 <td className="whitespace-nowrap px-3 py-2 tabular-nums">{r.ndc || "—"}</td>
                 <td className="whitespace-nowrap px-3 py-2">{r.lotNumber || <span className="text-orange-700 dark:text-orange-300">missing</span>}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{r.quantity}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{r.quantityAccepted == null ? <span className="text-slate-400">pending</span> : r.quantityAccepted}</td>
                 <td className="whitespace-nowrap px-3 py-2">{r.condition || "—"}</td>
                 <td className="whitespace-nowrap px-3 py-2 tabular-nums">{r.expirationEarliest ? (r.expirationLatest && r.expirationLatest !== r.expirationEarliest ? `${r.expirationEarliest} – ${r.expirationLatest}` : r.expirationEarliest) : "—"}</td>
                 <td className="whitespace-nowrap px-3 py-2">{dispositionLabel(r.needsReturn, r.quantityToReturn)}</td>
               </tr>
             ))}
-            {rows.length === 0 && <tr><td colSpan={12} className="px-3 py-10 text-center text-slate-500">No received items match.</td></tr>}
+            {rows.length === 0 && <tr><td colSpan={13} className="px-3 py-10 text-center text-slate-500">No received items match.</td></tr>}
           </tbody>
         </table>
       </div>

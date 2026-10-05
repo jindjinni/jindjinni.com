@@ -219,7 +219,7 @@ export function IntakeForm(props: Props) {
 
   function removeItems(ids: string[]) {
     const one = ids.length === 1;
-    if (!window.confirm(one ? "Remove this record and its photos?" : `Remove these ${ids.length} records and their photos?`)) return;
+    if (!window.confirm(one ? "Delete this whole row, including its photos?" : `Delete these ${ids.length} rows, including their photos?`)) return;
     setError("");
     startTransition(async () => {
       let quoted: Awaited<ReturnType<typeof deleteReceivingItem>>["quoted"];

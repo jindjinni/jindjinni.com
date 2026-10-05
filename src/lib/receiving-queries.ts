@@ -34,6 +34,7 @@ import {
   parseStringList,
   summarizeItems,
   quotedNotEntered,
+  acceptedQuantity,
   type PhotoKind,
 } from "@/lib/receiving-rules";
 
@@ -569,16 +570,25 @@ export type ReceivedItemRow = {
   customer: string;
   orderNumber: string;
   trackingNumber: string | null;
+  productId: string | null;
   productName: string;
+  productCode: string | null;
+  brand: string | null;
   ndc: string | null;
   lotNumber: string | null;
   quantity: number;
   condition: string | null;
+  expirationDate: string | null;
   expirationEarliest: string | null;
   expirationLatest: string | null;
   needsReturn: string | null;
   quantityToReturn: number | null;
+  /** Received minus returned; null while the return decision is still pending. */
+  quantityAccepted: number | null;
+  returnStatus: string | null;
+  notes: string | null;
   receivedBy: string | null;
+  receivedByUserId: string | null;
 };
 
 const isDay = (v: string | undefined) => !!v && /^\d{4}-\d{2}-\d{2}$/.test(v);
@@ -616,15 +626,24 @@ export async function getReceivedItems(organizationId: string, f: ReceivedItemsF
       customer: receivingIntakeLines.receivedFrom,
       orderNumber: purchasingQuotations.quotationNumber,
       trackingNumber: sql<string | null>`coalesce(${receivingPackages.trackingNumber}, ${purchasingQuotations.trackingNumber})`,
+      productId: receivingIntakeLines.productId,
       productName: receivingIntakeLines.productName,
+      // older lines were saved before these were kept: fall back to the catalog as it is now
+      productCode: sql<string | null>`coalesce(${receivingIntakeLines.productCode}, ${purchasingProducts.productCode})`,
+      brand: sql<string | null>`coalesce(${receivingIntakeLines.brand}, ${purchasingCategories.name})`,
       ndc: receivingIntakeLines.ndc,
       lotNumber: receivingIntakeLines.lotNumber,
       quantity: receivingIntakeLines.quantity,
       condition: receivingIntakeLines.condition,
+      expirationDate: receivingIntakeLines.expirationDate,
       expirationEarliest: receivingIntakeLines.expirationEarliest,
       expirationLatest: receivingIntakeLines.expirationLatest,
       needsReturn: receivingIntakeLines.needsReturn,
       quantityToReturn: receivingIntakeLines.quantityToReturn,
+      quantityAccepted: receivingIntakeLines.quantityAccepted,
+      returnStatus: receivingIntakeLines.returnStatus,
+      notes: receivingIntakeLines.itemNotes,
+      agentId: sql<string | null>`${agentExpr}`,
       receivedByName: users.name,
       receivedByEmail: users.email,
     })
@@ -633,6 +652,8 @@ export async function getReceivedItems(organizationId: string, f: ReceivedItemsF
     .innerJoin(receivingPackages, eq(receivingPackages.id, receivingIntakeLogs.packageId))
     .innerJoin(purchasingQuotations, eq(purchasingQuotations.id, receivingPackages.quotationId))
     .leftJoin(users, sql`${users.id} = ${agentExpr}`)
+    .leftJoin(purchasingProducts, eq(purchasingProducts.id, receivingIntakeLines.productId))
+    .leftJoin(purchasingCategories, eq(purchasingCategories.id, purchasingProducts.categoryId))
     .where(and(...conds));
 
   const rows = await base
@@ -658,16 +679,24 @@ export async function getReceivedItems(organizationId: string, f: ReceivedItemsF
       customer: r.customer ?? "",
       orderNumber: r.orderNumber,
       trackingNumber: r.trackingNumber,
+      productId: r.productId,
       productName: r.productName,
+      productCode: r.productCode,
+      brand: r.brand,
       ndc: r.ndc,
       lotNumber: r.lotNumber,
       quantity: r.quantity,
       condition: r.condition,
+      expirationDate: r.expirationDate ?? r.expirationEarliest,
       expirationEarliest: r.expirationEarliest,
       expirationLatest: r.expirationLatest,
       needsReturn: r.needsReturn,
       quantityToReturn: r.quantityToReturn,
+      quantityAccepted: r.quantityAccepted ?? (r.needsReturn === "PENDING_REVIEW" ? null : acceptedQuantity(r.quantity, r.needsReturn, r.quantityToReturn)),
+      returnStatus: r.returnStatus,
+      notes: r.notes,
       receivedBy: r.receivedByName || r.receivedByEmail || null,
+      receivedByUserId: r.agentId,
     })),
     total: Number(agg?.n ?? 0),
     totalQuantity: Number(agg?.qty ?? 0),

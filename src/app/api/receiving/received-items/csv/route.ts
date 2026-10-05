@@ -26,11 +26,38 @@ export async function GET(req: NextRequest) {
     condition: p.get("condition") ?? "",
     limit: 5000,
   });
-  const head = ["Date received", "Received by", "Package opened (UTC)", "Customer", "Order", "Tracking", "Product", "NDC", "Lot number", "Quantity", "Condition", "Earliest expiration", "Latest expiration", "Accepted / return", "Quantity to return"];
+  const head = ["Line ID", "Date received", "Received by", "Package opened (UTC)", "Customer", "Order", "Tracking", "Brand", "Product", "Product code", "NDC", "Lot number", "Quantity received", "Quantity accepted", "Quantity to return", "Condition", "Expiration date", "Earliest expiration", "Latest expiration", "Accepted / return", "Return status", "Notes", "Product ID", "Package ID"];
   const lines = [head.map(cell).join(",")];
   for (const r of rows) {
     lines.push(
-      [r.receivedAt, r.receivedBy, r.startedAt, r.customer, r.orderNumber, r.trackingNumber, r.productName, r.ndc, r.lotNumber, r.quantity, r.condition, r.expirationEarliest, r.expirationLatest, r.needsReturn === "YES" ? "Return" : r.needsReturn === "PENDING_REVIEW" ? "Pending review" : r.needsReturn === "NO" ? "Accepted" : "", r.quantityToReturn].map(cell).join(","),
+      [
+        r.id,
+        r.receivedAt,
+        r.receivedBy,
+        r.startedAt,
+        r.customer,
+        r.orderNumber,
+        r.trackingNumber,
+        r.brand,
+        r.productName,
+        r.productCode,
+        r.ndc,
+        r.lotNumber,
+        r.quantity,
+        r.quantityAccepted,
+        r.quantityToReturn,
+        r.condition,
+        r.expirationDate,
+        r.expirationEarliest,
+        r.expirationLatest,
+        r.needsReturn === "YES" ? "Return" : r.needsReturn === "PENDING_REVIEW" ? "Pending review" : r.needsReturn === "NO" ? "Accepted" : "",
+        r.returnStatus,
+        r.notes,
+        r.productId,
+        r.packageId,
+      ]
+        .map(cell)
+        .join(","),
     );
   }
   return new NextResponse(lines.join("\r\n") + "\r\n", {

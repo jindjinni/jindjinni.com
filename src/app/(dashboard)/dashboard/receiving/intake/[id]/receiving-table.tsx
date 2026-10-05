@@ -440,6 +440,7 @@ export function ReceivedItemsGrid({
         <h3 className="text-lg font-bold text-slate-900 dark:text-slate-50">Received Items</h3>
         {editable && (
           <div className="flex items-center gap-2">
+            {editable && selectedIds.length === 0 && items.length > 0 && <span className="hidden text-xs text-slate-500 sm:inline">Tick a row to delete it, or use the trash icon.</span>}
             {selectedIds.length > 0 && (
               <button
                 type="button"
@@ -449,7 +450,7 @@ export function ReceivedItemsGrid({
                 }}
                 className="rounded-lg border border-red-300 bg-white px-3 py-2 text-sm font-medium text-red-800 hover:bg-red-50 dark:border-red-800 dark:bg-slate-900 dark:text-red-200"
               >
-                Delete {selectedIds.length === 1 ? "1 record" : `${selectedIds.length} records`}
+                Delete {selectedIds.length === 1 ? "selected row" : `${selectedIds.length} selected rows`}
               </button>
             )}
             <button type="button" onClick={addRecord} disabled={busy} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700 disabled:opacity-50 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white">
@@ -462,7 +463,7 @@ export function ReceivedItemsGrid({
       <div className="mt-3 overflow-x-auto border-l border-t border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
         <table className="w-full min-w-[77.5rem] table-fixed border-separate border-spacing-0 text-sm">
           <colgroup>
-            <col style={{ width: "5.75rem" }} />
+            <col style={{ width: "7.25rem" }} />
             <col style={{ width: "15rem" }} />
             <col style={{ width: "8.5rem" }} />
             <col style={{ width: "6.5rem" }} />
@@ -479,7 +480,7 @@ export function ReceivedItemsGrid({
                   <input type="checkbox" aria-label="Select all records" disabled={!editable || items.length === 0} checked={allSelected} onChange={(e) => setSelected(e.target.checked ? Object.fromEntries(items.map((i) => [i.id, true])) : {})} />
                 </span>
               </th>
-              <th className={`${th} sticky left-[5.75rem] z-20`}>Product</th>
+              <th className={`${th} sticky left-[7.25rem] z-20`}>Product</th>
               <th className={th}>NDC</th>
               <th className={th}>Quantity Received</th>
               <th className={th}>Product Condition</th>
@@ -509,9 +510,16 @@ export function ReceivedItemsGrid({
                             {isOpen ? <path d="M10 6l4-4M10 6h3M10 6V3M6 10l-4 4M6 10H3M6 10v3" /> : <path d="M9 2h5v5M14 2L9 7M7 14H2V9M2 14l5-5" />}
                           </svg>
                         </button>
+                        {editable && (
+                          <button type="button" aria-label={`Delete ${label}`} title="Delete this row" onClick={() => onRemoveMany([it.id])} className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/40 dark:hover:text-red-300">
+                            <svg aria-hidden viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M2.5 4h11M6 4V2.5h4V4M4 4l.6 9h6.8L12 4M6.5 6.5v4M9.5 6.5v4" />
+                            </svg>
+                          </button>
+                        )}
                       </div>
                     </td>
-                    <td className={`${td} sticky left-[5.75rem] z-10 bg-white dark:bg-slate-900`}>
+                    <td className={`${td} sticky left-[7.25rem] z-10 bg-white dark:bg-slate-900`}>
                       <ProductCell item={it} catalog={catalog} editable={editable} busy={busy} autoOpen={justAdded === it.id && !it.productName} onChoose={(c) => chooseProduct(it, c)} />
                     </td>
                     <td className={td}>
