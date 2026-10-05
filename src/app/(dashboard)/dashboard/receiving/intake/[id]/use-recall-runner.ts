@@ -30,7 +30,12 @@ export function useRecallRunner({
 
   function applyPatch(itemId: string, p?: RecallItemPatch) {
     if (!p) return;
-    onPatchMany({ [itemId]: { needsReturn: p.needsReturn, returnStatus: p.returnStatus, quantityToReturn: p.quantityToReturn, returnNotes: p.returnNotes } });
+    const patch: Partial<ItemState> = {};
+    if (p.needsReturn !== undefined) patch.needsReturn = p.needsReturn as ItemState["needsReturn"];
+    if (p.returnStatus !== undefined) patch.returnStatus = p.returnStatus as ItemState["returnStatus"];
+    if (p.quantityToReturn !== undefined) patch.quantityToReturn = p.quantityToReturn;
+    if (p.returnNotes !== undefined) patch.returnNotes = p.returnNotes;
+    onPatchMany({ [itemId]: patch });
   }
   function took(r: RecallActionState) {
     if (r.checks) onChecks(r.checks);
@@ -49,6 +54,24 @@ export function useRecallRunner({
           tone: "bad",
           title: `RECALLED: ${row.productName}`,
           lines: [...hits.map((h) => `${h.number} is on the recall list for ${h.recalls.join(", ")}.`), "Do not accept this product. The row is marked Needs To Be Returned: Yes (Return Requested)."],
+        });
+      } else if ((r.near ?? []).length > 0) {
+        setOutcome({
+          tone: "bad",
+          title: `LOOKS LIKE A RECALLED NUMBER: ${row.productName}`,
+          lines: [
+            ...(r.near ?? []).map((k) => `${k.number} is not exactly on the list, but it is very close to ${k.listed} (${k.recall})${k.kind === "LOOKALIKE" ? ". Letters like O and 0, I and 1, S and 5, B and 8 look alike" : ""}.`),
+            "Read the label again, character by character, against the recall notice. Until a manager decides, the row is held in review (Needs To Be Returned: Pending review).",
+          ],
+        });
+      } else if ((r.unverified ?? []).length > 0) {
+        setOutcome({
+          tone: "bad",
+          title: `CAN'T CONFIRM: ${row.productName}`,
+          lines: [
+            `${(r.results ?? []).map((x) => x.number).join(", ")} is not on the lists we have, but there is no list loaded for ${(r.unverified ?? []).join(", ")}, so that proves nothing yet.`,
+            "Look the number up on the manufacturer's page (button below) and record what it showed. This product can't be submitted until you do.",
+          ],
         });
       } else {
         const nums = (r.results ?? []).map((x) => x.number).join(", ");

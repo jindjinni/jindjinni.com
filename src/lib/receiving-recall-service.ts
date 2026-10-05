@@ -8,6 +8,11 @@ import { newId } from "@/lib/ids";
 import {
   DEFAULT_RECALLS,
   matchNumber,
+  nearMatches,
+  type NearMatch,
+  recallsForProduct,
+  isRecalledResult,
+  normalizeNumber,
   numbersToCheck,
   parseRecallList,
   type RecallListIndex,
@@ -114,9 +119,31 @@ export async function loadIndex(organizationId: string): Promise<RecallListIndex
   });
 }
 
+export type RelevantRecall = { id: string; name: string; manufacturer: string; loaded: number };
+
+/** Active recalls whose keywords appear in this product's name, with how many numbers each has loaded. */
+export async function relevantRecalls(organizationId: string, productName: string): Promise<RelevantRecall[]> {
+  const rows = await db
+    .select({ id: receivingRecalls.id, name: receivingRecalls.name, manufacturer: receivingRecalls.manufacturer, keywords: receivingRecalls.keywords })
+    .from(receivingRecalls)
+    .where(and(eq(receivingRecalls.organizationId, organizationId), eq(receivingRecalls.active, true)));
+  const hits = recallsForProduct(productName, rows);
+  if (hits.length === 0) return [];
+  const counts = await db
+    .select({ recallId: receivingRecallNumbers.recallId, n: sql<number>`count(*)` })
+    .from(receivingRecallNumbers)
+    .where(and(eq(receivingRecallNumbers.organizationId, organizationId), inArray(receivingRecallNumbers.recallId, hits.map((h) => h.id))))
+    .groupBy(receivingRecallNumbers.recallId);
+  return hits.map((h) => ({ id: h.id, name: h.name, manufacturer: h.manufacturer, loaded: Number(counts.find((c) => c.recallId === h.id)?.n ?? 0) }));
+}
+
 export type CheckOutcome = {
-  numbers: { number: string; matches: { recallId: string; recallName: string }[] }[];
+  numbers: { number: string; matches: { recallId: string; recallName: string }[]; near: NearMatch[] }[];
   recalled: boolean;
+  /** Some number is close to (but not exactly) a recalled number: a person must look. */
+  nearAny: boolean;
+  /** Recalls that apply to this product but have no list loaded: "not on the list" proves nothing for these. */
+  unverified: { id: string; name: string; manufacturer: string }[];
 };
 
 /** Compares what was typed / scanned / read from a photo with the loaded lists and records one check per number (per recall matched). */
@@ -130,11 +157,24 @@ export async function runRecallCheck(
   if (numbers.length === 0) return { error: "Enter a lot or serial number (at least 4 letters or digits)." };
   if (numbers.length > 12) return { error: "That is a lot of numbers at once. Check up to 12 at a time." };
   const index = await loadIndex(org.organizationId);
-  const outcome: CheckOutcome = { numbers: [], recalled: false };
+  const [itemRow] = await db
+    .select({ name: receivingItems.productName })
+    .from(receivingItems)
+    .where(and(eq(receivingItems.id, itemId), eq(receivingItems.organizationId, org.organizationId)))
+    .limit(1);
+  const relevant = itemRow ? await relevantRecalls(org.organizationId, itemRow.name) : [];
+  const outcome: CheckOutcome = {
+    numbers: [],
+    recalled: false,
+    nearAny: false,
+    unverified: relevant.filter((r) => r.loaded === 0).map((r) => ({ id: r.id, name: r.name, manufacturer: r.manufacturer })),
+  };
   for (const n of numbers) {
     const matches = matchNumber(n, index);
-    outcome.numbers.push({ number: n, matches });
+    const near = matches.length === 0 ? nearMatches(n, index) : [];
+    outcome.numbers.push({ number: n, matches, near });
     if (matches.length > 0) outcome.recalled = true;
+    if (near.length > 0) outcome.nearAny = true;
     // Checking the same number again replaces the earlier automatic result for it rather than piling up copies.
     await db
       .delete(receivingRecallChecks)
@@ -390,3 +430,52 @@ export async function importNumbers(
   return { added: rows.length, skipped: p.skipped, total: Number(n) };
 }
 
+
+
+// ---- the gate: a recall-risk product can't be submitted without a real check -------------------------------------
+
+/**
+ * Lines the "Missing Info" list must show for recall-risk products. A product whose name matches an active recall
+ * needs a check before the shipment can be submitted:
+ *  - recall with a list loaded: at least one lot / serial number checked on the row;
+ *  - recall with NO list loaded: "not on the list" proves nothing, so the agent has to look the number up on the
+ *    manufacturer's page and record what it said.
+ */
+export async function recallGateIssues(
+  organizationId: string,
+  packageId: string,
+  items: { id: string; productName: string | null; wasReceived: string | null; quantityReceived: number | null }[],
+): Promise<string[]> {
+  const out: string[] = [];
+  const candidates = items.filter((i) => i.productName?.trim() && i.wasReceived !== "NO" && (i.quantityReceived ?? 0) > 0);
+  if (candidates.length === 0) return out;
+  const checks = await db
+    .select({ itemId: receivingRecallChecks.itemId, recallId: receivingRecallChecks.recallId, result: receivingRecallChecks.result })
+    .from(receivingRecallChecks)
+    .where(and(eq(receivingRecallChecks.organizationId, organizationId), eq(receivingRecallChecks.packageId, packageId)));
+  for (const it of candidates) {
+    const name = it.productName!.trim();
+    const mine = checks.filter((c) => c.itemId === it.id);
+    for (const r of await relevantRecalls(organizationId, name)) {
+      if (r.loaded > 0) {
+        const done = mine.some((c) => c.result === "ON_LIST" || c.result === "NOT_ON_LIST" || c.recallId === r.id);
+        if (!done) out.push(`${name}: recall check needed (${r.name}). Enter or scan its lot or serial number in Step 6.`);
+      } else {
+        const done = mine.some((c) => c.recallId === r.id && (c.result === "CONFIRMED_OK" || c.result === "CONFIRMED_AFFECTED"));
+        if (!done) out.push(`${name}: ${r.name} has no list loaded here, so look its number up on ${r.manufacturer || "the manufacturer"}'s page and record the result in Step 6.`);
+      }
+    }
+  }
+  return out;
+}
+
+/** True when this row has a check that says the product is recalled (so it must stay marked for return). */
+export async function rowIsRecalled(organizationId: string, itemId: string): Promise<boolean> {
+  const rows = await db
+    .select({ result: receivingRecallChecks.result })
+    .from(receivingRecallChecks)
+    .where(and(eq(receivingRecallChecks.organizationId, organizationId), eq(receivingRecallChecks.itemId, itemId)));
+  return rows.some((r) => isRecalledResult(r.result));
+}
+
+void normalizeNumber;

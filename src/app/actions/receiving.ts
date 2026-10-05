@@ -17,6 +17,7 @@ import {
   receivingAdjustments,
   receivingExpirationLots,
   receivingItems,
+  receivingItemSerials,
   receivingPackagePhotos,
   receivingPackages,
   receivingSettings,
@@ -49,6 +50,9 @@ import { storage, STORAGE_NOT_CONNECTED } from "@/lib/receiving-storage";
 import { auditReceiving, deleteIntakeLog, deliverCustomerEmail, refreshIntakeLogPrice, writeIntakeLog } from "@/lib/receiving-service";
 import { finalPayout } from "@/lib/receiving-rules";
 import { isShipmentLocked } from "@/lib/receiving-test-lock";
+import { listChecks, rowIsRecalled, type RecallCheckView } from "@/lib/receiving-recall-service";
+import { autoCheckRowLots } from "@/lib/receiving-recall-auto";
+import { flagsFromString, isCounterfeitSuspect } from "@/lib/receiving-serial-rules";
 
 export type ReceivingActionState = {
   error?: string;
@@ -59,6 +63,10 @@ export type ReceivingActionState = {
   /** After a row is added / its product is set / a row is removed: how every row now relates to the quotation. */
   quoted?: Record<string, { quotedItemId: string | null; itemSource: "QUOTED" | "EXTRA"; quotedQuantity: number | null; quotedAmount: number | null }>;
   item?: { productId: string | null; productName: string; ndc: string };
+  /** Changes the server made to product rows (a recall hit marks a row for return), for the open form to show. */
+  itemPatches?: Record<string, { needsReturn?: string; returnStatus?: string; quantityToReturn?: string; returnNotes?: string }>;
+  /** The shipment's recall checks after a save (typed lots are checked automatically), so the form shows them. */
+  recallChecks?: RecallCheckView[];
 };
 
 const MAX_PHOTO_BYTES = 4 * 1024 * 1024;
@@ -285,7 +293,7 @@ type ItemInput = {
 const MAX_LOTS = 25;
 
 /** Validates and saves one product line (and replaces its lots). Returns an error message, or null. */
-async function applyItem(organizationId: string, packageId: string, raw: ItemInput): Promise<string | null> {
+async function applyItem(organizationId: string, packageId: string, raw: ItemInput, role: string, notes: string[]): Promise<string | null> {
   const id = typeof raw.id === "string" ? raw.id : "";
   const [cur] = await db
     .select({ id: receivingItems.id, name: receivingItems.productName })
@@ -320,13 +328,36 @@ async function applyItem(organizationId: string, packageId: string, raw: ItemInp
     }
   }
 
+  // A product that checked as RECALLED stays marked for return: a save can't quietly put it back into stock.
+  let needsReturn = pick(raw.needsReturn, ["YES", "NO", "PENDING_REVIEW"] as const);
+  let returnStatus = pick(raw.returnStatus, ["NOT_APPLICABLE", "RETURN_REQUESTED", "RETURN_SHIPPED", "RETURNED"] as const);
+  let toReturn = quantityToReturn;
+  if (await rowIsRecalled(organizationId, id)) {
+    if (needsReturn !== "YES" || !returnStatus || returnStatus === "NOT_APPLICABLE" || !toReturn) {
+      notes.push(`${cur.name}: this product is on a recall list, so it stays marked for return. To change that, remove its recall check first.`);
+    }
+    needsReturn = "YES";
+    if (!returnStatus || returnStatus === "NOT_APPLICABLE") returnStatus = "RETURN_REQUESTED";
+    if (!toReturn || toReturn <= 0) toReturn = quantityReceived && quantityReceived > 0 ? quantityReceived : toReturn;
+  } else if (needsReturn === "NO" && !isAdmin(role)) {
+    // Units that scanned as possible counterfeits wait for a manager's decision; a receiver can't clear them.
+    const sus = await db
+      .select({ flag: receivingItemSerials.flag })
+      .from(receivingItemSerials)
+      .where(and(eq(receivingItemSerials.itemId, id), eq(receivingItemSerials.organizationId, organizationId)));
+    if (sus.some((r) => isCounterfeitSuspect(flagsFromString(r.flag)))) {
+      needsReturn = "PENDING_REVIEW";
+      notes.push(`${cur.name}: a scanned unit looks suspect, so this product stays in review until an Owner or Admin clears it.`);
+    }
+  }
+
   await db
     .update(receivingItems)
     .set({
       wasReceived,
       quantityReceived: wasReceived === "NO" ? 0 : quantityReceived,
       condition: pick(raw.condition, RECEIVING_CONDITIONS),
-      needsReturn: pick(raw.needsReturn, ["YES", "NO", "PENDING_REVIEW"] as const),
+      needsReturn,
       notes: text(raw.notes),
       ndc: text(raw.ndc, 40),
       lotNumber: text(raw.lotNumber, 60),
@@ -346,8 +377,8 @@ async function applyItem(organizationId: string, packageId: string, raw: ItemInp
       proposedRevisedAmount: moneyOrNull(raw.proposedRevisedAmount),
       adjustmentReason: pick(raw.adjustmentReason, RECEIVING_ADJUSTMENT_REASONS),
       adjustmentNotes: text(raw.adjustmentNotes),
-      quantityToReturn,
-      returnStatus: pick(raw.returnStatus, ["NOT_APPLICABLE", "RETURN_REQUESTED", "RETURN_SHIPPED", "RETURNED"] as const),
+      quantityToReturn: toReturn,
+      returnStatus,
       returnTracking: text(raw.returnTracking, 80),
       returnNotes: text(raw.returnNotes),
       updatedAt: sql`(current_timestamp)`,
@@ -428,6 +459,7 @@ export async function saveReceiving(packageId: string, formData: FormData): Prom
   if (p.status !== "IN_PROGRESS") await auditReceiving(org, p.quotationId, "receiving", "Receiving details edited after the shipment was submitted");
 
   // Items first, so a bad quantity stops the whole save.
+  const itemNotes: string[] = [];
   const itemsRaw = formData.get("itemsJson");
   if (typeof itemsRaw === "string" && itemsRaw.trim()) {
     let parsed: unknown;
@@ -438,7 +470,7 @@ export async function saveReceiving(packageId: string, formData: FormData): Prom
     }
     if (!Array.isArray(parsed)) return { error: "The product lines couldn't be read. Refresh the page and try again." };
     for (const it of parsed as ItemInput[]) {
-      const err = await applyItem(org.organizationId, packageId, it);
+      const err = await applyItem(org.organizationId, packageId, it, org.role, itemNotes);
       if (err) return { error: err };
     }
   }
@@ -492,9 +524,12 @@ export async function saveReceiving(packageId: string, formData: FormData): Prom
 
   const acc = await applyAccountsFields(org, p, formData);
   if (acc.error) return acc;
+  // Every lot typed into a product row is compared with the recall lists, whether or not anyone ran the Recall check.
+  const auto = await autoCheckRowLots(org, packageId, p.quotationId);
   await resyncInventory(org, p, packageId);
   refresh(packageId);
-  return { ok: true, id: packageId };
+  const notice = [...itemNotes, ...auto.notices].join(" ") || undefined;
+  return { ok: true, id: packageId, notice, itemPatches: Object.keys(auto.patches).length ? auto.patches : undefined, recallChecks: await listChecks(org.organizationId, packageId) };
 }
 
 /** Saves, then checks nothing is missing. If complete, locks in the final status, marks the order Received and writes the inventory log. */
@@ -531,9 +566,9 @@ export async function submitReceiving(packageId: string, formData: FormData): Pr
     );
   await writeIntakeLog(org, packageId);
   await auditReceiving(org, pkg.quotationId, "receiving", `Receiving submitted: ${status === "RECEIVING_COMPLETE" ? "complete" : "complete with discrepancy"}`);
-  const notice = await maybeAutoNotify(org, packageId);
+  const notice = [saved.notice, await maybeAutoNotify(org, packageId)].filter(Boolean).join(" ") || undefined;
   refresh(packageId);
-  return { ok: true, id: packageId, notice };
+  return { ok: true, id: packageId, notice, itemPatches: saved.itemPatches, recallChecks: await listChecks(org.organizationId, packageId) };
 }
 
 /** Puts a submitted shipment back to In Progress so it can be corrected. */

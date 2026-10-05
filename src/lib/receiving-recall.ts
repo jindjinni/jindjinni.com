@@ -186,3 +186,55 @@ export function rowRecallState(checks: { result: string }[]): "RECALLED" | "CHEC
   if (checks.some((c) => isRecalledResult(c.result))) return "RECALLED";
   return checks.length > 0 ? "CHECKED" : "NONE";
 }
+
+// ---- close matches -----------------------------------------------------------------------------------------------
+// A scanner never misreads a barcode, but a person typing from a label or a camera reading a photo does: O for 0,
+// I or L for 1, S for 5, B for 8, Z for 2. A number that is one of those slips away from a recalled number must
+// not slide through as "not on the list", so it is reported as a close match for a person to look at.
+
+const LOOKALIKES: Record<string, string> = { O: "0", Q: "0", D: "0", I: "1", L: "1", S: "5", B: "8", Z: "2" };
+
+/** Normalised number with look-alike letters folded to digits ("PH1UO103" and "PH1U0103" fold to the same text). */
+export function foldLookalikes(s: string): string {
+  return normalizeNumber(s).replace(/[OQDILSBZ]/g, (c) => LOOKALIKES[c]);
+}
+
+export type NearMatch = { recallId: string; recallName: string; listed: string; kind: "LOOKALIKE" | "CONTAINS" };
+
+const MIN_NEAR = 6;
+
+/**
+ * Listed numbers this one is suspiciously close to: the same once look-alike characters are folded, or a long
+ * listed number that sits inside this one (or the other way round). Exact and prefix matches are not repeated here.
+ */
+export function nearMatches(number: string, lists: RecallListIndex[], limit = 3): NearMatch[] {
+  const n = normalizeNumber(number);
+  if (n.length < MIN_NEAR) return [];
+  const f = foldLookalikes(n);
+  const out: NearMatch[] = [];
+  for (const l of lists) {
+    if (matchNumber(n, [l]).length > 0) continue;
+    let found: NearMatch | null = null;
+    for (const v of l.values) {
+      if (v === n) continue;
+      if (v.length >= MIN_NEAR && foldLookalikes(v) === f) {
+        found = { recallId: l.recallId, recallName: l.recallName, listed: v, kind: "LOOKALIKE" };
+        break;
+      }
+      if (!found && v.length >= MIN_NEAR + 1 && (n.includes(v) || (n.length >= MIN_NEAR + 1 && v.includes(n)))) {
+        found = { recallId: l.recallId, recallName: l.recallName, listed: v, kind: "CONTAINS" };
+      }
+    }
+    if (!found) {
+      for (const p of l.prefixes) {
+        if (p.length >= 4 && f.startsWith(foldLookalikes(p))) {
+          found = { recallId: l.recallId, recallName: l.recallName, listed: `${p}*`, kind: "LOOKALIKE" };
+          break;
+        }
+      }
+    }
+    if (found) out.push(found);
+    if (out.length >= limit) break;
+  }
+  return out;
+}

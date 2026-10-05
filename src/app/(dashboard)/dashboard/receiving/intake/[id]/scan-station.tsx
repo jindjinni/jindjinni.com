@@ -95,7 +95,7 @@ export function ScanStation({
   function show(r: ScanResult, item: ItemState) {
     const scan = r.scan;
     const flags: SerialFlag[] = scan?.flags ?? [];
-    const sev = r.recalled && r.recalled.length > 0 ? "stop" : severityOf(flags);
+    const sev = (r.recalled && r.recalled.length > 0) || (r.near && r.near.length > 0) ? "stop" : r.unverified && r.unverified.length > 0 && severityOf(flags) === "ok" ? "warn" : severityOf(flags);
     const lines = [...(r.notes ?? [])];
     let title = "";
     if (r.productCodeOnly) {
@@ -105,6 +105,10 @@ export function ScanStation({
     if (r.recalled && r.recalled.length > 0) {
       title = `RECALLED: ${item.productName}`;
       lines.unshift(...r.recalled.map((x) => `${x.number} is on the recall list for ${x.recalls.join(", ")}. Do not accept this product; the row is marked Needs To Be Returned.`));
+    } else if (r.near && r.near.length > 0) {
+      title = `LOOKS LIKE A RECALLED NUMBER: ${item.productName}`;
+      lines.unshift(...r.near.map((k) => `${k.number} is very close to ${k.listed} (${k.recall}). Read the label again, character by character, against the recall notice.`));
+      lines.push("The row is held in Pending review until a manager decides.");
     } else if (isCounterfeitSuspect(flags)) {
       title = `STOP: possible counterfeit (${item.productName})`;
       lines.push("The row is marked Pending review in Needs To Be Returned. Set the product aside and ask a manager.");
@@ -116,8 +120,12 @@ export function ScanStation({
       title = "Already scanned on this product";
     } else {
       const n = (r.serials ?? []).filter((s) => s.itemId === item.id).length || 1;
-      title = `OK: ${item.productName}`;
-      lines.unshift(`Saved unit ${n}. No repeat, no recall match and nothing wrong with the format.`);
+      title = r.unverified && r.unverified.length > 0 ? `SAVED, BUT RECALL NOT CONFIRMED: ${item.productName}` : `OK: ${item.productName}`;
+      if (r.unverified && r.unverified.length > 0) {
+        lines.unshift(`Saved unit ${n}. No repeat and nothing wrong with the format, but no recall list is loaded for ${r.unverified.join(", ")}. Look the number up on the manufacturer's page (Recall check box) before you submit.`);
+      } else {
+        lines.unshift(`Saved unit ${n}. No repeat, no recall match and nothing wrong with the format.`);
+      }
       lines.push("OK does not prove the serial is real. Manufacturers do not publish serial lists, so this catches repeats, made-up numbers and recalls.");
     }
     if (scan) {

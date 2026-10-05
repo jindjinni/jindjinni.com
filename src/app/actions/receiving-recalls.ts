@@ -11,6 +11,8 @@ import { requireOrg, type CurrentOrg } from "@/lib/tenant";
 import { canWriteReceiving, isAdmin } from "@/lib/permissions";
 import { sniffReceiptType } from "@/lib/purchasing-receipt-docs";
 import { auditReceiving } from "@/lib/receiving-service";
+import { markRowForReview } from "@/lib/receiving-serial-service";
+import { rescanReceivedStock } from "@/lib/receiving-recall-rescan";
 import {
   deleteCheck,
   deleteRecall,
@@ -30,7 +32,7 @@ import {
 import { PHOTO_MAX_BYTES, readLabelPhoto, type LabelRead } from "@/lib/receiving-recall-photo";
 import { isShipmentLocked } from "@/lib/receiving-test-lock";
 
-export type RecallItemPatch = { needsReturn: string; returnStatus: string; quantityToReturn: string; returnNotes: string };
+export type RecallItemPatch = { needsReturn?: string; returnStatus?: string; quantityToReturn?: string; returnNotes?: string };
 export type RecallActionState = {
   error?: string;
   ok?: boolean;
@@ -39,6 +41,10 @@ export type RecallActionState = {
   recalls?: RecallView[];
   /** Per number checked: which recalls it is on (empty = not on any list we have). */
   results?: { number: string; recalls: string[] }[];
+  /** Numbers that are close to (but not exactly) a recalled number: a person must compare the label with the notice. */
+  near?: { number: string; listed: string; recall: string; kind: "LOOKALIKE" | "CONTAINS" }[];
+  /** Recalls that apply to this product but have no list loaded, so "not on the list" proves nothing. */
+  unverified?: string[];
   /** Set when the row was marked for return, so the open form can show it. */
   itemPatch?: RecallItemPatch;
   preview?: { values: number; prefixes: number; skipped: number; newOnes: number; sample: string[] };
@@ -92,11 +98,21 @@ export async function checkRecall(packageId: string, itemId: string, input: stri
     itemPatch = await markRowForReturn(org.organizationId, itemId, hit.matches[0].recallName, hit.number);
     await auditReceiving(org, row.quotationId, "Recall check", `${row.productName}: ${hit.number} is on the recall list (${hit.matches.map((m) => m.recallName).join(", ")}). Marked for return.`);
   } else {
-    await auditReceiving(org, row.quotationId, "Recall check", `${row.productName}: ${r.numbers.map((n) => n.number).join(", ")} not on the recall lists loaded.`);
+    await auditReceiving(org, row.quotationId, "Recall check", `${row.productName}: ${r.numbers.map((n) => n.number).join(", ")} not on the recall lists loaded${r.unverified.length ? ` (no list loaded for ${r.unverified.map((u) => u.name).join(", ")}, so this proves nothing for that recall)` : ""}.`);
+  }
+  const nearList = r.numbers.flatMap((n) => n.near.map((k) => ({ number: n.number, listed: k.listed, recall: k.recallName, kind: k.kind })));
+  if (!hit && nearList.length > 0) {
+    const k = nearList[0];
+    const line = `CHECK: ${k.number} is very close to recalled ${k.listed} (${k.recall}). Compare the label with the recall notice.`;
+    const p = await markRowForReview(org.organizationId, itemId, line);
+    itemPatch = { needsReturn: p.needsReturn, returnNotes: p.returnNotes };
+    await auditReceiving(org, row.quotationId, "Recall check", `${row.productName}: ${line}`);
   }
   refresh(packageId);
   return {
     ok: true,
+    near: nearList,
+    unverified: r.unverified.map((u) => u.name),
     results: r.numbers.map((n) => ({ number: n.number, recalls: n.matches.map((m) => m.recallName) })),
     checks: await listChecks(org.organizationId, packageId),
     itemPatch,
@@ -186,10 +202,15 @@ export async function importRecallList(recallId: string, text: string, mode: "ad
   const org = await requireRecallAdmin();
   const r = await importNumbers(org.organizationId, String(recallId), String(text ?? ""), mode === "replace" ? "replace" : "add");
   if ("error" in r) return { error: r.error };
+  // Stock received before this list was loaded may be on it: compare everything already received with the lists now.
+  const scan = await rescanReceivedStock(org);
   refresh();
+  const found = scan.hits.length
+    ? ` WARNING: ${scan.hits.length} already-received item${scan.hits.length === 1 ? "" : "s"} match${scan.hits.length === 1 ? "es" : ""} a recall and ${scan.hits.length === 1 ? "was" : "were"} marked for return: ${scan.hits.slice(0, 8).map((h) => `${h.product} ${h.number} (order ${h.quotationNumber})`).join("; ")}${scan.hits.length > 8 ? "; and more" : ""}.`
+    : ` Checked ${scan.numbersLooked.toLocaleString()} lot and serial numbers already received: none match.`;
   return {
     ok: true,
-    notice: `${r.added} number${r.added === 1 ? "" : "s"} ${mode === "replace" ? "loaded" : "added"}${r.skipped ? ` (${r.skipped} words or short numbers skipped)` : ""}. ${r.total} on this list now.`,
+    notice: `${r.added} number${r.added === 1 ? "" : "s"} ${mode === "replace" ? "loaded" : "added"}${r.skipped ? ` (${r.skipped} words or short numbers skipped)` : ""}. ${r.total} on this list now.${found}`,
     recalls: await listRecalls(org.organizationId),
   };
 }

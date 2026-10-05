@@ -40,6 +40,10 @@ export type ScanResult = {
   serials?: SerialView[];
   checks?: RecallCheckView[];
   recalled?: { number: string; recalls: string[] }[];
+  /** Close to (but not exactly) a recalled number: a person must compare the label with the notice. */
+  near?: { number: string; listed: string; recall: string }[];
+  /** Recalls for this product that have no list loaded, so "no match" proves nothing. */
+  unverified?: string[];
   /** Plain-language reasons for every flag on this scan. */
   notes?: string[];
   /** Fields to change on product rows in the open form (a row sent to review or marked for return). */
@@ -110,6 +114,8 @@ export async function scanUnit(packageId: string, itemId: string, text: string, 
   let view = saved.view;
   const patches: Record<string, ItemPatchLite> = {};
   let recalled: { number: string; recalls: string[] }[] = [];
+  let near: { number: string; listed: string; recall: string }[] = [];
+  let unverified: string[] = [];
   let checks: RecallCheckView[] | undefined;
 
   // Lot and serial against the recall lists (the same check the Recall check box makes).
@@ -124,6 +130,14 @@ export async function scanUnit(packageId: string, itemId: string, text: string, 
         patches[itemId] = { ...p };
         const v = await addFlag(org.organizationId, view.id, "RECALLED", `On the recall list: ${recalled.map((x) => `${x.number} (${x.recalls.join(", ")})`).join("; ")}.`);
         if (v) view = v;
+      }
+      near = r.numbers.flatMap((n) => n.near.map((k) => ({ number: n.number, listed: k.listed, recall: k.recallName })));
+      unverified = r.unverified.map((u) => u.name);
+      if (recalled.length === 0 && near.length > 0) {
+        const line = `CHECK: ${near[0].number} is very close to recalled ${near[0].listed} (${near[0].recall}). Compare the label with the recall notice.`;
+        const pv = await markRowForReview(org.organizationId, itemId, line);
+        patches[itemId] = { ...patches[itemId], needsReturn: pv.needsReturn, returnNotes: pv.returnNotes };
+        await auditReceiving(org, row.quotationId, "Recall check", `${row.productName}: ${line}`);
       }
       checks = await listChecks(org.organizationId, packageId);
     }
@@ -164,6 +178,8 @@ export async function scanUnit(packageId: string, itemId: string, text: string, 
     serials: await listSerials(org.organizationId, packageId),
     checks,
     recalled,
+    near,
+    unverified,
     notes,
     itemPatches: Object.keys(patches).length ? patches : undefined,
   };

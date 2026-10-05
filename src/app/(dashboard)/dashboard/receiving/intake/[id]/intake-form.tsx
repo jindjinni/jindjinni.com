@@ -173,7 +173,20 @@ export function IntakeForm(props: Props) {
   const itemFacts = items.map(itemFactsOf);
   const flags = discrepancyFlags(itemFacts);
   const facts = { ...v };
-  const missing = computeMissingInfo(facts, counts, itemFacts);
+  // Recall-risk products can't be submitted without a real check (the same rule the server enforces).
+  const recallGate: string[] = [];
+  for (const i of items) {
+    if (!i.productName.trim() || i.wasReceived === "NO" || !((parseInt(i.quantityReceived, 10) || 0) > 0)) continue;
+    const mine = recallChecks.filter((c) => c.itemId === i.id);
+    for (const r of recallsForProduct(i.productName, recalls.filter((x) => x.active))) {
+      if (r.numberCount + r.prefixCount > 0) {
+        if (!mine.some((c) => c.result === "ON_LIST" || c.result === "NOT_ON_LIST" || c.recallId === r.id)) recallGate.push(`${i.productName.trim()}: recall check needed (${r.name}). Enter or scan its lot or serial number in Step 6.`);
+      } else if (!mine.some((c) => c.recallId === r.id && (c.result === "CONFIRMED_OK" || c.result === "CONFIRMED_AFFECTED"))) {
+        recallGate.push(`${i.productName.trim()}: ${r.name} has no list loaded here, so look its number up on ${r.manufacturer || "the manufacturer"}'s page and record the result in Step 6.`);
+      }
+    }
+  }
+  const missing = [...computeMissingInfo(facts, counts, itemFacts), ...recallGate];
   // Quoted products nothing has been entered for yet count as shortages. Blank rows (no product chosen) are not lines yet.
   const namedFacts = itemFacts.filter((f) => f.productName?.trim());
   const notEntered = quotedNotEntered(props.quotedLines, namedFacts);
@@ -223,6 +236,8 @@ export function IntakeForm(props: Props) {
         if (res.missing) setMissingAfterSubmit(res.missing);
         return;
       }
+      if (res.recallChecks) setRecallChecks(res.recallChecks);
+      if (res.itemPatches) patchMany(res.itemPatches as Record<string, Partial<ItemState>>);
       const base = kind === "submit" ? "Submitted. The order is now marked Received." : "Saved.";
       setMessage(res.notice ? `${base} ${res.notice}` : base);
       router.refresh();

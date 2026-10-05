@@ -24,6 +24,7 @@ import {
 } from "@/db/schema";
 import { newId } from "@/lib/ids";
 import { getReceiptState } from "@/lib/purchasing-receipt-docs";
+import { recallGateIssues } from "@/lib/receiving-recall-service";
 import {
   computeMissingInfo,
   discrepancyFlags,
@@ -449,7 +450,7 @@ export async function getReceivingPackage(organizationId: string, packageId: str
     receipt,
     duplicates: dupes,
     settings,
-    missing: computeMissingInfo({ ...pkg, damageTypes }, photoCounts, itemRows),
+    missing: [...computeMissingInfo({ ...pkg, damageTypes }, photoCounts, itemRows), ...(await recallGateIssues(organizationId, packageId, itemRows))],
   };
 }
 
