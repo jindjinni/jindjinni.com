@@ -36,7 +36,7 @@ export const DOCUMENT_PHOTO_KINDS: readonly PhotoKind[] = ["PACKING_SHEET", "REV
 /** Kinds that belong to one product line (carry an itemId). */
 export const ITEM_PHOTO_KINDS: readonly PhotoKind[] = ["ITEM_PRODUCT", "ITEM_DAMAGE", "ITEM_DISCREPANCY", "ITEM_EXPIRATION"];
 
-export const MAX_PHOTOS_PER_KIND = 10;
+export const MAX_PHOTOS_PER_KIND = 25;
 
 export const DAMAGE_TYPES = ["Crushed", "Torn", "Wet", "Open", "Punctured", "Tape Damage", "Box Damage", "Other"] as const;
 

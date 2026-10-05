@@ -3,7 +3,7 @@
 // Building blocks shared by the Receiving Intake Form: label rows, step sections,
 // Yes/No pills, and the photo / document uploader.
 
-import { useRef, useState, useTransition, type ReactNode } from "react";
+import { createContext, useContext, useRef, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { deleteReceivingPhoto, uploadReceivingPhoto } from "@/app/actions/receiving";
 import { prepareUploadFile } from "@/lib/client-image";
@@ -106,12 +106,16 @@ export const YN_NA: ChoiceOption[] = [
   { value: "NA", label: "N/A", tone: "warn" },
 ];
 
+/** Whether the signed-in person may add photos to the shipment being shown (true for receiving staff even after it is submitted). */
+export const PhotoAddContext = createContext<boolean | null>(null);
+
 export function PhotoSlot({
   packageId,
   kind,
   itemId,
   photos,
   editable,
+  canAdd: canAddProp,
   storageOk,
   onError,
   compact,
@@ -120,11 +124,17 @@ export function PhotoSlot({
   kind: PhotoKind;
   itemId?: string;
   photos: PackagePhoto[];
+  /** Removing photos: only while the shipment is in progress. */
   editable: boolean;
+  /** Adding photos: defaults to the shipment-wide setting, which stays on after the shipment is submitted. */
+  canAdd?: boolean;
   storageOk: boolean;
   onError: (m: string) => void;
   compact?: boolean;
 }) {
+  const ctxCanAdd = useContext(PhotoAddContext);
+  const canAdd = canAddProp ?? ctxCanAdd ?? editable;
+  const [dragOver, setDragOver] = useState(false);
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [busy, setBusy] = useState(false);
@@ -180,9 +190,27 @@ export function PhotoSlot({
     });
   }
 
+  const full = mine.length >= MAX_PHOTOS_PER_KIND;
+  const ready = canAdd && storageOk && !busy && !full;
+
   return (
     <div>
-      <div className="flex flex-wrap gap-2">
+      <div
+        className={`flex flex-wrap gap-2 rounded-lg ${dragOver ? "outline-dashed outline-2 outline-offset-4 outline-sky-500" : ""}`}
+        onDragOver={(e) => {
+          if (!ready) return;
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => {
+          setDragOver(false);
+          if (!ready) return;
+          e.preventDefault();
+          const dropped = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith("image/") || (pdfOk && f.type === "application/pdf"));
+          void addFiles(dropped.slice(0, MAX_PHOTOS_PER_KIND - mine.length));
+        }}
+      >
         {mine.map((p) => (
           <div key={p.id} className="group relative">
             <a href={`/api/receiving/photos/${p.id}`} target="_blank" rel="noreferrer" title={p.filename}>
@@ -209,8 +237,8 @@ export function PhotoSlot({
             )}
           </div>
         ))}
-        {mine.length === 0 && !editable && <span className="text-slate-500">None</span>}
-        {editable && mine.length < MAX_PHOTOS_PER_KIND && (
+        {mine.length === 0 && !canAdd && <span className="text-slate-500">None</span>}
+        {canAdd && !full && (
           <label
             className={`flex ${size} flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed text-center text-xs font-medium ${
               storageOk ? "cursor-pointer border-amber-400 text-amber-900 hover:bg-amber-50 dark:text-amber-200 dark:hover:bg-amber-950/40" : "cursor-not-allowed border-slate-300 text-slate-400"
@@ -230,7 +258,7 @@ export function PhotoSlot({
             />
           </label>
         )}
-        {editable && mine.length < MAX_PHOTOS_PER_KIND && canCam && (
+        {canAdd && !full && canCam && (
           <button
             type="button"
             disabled={!storageOk || busy}
@@ -248,12 +276,17 @@ export function PhotoSlot({
         <CameraCapture
           title="Take photos with the camera"
           onClose={() => setCamOpen(false)}
-          onCapture={async (file) => {
-            await addFiles([file]);
-          }}
+          onCapture={(file) => addFiles([file])}
         />
       )}
-      {editable && !storageOk && <p className="mt-1 text-xs text-slate-500">Photo storage isn&apos;t connected yet.</p>}
+      {canAdd && !storageOk && <p className="mt-1 text-xs text-slate-500">Photo storage isn&apos;t connected yet.</p>}
+      {canAdd && storageOk && (
+        <p className="mt-1 text-xs text-slate-500">
+          {full
+            ? `That's the limit of ${MAX_PHOTOS_PER_KIND} here. Remove one to add another.`
+            : `Add as many as you need: select several files at once, drag them in from any folder, or take one shot after another with Live camera.${mine.length ? ` ${mine.length} of ${MAX_PHOTOS_PER_KIND} added.` : ""}`}
+        </p>
+      )}
     </div>
   );
 }

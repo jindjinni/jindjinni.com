@@ -807,7 +807,8 @@ export async function uploadReceivingPhoto(packageId: string, kind: string, form
   }
   const p = await ownPackage(org.organizationId, packageId);
   if (!p) return { error: "That shipment wasn't found." };
-  if (!accountsKind && p.status !== "IN_PROGRESS") return { error: "This shipment was already submitted. Reopen it to change photos." };
+  // Photos can be added at any time, including after the shipment is submitted (more evidence is never a problem).
+  // Removing one is still limited to shipments in progress.
   if (!storage.configured()) return { error: STORAGE_NOT_CONNECTED };
 
   const isItemKind = ITEM_PHOTO_KINDS.includes(k);
@@ -865,6 +866,7 @@ export async function uploadReceivingPhoto(packageId: string, kind: string, form
     storagePath,
     uploadedByUserId: org.userId,
   });
+  if (p.status !== "IN_PROGRESS") await auditReceiving(org, p.quotationId, "Photo added", `${cleanName} added after the shipment was submitted.`);
   refresh(packageId);
   return { ok: true, id };
 }

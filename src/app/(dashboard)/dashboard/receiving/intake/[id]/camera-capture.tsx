@@ -22,8 +22,8 @@ export function CameraCapture({
   multiple = true,
 }: {
   title?: string;
-  /** Called with each photo as a JPEG file. May return a promise; the camera waits for it before the next shot. */
-  onCapture: (file: File) => void | Promise<void>;
+  /** Called with each photo as a JPEG file. May return a promise; the camera waits for it before the next shot. Return false when the photo could not be saved. */
+  onCapture: (file: File) => void | boolean | Promise<void | boolean>;
   onClose: () => void;
   /** Keep the camera open for more photos (default). When false the camera closes after the first photo. */
   multiple?: boolean;
@@ -122,7 +122,12 @@ export function CameraCapture({
         return;
       }
       const stamp = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14);
-      await onCapture(new File([blob], `camera-${stamp}.jpg`, { type: "image/jpeg" }));
+      const saved = await onCapture(new File([blob], `camera-${stamp}.jpg`, { type: "image/jpeg" }));
+      if (saved === false) {
+        setError("That photo couldn't be saved. Check the message on the page, then take it again.");
+        return;
+      }
+      setError("");
       setTaken((n) => n + 1);
       if (!multiple) closeRef.current();
     } finally {

@@ -29,7 +29,7 @@ import {
 } from "@/lib/receiving-rules";
 import { MONEY, STATUS_PILL, chipClass, formatUtcStamp } from "@/lib/receiving-ui";
 import { LocalTime } from "@/components/local-time";
-import { Choice, PhotoSlot, Row, Step, YN, YN_RISK, field } from "./intake-parts";
+import { Choice, PhotoAddContext, PhotoSlot, Row, Step, YN, YN_RISK, field } from "./intake-parts";
 import { ItemAdjustmentCard, itemFactsOf, toItemState, type ItemState } from "./item-card";
 import { ReceiptPreview, ReceivedItemsGrid } from "./receiving-table";
 import { RecallCheck } from "./recall-check";
@@ -286,7 +286,7 @@ export function IntakeForm(props: Props) {
   }
 
   const slot = (kind: PhotoKind, opts?: { accounts?: boolean; payment?: boolean }) => (
-    <PhotoSlot packageId={packageId} kind={kind} photos={photos} editable={opts?.payment ? canPayment : opts?.accounts ? canAccounts : editable} storageOk={storageOk} onError={setError} />
+    <PhotoSlot packageId={packageId} kind={kind} photos={photos} editable={opts?.payment ? canPayment : opts?.accounts ? canAccounts : editable} canAdd={opts?.payment ? canPayment : opts?.accounts ? canAccounts : canWrite} storageOk={storageOk} onError={setError} />
   );
   const textInput = (id: keyof FormValues, rows?: number) =>
     rows ? (
@@ -296,6 +296,7 @@ export function IntakeForm(props: Props) {
     );
 
   return (
+    <PhotoAddContext.Provider value={canWrite}>
     <article className="mx-auto max-w-[100rem]">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
@@ -715,5 +716,6 @@ export function IntakeForm(props: Props) {
         </div>
       )}
     </article>
+    </PhotoAddContext.Provider>
   );
 }
