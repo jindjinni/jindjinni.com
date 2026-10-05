@@ -8,8 +8,6 @@ import {
   reopenReceiving,
   saveFollowUp,
   saveReceiving,
-  sendCustomerNotification,
-  sendPackagingWarning,
   submitReceiving,
 } from "@/app/actions/receiving";
 import type { AdjustmentSummary, CatalogProduct, PackagePhoto, QuotationBrief, QuotedLine, ItemView, TeamMember } from "@/lib/receiving-queries";
@@ -23,11 +21,9 @@ import {
   finalPayout,
   finalStatusFor,
   formatMoney,
-  pickEmailTemplate,
   summarizeItems,
   quotedNotEntered,
   RETURN_STATUS_LABELS,
-  type EmailTemplateKey,
   type PhotoKind,
 } from "@/lib/receiving-rules";
 import { MONEY, STATUS_PILL, chipClass, formatUtcStamp } from "@/lib/receiving-ui";
@@ -109,13 +105,6 @@ const STEPS = [
   "Completion",
 ];
 
-const TEMPLATE_LABELS: Record<EmailTemplateKey, string> = {
-  STANDARD: "Standard: package received & processed",
-  STANDARD_PACKAGING_NOTICE: "Processed, with a packaging notice",
-  ADJUSTMENT_ONLY: "Processed, with an adjustment",
-  ADJUSTMENT_PACKAGING: "Processed, with an adjustment and a packaging notice",
-};
-
 const fieldKeysForAccounts = ["adjustedOrderTotal", "adjustmentAmountEmail", "customerEmailNote", "accountsDecision", "accountsStatus"] as const;
 
 export function IntakeForm(props: Props) {
@@ -166,7 +155,6 @@ export function IntakeForm(props: Props) {
   const adjustedValid = adjustedNum == null || Number.isFinite(adjustedNum);
   const payout = finalPayout(total, adjustedValid ? adjustedNum : null);
   const suggestedChange = adjustedValid && adjustedNum != null ? Math.round((adjustedNum - total) * 100) / 100 : null;
-  const template = pickEmailTemplate({ adjustmentNeeded: v.adjustmentNeeded, overallPackaging: v.overallPackaging });
   const submittedBy = props.team.find((t) => t.userId === saved.submittedByUserId)?.name;
 
   function receivingFormData() {
@@ -240,19 +228,6 @@ export function IntakeForm(props: Props) {
     });
   }
 
-  function notify(kind: "status" | "warning") {
-    setError("");
-    setMessage("");
-    startTransition(async () => {
-      const res = kind === "status" ? await sendCustomerNotification(packageId) : await sendPackagingWarning(packageId);
-      if (res.error) setError(res.error);
-      else {
-        setMessage(res.notice ?? "Sent.");
-        router.refresh();
-      }
-    });
-  }
-
   const slot = (kind: PhotoKind, opts?: { accounts?: boolean }) => (
     <PhotoSlot packageId={packageId} kind={kind} photos={photos} editable={opts?.accounts ? canAccounts : editable} storageOk={storageOk} onError={setError} />
   );
@@ -262,8 +237,6 @@ export function IntakeForm(props: Props) {
     ) : (
       <input id={id} className={field} value={v[id] as string} onChange={(e) => set(id, e.target.value as never)} />
     );
-
-  const canSendStatus = canAccounts && locked && saved.accountsStatus === "PAID" && props.settings.emailsEnabled && !!brief.email;
 
   return (
     <article className="mx-auto max-w-[100rem]">
@@ -614,36 +587,6 @@ export function IntakeForm(props: Props) {
         <Row label="Submitted By">{locked ? submittedBy ?? "—" : "—"}</Row>
         <Row label="Submission Date/Time">{locked ? <span suppressHydrationWarning>{formatUtcStamp(saved.submittedAt)}</span> : "—"}</Row>
         <Row label="Record Created"><span suppressHydrationWarning>{formatUtcStamp(saved.createdAt)}</span></Row>
-
-        <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Customer notification</h3>
-          <p className="mt-1 text-xs text-slate-500">Email that applies to this shipment: {TEMPLATE_LABELS[template]}.</p>
-          <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
-            <div><dt className="text-xs text-slate-500">Customer emailed</dt><dd>{saved.customerNotifiedAt ? <span suppressHydrationWarning>{formatUtcStamp(saved.customerNotifiedAt)}</span> : "Not yet"}</dd></div>
-            <div><dt className="text-xs text-slate-500">Packaging warning sent</dt><dd>{saved.packagingWarningSentAt ? <span suppressHydrationWarning>{formatUtcStamp(saved.packagingWarningSentAt)}</span> : "Not yet"}</dd></div>
-          </dl>
-          <label className="mt-3 flex items-center gap-2 text-sm">
-            <input type="checkbox" className="h-4 w-4 accent-amber-600" disabled={!canAccounts} checked={v.customerTexted} onChange={(e) => set("customerTexted", e.target.checked)} />
-            Customer texted
-          </label>
-          {!props.settings.emailsEnabled && (
-            <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:bg-amber-950/40 dark:text-amber-100">
-              Customer emails are turned off.{" "}
-              {props.isAdminUser ? <Link href="/dashboard/receiving/email-settings" className="font-semibold underline">Turn them on in Email Settings</Link> : "An admin can turn them on in Email Settings."}
-            </p>
-          )}
-          {!brief.email && <p className="mt-3 text-xs text-red-800 dark:text-red-300">This order has no customer email address, so nothing can be sent.</p>}
-          {canAccounts && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button type="button" disabled={pending || !canSendStatus} onClick={() => notify("status")} title={canSendStatus ? undefined : "Submit receiving, save the status as Paid and turn emails on first"} className="rounded-lg bg-[#F7B838] px-3 py-2 text-sm font-semibold text-amber-950 hover:brightness-95 disabled:opacity-50">
-                {saved.customerNotifiedAt ? "Resend customer email" : "Send customer email"}
-              </button>
-              <button type="button" disabled={pending || !props.settings.emailsEnabled || !brief.email} onClick={() => notify("warning")} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900">
-                Send packaging warning
-              </button>
-            </div>
-          )}
-        </div>
       </Step>
 
       {error && <p role="alert" className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-950/50 dark:text-red-200">{error}</p>}
