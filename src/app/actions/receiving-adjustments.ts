@@ -12,6 +12,7 @@ import {
   discardAdjustment,
   finalizeAdjustment,
   getAdjustmentById,
+  regenerateFromReceived,
   saveAdjustment as saveAdjustmentRow,
   type AdjustmentInput,
 } from "@/lib/receiving-adjustment-service";
@@ -65,6 +66,16 @@ export async function finalizeAdjustmentAction(adjustmentId: string, input: Adju
       ? "Finalized. The adjusted quotation is attached to the receiving order."
       : "Finalized. File storage isn't connected, so the PDF isn't stored, but it is built fresh whenever you open it or email the customer.",
   };
+}
+
+/** Rebuilds the lines and totals from the original quotation and what Step 6 says now (back to a draft). */
+export async function regenerateAdjustment(adjustmentId: string): Promise<AdjustmentActionState> {
+  const org = await requireWriter();
+  const r = await regenerateFromReceived(org, adjustmentId);
+  if (!r.ok) return { error: r.error };
+  const [adj] = await packageOf(org.organizationId, adjustmentId);
+  refresh(adj?.packageId, adjustmentId);
+  return { ok: true, id: adjustmentId, notice: "Rebuilt from the original quotation and what was received. Review it, then finalize." };
 }
 
 export async function deleteAdjustment(adjustmentId: string): Promise<AdjustmentActionState> {

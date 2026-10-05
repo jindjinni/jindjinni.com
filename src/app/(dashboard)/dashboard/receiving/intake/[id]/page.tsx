@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { requireOrg } from "@/lib/tenant";
 import { canWriteAccounts, canWriteReceiving, isAdmin } from "@/lib/permissions";
 import { getReceivingCatalog, getReceivingPackage } from "@/lib/receiving-queries";
+import { getAdjustmentForPackage } from "@/lib/receiving-adjustment-service";
 import { storage } from "@/lib/receiving-storage";
 import { IntakeForm, type FormValues } from "./intake-form";
 
@@ -14,6 +15,7 @@ export default async function IntakeDetailPage({ params }: { params: Promise<{ i
   if (!data) notFound();
   const { pkg } = data;
   const catalog = await getReceivingCatalog(org.organizationId);
+  const adjustmentView = await getAdjustmentForPackage(org.organizationId, id);
 
   const initial: FormValues = {
     trackingNumber: pkg.trackingNumber ?? "",
@@ -46,7 +48,7 @@ export default async function IntakeDetailPage({ params }: { params: Promise<{ i
 
   return (
     <IntakeForm
-      key={`${pkg.id}:${pkg.status}:${data.adjustment?.status ?? ""}:${data.adjustment?.adjustedTotal ?? ""}`}
+      key={`${pkg.id}:${pkg.status}`}
       packageId={pkg.id}
       status={pkg.status}
       canWrite={canWriteReceiving(org.role)}
@@ -63,6 +65,7 @@ export default async function IntakeDetailPage({ params }: { params: Promise<{ i
       items={data.items}
       quotedLines={data.quotedLines}
       adjustment={data.adjustment}
+      adjustmentView={adjustmentView}
       started={data.started}
       catalog={catalog}
       saved={{

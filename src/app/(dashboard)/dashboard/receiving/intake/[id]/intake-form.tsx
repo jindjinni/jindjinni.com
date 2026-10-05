@@ -1,6 +1,7 @@
 "use client";
 
-import Link from "next/link";
+import { AdjustmentSection, type AdjustmentChange } from "./adjustment-section";
+import type { AdjustmentView } from "@/lib/receiving-adjustment-service";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -31,7 +32,6 @@ import { LocalTime } from "@/components/local-time";
 import { Choice, PhotoSlot, Row, Step, YN, YN_RISK, field } from "./intake-parts";
 import { ItemAdjustmentCard, itemFactsOf, toItemState, type ItemState } from "./item-card";
 import { ReceiptPreview, ReceivedItemsGrid } from "./receiving-table";
-import { StartAdjustmentButton } from "../../adjustments/start-button";
 
 export type FormValues = {
   trackingNumber: string;
@@ -75,6 +75,8 @@ type Props = {
   team: TeamMember[];
   duplicates: { number: string; tracking: string | null }[];
   settings: { emailsEnabled: boolean };
+  /** The full adjustment quotation (built inline in Step 7), or null when none has been started. */
+  adjustmentView: AdjustmentView | null;
   photos: PackagePhoto[];
   items: ItemView[];
   quotedLines: QuotedLine[];
@@ -193,6 +195,29 @@ export function IntakeForm(props: Props) {
       setMessage(res.notice ? `${base} ${res.notice}` : base);
       router.refresh();
     });
+  }
+
+  /** The adjustment quotation is built from what is saved, so save the form first. Starting one also answers "Adjustment needed?" with Yes. */
+  async function saveBeforeAdjustment(): Promise<string | null> {
+    if (v.adjustmentNeeded !== "YES") set("adjustmentNeeded", "YES");
+    if (!editable) return null;
+    const fd = receivingFormData();
+    fd.set("adjustmentNeeded", "YES");
+    const res = await saveReceiving(packageId, fd);
+    return res.error ?? null;
+  }
+
+  function onAdjustmentChanged(e: AdjustmentChange) {
+    if (e.kind === "finalized") {
+      set("adjustedOrderTotal", String(e.adjustedTotal));
+      set("adjustmentAmountEmail", String(e.difference));
+    }
+    if (e.kind === "discarded") {
+      if (Number(v.adjustedOrderTotal) === e.adjustedTotal) {
+        set("adjustedOrderTotal", "");
+        set("adjustmentAmountEmail", "");
+      }
+    }
   }
 
   function reopen() {
@@ -501,27 +526,13 @@ export function IntakeForm(props: Props) {
       {/* STEP 7 (accounting part) */}
       <fieldset disabled={!canAccounts} className="min-w-0 border-0 p-0">
         <div className="mt-2">
-          {(v.adjustmentNeeded === "YES" || props.adjustment) && (
-          <Row label="Adjusted Quotation">
-            {props.adjustment ? (
-  <div className="space-y-1">
-    <Link href={`/dashboard/receiving/adjustments/${props.adjustment.id}`} className="inline-block rounded-lg bg-[#F7B838] px-3 py-2 text-sm font-semibold text-amber-950 hover:brightness-95">
-      Open {props.adjustment.number}
-    </Link>
-    <p className="text-xs text-slate-600 dark:text-slate-400">
-      {props.adjustment.status === "FINAL" ? "Final and attached to this order" : "Draft, not attached yet"} · {formatMoney(props.adjustment.originalTotal)} → {formatMoney(props.adjustment.adjustedTotal)}
-    </p>
-  </div>
-            ) : canAccounts ? (
-  <>
-    <StartAdjustmentButton packageId={packageId} />
-    <p className="mt-1 text-xs text-slate-500">Starts a new quotation from the original one and what you received. You edit it, then it is attached to this order.</p>
-  </>
-            ) : (
-  <p className="text-xs text-slate-500">No adjusted quotation yet. Receivers, accountants and admins can create one.</p>
-            )}
-          </Row>
-          )}
+          <AdjustmentSection
+            packageId={packageId}
+            view={props.adjustmentView}
+            canWrite={canAccounts}
+            beforeAction={saveBeforeAdjustment}
+            onChanged={onAdjustmentChanged}
+          />
           <Row label="Adjusted Order Total" hint="Leave blank to pay the original order total.">
             <input id="adjustedOrderTotal" inputMode="decimal" placeholder="0.00" className={`${field} sm:w-48`} value={v.adjustedOrderTotal} onChange={(e) => set("adjustedOrderTotal", e.target.value)} />
             {!adjustedValid && <p className="mt-1 text-xs text-red-700">Enter a dollar amount.</p>}

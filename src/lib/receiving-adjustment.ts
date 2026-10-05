@@ -53,7 +53,17 @@ export type ReceivedForPrefill = {
   wasReceived: string;
   quantityReceived: number | null;
   condition: string;
+  /** YYYY-MM-DD, when the receiver typed one for this row. */
+  expirationDate?: string | null;
 };
+
+/** "2027-07-20" -> "07/20/2027" (how the printed quotation shows expiry dates); anything else is returned as is. */
+export function expiryText(v: string | null | undefined): string | null {
+  const t = (v ?? "").trim();
+  if (!t) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(t);
+  return m ? `${m[2]}/${m[3]}/${m[1]}` : t;
+}
 
 /**
  * Starting point for a new adjustment: every line of the original quotation, with the quantity (and condition)
@@ -65,21 +75,38 @@ export function prefillAdjustmentLines(quoted: QuotedForPrefill[], received: Rec
   for (const q of quoted) {
     const rows = received.filter((r) => r.quotedItemId === q.id);
     const counted = rows.filter((r) => r.quantityReceived != null);
-    const quantity = counted.length > 0 ? counted.reduce((a, r) => a + (r.quantityReceived ?? 0), 0) : q.quantity;
-    const conds = Array.from(new Set(rows.map((r) => r.condition).filter(Boolean)));
-    const condition = conds.length === 1 && conds[0] !== "Mint" ? conds[0] : conds.length > 1 ? conds.join(" / ") : q.condition;
-    out.push({
+    const base = {
       quotedItemId: q.id,
       productId: q.productId,
       productName: q.name,
       productCode: q.code,
-      condition: condition ?? null,
-      expiryLabel: q.expiration,
       originalQuantity: q.quantity,
       originalUnitPrice: q.unitPrice,
       originalLineTotal: q.lineTotal,
-      quantity,
       unitPrice: q.unitPrice,
+    };
+    // Different conditions or expiry dates arrived for the same product: one line each, so each can be priced on its own.
+    const kinds = new Set(counted.map((r) => `${r.condition || ""}|${r.expirationDate || ""}`));
+    if (counted.length > 1 && kinds.size > 1) {
+      for (const r of counted) {
+        out.push({
+          ...base,
+          condition: r.condition || q.condition || null,
+          expiryLabel: expiryText(r.expirationDate) ?? q.expiration,
+          quantity: r.quantityReceived ?? 0,
+          note: null,
+        });
+      }
+      continue;
+    }
+    const quantity = counted.length > 0 ? counted.reduce((a, r) => a + (r.quantityReceived ?? 0), 0) : q.quantity;
+    const conds = Array.from(new Set(rows.map((r) => r.condition).filter(Boolean)));
+    const condition = conds.length === 1 && conds[0] !== "Mint" ? conds[0] : conds.length > 1 ? conds.join(" / ") : q.condition;
+    out.push({
+      ...base,
+      condition: condition ?? null,
+      expiryLabel: (counted.length === 1 ? expiryText(counted[0].expirationDate) : null) ?? q.expiration,
+      quantity,
       note: quantity !== q.quantity ? `Quoted ${q.quantity}, received ${quantity}` : null,
     });
   }
@@ -110,13 +137,26 @@ export function validateAdjustmentLines(lines: AdjLine[]): AdjValidation {
   return { ok: true };
 }
 
-/** One sentence per changed line, for the "Adjustment Details" box. */
-export function describeChanges(lines: AdjLine[]): string {
+/** One sentence per changed product, for the "Adjustment Details" box and the reason printed on the quotation. */
+export function describeChanges(
+  lines: { productName: string; quotedItemId?: string | null; condition?: string | null; originalQuantity?: number | null; originalUnitPrice?: number | null; quantity: number; unitPrice: number }[],
+): string {
   const parts: string[] = [];
-  for (const l of lines) {
-    if (l.originalQuantity == null) parts.push(`${l.productName}: not on the original quotation (${l.quantity} received)`);
-    else if (l.quantity !== l.originalQuantity) parts.push(`${l.productName}: quoted ${l.originalQuantity}, received ${l.quantity}`);
-    else if (l.originalUnitPrice != null && roundMoney(l.unitPrice) !== roundMoney(l.originalUnitPrice)) parts.push(`${l.productName}: price changed from $${l.originalUnitPrice.toFixed(2)} to $${l.unitPrice.toFixed(2)}`);
+  const groups = new Map<string, typeof lines>();
+  lines.forEach((l, i) => {
+    const key = l.quotedItemId ? `q:${l.quotedItemId}` : `n:${i}`;
+    groups.set(key, [...(groups.get(key) ?? []), l]);
+  });
+  for (const group of groups.values()) {
+    const first = group[0];
+    const qty = group.reduce((acc, l) => acc + l.quantity, 0);
+    if (first.originalQuantity == null) parts.push(`${first.productName}: not on the original quotation (${qty} received)`);
+    else if (qty !== first.originalQuantity) parts.push(`${first.productName}: quoted ${first.originalQuantity}, received ${qty}`);
+    else if (group.length === 1 && first.originalUnitPrice != null && roundMoney(first.unitPrice) !== roundMoney(first.originalUnitPrice)) parts.push(`${first.productName}: price changed from $${first.originalUnitPrice.toFixed(2)} to $${first.unitPrice.toFixed(2)}`);
+    for (const l of group) {
+      const c = (l.condition ?? "").trim();
+      if (/damag|crush|torn|ripp|stain|opened|dent|scratch|expired|short|missing/i.test(c)) parts.push(`${l.quantity} ${c.toLowerCase()} - ${l.productName}`);
+    }
   }
   return parts.join("; ");
 }

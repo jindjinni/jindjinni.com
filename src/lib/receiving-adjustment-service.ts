@@ -16,7 +16,7 @@ import {
   RECEIVING_ADJUSTMENT_REASONS,
 } from "@/db/schema";
 import { newId } from "@/lib/ids";
-import { getBusinessProfile, resolveBusinessDocumentIdentity } from "@/lib/queries";
+import { getBusinessProfile, getPurchasingReceiptSettings, renderReceiptCopy, resolveBusinessDocumentIdentity, resolvePurchasingReceiptSettings } from "@/lib/queries";
 import { storage } from "@/lib/receiving-storage";
 import { buildAdjustmentPdf } from "@/lib/receiving-adjustment-pdf";
 import {
@@ -199,6 +199,38 @@ export async function listNeedingAdjustment(organizationId: string): Promise<Nee
 
 // ---- drafting -------------------------------------------------------------------
 
+/** The original quotation's lines, adjusted by what the receiver entered in Step 6 (see prefillAdjustmentLines). */
+async function prefillFor(organizationId: string, packageId: string, quotationId: string): Promise<{ lines: AdjLine[]; reason: (typeof RECEIVING_ADJUSTMENT_REASONS)[number] | null }> {
+  const quoted = await db
+    .select({
+      id: purchasingQuotedItems.id,
+      productId: purchasingQuotedItems.productId,
+      name: purchasingQuotedItems.productNameSnapshot,
+      code: purchasingQuotedItems.productCodeSnapshot,
+      condition: purchasingQuotedItems.conditionNameSnapshot,
+      expiration: purchasingQuotedItems.expirationRangeLabelSnapshot,
+      quantity: purchasingQuotedItems.quantity,
+      unitPrice: purchasingQuotedItems.finalUnitPrice,
+      lineTotal: purchasingQuotedItems.lineTotal,
+    })
+    .from(purchasingQuotedItems)
+    .where(eq(purchasingQuotedItems.quotationId, quotationId))
+    .orderBy(purchasingQuotedItems.createdAt);
+  const received = await db.select().from(receivingItems).where(and(eq(receivingItems.packageId, packageId), eq(receivingItems.organizationId, organizationId)));
+  const lines = prefillAdjustmentLines(quoted, received.map((r) => ({
+    quotedItemId: r.quotedItemId,
+    productId: r.productId,
+    productName: r.productName,
+    itemSource: r.itemSource,
+    wasReceived: r.wasReceived ?? "",
+    quantityReceived: r.quantityReceived,
+    condition: r.condition ?? "",
+    expirationDate: r.expirationDate,
+  })));
+  const reason = received.map((r) => r.adjustmentReason).find(Boolean) ?? (received.some((r) => /damag/i.test(r.condition ?? "")) ? ("Product Damage" as const) : null);
+  return { lines, reason };
+}
+
 /** Starts (or returns) the shipment's adjustment, pre-filled from the original quotation and what was received. */
 export async function createDraftFromPackage(org: OrgRef, packageId: string): Promise<{ id: string; created: boolean } | { error: string }> {
   const [pkg] = await db
@@ -223,36 +255,11 @@ export async function createDraftFromPackage(org: OrgRef, packageId: string): Pr
     .limit(1);
   if (!q) return { error: "The order for this shipment wasn't found." };
 
-  const quoted = await db
-    .select({
-      id: purchasingQuotedItems.id,
-      productId: purchasingQuotedItems.productId,
-      name: purchasingQuotedItems.productNameSnapshot,
-      code: purchasingQuotedItems.productCodeSnapshot,
-      condition: purchasingQuotedItems.conditionNameSnapshot,
-      expiration: purchasingQuotedItems.expirationRangeLabelSnapshot,
-      quantity: purchasingQuotedItems.quantity,
-      unitPrice: purchasingQuotedItems.finalUnitPrice,
-      lineTotal: purchasingQuotedItems.lineTotal,
-    })
-    .from(purchasingQuotedItems)
-    .where(eq(purchasingQuotedItems.quotationId, pkg.quotationId))
-    .orderBy(purchasingQuotedItems.createdAt);
-  const received = await db.select().from(receivingItems).where(and(eq(receivingItems.packageId, packageId), eq(receivingItems.organizationId, org.organizationId)));
-  const lines = prefillAdjustmentLines(quoted, received.map((r) => ({
-    quotedItemId: r.quotedItemId,
-    productId: r.productId,
-    productName: r.productName,
-    itemSource: r.itemSource,
-    wasReceived: r.wasReceived ?? "",
-    quantityReceived: r.quantityReceived,
-    condition: r.condition ?? "",
-  })));
+  const { lines, reason } = await prefillFor(org.organizationId, pkg.id, pkg.quotationId);
 
   const bonus = q.bonus ?? 0;
   const deduction = q.deductionOn ? (q.deduction ?? 0) : 0;
   const totals = adjustmentTotals(lines, bonus, deduction);
-  const reason = received.map((r) => r.adjustmentReason).find(Boolean) ?? null;
   const id = newId("radj");
   try {
     await db.insert(receivingAdjustments).values({
@@ -275,12 +282,18 @@ export async function createDraftFromPackage(org: OrgRef, packageId: string): Pr
     if (again) return { id: again.id, created: false };
     return { error: "Couldn't start the adjustment. Try again." };
   }
+  await insertLines(org.organizationId, id, lines);
+  await auditReceiving(org, pkg.quotationId, "adjustment", `Adjustment quotation started (${`ADJ-${q.number}`})`);
+  return { id, created: true };
+}
+
+async function insertLines(organizationId: string, adjustmentId: string, lines: AdjLine[]) {
   let order = 0;
   for (const l of lines) {
     await db.insert(receivingAdjustmentLines).values({
       id: newId("radjl"),
-      organizationId: org.organizationId,
-      adjustmentId: id,
+      organizationId,
+      adjustmentId,
       quotedItemId: l.quotedItemId ?? null,
       productId: l.productId ?? null,
       productName: l.productName,
@@ -297,8 +310,46 @@ export async function createDraftFromPackage(org: OrgRef, packageId: string): Pr
       sortOrder: order++,
     });
   }
-  await auditReceiving(org, pkg.quotationId, "adjustment", `Adjustment quotation started (${`ADJ-${q.number}`})`);
-  return { id, created: true };
+}
+
+/**
+ * "Regenerate": throws away the lines and totals on this adjustment and rebuilds them from the original quotation and
+ * whatever Step 6 says now. The reason and the note for the customer are kept (filled in if they were blank).
+ * The adjustment goes back to a draft, so it has to be finalized again.
+ */
+export async function regenerateFromReceived(org: OrgRef, adjustmentId: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  const a = await getAdjustmentById(org.organizationId, adjustmentId);
+  if (!a) return { ok: false, error: "That adjustment wasn't found." };
+  const [pkg] = await db.select().from(receivingPackages).where(and(eq(receivingPackages.id, a.packageId), eq(receivingPackages.organizationId, org.organizationId))).limit(1);
+  if (!pkg) return { ok: false, error: "That shipment wasn't found." };
+  const [q] = await db
+    .select({ grandTotal: purchasingQuotations.grandTotal, bonus: purchasingQuotations.bonusAmount, deduction: purchasingQuotations.deductionAmount, deductionOn: purchasingQuotations.deductionEnabled })
+    .from(purchasingQuotations)
+    .where(and(eq(purchasingQuotations.id, pkg.quotationId), eq(purchasingQuotations.organizationId, org.organizationId)))
+    .limit(1);
+  if (!q) return { ok: false, error: "The order for this shipment wasn't found." };
+  const { lines, reason } = await prefillFor(org.organizationId, pkg.id, pkg.quotationId);
+  const bonus = q.bonus ?? 0;
+  const deduction = q.deductionOn ? (q.deduction ?? 0) : 0;
+  const totals = adjustmentTotals(lines, bonus, deduction);
+  await db.delete(receivingAdjustmentLines).where(eq(receivingAdjustmentLines.adjustmentId, adjustmentId));
+  await insertLines(org.organizationId, adjustmentId, lines);
+  await db
+    .update(receivingAdjustments)
+    .set({
+      reasonCategory: a.reasonCategory ? undefined : reason,
+      reasonNotes: a.reasonNotes.trim() ? undefined : (pkg.adjustmentDetails || describeChanges(lines) || null),
+      originalTotal: q.grandTotal,
+      bonusAmount: bonus,
+      deductionAmount: deduction,
+      itemsTotal: totals.itemsTotal,
+      adjustedTotal: totals.adjustedTotal,
+      status: "DRAFT",
+      updatedAt: sql`(current_timestamp)`,
+    })
+    .where(eq(receivingAdjustments.id, adjustmentId));
+  await auditReceiving(org, pkg.quotationId, "adjustment", `Adjustment quotation regenerated from what was received (${a.number})`);
+  return { ok: true };
 }
 
 export type AdjustmentInput = {
@@ -388,35 +439,42 @@ export async function saveAdjustment(org: OrgRef, adjustmentId: string, input: A
 export async function renderAdjustmentPdf(organizationId: string, organizationName: string, adjustmentId: string): Promise<{ bytes: Uint8Array; filename: string } | null> {
   const a = await getAdjustmentById(organizationId, adjustmentId);
   if (!a) return null;
-  const profile = await getBusinessProfile(organizationId);
+  const [profile, settingsRow] = await Promise.all([getBusinessProfile(organizationId), getPurchasingReceiptSettings(organizationId)]);
   const business = resolveBusinessDocumentIdentity(organizationName, profile);
+  const copy = renderReceiptCopy(resolvePurchasingReceiptSettings(settingsRow), business.displayName);
   const date = (a.finalizedAt ?? new Date().toISOString()).slice(0, 10);
   const bytes = await buildAdjustmentPdf({
     businessName: business.displayName,
     logoDataUrl: business.showLogo ? business.logoDataUrl : null,
     draft: a.status !== "FINAL",
     adjustmentNumber: a.number,
-    orderLabel: [a.quotationNumber, a.trackingNumber].filter(Boolean).join(" — "),
+    orderLabel: [a.quotationNumber, a.trackingNumber].filter(Boolean).join(" / "),
     date,
     customerName: a.customerName,
-    reason: a.reasonCategory,
-    reasonNotes: a.reasonNotes,
+    reason: a.reasonNotes.trim() || a.reasonCategory,
     lines: a.lines.map((l) => ({
       productName: l.productName,
       productCode: l.productCode || null,
       condition: l.condition || null,
       note: l.note || null,
-      originalQuantity: l.originalQuantity,
-      originalUnitPrice: l.originalUnitPrice,
+      expiry: l.expiryLabel || null,
       quantity: l.quantity,
       unitPrice: l.unitPrice,
       lineTotal: l.lineTotal,
     })),
-    originalTotal: a.originalTotal,
     itemsTotal: a.itemsTotal,
     bonusAmount: a.bonusAmount,
     deductionAmount: a.deductionAmount,
     adjustedTotal: a.adjustedTotal,
+    copy: {
+      disclaimerIntro: copy.disclaimerIntro,
+      disclaimerReturnPolicy: copy.disclaimerReturnPolicy,
+      conditionHeading: copy.conditionHeading,
+      conditionBullets: copy.conditionBullets,
+      paymentTimingText: copy.paymentTimingText,
+      footerThankYou: copy.footerThankYou,
+    },
+    generatedAt: new Date().toLocaleString("en-US", { timeZone: "America/New_York" }),
   });
   const safe = a.number.replace(/[^A-Za-z0-9._-]+/g, "_").slice(0, 60) || "adjustment";
   return { bytes, filename: `Adjusted-Quotation-${safe}.pdf` };
@@ -504,7 +562,7 @@ export async function finalizeAdjustment(org: OrgRef, adjustmentId: string): Pro
 }
 
 function describeChangesFromView(a: AdjustmentView): string {
-  return describeChanges(a.lines.map((l) => ({ productName: l.productName, originalQuantity: l.originalQuantity, originalUnitPrice: l.originalUnitPrice, quantity: l.quantity, unitPrice: l.unitPrice })));
+  return describeChanges(a.lines.map((l) => ({ productName: l.productName, quotedItemId: l.quotedItemId, condition: l.condition, originalQuantity: l.originalQuantity, originalUnitPrice: l.originalUnitPrice, quantity: l.quantity, unitPrice: l.unitPrice })));
 }
 
 /** Deletes the adjustment, its stored PDF, and (if it had set them) clears the shipment's adjusted total. */
