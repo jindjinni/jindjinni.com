@@ -11,13 +11,11 @@ const ITEMS = [
   { href: "/dashboard/receiving/adjustments", label: "Order Adjustments", icon: "🧾", exact: false },
 ];
 
-const ADMIN_ITEMS = [{ href: "/dashboard/receiving/email-settings", label: "Email Settings", icon: "✉️", exact: false }];
-
-export function ReceivingNav({ orgName, isAdminUser }: { orgName: string; isAdminUser: boolean }) {
+export function ReceivingNav({ orgName }: { orgName: string }) {
   const path = usePathname();
-  const items = isAdminUser ? [...ITEMS, ...ADMIN_ITEMS] : ITEMS;
+  const items = ITEMS;
   return (
-    <aside className="shrink-0 bg-[var(--dept-accent,#F7B838)] text-amber-950 md:w-60 print:hidden">
+    <aside className="shrink-0 bg-[var(--dept-accent,#F7B838)] text-amber-950 md:w-56 print:hidden">
       <div className="px-5 pb-3 pt-5 md:pt-6">
         <p className="text-xs font-semibold uppercase tracking-wider text-amber-950/70">Receiving Department</p>
         <p className="mt-1 text-lg font-bold leading-tight">{orgName}</p>

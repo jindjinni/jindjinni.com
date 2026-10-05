@@ -132,7 +132,15 @@ export function IntakeList({ cards, canWrite }: { cards: BoardCard[]; canWrite: 
               >
                 {c.coverPhotoId ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={`/api/receiving/photos/${c.coverPhotoId}`} alt="" loading="lazy" className="h-14 w-14 shrink-0 rounded-md object-cover" />
+                  <img
+                    src={`/api/receiving/photos/${c.coverPhotoId}`}
+                    alt=""
+                    loading="lazy"
+                    onError={(e) => {
+                      e.currentTarget.style.visibility = "hidden";
+                    }}
+                    className="h-14 w-14 shrink-0 rounded-md bg-stone-200 object-cover dark:bg-slate-800"
+                  />
                 ) : (
                   <div aria-hidden="true" className="flex h-14 w-14 shrink-0 items-center justify-center rounded-md bg-stone-200 text-lg dark:bg-slate-800">📦</div>
                 )}

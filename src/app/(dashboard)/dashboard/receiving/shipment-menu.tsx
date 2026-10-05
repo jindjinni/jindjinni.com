@@ -66,7 +66,7 @@ export function ShipmentMenu({
   }
 
   return (
-    <div ref={wrap} className={`relative ${className}`}>
+    <div ref={wrap} className={className || "relative"}>
       <button
         type="button"
         aria-label={`Options for ${label}`}

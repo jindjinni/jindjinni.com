@@ -83,7 +83,7 @@ export default async function ReceivedItemsPage({ searchParams }: { searchParams
 
       <p className="mt-4 text-xs text-slate-500">{total} product lines · {totalQuantity} units</p>
       <div className="mt-2 overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-        <table className="w-full min-w-[78rem] text-sm">
+        <table className="w-full min-w-[84rem] text-sm">
           <thead>
             <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
               <th className="px-3 py-2">Date received</th>
@@ -108,9 +108,9 @@ export default async function ReceivedItemsPage({ searchParams }: { searchParams
                 <td className="whitespace-nowrap px-3 py-2">{formatStamp(r.receivedAt)}</td>
                 <td className="whitespace-nowrap px-3 py-2 font-medium">{r.receivedBy ?? "—"}</td>
                 <td className="whitespace-nowrap px-3 py-2 text-xs text-slate-500"><LocalTime value={r.startedAt} /></td>
-                <td className="px-3 py-2"><span className={`rounded-full px-2 py-0.5 text-xs font-medium ${chipClass(r.customer)}`}>{r.customer || "—"}</span></td>
+                <td className="whitespace-nowrap px-3 py-2"><span className={`rounded-full px-2 py-0.5 text-xs font-medium ${chipClass(r.customer)}`}>{r.customer || "—"}</span></td>
                 <td className="whitespace-nowrap px-3 py-2"><Link href={`/dashboard/receiving/intake/${r.packageId}`} className="text-amber-800 underline dark:text-amber-300">{r.orderNumber}</Link></td>
-                <td className="px-3 py-2">
+                <td className="min-w-[13rem] px-3 py-2">
                   <span className="font-medium">{r.productName}</span>
                   {(r.brand || r.productCode) && <span className="block text-xs text-slate-500">{[r.brand, r.productCode].filter(Boolean).join(" · ")}</span>}
                 </td>
