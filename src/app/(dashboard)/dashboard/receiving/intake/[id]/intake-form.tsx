@@ -33,6 +33,7 @@ import { Choice, PhotoSlot, Row, Step, YN, YN_RISK, field } from "./intake-parts
 import { ItemAdjustmentCard, itemFactsOf, toItemState, type ItemState } from "./item-card";
 import { ReceiptPreview, ReceivedItemsGrid } from "./receiving-table";
 import { RecallCheck } from "./recall-check";
+import { RowScanDialog } from "./row-scan-dialog";
 import type { RecallCheckView, RecallView } from "@/lib/receiving-recall-service";
 import { recallsForProduct, rowRecallState } from "@/lib/receiving-recall";
 
@@ -144,6 +145,8 @@ export function IntakeForm(props: Props) {
 
   // Recall checks made in Step 6 (saved on the server as they are made).
   const [recallChecks, setRecallChecks] = useState<RecallCheckView[]>(props.recallChecks);
+  const [recalls, setRecalls] = useState<RecallView[]>(props.recalls);
+  const [scanItemId, setScanItemId] = useState<string | null>(null);
   const recallStates: Record<string, "RECALLED" | "CHECKED"> = {};
   for (const it of props.items) {
     const st = rowRecallState(recallChecks.filter((c) => c.itemId === it.id));
@@ -153,7 +156,7 @@ export function IntakeForm(props: Props) {
   const checkedCount = Object.keys(recallStates).length;
   // Products that point at a recall (by name) but were never checked.
   const unchecked = items
-    .filter((i) => i.productName.trim() && i.wasReceived !== "NO" && !recallStates[i.id] && recallsForProduct(i.productName, props.recalls.filter((r) => r.active)).length > 0)
+    .filter((i) => i.productName.trim() && i.wasReceived !== "NO" && !recallStates[i.id] && recallsForProduct(i.productName, recalls.filter((r) => r.active)).length > 0)
     .map((i) => i.productName);
 
   const counts: Partial<Record<PhotoKind, number>> = {};
@@ -495,6 +498,7 @@ export function IntakeForm(props: Props) {
             onPatchMany={patchMany}
             onRemoveMany={removeItems}
             recallStates={recallStates}
+            onScanRow={editable ? setScanItemId : undefined}
           />
 
           <RecallCheck
@@ -503,12 +507,25 @@ export function IntakeForm(props: Props) {
             editable={editable}
             isAdminUser={props.isAdminUser}
             photoReading={props.photoReading}
-            initialRecalls={props.recalls}
-            initialChecks={recallChecks}
-            onPatchMany={patchMany}
+            recalls={recalls}
+            onRecalls={setRecalls}
+            checks={recallChecks}
             onChecks={setRecallChecks}
+            onPatchMany={patchMany}
             onError={setError}
           />
+          {scanItemId && items.find((i) => i.id === scanItemId) && (
+            <RowScanDialog
+              packageId={packageId}
+              item={items.find((i) => i.id === scanItemId)!}
+              recalls={recalls}
+              photoReading={props.photoReading}
+              onClose={() => setScanItemId(null)}
+              onChecks={setRecallChecks}
+              onPatchMany={patchMany}
+              onError={setError}
+            />
+          )}
 
           <div className="mt-8">
             <h3 className="text-lg font-bold text-slate-900 dark:text-slate-50">Verification Summary</h3>

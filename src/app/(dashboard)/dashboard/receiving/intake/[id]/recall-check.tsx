@@ -3,24 +3,22 @@
 // Step 6: check a received product's lot / serial number against the recalls, without leaving the shipment.
 // Type it, scan the barcode with the camera, or take a photo of the label. Official lookup pages open in a new tab.
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import {
-  checkRecall,
-  confirmRecallLookup,
   importRecallList,
   previewRecallList,
-  readRecallPhoto,
   removeRecall,
   removeRecallCheck,
   saveRecall,
   setupRecalls,
   type RecallActionState,
-  type RecallItemPatch,
 } from "@/app/actions/receiving-recalls";
 import type { RecallCheckView, RecallView } from "@/lib/receiving-recall-service";
-import { RECALL_RESULT_LABELS, isRecalledResult, normalizeNumber, parseGs1, recallsForProduct } from "@/lib/receiving-recall";
+import { RECALL_RESULT_LABELS, isRecalledResult, normalizeNumber, recallsForProduct } from "@/lib/receiving-recall";
 import type { ItemState } from "./item-card";
 import { field } from "./intake-parts";
+import { ScanTools } from "./scan-tools";
+import { useRecallRunner, type Outcome } from "./use-recall-runner";
 
 const btn =
   "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-600 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800";
@@ -29,34 +27,17 @@ const btnPrimary =
 const linkBtn =
   "inline-flex items-center gap-1.5 rounded-lg border border-sky-300 bg-sky-50 px-3 py-2 text-sm font-medium text-sky-900 hover:bg-sky-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-600 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-100 dark:hover:bg-sky-900/50";
 
-type Outcome = { tone: "bad" | "ok" | "info"; title: string; lines: string[] };
-
-/** Shrinks a phone photo before it is sent: label text stays readable at 1600px and the upload stays small. */
-async function shrinkPhoto(file: File): Promise<File> {
-  try {
-    const bmp = await createImageBitmap(file);
-    const scale = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.round(bmp.width * scale);
-    canvas.height = Math.round(bmp.height * scale);
-    canvas.getContext("2d")?.drawImage(bmp, 0, 0, canvas.width, canvas.height);
-    const blob: Blob | null = await new Promise((res) => canvas.toBlob(res, "image/jpeg", 0.85));
-    return blob ? new File([blob], "label.jpg", { type: "image/jpeg" }) : file;
-  } catch {
-    return file;
-  }
-}
-
 export function RecallCheck({
   packageId,
   items,
   editable,
   isAdminUser,
   photoReading,
-  initialRecalls,
-  initialChecks,
-  onPatchMany,
+  recalls,
+  onRecalls,
+  checks,
   onChecks,
+  onPatchMany,
   onError,
 }: {
   packageId: string;
@@ -64,215 +45,38 @@ export function RecallCheck({
   editable: boolean;
   isAdminUser: boolean;
   photoReading: boolean;
-  initialRecalls: RecallView[];
-  initialChecks: RecallCheckView[];
-  onPatchMany: (updates: Record<string, Partial<ItemState>>) => void;
+  recalls: RecallView[];
+  onRecalls: (r: RecallView[]) => void;
+  checks: RecallCheckView[];
   onChecks: (checks: RecallCheckView[]) => void;
+  onPatchMany: (updates: Record<string, Partial<ItemState>>) => void;
   onError: (m: string) => void;
 }) {
-  const [recalls, setRecalls] = useState(initialRecalls);
-  const [checks, setChecks] = useState(initialChecks);
   const rows = items.filter((i) => i.productName.trim());
   const [rowId, setRowId] = useState("");
   const [input, setInput] = useState("");
-  const [outcome, setOutcome] = useState<Outcome | null>(null);
-  const [pending, start] = useTransition();
-  const [scanning, setScanning] = useState(false);
-  const [scanMsg, setScanMsg] = useState("");
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const stopRef = useRef<(() => void) | null>(null);
-  const photoRef = useRef<HTMLInputElement | null>(null);
   const [lookedUp, setLookedUp] = useState<Record<string, boolean>>({});
+  const [removing, startRemove] = useTransition();
+  const runner = useRecallRunner({ packageId, recalls, onChecks, onPatchMany, onError });
+  const { outcome, setOutcome, note: scanMsg, pending } = runner;
 
   const row = rows.find((r) => r.id === rowId) ?? rows[0];
   const rowChecks = checks.filter((c) => c.itemId === row?.id);
   const matching = row ? recallsForProduct(row.productName, recalls) : [];
   const shown = recalls.filter((r) => r.active);
 
-  useEffect(() => () => stopRef.current?.(), []);
-
-  function applyPatch(itemId: string, p?: RecallItemPatch) {
-    if (!p) return;
-    onPatchMany({
-      [itemId]: {
-        needsReturn: p.needsReturn,
-        returnStatus: p.returnStatus,
-        quantityToReturn: p.quantityToReturn,
-        returnNotes: p.returnNotes,
-      },
-    });
-  }
-  function took(r: RecallActionState) {
-    if (r.checks) {
-      setChecks(r.checks);
-      onChecks(r.checks);
-    }
-  }
-
-  function run(text: string, forRow = row) {
-    if (!forRow) return;
-    setOutcome(null);
-    start(async () => {
-      const r = await checkRecall(packageId, forRow.id, text);
-      if (r.error) {
-        onError(r.error);
-        return;
-      }
-      took(r);
-      applyPatch(forRow.id, r.itemPatch);
-      const hits = (r.results ?? []).filter((x) => x.recalls.length > 0);
-      if (hits.length > 0) {
-        setOutcome({
-          tone: "bad",
-          title: `RECALLED: ${forRow.productName}`,
-          lines: [
-            ...hits.map((h) => `${h.number} is on the recall list for ${h.recalls.join(", ")}.`),
-            "Do not accept this product. The row is marked Needs To Be Returned: Yes (Return Requested).",
-          ],
-        });
-      } else {
-        const nums = (r.results ?? []).map((x) => x.number).join(", ");
-        const mine = recallsForProduct(forRow.productName, recalls);
-        const loaded = mine.filter((m) => m.numberCount + m.prefixCount > 0);
-        const date = loaded.map((m) => m.listUpdatedAt).filter(Boolean).sort().pop();
-        setOutcome({
-          tone: "info",
-          title: "Not on the recall lists we have",
-          lines: [
-            `${nums} was not found${date ? ` (our list was last updated ${date})` : mine.length && loaded.length === 0 ? " (no list is loaded for this product yet)" : ""}.`,
-            "That does not mean the product is safe. Confirm on the manufacturer's page below, then record what it said.",
-          ],
-        });
-      }
-    });
-  }
-
-  // The text a scan or photo gave: fill the row's lot (and date) if empty, then check it.
   function applyScanned(text: string) {
     if (!row) return;
-    const g = parseGs1(text);
-    if (g) {
-      const patch: Partial<ItemState> = {};
-      if (g.lot && !row.lotNumber.trim() && row.lots.every((l) => !l.lotNumber.trim())) patch.lotNumber = g.lot;
-      if (g.expiry && !row.expirationDate && !row.expirationEntryType) {
-        patch.expirationDate = g.expiry;
-        patch.expirationEntryType = "SINGLE";
-      }
-      if (Object.keys(patch).length) onPatchMany({ [row.id]: patch });
-    }
-    if (g?.lot && row.lotNumber.trim() && normalizeNumber(row.lotNumber) !== normalizeNumber(g.lot)) {
-      setScanMsg(`The label says lot ${g.lot}, but this row has lot ${row.lotNumber}. Check which one is right.`);
-    }
-    const toCheck = g ? [g.lot, g.serial].filter(Boolean).join(" ") : text;
-    setInput(toCheck);
-    run(toCheck);
+    setInput(runner.applyScanned(row, text));
   }
-
-  async function startScan() {
-    if (!row) {
-      onError("Add the product to the list above first, then check it.");
-      return;
-    }
-    setScanMsg("");
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setScanMsg("This browser can't open the camera. Use Take a photo or type the number.");
-      return;
-    }
-    setScanning(true);
-    try {
-      const [{ BrowserMultiFormatReader }, { DecodeHintType }] = await Promise.all([import("@zxing/browser"), import("@zxing/library")]);
-      const hints = new Map();
-      hints.set(DecodeHintType.TRY_HARDER, true);
-      const reader = new BrowserMultiFormatReader(hints);
-      // Wait for the video element to be on the page.
-      await new Promise((r) => setTimeout(r, 50));
-      if (!videoRef.current) return;
-      const controls = await reader.decodeFromConstraints({ video: { facingMode: { ideal: "environment" } } }, videoRef.current, (result, _err, c) => {
-        if (result) {
-          c.stop();
-          stopRef.current = null;
-          setScanning(false);
-          applyScanned(result.getText());
-        }
-      });
-      stopRef.current = () => controls.stop();
-    } catch (e) {
-      setScanning(false);
-      const denied = e instanceof Error && /denied|permission|notallowed/i.test(`${e.name} ${e.message}`);
-      setScanMsg(denied ? "Camera access was blocked. Allow the camera for this site in the browser, or use Take a photo." : "Couldn't start the camera. Use Take a photo or type the number.");
-    }
-  }
-  function stopScan() {
-    stopRef.current?.();
-    stopRef.current = null;
-    setScanning(false);
-  }
-
-  async function onPhoto(file: File | undefined) {
-    if (!file || !row) return;
-    setScanMsg("Reading the photo…");
-    // First try to find a barcode in the picture (free, no upload); then ask the photo reader.
-    try {
-      const [{ BrowserMultiFormatReader }, { DecodeHintType }] = await Promise.all([import("@zxing/browser"), import("@zxing/library")]);
-      const hints = new Map();
-      hints.set(DecodeHintType.TRY_HARDER, true);
-      const url = URL.createObjectURL(file);
-      try {
-        const res = await new BrowserMultiFormatReader(hints).decodeFromImageUrl(url);
-        setScanMsg("");
-        applyScanned(res.getText());
-        return;
-      } finally {
-        URL.revokeObjectURL(url);
-      }
-    } catch {
-      /* no barcode found: fall through to the photo reader */
-    }
-    if (!photoReading) {
-      setScanMsg("No barcode found in that photo. Type the number, or ask an admin to switch on photo reading.");
-      return;
-    }
-    const small = await shrinkPhoto(file);
-    const fd = new FormData();
-    fd.set("photo", small);
-    const r = await readRecallPhoto(fd);
-    if (r.error || !r.label) {
-      setScanMsg("");
-      onError(r.error ?? "Couldn't read that photo.");
-      return;
-    }
-    setScanMsg("");
-    const l = r.label;
-    const text = l.barcodeText && parseGs1(l.barcodeText) ? l.barcodeText : [l.lot, l.serial].filter(Boolean).join(" ");
-    if (l.expiry) setScanMsg(`Read from the photo: ${[l.lot && `lot ${l.lot}`, l.serial && `serial ${l.serial}`].filter(Boolean).join(", ")}. Check it matches the label.`);
-    applyScanned(text);
-  }
-
   function confirm(recallId: string, affected: boolean) {
-    if (!row) return;
-    const n = normalizeNumber(input);
-    if (n.length < 4) {
-      onError("Type or scan the lot / serial number you looked up first.");
-      return;
-    }
-    start(async () => {
-      const r = await confirmRecallLookup(packageId, row.id, recallId, input, affected);
-      if (r.error) return onError(r.error);
-      took(r);
-      applyPatch(row.id, r.itemPatch);
-      setOutcome(
-        affected
-          ? { tone: "bad", title: `RECALLED: ${row.productName}`, lines: ["Recorded as affected. The row is marked Needs To Be Returned: Yes (Return Requested)."] }
-          : { tone: "ok", title: "Recorded: not affected", lines: ["The manufacturer's page showed this number is not affected. This is saved with the shipment."] },
-      );
-    });
+    if (row) runner.confirm(row, recallId, input, affected);
   }
-
   function removeCheck(id: string) {
-    start(async () => {
+    startRemove(async () => {
       const r = await removeRecallCheck(packageId, id);
       if (r.error) return onError(r.error);
-      took(r);
+      if (r.checks) onChecks(r.checks);
     });
   }
 
@@ -345,34 +149,10 @@ export function RecallCheck({
             </div>
           </div>
 
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <button type="button" className={btn} disabled={!editable || scanning} onClick={startScan}>
-              <span aria-hidden>▣</span> Scan barcode with camera
-            </button>
-            <button type="button" className={btn} disabled={!editable} onClick={() => photoRef.current?.click()}>
-              <span aria-hidden>◉</span> Take or choose a photo of the label
-            </button>
-            <input ref={photoRef} id="recall-photo" type="file" accept="image/*" capture="environment" className="sr-only" tabIndex={-1} aria-label="Photo of the label" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; void onPhoto(f); }} />
-            <span className="text-xs text-slate-500">{photoReading ? "If there is no barcode, the label text is read for the lot and serial number." : "Photos work for barcodes and QR codes."}</span>
+          <div className="mt-3">
+            <ScanTools idPrefix="recall" disabled={!editable || !row} photoReading={photoReading} onText={applyScanned} onError={onError} />
           </div>
-          <p className="mt-2 max-w-3xl rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-950 dark:bg-sky-950/30 dark:text-sky-100">
-            <strong>Photo tip:</strong> frame only the side of the box or product with the lot number, serial number or barcode. Keep pharmacy stickers and anything with a patient&apos;s name out of the picture.
-            {photoReading ? " If no barcode is found, the photo is sent to an outside reading service (Anthropic) to pick out the numbers. This app does not store it, but the service may keep it for a short time." : ""}
-            {" "}A USB or Bluetooth barcode scanner works too: click the number box, scan, and the check runs by itself.
-          </p>
           {scanMsg && <p role="status" className="mt-2 text-sm text-slate-700 dark:text-slate-200">{scanMsg}</p>}
-
-          {scanning && (
-            <div className="mt-3 max-w-md overflow-hidden rounded-xl border border-slate-300 bg-black dark:border-slate-600">
-              <video ref={videoRef} className="aspect-[4/3] w-full object-cover" muted playsInline aria-label="Camera view: point at the barcode" />
-              <div className="flex items-center justify-between gap-2 bg-slate-900 px-3 py-2 text-xs text-slate-200">
-                <span>Hold the barcode or QR code inside the picture. Keep patient stickers out of view.</span>
-                <button type="button" className="rounded border border-slate-500 px-2 py-1 font-medium text-white hover:bg-slate-800" onClick={stopScan}>
-                  Stop
-                </button>
-              </div>
-            </div>
-          )}
 
           {outcome && (
             <div role="status" className={`mt-4 rounded-lg border px-4 py-3 text-sm ${toneClass[outcome.tone]}`}>
@@ -391,7 +171,7 @@ export function RecallCheck({
                   <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${isRecalledResult(c.result) ? "bg-red-100 text-red-900 dark:bg-red-900/40 dark:text-red-100" : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"}`}>{RECALL_RESULT_LABELS[c.result]}</span>
                   {c.recallName && <span className="text-xs text-slate-500">{c.recallName}</span>}
                   {editable && (
-                    <button type="button" aria-label={`Remove check ${c.enteredNumber}`} className="ml-auto rounded px-1.5 text-xs text-slate-500 hover:bg-slate-100 hover:text-red-700 dark:hover:bg-slate-800" onClick={() => removeCheck(c.id)}>
+                    <button type="button" aria-label={`Remove check ${c.enteredNumber}`} className="ml-auto rounded px-1.5 text-xs text-slate-500 hover:bg-slate-100 hover:text-red-700 dark:hover:bg-slate-800" disabled={removing} onClick={() => removeCheck(c.id)}>
                       Remove
                     </button>
                   )}
@@ -457,7 +237,7 @@ export function RecallCheck({
         )}
       </div>
 
-      {isAdminUser && <ManageRecalls recalls={recalls} onRecalls={setRecalls} onError={onError} />}
+      {isAdminUser && <ManageRecalls recalls={recalls} onRecalls={onRecalls} onError={onError} />}
     </div>
   );
 }

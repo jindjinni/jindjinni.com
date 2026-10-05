@@ -381,6 +381,7 @@ export function ReceivedItemsGrid({
   onPatchMany,
   onRemoveMany,
   recallStates,
+  onScanRow,
 }: {
   packageId: string;
   items: ItemState[];
@@ -395,6 +396,8 @@ export function ReceivedItemsGrid({
   onRemoveMany: (ids: string[]) => void;
   /** Recall-check result per row id (rows never checked are absent). */
   recallStates?: Record<string, "RECALLED" | "CHECKED">;
+  /** Opens the scan dialog for a row (the scan button in its Lot Number cell). */
+  onScanRow?: (itemId: string) => void;
 }) {
   const router = useRouter();
   const [busy, startTransition] = useTransition();
@@ -583,7 +586,16 @@ export function ReceivedItemsGrid({
                       <PillSelect id={`cond-${it.id}`} label={`Product Condition, ${label}`} value={it.condition} options={CONDITION_PILLS} disabled={!editable || notReceived} onChange={(v) => onCondition(it, v)} />
                     </td>
                     <td className={td}>
-                      <input aria-label={`Lot Number, ${label}`} id={`lot-${it.id}`} className={cellInput} maxLength={60} disabled={!editable || notReceived} value={it.lotNumber} onChange={(e) => patch(it.id, { lotNumber: e.target.value })} />
+                      <div className="flex items-center">
+                        <input aria-label={`Lot Number, ${label}`} id={`lot-${it.id}`} className={cellInput} maxLength={60} disabled={!editable || notReceived} value={it.lotNumber} onChange={(e) => patch(it.id, { lotNumber: e.target.value })} />
+                        {editable && onScanRow && it.productName.trim() && !notReceived && (
+                          <button type="button" title="Scan the barcode or take a photo of the label" aria-label={`Scan lot number, ${label}`} onClick={() => onScanRow(it.id)} className="mr-1 shrink-0 rounded p-1.5 text-slate-500 hover:bg-sky-50 hover:text-sky-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-600 dark:hover:bg-sky-950/40 dark:hover:text-sky-200">
+                            <svg aria-hidden viewBox="0 0 16 16" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M2 5V3a1 1 0 011-1h2M11 2h2a1 1 0 011 1v2M14 11v2a1 1 0 01-1 1h-2M5 14H3a1 1 0 01-1-1v-2M4.5 5.5v5M7 5.5v5M9 5.5v5M11.5 5.5v5" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
                     </td>
                     <td className={td}>
                       {multi ? (
