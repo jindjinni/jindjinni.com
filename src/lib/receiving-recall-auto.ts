@@ -5,6 +5,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { receivingExpirationLots, receivingItems } from "@/db/schema";
 import { auditReceiving, type OrgRef } from "@/lib/receiving-service";
+import { normalizeNumber } from "@/lib/receiving-recall";
 import { markRowForReturn, runRecallCheck } from "@/lib/receiving-recall-service";
 import { markRowForReview } from "@/lib/receiving-serial-service";
 
@@ -27,7 +28,8 @@ export async function autoCheckRowLots(
       .select({ lot: receivingExpirationLots.lotNumber })
       .from(receivingExpirationLots)
       .where(and(eq(receivingExpirationLots.itemId, it.id), eq(receivingExpirationLots.organizationId, org.organizationId)));
-    const numbers = [it.lot, ...lots.map((l) => l.lot)].map((x) => (x ?? "").trim()).filter(Boolean);
+    // Each lot as one number (spaces inside a lot are part of the lot), several lots side by side.
+    const numbers = [it.lot, ...lots.map((l) => l.lot)].map((x) => normalizeNumber(x ?? "")).filter(Boolean);
     if (numbers.length === 0) continue;
     const r = await runRecallCheck(org, packageId, it.id, numbers.slice(0, 12).join(" "));
     if ("error" in r) continue;

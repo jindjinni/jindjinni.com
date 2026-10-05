@@ -128,6 +128,9 @@ export function ScanStation({
       }
       lines.push("OK does not prove the serial is real. Manufacturers do not publish serial lists, so this catches repeats, made-up numbers and recalls.");
     }
+    if (r.unverified && r.unverified.length > 0 && !title.includes("NOT CONFIRMED") && !r.recalled?.length) {
+      lines.push(`No recall list is loaded for ${r.unverified.join(", ")}, so its recall status is NOT confirmed. Look the number up on the manufacturer's page (Recall check box) before you submit.`);
+    }
     if (scan) {
       const bits = [scan.serial && `Serial ${scan.serial}`, scan.lot && `Lot ${scan.lot}`, scan.expiry && `Expires ${scan.expiry}`].filter(Boolean).join(" · ");
       if (bits) lines.unshift(bits);

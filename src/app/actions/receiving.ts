@@ -50,7 +50,7 @@ import { storage, STORAGE_NOT_CONNECTED } from "@/lib/receiving-storage";
 import { auditReceiving, deleteIntakeLog, deliverCustomerEmail, refreshIntakeLogPrice, writeIntakeLog } from "@/lib/receiving-service";
 import { finalPayout } from "@/lib/receiving-rules";
 import { isShipmentLocked } from "@/lib/receiving-test-lock";
-import { listChecks, rowIsRecalled, type RecallCheckView } from "@/lib/receiving-recall-service";
+import { clearNearHolds, listChecks, openNearHolds, rowIsRecalled, type RecallCheckView } from "@/lib/receiving-recall-service";
 import { autoCheckRowLots } from "@/lib/receiving-recall-auto";
 import { flagsFromString, isCounterfeitSuspect } from "@/lib/receiving-serial-rules";
 
@@ -293,7 +293,9 @@ type ItemInput = {
 const MAX_LOTS = 25;
 
 /** Validates and saves one product line (and replaces its lots). Returns an error message, or null. */
-async function applyItem(organizationId: string, packageId: string, raw: ItemInput, role: string, notes: string[]): Promise<string | null> {
+async function applyItem(org: CurrentOrg, packageId: string, raw: ItemInput, notes: string[]): Promise<string | null> {
+  const organizationId = org.organizationId;
+  const role = org.role;
   const id = typeof raw.id === "string" ? raw.id : "";
   const [cur] = await db
     .select({ id: receivingItems.id, name: receivingItems.productName })
@@ -339,6 +341,16 @@ async function applyItem(organizationId: string, packageId: string, raw: ItemInp
     needsReturn = "YES";
     if (!returnStatus || returnStatus === "NOT_APPLICABLE") returnStatus = "RETURN_REQUESTED";
     if (!toReturn || toReturn <= 0) toReturn = quantityReceived && quantityReceived > 0 ? quantityReceived : toReturn;
+  } else if (needsReturn === "NO" && (await openNearHolds(organizationId, id)).length > 0) {
+    // A number that looked like a recalled one is waiting for a decision. A manager can clear it (that is recorded as a
+    // check); anyone else has to get the manufacturer's own answer through the Recall check box.
+    if (isAdmin(role)) {
+      await clearNearHolds(org, packageId, id, await openNearHolds(organizationId, id));
+      notes.push(`${cur.name}: close-match number cleared by a manager and recorded.`);
+    } else {
+      needsReturn = "PENDING_REVIEW";
+      notes.push(`${cur.name}: a number on this product looks like a recalled one, so it stays in review until an Owner or Admin clears it (or the manufacturer's page is checked in Step 6).`);
+    }
   } else if (needsReturn === "NO" && !isAdmin(role)) {
     // Units that scanned as possible counterfeits wait for a manager's decision; a receiver can't clear them.
     const sus = await db
@@ -470,7 +482,7 @@ export async function saveReceiving(packageId: string, formData: FormData): Prom
     }
     if (!Array.isArray(parsed)) return { error: "The product lines couldn't be read. Refresh the page and try again." };
     for (const it of parsed as ItemInput[]) {
-      const err = await applyItem(org.organizationId, packageId, it, org.role, itemNotes);
+      const err = await applyItem(org, packageId, it, itemNotes);
       if (err) return { error: err };
     }
   }

@@ -6,9 +6,10 @@
 import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db/client";
-import { receivingItems, receivingPackages } from "@/db/schema";
+import { receivingItems, receivingPackages, receivingRecallChecks } from "@/db/schema";
 import { requireOrg, type CurrentOrg } from "@/lib/tenant";
 import { canWriteReceiving, isAdmin } from "@/lib/permissions";
+import { isRecalledResult } from "@/lib/receiving-recall";
 import { sniffReceiptType } from "@/lib/purchasing-receipt-docs";
 import { auditReceiving } from "@/lib/receiving-service";
 import { markRowForReview } from "@/lib/receiving-serial-service";
@@ -147,7 +148,19 @@ export async function removeRecallCheck(packageId: string, checkId: string): Pro
     .limit(1);
   if (!p) return { error: "That shipment wasn't found." };
   if (await isShipmentLocked({ ...p, organizationId: org.organizationId })) return { error: "This shipment was already submitted. Reopen it to change recall checks." };
-  if (p.status !== "IN_PROGRESS") await auditReceiving(org, p.quotationId, "Recall check", "A recall check was removed after the shipment was submitted.");
+  // A result that says "recalled", "affected" or "looks like a recalled number" can only be removed by an Owner or Admin,
+  // so a receiver can't make a recall disappear. Plain "not on the list" results can still be removed (a mistyped number).
+  const [chk] = await db
+    .select({ n: receivingRecallChecks.enteredNumber, result: receivingRecallChecks.result, note: receivingRecallChecks.note, recallName: receivingRecallChecks.recallName })
+    .from(receivingRecallChecks)
+    .where(and(eq(receivingRecallChecks.id, String(checkId)), eq(receivingRecallChecks.packageId, packageId), eq(receivingRecallChecks.organizationId, org.organizationId)))
+    .limit(1);
+  if (!chk) return { ok: true, checks: await listChecks(org.organizationId, packageId) };
+  const protectedResult = isRecalledResult(chk.result) || !!chk.note?.startsWith("NEAR:");
+  if (protectedResult && !isAdmin(org.role)) {
+    return { error: "Only an Owner or Admin can remove a recall result. Ask a manager to look at it." };
+  }
+  await auditReceiving(org, p.quotationId, "Recall check", `Recall check removed: ${chk.n} (${chk.result}${chk.recallName ? `, ${chk.recallName}` : ""}) by ${org.role}${p.status !== "IN_PROGRESS" ? ", after the shipment was submitted" : ""}.`);
   await deleteCheck(org.organizationId, packageId, String(checkId));
   refresh(packageId);
   return { ok: true, checks: await listChecks(org.organizationId, packageId) };

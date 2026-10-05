@@ -168,7 +168,7 @@ export function RecallCheck({
               {rowChecks.map((c) => (
                 <li key={c.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
                   <span className="font-mono text-xs">{c.enteredNumber}</span>
-                  <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${isRecalledResult(c.result) ? "bg-red-100 text-red-900 dark:bg-red-900/40 dark:text-red-100" : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"}`}>{RECALL_RESULT_LABELS[c.result]}</span>
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${isRecalledResult(c.result) ? "bg-red-100 text-red-900 dark:bg-red-900/40 dark:text-red-100" : c.note.startsWith("NEAR:") ? "bg-orange-100 text-orange-900 dark:bg-orange-900/40 dark:text-orange-100" : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"}`}>{c.note.startsWith("NEAR:") ? "Looks like a recalled number" : RECALL_RESULT_LABELS[c.result]}</span>
                   {c.recallName && <span className="text-xs text-slate-500">{c.recallName}</span>}
                   {editable && (
                     <button type="button" aria-label={`Remove check ${c.enteredNumber}`} className="ml-auto rounded px-1.5 text-xs text-slate-500 hover:bg-slate-100 hover:text-red-700 dark:hover:bg-slate-800" disabled={removing} onClick={() => removeCheck(c.id)}>

@@ -186,8 +186,13 @@ export async function runRecallCheck(
           inArray(receivingRecallChecks.result, ["ON_LIST", "NOT_ON_LIST"]),
         ),
       );
-    const rows: { recallId: string | null; recallName: string | null; result: RecallResult }[] =
-      matches.length > 0 ? matches.map((m) => ({ recallId: m.recallId, recallName: m.recallName, result: "ON_LIST" as const })) : [{ recallId: null, recallName: null, result: "NOT_ON_LIST" as const }];
+    // A close match is stored on the "not on the list" check as a NEAR note: it keeps the row in review until a manager
+    // clears it or someone records the manufacturer's own answer.
+    const nearNote = near.length > 0 ? `NEAR: ${near.map((k) => `${k.listed} (${k.recallName})`).join("; ")}` : null;
+    const rows: { recallId: string | null; recallName: string | null; result: RecallResult; note?: string | null }[] =
+      matches.length > 0
+        ? matches.map((m) => ({ recallId: m.recallId, recallName: m.recallName, result: "ON_LIST" as const }))
+        : [{ recallId: near[0]?.recallId ?? null, recallName: near[0]?.recallName ?? null, result: "NOT_ON_LIST" as const, note: nearNote }];
     for (const r of rows) {
       await db.insert(receivingRecallChecks).values({
         id: newId("rchk"),
@@ -198,6 +203,7 @@ export async function runRecallCheck(
         recallName: r.recallName,
         enteredNumber: n,
         result: r.result,
+        note: r.note ?? null,
         checkedByUserId: org.userId,
       });
     }
@@ -450,12 +456,18 @@ export async function recallGateIssues(
   const candidates = items.filter((i) => i.productName?.trim() && i.wasReceived !== "NO" && (i.quantityReceived ?? 0) > 0);
   if (candidates.length === 0) return out;
   const checks = await db
-    .select({ itemId: receivingRecallChecks.itemId, recallId: receivingRecallChecks.recallId, result: receivingRecallChecks.result })
+    .select({ itemId: receivingRecallChecks.itemId, recallId: receivingRecallChecks.recallId, result: receivingRecallChecks.result, note: receivingRecallChecks.note, n: receivingRecallChecks.enteredNumber })
     .from(receivingRecallChecks)
     .where(and(eq(receivingRecallChecks.organizationId, organizationId), eq(receivingRecallChecks.packageId, packageId)));
   for (const it of candidates) {
     const name = it.productName!.trim();
     const mine = checks.filter((c) => c.itemId === it.id);
+    const resolved = mine.some((c) => c.result === "CONFIRMED_OK" || c.result === "CONFIRMED_AFFECTED");
+    if (!resolved) {
+      for (const c of mine.filter((x) => x.note?.startsWith("NEAR:"))) {
+        out.push(`${name}: ${c.n} looks like a recalled number (${c.note!.slice(6)}). A manager must clear it, or record what the manufacturer's page says.`);
+      }
+    }
     for (const r of await relevantRecalls(organizationId, name)) {
       if (r.loaded > 0) {
         const done = mine.some((c) => c.result === "ON_LIST" || c.result === "NOT_ON_LIST" || c.recallId === r.id);
@@ -479,3 +491,33 @@ export async function rowIsRecalled(organizationId: string, itemId: string): Pro
 }
 
 void normalizeNumber;
+
+
+/** Close-match holds on this row that nobody has cleared yet. */
+export async function openNearHolds(organizationId: string, itemId: string) {
+  const rows = await db
+    .select({ recallId: receivingRecallChecks.recallId, recallName: receivingRecallChecks.recallName, n: receivingRecallChecks.enteredNumber, note: receivingRecallChecks.note, result: receivingRecallChecks.result })
+    .from(receivingRecallChecks)
+    .where(and(eq(receivingRecallChecks.organizationId, organizationId), eq(receivingRecallChecks.itemId, itemId)));
+  if (rows.some((r) => r.result === "CONFIRMED_OK" || r.result === "CONFIRMED_AFFECTED")) return [];
+  return rows.filter((r) => r.note?.startsWith("NEAR:"));
+}
+
+/** A manager reviewed a close match and cleared it: recorded as a check, so the history shows who and why. */
+export async function clearNearHolds(org: { organizationId: string; userId: string }, packageId: string, itemId: string, holds: Awaited<ReturnType<typeof openNearHolds>>) {
+  for (const h of holds) {
+    if (!h.recallId) continue;
+    await db.insert(receivingRecallChecks).values({
+      id: newId("rchk"),
+      organizationId: org.organizationId,
+      packageId,
+      itemId,
+      recallId: h.recallId,
+      recallName: h.recallName,
+      enteredNumber: h.n,
+      result: "CONFIRMED_OK",
+      note: "Close match reviewed and cleared by a manager",
+      checkedByUserId: org.userId,
+    });
+  }
+}

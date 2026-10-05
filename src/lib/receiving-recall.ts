@@ -143,9 +143,26 @@ export function parseGs1(input: string): Gs1 | null {
 }
 
 /** The numbers worth checking in whatever was scanned or typed: a GS1 barcode gives its lot and serial; otherwise every token. */
+const FILLER = /^(and|or|lot|lots|serial|sn|ref|exp|expires|expiry|no|the|for|also|with|then|on|is|are|number|num)$/i;
+
 export function numbersToCheck(input: string): string[] {
   const gs1 = parseGs1(input);
-  const raw = gs1 ? [gs1.lot ?? "", gs1.serial ?? ""] : input.split(/[\s,;|]+/);
+  const raw = gs1 ? [gs1.lot ?? "", gs1.serial ?? ""] : input.split(/[\s,;|]+/).filter(Boolean);
+  // Labels often print a lot in groups ("PH1U 0103 2521"). Neighbouring pieces are also tried joined together, so a
+  // lot split by spaces can't slip past the lists as two short harmless-looking numbers.
+  if (!gs1 && raw.length >= 2 && raw.length <= 4) {
+    const parts = [...raw];
+    for (let a = 0; a < parts.length; a++) {
+      for (let b = a + 2; b <= parts.length; b++) {
+        const win = parts.slice(a, b);
+        // Ordinary words ("and", "lot", "serial") are never joined into a number.
+        if (win.some((w) => FILLER.test(w)) || !win.some((w) => /\d/.test(w))) continue;
+        if (new Set(win.map(normalizeNumber)).size < win.length) continue;
+        const joined = win.join("");
+        if (joined.length >= 6 && joined.length <= 40) raw.push(joined);
+      }
+    }
+  }
   const seen = new Set<string>();
   const out: string[] = [];
   for (const r of raw) {
