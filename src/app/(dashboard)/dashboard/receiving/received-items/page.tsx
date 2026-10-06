@@ -4,6 +4,7 @@ import { getReceivedItems } from "@/lib/receiving-queries";
 import { CONDITION_OPTIONS } from "@/lib/receiving-rules";
 import { chipClass, formatStamp } from "@/lib/receiving-ui";
 import { LocalTime } from "@/components/local-time";
+import { groupByBrand } from "@/lib/receiving-brand";
 import { db } from "@/db/client";
 import { memberships, users } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
@@ -35,6 +36,9 @@ export default async function ReceivedItemsPage({ searchParams }: { searchParams
     return s ? `?${s}` : "";
   };
   const pages = Math.max(1, Math.ceil(total / PAGE));
+  // Everything received is grouped under its brand, each brand closed until opened. A search, a filter or a single brand opens them.
+  const brands = groupByBrand(rows, (r) => r.brand);
+  const openAll = !!(f.q.trim() || f.from || f.to || f.agentId || f.condition) || brands.length === 1;
 
   return (
     <div className="mx-auto max-w-[96rem] px-4 py-6">
@@ -82,51 +86,71 @@ export default async function ReceivedItemsPage({ searchParams }: { searchParams
       </form>
 
       <p className="mt-4 text-xs text-slate-500">{total} product lines · {totalQuantity} units</p>
-      <div className="mt-2 overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-        <table className="w-full min-w-[84rem] text-sm">
-          <thead>
-            <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
-              <th className="px-3 py-2">Date received</th>
-              <th className="px-3 py-2">Received by</th>
-              <th className="px-3 py-2">Package opened</th>
-              <th className="px-3 py-2">Customer</th>
-              <th className="px-3 py-2">Order</th>
-              <th className="px-3 py-2">Product</th>
-              <th className="px-3 py-2">NDC</th>
-              <th className="px-3 py-2">Lot #</th>
-              <th className="px-3 py-2 text-right">Qty received</th>
-              <th className="px-3 py-2 text-right">Qty accepted</th>
-              <th className="px-3 py-2">Condition</th>
-              <th className="px-3 py-2">Expiration</th>
-              <th className="px-3 py-2">Accepted / return</th>
-              <th className="px-3 py-2">Recall check</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-            {rows.map((r) => (
-              <tr key={r.id} className="align-top">
-                <td className="whitespace-nowrap px-3 py-2">{formatStamp(r.receivedAt)}</td>
-                <td className="whitespace-nowrap px-3 py-2 font-medium">{r.receivedBy ?? "—"}</td>
-                <td className="whitespace-nowrap px-3 py-2 text-xs text-slate-500"><LocalTime value={r.startedAt} /></td>
-                <td className="whitespace-nowrap px-3 py-2"><span className={`rounded-full px-2 py-0.5 text-xs font-medium ${chipClass(r.customer)}`}>{r.customer || "—"}</span></td>
-                <td className="whitespace-nowrap px-3 py-2"><Link href={`/dashboard/receiving/intake/${r.packageId}`} className="text-amber-800 underline dark:text-amber-300">{r.orderNumber}</Link></td>
-                <td className="min-w-[13rem] px-3 py-2">
-                  <span className="font-medium">{r.productName}</span>
-                  {(r.brand || r.productCode) && <span className="block text-xs text-slate-500">{[r.brand, r.productCode].filter(Boolean).join(" · ")}</span>}
-                </td>
-                <td className="whitespace-nowrap px-3 py-2 tabular-nums">{r.ndc || "—"}</td>
-                <td className="whitespace-nowrap px-3 py-2">{r.lotNumber || <span className="text-orange-700 dark:text-orange-300">missing</span>}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{r.quantity}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{r.quantityAccepted == null ? <span className="text-slate-400">pending</span> : r.quantityAccepted}</td>
-                <td className="whitespace-nowrap px-3 py-2">{r.condition || "—"}</td>
-                <td className="whitespace-nowrap px-3 py-2 tabular-nums">{r.expirationEarliest ? (r.expirationLatest && r.expirationLatest !== r.expirationEarliest ? `${r.expirationEarliest} – ${r.expirationLatest}` : r.expirationEarliest) : "—"}</td>
-                <td className="whitespace-nowrap px-3 py-2">{dispositionLabel(r.needsReturn, r.quantityToReturn)}</td>
-                <td className="whitespace-nowrap px-3 py-2">{recallLabel(r.recallStatus, r.recallName)}</td>
-              </tr>
-            ))}
-            {rows.length === 0 && <tr><td colSpan={14} className="px-3 py-10 text-center text-slate-500">No received items match.</td></tr>}
-          </tbody>
-        </table>
+      <div className="mt-2 space-y-2">
+        {brands.map((b) => {
+          const units = b.rows.reduce((n, r) => n + r.quantity, 0);
+          const accepted = b.rows.reduce((n, r) => n + (r.quantityAccepted ?? 0), 0);
+          const recalled = b.rows.filter((r) => r.recallStatus === "RECALLED").length;
+          const pending = b.rows.filter((r) => r.quantityAccepted == null).length;
+          return (
+            <details key={b.key} open={openAll} data-testid="brand-block" className="group/brand rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+              <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3">
+                <span aria-hidden className="text-[10px] text-slate-400 transition group-open/brand:rotate-90">▶</span>
+                <span data-testid="brand-name" className={`rounded-full px-2.5 py-0.5 text-sm font-semibold ${chipClass(b.brand)}`}>{b.brand}</span>
+                <span className="text-sm text-slate-600 dark:text-slate-300"><strong className="tabular-nums">{b.rows.length}</strong> {b.rows.length === 1 ? "product line" : "product lines"}</span>
+                <span className="text-sm text-slate-600 dark:text-slate-300"><strong className="tabular-nums">{units}</strong> received · <strong className="tabular-nums" data-testid="brand-accepted">{accepted}</strong> accepted</span>
+                {pending > 0 && <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-semibold text-yellow-900 dark:bg-yellow-900/40 dark:text-yellow-100">{pending} pending review</span>}
+                {recalled > 0 && <span className="rounded-full bg-red-600 px-2 py-0.5 text-xs font-bold text-white">{recalled} recalled</span>}
+              </summary>
+              <div className="overflow-x-auto border-t border-slate-200 dark:border-slate-800">
+                <table className="w-full min-w-[84rem] text-sm">
+                  <thead>
+                    <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
+                      <th className="px-3 py-2">Date received</th>
+                      <th className="px-3 py-2">Received by</th>
+                      <th className="px-3 py-2">Package opened</th>
+                      <th className="px-3 py-2">Customer</th>
+                      <th className="px-3 py-2">Order</th>
+                      <th className="px-3 py-2">Product</th>
+                      <th className="px-3 py-2">NDC</th>
+                      <th className="px-3 py-2">Lot #</th>
+                      <th className="px-3 py-2 text-right">Qty received</th>
+                      <th className="px-3 py-2 text-right">Qty accepted</th>
+                      <th className="px-3 py-2">Condition</th>
+                      <th className="px-3 py-2">Expiration</th>
+                      <th className="px-3 py-2">Accepted / return</th>
+                      <th className="px-3 py-2">Recall check</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                    {b.rows.map((r) => (
+                      <tr key={r.id} data-testid="item-row" className="align-top">
+                        <td className="whitespace-nowrap px-3 py-2">{formatStamp(r.receivedAt)}</td>
+                        <td className="whitespace-nowrap px-3 py-2 font-medium">{r.receivedBy ?? "—"}</td>
+                        <td className="whitespace-nowrap px-3 py-2 text-xs text-slate-500"><LocalTime value={r.startedAt} /></td>
+                        <td className="whitespace-nowrap px-3 py-2"><span className={`rounded-full px-2 py-0.5 text-xs font-medium ${chipClass(r.customer)}`}>{r.customer || "—"}</span></td>
+                        <td className="whitespace-nowrap px-3 py-2"><Link href={`/dashboard/receiving/intake/${r.packageId}`} className="text-amber-800 underline dark:text-amber-300">{r.orderNumber}</Link></td>
+                        <td className="min-w-[13rem] px-3 py-2">
+                          <span className="font-medium">{r.productName}</span>
+                          {r.productCode && <span className="block text-xs text-slate-500">{r.productCode}</span>}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-2 tabular-nums">{r.ndc || "—"}</td>
+                        <td className="whitespace-nowrap px-3 py-2">{r.lotNumber || <span className="text-orange-700 dark:text-orange-300">missing</span>}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{r.quantity}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{r.quantityAccepted == null ? <span className="text-slate-400">pending</span> : r.quantityAccepted}</td>
+                        <td className="whitespace-nowrap px-3 py-2">{r.condition || "—"}</td>
+                        <td className="whitespace-nowrap px-3 py-2 tabular-nums">{r.expirationEarliest ? (r.expirationLatest && r.expirationLatest !== r.expirationEarliest ? `${r.expirationEarliest} – ${r.expirationLatest}` : r.expirationEarliest) : "—"}</td>
+                        <td className="whitespace-nowrap px-3 py-2">{dispositionLabel(r.needsReturn, r.quantityToReturn)}</td>
+                        <td className="whitespace-nowrap px-3 py-2">{recallLabel(r.recallStatus, r.recallName)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          );
+        })}
+        {rows.length === 0 && <p className="rounded-xl border border-dashed border-slate-300 p-10 text-center text-sm text-slate-500 dark:border-slate-700">No received items match.</p>}
       </div>
       {pages > 1 && (
         <nav className="mt-4 flex items-center gap-3 text-sm" aria-label="Pages">
