@@ -8,7 +8,7 @@ const ITEMS = [
   { href: "/dashboard/receiving/intake", label: "Receiving Intake Form", icon: "📝", exact: false },
   { href: "/dashboard/receiving/received-items", label: "Received Items", icon: "📋", exact: false },
   { href: "/dashboard/receiving/daily", label: "Daily Receiving", icon: "🗓️", exact: false },
-  { href: "/dashboard/receiving/serials", label: "Serial Numbers", icon: "🔢", exact: false },
+  { href: "/dashboard/receiving/tracker", label: "Lot & Serial Tracker", icon: "🔎", exact: false },
   { href: "/dashboard/receiving/products", label: "Products", icon: "🏷️", exact: false },
   { href: "/dashboard/receiving/adjustments", label: "Order Adjustments", icon: "🧾", exact: false },
 ];

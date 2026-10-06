@@ -22,6 +22,8 @@ export type SerialRegisterRow = {
   expiration: string | null;
   orderNumber: string;
   customer: string;
+  customerEmail: string | null;
+  customerPhone: string | null;
   receivedBy: string | null;
   source: "SCANNER" | "CAMERA" | "PHOTO" | "TYPED";
   flags: SerialFlag[];
@@ -75,6 +77,8 @@ export async function getSerialRegister(organizationId: string, f: SerialRegiste
       expiration: sql<string | null>`coalesce(nullif(${receivingItemSerials.expiry}, ''), ${receivingItems.expirationDate})`,
       orderNumber: purchasingQuotations.quotationNumber,
       customer: receivingIntakeLogs.receivedFrom,
+      customerEmail: purchasingQuotations.customerEmailSnapshot,
+      customerPhone: purchasingQuotations.customerPhoneSnapshot,
       receivedBy: sql<string | null>`coalesce(${users.name}, ${users.email})`,
       source: receivingItemSerials.source,
       flag: receivingItemSerials.flag,
@@ -117,6 +121,8 @@ export async function getSerialRegister(organizationId: string, f: SerialRegiste
       expiration: r.expiration,
       orderNumber: r.orderNumber,
       customer: r.customer,
+      customerEmail: r.customerEmail,
+      customerPhone: r.customerPhone,
       receivedBy: r.receivedBy,
       source: r.source,
       flags: flagsFromString(r.flag),
