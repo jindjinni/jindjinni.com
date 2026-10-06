@@ -1,45 +1,64 @@
 "use client";
 
-import { Fragment } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-export type TabItem = { href: string; label: string; /** Setup and record-keeping tabs: shown after the everyday ones, a little quieter. */ secondary?: boolean };
+export type NavEntry = {
+  href: string;
+  label: string;
+  icon?: string;
+  /** Setup and record-keeping pages: listed under a "Setup" heading, a little quieter. */
+  secondary?: boolean;
+};
 
 const HOME = "/dashboard/purchasing";
 
-/** The Purchasing tab strip: soft pills, the open tab filled with the company's theme color. */
-export function PurchasingTabs({ items }: { items: TabItem[] }) {
-  const pathname = usePathname();
+/**
+ * The Purchasing sidebar, the same design as Receiving's: a colored column down the left with the company name,
+ * the everyday pages first, then the Setup pages under their own heading. On a phone it becomes a scrolling row.
+ */
+export function PurchasingNav({ orgName, items }: { orgName: string; items: NavEntry[] }) {
+  const path = usePathname();
+  const main = items.filter((i) => !i.secondary);
+  const setup = items.filter((i) => i.secondary);
+  const isActive = (href: string) => (href === HOME ? path === HOME : path === href || path.startsWith(href + "/"));
+  const link = (i: NavEntry) => {
+    const active = isActive(i.href);
+    return (
+      <Link
+        key={i.href}
+        href={i.href}
+        aria-current={active ? "page" : undefined}
+        className={`flex items-center gap-2.5 whitespace-nowrap rounded-lg px-3 py-2 transition-colors ${i.secondary ? "text-[13px] md:pl-9" : "text-sm"} ${
+          active ? "bg-emerald-950/15 font-semibold" : "font-medium hover:bg-emerald-950/10"
+        } focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-950`}
+      >
+        {i.icon && <span aria-hidden="true">{i.icon}</span>}
+        {i.label}
+      </Link>
+    );
+  };
   return (
-    <nav aria-label="Purchasing sections" className="mb-6 flex flex-wrap items-center gap-1.5 rounded-xl border border-emerald-100 bg-white p-1.5 shadow-sm print:hidden dark:border-emerald-900/60 dark:bg-slate-900">
-      {items.map((t, i) => {
-        const active = t.href === HOME ? pathname === HOME : pathname === t.href || pathname.startsWith(t.href + "/");
-        const startsSetup = t.secondary && !items[i - 1]?.secondary;
-        return (
-          <Fragment key={t.href}>
-            {startsSetup && (
-              <>
-                <span aria-hidden className="basis-full" />
-                <span className="px-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Setup</span>
-              </>
-            )}
-            <Link
-              href={t.href}
-              aria-current={active ? "page" : undefined}
-              className={`rounded-lg px-3 py-1.5 transition-colors ${t.secondary ? "text-[13px]" : "text-sm"} ${
-                active
-                  ? "bg-emerald-100 font-semibold text-emerald-900 dark:bg-emerald-900/60 dark:text-emerald-50"
-                  : t.secondary
-                    ? "text-slate-500 hover:bg-emerald-50 hover:text-emerald-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-emerald-300"
-                    : "text-slate-700 hover:bg-emerald-50 hover:text-emerald-800 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-emerald-300"
-              }`}
-            >
-              {t.label}
-            </Link>
-          </Fragment>
-        );
-      })}
-    </nav>
+    <aside className="shrink-0 bg-[var(--dept-accent,#34d399)] text-emerald-950 md:w-56 print:hidden">
+      <div className="px-5 pb-3 pt-5 md:pt-6">
+        <p className="text-xs font-semibold uppercase tracking-wider text-emerald-950/70">Purchasing Department</p>
+        <p className="mt-1 text-lg font-bold leading-tight">{orgName}</p>
+      </div>
+      <nav className="flex items-center gap-1 overflow-x-auto px-3 pb-3 md:flex-col md:items-stretch md:pb-6" aria-label="Purchasing sections">
+        {main.map(link)}
+        {setup.length > 0 && (
+          <>
+            <p className="whitespace-nowrap px-3 pt-1 text-[11px] font-semibold uppercase tracking-wider text-emerald-950/60 md:pt-4">Setup</p>
+            {setup.map(link)}
+          </>
+        )}
+      </nav>
+    </aside>
   );
+}
+
+/** The page area beside the sidebar. Most pages sit in a readable column; the Quotations summary is a wide table and gets the full width. */
+export function PurchasingContent({ children }: { children: React.ReactNode }) {
+  const wide = usePathname() === "/dashboard/purchasing/quotations";
+  return <div className={`pz mx-auto w-full px-6 py-8 print:max-w-none print:p-0 ${wide ? "max-w-none" : "max-w-6xl"}`}>{children}</div>;
 }

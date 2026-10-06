@@ -170,6 +170,8 @@ export function themeStyle(key: ThemeKey, dept: DepartmentKey = "general"): CSSP
   const style: Record<string, string> = {};
   const ramp = THEMES[key].ramp;
   if (key !== "green") for (const [shade, value] of Object.entries(ramp)) style[`--color-emerald-${shade}`] = value;
+  // Receiving and Purchasing both have a colored sidebar, painted with the department's accent color.
+  if (dept === "purchasing") style["--dept-accent"] = THEMES[key].accent;
   if (dept === "receiving") {
     style["--dept-accent"] = THEMES[key].accent;
     if (key !== "yellow") for (const [shade, value] of Object.entries(ramp)) style[`--color-amber-${shade}`] = value;
