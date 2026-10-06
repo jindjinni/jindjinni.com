@@ -5,7 +5,7 @@
 
 import { and, desc, eq, inArray, like, or, sql } from "drizzle-orm";
 import { db } from "@/db/client";
-import { purchasingQuotations, receivingIntakeLogs, receivingItemSerials, receivingItems, receivingPackages, users } from "@/db/schema";
+import { purchasingCategories, purchasingProducts, purchasingQuotations, receivingIntakeLogs, receivingItemSerials, receivingItems, receivingPackages, users } from "@/db/schema";
 import { FLAG_LABELS, flagsFromString, severityOf, type SerialFlag } from "@/lib/receiving-serial-rules";
 
 export type SerialRegisterRow = {
@@ -17,6 +17,8 @@ export type SerialRegisterRow = {
   serial: string;
   lot: string | null;
   productName: string;
+  /** The product's brand (Dexcom, Omnipod, ...); the tracker groups by it. */
+  brand: string | null;
   ndc: string | null;
   condition: string | null;
   expiration: string | null;
@@ -95,6 +97,8 @@ export async function getSerialRegister(organizationId: string, f: SerialRegiste
       serial: receivingItemSerials.serial,
       lot: sql<string | null>`coalesce(nullif(${receivingItemSerials.lot}, ''), ${receivingItems.lotNumber})`,
       productName: receivingItems.productName,
+      // the brand saved with the submitted line (so it matches Daily Receiving), else the catalog as it is now
+      brand: sql<string | null>`coalesce((select il.brand from receiving_intake_lines il where il.source_item_id = ${receivingItems.id} limit 1), ${purchasingCategories.name})`,
       ndc: receivingItems.ndc,
       condition: receivingItems.condition,
       expiration: sql<string | null>`coalesce(nullif(${receivingItemSerials.expiry}, ''), ${receivingItems.expirationDate})`,
@@ -113,6 +117,8 @@ export async function getSerialRegister(organizationId: string, f: SerialRegiste
     .innerJoin(receivingIntakeLogs, eq(receivingIntakeLogs.packageId, receivingPackages.id))
     .innerJoin(purchasingQuotations, eq(purchasingQuotations.id, receivingPackages.quotationId))
     .leftJoin(users, sql`${users.id} = coalesce(${receivingIntakeLogs.receivedByUserId}, ${receivingPackages.receivedByUserId})`)
+    .leftJoin(purchasingProducts, eq(purchasingProducts.id, receivingItems.productId))
+    .leftJoin(purchasingCategories, eq(purchasingCategories.id, purchasingProducts.categoryId))
     .where(and(...conds));
 
   const rows = await base
@@ -139,6 +145,7 @@ export async function getSerialRegister(organizationId: string, f: SerialRegiste
       serial: r.serial ?? "",
       lot: r.lot,
       productName: r.productName,
+      brand: r.brand,
       ndc: r.ndc,
       condition: r.condition,
       expiration: r.expiration,

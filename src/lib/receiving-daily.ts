@@ -7,6 +7,7 @@
 // it is on a recall list, when the return decision is still pending, or when every unit is going back.
 
 import { normalizeNumber } from "@/lib/receiving-recall";
+import { groupByBrand } from "@/lib/receiving-brand";
 import type { ReceivedItemRow } from "@/lib/receiving-queries";
 
 export type HeldReason = "RECALLED" | "PENDING" | "ALL_RETURNED";
@@ -53,6 +54,8 @@ export type DailyDay = {
   accepted: number;
   heldUnits: number;
   groups: DailyGroup[];
+  /** The same product lines grouped under their brand (A to Z, "Other" last), each with its own totals. */
+  brands: { key: string; brand: string; accepted: number; groups: DailyGroup[] }[];
   held: HeldLine[];
 };
 
@@ -141,6 +144,7 @@ export function groupDaily(rows: ReceivedItemRow[], serialsByItem?: Map<string, 
         accepted: groups.reduce((n, g) => n + g.accepted, 0),
         heldUnits: d.held.reduce((n, h) => n + h.quantity, 0),
         groups,
+        brands: groupByBrand(groups, (g) => g.brand).map((b) => ({ key: b.key, brand: b.brand, accepted: b.rows.reduce((n, g) => n + g.accepted, 0), groups: b.rows })),
         held: d.held.sort((a, b) => a.productName.localeCompare(b.productName)),
       };
     });

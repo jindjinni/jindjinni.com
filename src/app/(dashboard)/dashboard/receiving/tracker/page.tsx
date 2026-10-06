@@ -4,6 +4,7 @@ import { getLotRegister } from "@/lib/receiving-lot-register";
 import { SOURCE_LABELS, checkLabel, getSerialRegister } from "@/lib/receiving-serial-register";
 import { traceByCustomer } from "@/lib/receiving-trace";
 import { chipClass, formatStamp } from "@/lib/receiving-ui";
+import { groupByBrand } from "@/lib/receiving-brand";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +48,10 @@ export default async function LotSerialTrackerPage({ searchParams }: { searchPar
     return s ? `?${s}` : "";
   };
   const pages = Math.max(1, Math.ceil(total / PAGE));
+  // Products are grouped under their brand, each brand closed until opened. A search, a filter or a single brand opens them.
+  const lotBrands = groupByBrand(lotsRes.rows, (r) => r.brand);
+  const serialBrands = groupByBrand(serialsRes.rows, (r) => r.brand);
+  const openAll = !!f.q.trim() || f.only || (view === "lots" ? lotBrands : serialBrands).length === 1;
   const tab = (key: "lots" | "serials", label: string, n: number) => (
     <Link
       href={`/dashboard/receiving/tracker${qs({ view: key === "serials" ? "serials" : "", page: "" })}`}
@@ -130,88 +135,120 @@ export default async function LotSerialTrackerPage({ searchParams }: { searchPar
         {tab("serials", "Serial numbers", serialsRes.total)}
       </div>
 
-      {view === "lots" ? (
-        <div className="overflow-x-auto rounded-b-xl border border-t-0 border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-          <table className="w-full min-w-[78rem] text-sm" data-testid="lot-table">
-            <thead>
-              <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
-                <th className="px-3 py-2">Date received</th>
-                <th className="px-3 py-2">Lot #</th>
-                <th className="px-3 py-2">Product</th>
-                <th className="px-3 py-2">NDC</th>
-                <th className="px-3 py-2">Condition</th>
-                <th className="px-3 py-2">Expiration</th>
-                <th className="px-3 py-2 text-right">Units</th>
-                <th className="px-3 py-2">Came from</th>
-                <th className="px-3 py-2">Order</th>
-                <th className="px-3 py-2">Received by</th>
-                <th className="px-3 py-2">Recall</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-              {lotsRes.rows.map((r) => (
-                <tr key={r.id} data-testid="lot-row" className="align-top">
-                  <td className="whitespace-nowrap px-3 py-2">{formatStamp(r.receivedAt)}</td>
-                  <td className="whitespace-nowrap px-3 py-2 font-mono font-medium">{r.lot}</td>
-                  <td className="min-w-[13rem] px-3 py-2 font-medium">{r.productName}</td>
-                  <td className="whitespace-nowrap px-3 py-2 tabular-nums">{r.ndc || "—"}</td>
-                  <td className="whitespace-nowrap px-3 py-2">{r.condition || "—"}</td>
-                  <td className="whitespace-nowrap px-3 py-2 tabular-nums">{r.expiration || "—"}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{r.quantity}</td>
-                  <td className="whitespace-nowrap px-3 py-2"><span className={`rounded-full px-2 py-0.5 text-xs font-medium ${chipClass(r.customer)}`}>{r.customer || "—"}</span></td>
-                  <td className="whitespace-nowrap px-3 py-2"><Link href={`/dashboard/receiving/intake/${r.packageId}`} className="text-amber-800 underline dark:text-amber-300">{r.orderNumber}</Link></td>
-                  <td className="whitespace-nowrap px-3 py-2">{r.receivedBy ?? "—"}</td>
-                  <td className="px-3 py-2">{r.recalled ? <span title={r.recallName ?? undefined} className="rounded-full bg-red-600 px-2 py-0.5 text-xs font-bold text-white">Recalled</span> : <span className="text-slate-400">—</span>}</td>
-                </tr>
-              ))}
-              {lotsRes.rows.length === 0 && <tr><td colSpan={11} className="px-3 py-10 text-center text-slate-500">No lot numbers match. They appear here once a shipment is submitted.</td></tr>}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="overflow-x-auto rounded-b-xl border border-t-0 border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-          <table className="w-full min-w-[84rem] text-sm" data-testid="serial-table">
-            <thead>
-              <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
-                <th className="px-3 py-2">Date received</th>
-                <th className="px-3 py-2">Serial #</th>
-                <th className="px-3 py-2">Check</th>
-                <th className="px-3 py-2">Lot #</th>
-                <th className="px-3 py-2">Product</th>
-                <th className="px-3 py-2">NDC</th>
-                <th className="px-3 py-2">Condition</th>
-                <th className="px-3 py-2">Expiration</th>
-                <th className="px-3 py-2">Came from</th>
-                <th className="px-3 py-2">Order</th>
-                <th className="px-3 py-2">Received by</th>
-                <th className="px-3 py-2">Entered</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-              {serialsRes.rows.map((r) => {
-                const c = checkLabel(r.flags);
-                return (
-                  <tr key={r.id} data-testid="serial-row" className="align-top">
-                    <td className="whitespace-nowrap px-3 py-2">{formatStamp(r.receivedAt)}</td>
-                    <td className="whitespace-nowrap px-3 py-2 font-mono font-medium">{r.serial}</td>
-                    <td className="px-3 py-2"><span title={r.note ?? undefined} className={`rounded-full px-2 py-0.5 text-xs font-semibold ${TONE[c.tone]}`}>{c.text}</span></td>
-                    <td className="whitespace-nowrap px-3 py-2">{r.lot || "—"}</td>
-                    <td className="min-w-[13rem] px-3 py-2 font-medium">{r.productName}</td>
-                    <td className="whitespace-nowrap px-3 py-2 tabular-nums">{r.ndc || "—"}</td>
-                    <td className="whitespace-nowrap px-3 py-2">{r.condition || "—"}</td>
-                    <td className="whitespace-nowrap px-3 py-2 tabular-nums">{r.expiration || "—"}</td>
-                    <td className="whitespace-nowrap px-3 py-2"><span className={`rounded-full px-2 py-0.5 text-xs font-medium ${chipClass(r.customer)}`}>{r.customer || "—"}</span></td>
-                    <td className="whitespace-nowrap px-3 py-2"><Link href={`/dashboard/receiving/intake/${r.packageId}`} className="text-amber-800 underline dark:text-amber-300">{r.orderNumber}</Link></td>
-                    <td className="whitespace-nowrap px-3 py-2">{r.receivedBy ?? "—"}</td>
-                    <td className="whitespace-nowrap px-3 py-2 text-xs text-slate-600 dark:text-slate-300">{SOURCE_LABELS[r.source]}</td>
-                  </tr>
-                );
-              })}
-              {serialsRes.rows.length === 0 && <tr><td colSpan={12} className="px-3 py-10 text-center text-slate-500">No serial numbers match. They appear here once a shipment is submitted.</td></tr>}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <div className="rounded-b-xl border border-t-0 border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900" data-testid={view === "lots" ? "lot-table" : "serial-table"}>
+        {view === "lots" ? (
+          <>
+            {lotBrands.map((b) => {
+              const recalled = b.rows.filter((r) => r.recalled).length;
+              return (
+                <details key={b.key} open={openAll} data-testid="brand-block" className="group/brand mb-2 rounded-lg border border-slate-200 last:mb-0 dark:border-slate-700">
+                  <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2.5">
+                    <span aria-hidden className="text-[10px] text-slate-400 transition group-open/brand:rotate-90">▶</span>
+                    <span data-testid="brand-name" className={`rounded-full px-2.5 py-0.5 text-sm font-semibold ${chipClass(b.brand)}`}>{b.brand}</span>
+                    <span className="text-sm text-slate-600 dark:text-slate-300"><strong className="tabular-nums">{b.rows.length}</strong> {b.rows.length === 1 ? "lot" : "lots"} · <strong className="tabular-nums">{b.rows.reduce((n, r) => n + r.quantity, 0)}</strong> units</span>
+                    {recalled > 0 && <span className="rounded-full bg-red-600 px-2 py-0.5 text-xs font-bold text-white">{recalled} recalled</span>}
+                  </summary>
+                  <div className="overflow-x-auto border-t border-slate-200 dark:border-slate-700">
+                    <table className="w-full min-w-[78rem] text-sm">
+                      <thead>
+                        <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
+                          <th className="px-3 py-2">Date received</th>
+                          <th className="px-3 py-2">Lot #</th>
+                          <th className="px-3 py-2">Product</th>
+                          <th className="px-3 py-2">NDC</th>
+                          <th className="px-3 py-2">Condition</th>
+                          <th className="px-3 py-2">Expiration</th>
+                          <th className="px-3 py-2 text-right">Units</th>
+                          <th className="px-3 py-2">Came from</th>
+                          <th className="px-3 py-2">Order</th>
+                          <th className="px-3 py-2">Received by</th>
+                          <th className="px-3 py-2">Recall</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                        {b.rows.map((r) => (
+                          <tr key={r.id} data-testid="lot-row" className="align-top">
+                            <td className="whitespace-nowrap px-3 py-2">{formatStamp(r.receivedAt)}</td>
+                            <td className="whitespace-nowrap px-3 py-2 font-mono font-medium">{r.lot}</td>
+                            <td className="min-w-[13rem] px-3 py-2 font-medium">{r.productName}</td>
+                            <td className="whitespace-nowrap px-3 py-2 tabular-nums">{r.ndc || "—"}</td>
+                            <td className="whitespace-nowrap px-3 py-2">{r.condition || "—"}</td>
+                            <td className="whitespace-nowrap px-3 py-2 tabular-nums">{r.expiration || "—"}</td>
+                            <td className="px-3 py-2 text-right tabular-nums">{r.quantity}</td>
+                            <td className="whitespace-nowrap px-3 py-2"><span className={`rounded-full px-2 py-0.5 text-xs font-medium ${chipClass(r.customer)}`}>{r.customer || "—"}</span></td>
+                            <td className="whitespace-nowrap px-3 py-2"><Link href={`/dashboard/receiving/intake/${r.packageId}`} className="text-amber-800 underline dark:text-amber-300">{r.orderNumber}</Link></td>
+                            <td className="whitespace-nowrap px-3 py-2">{r.receivedBy ?? "—"}</td>
+                            <td className="px-3 py-2">{r.recalled ? <span title={r.recallName ?? undefined} className="rounded-full bg-red-600 px-2 py-0.5 text-xs font-bold text-white">Recalled</span> : <span className="text-slate-400">—</span>}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </details>
+              );
+            })}
+            {lotsRes.rows.length === 0 && <p className="px-3 py-10 text-center text-sm text-slate-500">No lot numbers match. They appear here once a shipment is submitted.</p>}
+          </>
+        ) : (
+          <>
+            {serialBrands.map((b) => {
+              const looks = b.rows.filter((r) => r.flags.length > 0).length;
+              return (
+                <details key={b.key} open={openAll} data-testid="brand-block" className="group/brand mb-2 rounded-lg border border-slate-200 last:mb-0 dark:border-slate-700">
+                  <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2.5">
+                    <span aria-hidden className="text-[10px] text-slate-400 transition group-open/brand:rotate-90">▶</span>
+                    <span data-testid="brand-name" className={`rounded-full px-2.5 py-0.5 text-sm font-semibold ${chipClass(b.brand)}`}>{b.brand}</span>
+                    <span className="text-sm text-slate-600 dark:text-slate-300"><strong className="tabular-nums">{b.rows.length}</strong> serial {b.rows.length === 1 ? "number" : "numbers"}</span>
+                    {looks > 0 && <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-semibold text-yellow-900 dark:bg-yellow-900/40 dark:text-yellow-100">{looks} need a look</span>}
+                  </summary>
+                  <div className="overflow-x-auto border-t border-slate-200 dark:border-slate-700">
+                    <table className="w-full min-w-[84rem] text-sm">
+                      <thead>
+                        <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
+                          <th className="px-3 py-2">Date received</th>
+                          <th className="px-3 py-2">Serial #</th>
+                          <th className="px-3 py-2">Check</th>
+                          <th className="px-3 py-2">Lot #</th>
+                          <th className="px-3 py-2">Product</th>
+                          <th className="px-3 py-2">NDC</th>
+                          <th className="px-3 py-2">Condition</th>
+                          <th className="px-3 py-2">Expiration</th>
+                          <th className="px-3 py-2">Came from</th>
+                          <th className="px-3 py-2">Order</th>
+                          <th className="px-3 py-2">Received by</th>
+                          <th className="px-3 py-2">Entered</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                        {b.rows.map((r) => {
+                          const c = checkLabel(r.flags);
+                          return (
+                            <tr key={r.id} data-testid="serial-row" className="align-top">
+                              <td className="whitespace-nowrap px-3 py-2">{formatStamp(r.receivedAt)}</td>
+                              <td className="whitespace-nowrap px-3 py-2 font-mono font-medium">{r.serial}</td>
+                              <td className="px-3 py-2"><span title={r.note ?? undefined} className={`rounded-full px-2 py-0.5 text-xs font-semibold ${TONE[c.tone]}`}>{c.text}</span></td>
+                              <td className="whitespace-nowrap px-3 py-2">{r.lot || "—"}</td>
+                              <td className="min-w-[13rem] px-3 py-2 font-medium">{r.productName}</td>
+                              <td className="whitespace-nowrap px-3 py-2 tabular-nums">{r.ndc || "—"}</td>
+                              <td className="whitespace-nowrap px-3 py-2">{r.condition || "—"}</td>
+                              <td className="whitespace-nowrap px-3 py-2 tabular-nums">{r.expiration || "—"}</td>
+                              <td className="whitespace-nowrap px-3 py-2"><span className={`rounded-full px-2 py-0.5 text-xs font-medium ${chipClass(r.customer)}`}>{r.customer || "—"}</span></td>
+                              <td className="whitespace-nowrap px-3 py-2"><Link href={`/dashboard/receiving/intake/${r.packageId}`} className="text-amber-800 underline dark:text-amber-300">{r.orderNumber}</Link></td>
+                              <td className="whitespace-nowrap px-3 py-2">{r.receivedBy ?? "—"}</td>
+                              <td className="whitespace-nowrap px-3 py-2 text-xs text-slate-600 dark:text-slate-300">{SOURCE_LABELS[r.source]}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </details>
+              );
+            })}
+            {serialsRes.rows.length === 0 && <p className="px-3 py-10 text-center text-sm text-slate-500">No serial numbers match. They appear here once a shipment is submitted.</p>}
+          </>
+        )}
+      </div>
       {pages > 1 && (
         <nav className="mt-4 flex items-center gap-3 text-sm" aria-label="Pages">
           {page > 1 && <Link href={`/dashboard/receiving/tracker${qs({ page: String(page - 1) })}`} className="underline">← Newer</Link>}

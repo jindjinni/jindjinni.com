@@ -83,74 +83,80 @@ export default async function DailyReceivingPage({ searchParams }: { searchParam
               <span className="text-sm text-slate-500">{d.groups.length} {d.groups.length === 1 ? "product line" : "product lines"} · {d.shipments} {d.shipments === 1 ? "shipment" : "shipments"}</span>
               {d.heldUnits > 0 && <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-900 dark:bg-red-900/40 dark:text-red-100">{d.heldUnits} held back</span>}
             </summary>
-            <div className="overflow-x-auto border-t border-slate-200 dark:border-slate-800">
-              <table className="w-full min-w-[62rem] text-sm">
-                <thead>
-                  <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
-                    <th className="px-4 py-2">Product</th>
-                    <th className="px-3 py-2">NDC</th>
-                    <th className="px-3 py-2">Condition</th>
-                    <th className="px-3 py-2">Lot #</th>
-                    <th className="px-3 py-2">Serial #</th>
-                    <th className="px-3 py-2">Expiration</th>
-                    <th className="px-3 py-2 text-right">Received</th>
-                    <th className="px-3 py-2 text-right">Returned</th>
-                    <th className="px-3 py-2 text-right">Accepted</th>
-                    <th className="px-3 py-2 text-right">Packages</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {d.groups.map((g) => (
-                    <tr key={g.key} className="align-top">
-                      <td className="min-w-[14rem] px-4 py-2">
-                        <span className="font-medium">{g.productName}</span>
-                        {(g.brand || g.productCode) && <span className="block text-xs text-slate-500">{[g.brand, g.productCode].filter(Boolean).join(" · ")}</span>}
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-2 tabular-nums">{g.ndc || "—"}</td>
-                      <td className="whitespace-nowrap px-3 py-2">{g.condition || "—"}</td>
-                      <td className="whitespace-nowrap px-3 py-2">{g.lot || <span className="text-orange-700 dark:text-orange-300">missing</span>}</td>
-                      <td className="px-3 py-2" data-testid="serial-cell">
-                        {g.serials.length === 0 ? (
-                          <span className="text-slate-400">—</span>
-                        ) : g.serials.length <= 2 ? (
-                          <span className="font-mono text-xs">
-                            {g.serials.map((s, i) => (
-                              <span key={s.serial} className={s.flagged ? "text-orange-700 dark:text-orange-300" : ""}>{i > 0 ? ", " : ""}{s.serial}</span>
-                            ))}
-                          </span>
-                        ) : (
-                          <details>
-                            <summary className="cursor-pointer whitespace-nowrap text-xs font-medium text-amber-800 dark:text-amber-300">{g.serials.length} serial numbers</summary>
-                            <ul className="mt-1 max-h-48 space-y-0.5 overflow-y-auto font-mono text-xs">
-                              {g.serials.map((s) => (
-                                <li key={s.serial} className={s.flagged ? "text-orange-700 dark:text-orange-300" : ""}>{s.serial}</li>
-                              ))}
-                            </ul>
-                          </details>
-                        )}
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-2 tabular-nums">{g.expiration || "—"}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">{g.received}</td>
-                      <td className="px-3 py-2 text-right tabular-nums text-slate-500">{g.returned || "—"}</td>
-                      <td className="px-3 py-2 text-right font-semibold tabular-nums">{g.accepted}</td>
-                      <td className="px-3 py-2 text-right tabular-nums text-slate-500">{g.packages}</td>
-                    </tr>
-                  ))}
-                  {d.groups.length === 0 && <tr><td colSpan={10} className="px-4 py-5 text-center text-slate-500">Nothing accepted on this day.</td></tr>}
-                </tbody>
-                {d.groups.length > 0 && (
-                  <tfoot>
-                    <tr className="border-t border-slate-200 text-sm font-semibold dark:border-slate-700">
-                      <td className="px-4 py-2" colSpan={6}>Total for the day</td>
-                      <td className="px-3 py-2 text-right tabular-nums">{d.groups.reduce((n, g) => n + g.received, 0)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">{d.groups.reduce((n, g) => n + g.returned, 0) || "—"}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">{d.accepted}</td>
-                      <td />
-                    </tr>
-                  </tfoot>
-                )}
-              </table>
+            <div className="space-y-2 border-t border-slate-200 p-3 dark:border-slate-800">
+              {d.brands.map((b) => (
+                <details key={b.key} open={!!q} data-testid="brand-block" className="group/brand rounded-lg border border-slate-200 dark:border-slate-700">
+                  <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2.5">
+                    <span aria-hidden className="text-[10px] text-slate-400 transition group-open/brand:rotate-90">▶</span>
+                    <span data-testid="brand-name" className={`rounded-full px-2.5 py-0.5 text-sm font-semibold ${chipClass(b.brand)}`}>{b.brand}</span>
+                    <span className="text-sm text-slate-600 dark:text-slate-300"><strong className="tabular-nums" data-testid="brand-accepted">{b.accepted}</strong> units accepted</span>
+                    <span className="text-sm text-slate-500">{b.groups.length} {b.groups.length === 1 ? "product line" : "product lines"}</span>
+                  </summary>
+                  <div className="overflow-x-auto border-t border-slate-200 dark:border-slate-700">
+                    <table className="w-full min-w-[62rem] text-sm">
+                      <thead>
+                        <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
+                          <th className="px-4 py-2">Product</th>
+                          <th className="px-3 py-2">NDC</th>
+                          <th className="px-3 py-2">Condition</th>
+                          <th className="px-3 py-2">Lot #</th>
+                          <th className="px-3 py-2">Serial #</th>
+                          <th className="px-3 py-2">Expiration</th>
+                          <th className="px-3 py-2 text-right">Received</th>
+                          <th className="px-3 py-2 text-right">Returned</th>
+                          <th className="px-3 py-2 text-right">Accepted</th>
+                          <th className="px-3 py-2 text-right">Packages</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                        {b.groups.map((g) => (
+                          <tr key={g.key} className="align-top">
+                            <td className="min-w-[14rem] px-4 py-2">
+                              <span className="font-medium">{g.productName}</span>
+                              {g.productCode && <span className="block text-xs text-slate-500">{g.productCode}</span>}
+                            </td>
+                            <td className="whitespace-nowrap px-3 py-2 tabular-nums">{g.ndc || "—"}</td>
+                            <td className="whitespace-nowrap px-3 py-2">{g.condition || "—"}</td>
+                            <td className="whitespace-nowrap px-3 py-2">{g.lot || <span className="text-orange-700 dark:text-orange-300">missing</span>}</td>
+                            <td className="px-3 py-2" data-testid="serial-cell">
+                              {g.serials.length === 0 ? (
+                                <span className="text-slate-400">—</span>
+                              ) : g.serials.length <= 2 ? (
+                                <span className="font-mono text-xs">
+                                  {g.serials.map((s, i) => (
+                                    <span key={s.serial} className={s.flagged ? "text-orange-700 dark:text-orange-300" : ""}>{i > 0 ? ", " : ""}{s.serial}</span>
+                                      ))}
+                                    </span>
+                                  ) : (
+                                    <details>
+                                      <summary className="cursor-pointer whitespace-nowrap text-xs font-medium text-amber-800 dark:text-amber-300">{g.serials.length} serial numbers</summary>
+                                      <ul className="mt-1 max-h-48 space-y-0.5 overflow-y-auto font-mono text-xs">
+                                        {g.serials.map((s) => (
+                                          <li key={s.serial} className={s.flagged ? "text-orange-700 dark:text-orange-300" : ""}>{s.serial}</li>
+                                        ))}
+                                      </ul>
+                                    </details>
+                                  )}
+                                </td>
+                                <td className="whitespace-nowrap px-3 py-2 tabular-nums">{g.expiration || "—"}</td>
+                                <td className="px-3 py-2 text-right tabular-nums">{g.received}</td>
+                                <td className="px-3 py-2 text-right tabular-nums text-slate-500">{g.returned || "—"}</td>
+                                <td className="px-3 py-2 text-right font-semibold tabular-nums">{g.accepted}</td>
+                                <td className="px-3 py-2 text-right tabular-nums text-slate-500">{g.packages}</td>
+                              </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </details>
+              ))}
+              {d.brands.length === 0 && <p className="px-2 py-3 text-center text-sm text-slate-500">Nothing accepted on this day.</p>}
             </div>
+            {d.groups.length > 0 && (
+              <p className="border-t border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 dark:border-slate-800 dark:text-slate-200">
+                Total for the day: <span className="tabular-nums">{d.groups.reduce((n, g) => n + g.received, 0)}</span> received · <span className="tabular-nums">{d.groups.reduce((n, g) => n + g.returned, 0)}</span> returned · <span className="tabular-nums">{d.accepted}</span> accepted
+              </p>
+            )}
             <p className="border-t border-slate-200 px-4 py-2 text-xs dark:border-slate-800">
               <Link href={`/dashboard/receiving/tracker?from=${d.day}&to=${d.day}`} className="font-medium text-amber-800 underline dark:text-amber-300">See the lot and serial numbers received this day, and who sent them</Link>
             </p>

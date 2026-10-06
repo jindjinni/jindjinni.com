@@ -4,7 +4,7 @@
 
 import { and, desc, eq, like, or, sql } from "drizzle-orm";
 import { db } from "@/db/client";
-import { purchasingQuotations, receivingIntakeLines, receivingIntakeLogs, receivingPackages, users } from "@/db/schema";
+import { purchasingCategories, purchasingProducts, purchasingQuotations, receivingIntakeLines, receivingIntakeLogs, receivingPackages, users } from "@/db/schema";
 
 export type LotRegisterRow = {
   id: string;
@@ -13,6 +13,8 @@ export type LotRegisterRow = {
   receivedAt: string | null;
   lot: string;
   productName: string;
+  /** The product's brand (Dexcom, Omnipod, ...); the tracker groups by it. */
+  brand: string | null;
   ndc: string | null;
   condition: string | null;
   expiration: string | null;
@@ -57,6 +59,8 @@ export async function getLotRegister(organizationId: string, f: LotRegisterFilte
       receivedAt: receivingIntakeLines.receivedAt,
       lot: receivingIntakeLines.lotNumber,
       productName: receivingIntakeLines.productName,
+      // same rule as Received Items: the brand saved with the line, else the catalog as it is now
+      brand: sql<string | null>`coalesce(${receivingIntakeLines.brand}, ${purchasingCategories.name})`,
       ndc: receivingIntakeLines.ndc,
       condition: receivingIntakeLines.condition,
       expiration: sql<string | null>`coalesce(${receivingIntakeLines.expirationDate}, ${receivingIntakeLines.expirationEarliest})`,
@@ -75,6 +79,8 @@ export async function getLotRegister(organizationId: string, f: LotRegisterFilte
     .innerJoin(receivingPackages, eq(receivingPackages.id, receivingIntakeLogs.packageId))
     .innerJoin(purchasingQuotations, eq(purchasingQuotations.id, receivingPackages.quotationId))
     .leftJoin(users, sql`${users.id} = ${agentExpr}`)
+    .leftJoin(purchasingProducts, eq(purchasingProducts.id, receivingIntakeLines.productId))
+    .leftJoin(purchasingCategories, eq(purchasingCategories.id, purchasingProducts.categoryId))
     .where(and(...conds))
     .orderBy(desc(receivingIntakeLines.receivedAt), desc(receivingIntakeLines.createdAt))
     .limit(Math.min(Math.max(f.limit ?? 100, 1), 20000))
@@ -96,6 +102,7 @@ export async function getLotRegister(organizationId: string, f: LotRegisterFilte
       receivedAt: r.receivedAt,
       lot: (r.lot ?? "").trim(),
       productName: r.productName,
+      brand: r.brand,
       ndc: r.ndc,
       condition: r.condition,
       expiration: r.expiration,
