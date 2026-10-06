@@ -43,6 +43,8 @@ To go back to it if something breaks badly: `git checkout foundation-v1` (or bra
 
 ## Known open items at the time of this foundation
 
+(The later review, decisions and follow-ups are kept in `docs/OPEN-ITEMS.md`.)
+
 - Not yet built: Accounts Department, Accounting Paid Orders, Customer Service Department (including emails), Weekly Received Tracker, Products Received Tracker.
 - Dexcom G7 receiver recall has no official lot/serial list to load; the Omnipod official lot list can be pasted in Step 6 > Manage recalls.
 - Duplicate "5-6 months" expiration ranges (50% and 80%) to tidy up.
