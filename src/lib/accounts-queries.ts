@@ -1,8 +1,8 @@
-import { and, desc, eq, inArray, isNotNull, ne, or, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, ne, or } from "drizzle-orm";
 import { db } from "@/db/client";
-import { purchasingCustomers, purchasingQuotations, receivingPackagePhotos, receivingPackages } from "@/db/schema";
+import { purchasingCustomers, purchasingQuotations, purchasingQuotedItems, receivingPackagePhotos, receivingPackages } from "@/db/schema";
 import { finalPayout } from "@/lib/receiving-rules";
-import type { AccountsOrder } from "@/lib/accounts-rules";
+import type { AccountsOrder, ReportOrder } from "@/lib/accounts-rules";
 
 // What the Accounts department reads. Every query is limited to the signed-in company.
 
@@ -116,4 +116,60 @@ export async function getPaidOrders(organizationId: string): Promise<AccountsOrd
   const ids = rows.map((r) => r.id);
   const [receipts, covers] = await Promise.all([receiptsFor(organizationId, ids), coversFor(organizationId, ids)]);
   return rows.map((r) => toOrder(r, receipts, covers));
+}
+
+/**
+ * The orders paid between two UTC stamps ("YYYY-MM-DD HH:MM:SS", start included, end excluded), oldest payment first,
+ * each with the complete items quoted and the final payout. The Monthly Report asks for a month plus a day either
+ * side and then keeps the orders that fall in the month on the viewer's own calendar.
+ */
+export async function getPaidReport(organizationId: string, startUtc: string, endUtc: string): Promise<ReportOrder[]> {
+  const rows = await db
+    .select({
+      id: receivingPackages.id,
+      quotationId: purchasingQuotations.id,
+      nameSnap: purchasingQuotations.customerNameSnapshot,
+      firstName: purchasingCustomers.firstName,
+      lastName: purchasingCustomers.lastName,
+      paidAt: receivingPackages.paidAt,
+      grandTotal: purchasingQuotations.grandTotal,
+      adjustedTotal: receivingPackages.adjustedOrderTotal,
+      importedItems: purchasingQuotations.importedItemsText,
+    })
+    .from(receivingPackages)
+    .innerJoin(purchasingQuotations, eq(purchasingQuotations.id, receivingPackages.quotationId))
+    .leftJoin(purchasingCustomers, eq(purchasingCustomers.id, purchasingQuotations.customerId))
+    .where(
+      and(
+        eq(receivingPackages.organizationId, organizationId),
+        eq(receivingPackages.accountsStatus, "PAID"),
+        isNotNull(receivingPackages.paidAt),
+        gte(receivingPackages.paidAt, startUtc),
+        lt(receivingPackages.paidAt, endUtc),
+      ),
+    )
+    .orderBy(asc(receivingPackages.paidAt))
+    .limit(5000);
+  if (rows.length === 0) return [];
+  const lines = await db
+    .select({
+      quotationId: purchasingQuotedItems.quotationId,
+      name: purchasingQuotedItems.productNameSnapshot,
+      quantity: purchasingQuotedItems.quantity,
+    })
+    .from(purchasingQuotedItems)
+    .where(inArray(purchasingQuotedItems.quotationId, rows.map((r) => r.quotationId)))
+    .orderBy(asc(purchasingQuotedItems.createdAt));
+  const by = new Map<string, string[]>();
+  for (const l of lines) by.set(l.quotationId, [...(by.get(l.quotationId) ?? []), `${l.name} (x${l.quantity})`]);
+  return rows.map((r) => {
+    const imported = (r.importedItems ?? "").split("\n").map((x) => x.trim()).filter(Boolean);
+    return {
+      id: r.id,
+      customerName: r.firstName ? [r.firstName, r.lastName].filter(Boolean).join(" ") : r.nameSnap,
+      paidAt: r.paidAt as string,
+      items: by.get(r.quotationId) ?? imported,
+      payout: finalPayout(r.grandTotal, r.adjustedTotal),
+    };
+  });
 }

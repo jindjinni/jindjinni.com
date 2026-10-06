@@ -28,7 +28,7 @@ export default async function AccountsLayout({ children }: { children: React.Rea
       />
       <div className="min-w-0 flex-1 bg-stone-50 dark:bg-slate-950">
         {!storage.configured() && (
-          <p className="border-b border-yellow-300 bg-yellow-100 px-6 py-2 text-sm text-yellow-950 dark:border-yellow-800 dark:bg-yellow-950 dark:text-yellow-100">
+          <p className="border-b border-yellow-300 bg-yellow-100 print:hidden px-6 py-2 text-sm text-yellow-950 dark:border-yellow-800 dark:bg-yellow-950 dark:text-yellow-100">
             File storage isn&apos;t connected yet, so payment receipts can&apos;t be attached. Everything else in Accounts works.
           </p>
         )}

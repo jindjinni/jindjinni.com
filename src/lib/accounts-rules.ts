@@ -70,3 +70,47 @@ export function orderMatches(o: AccountsOrder, q: string): boolean {
   if (!t) return true;
   return `${o.customerName} ${o.quotationNumber} ${o.trackingNumber ?? ""}`.toLowerCase().includes(t);
 }
+
+/** The time of day of a UTC stamp in the viewer's own time zone ("6:45 PM"). Only call in the browser. */
+export function localTimeOfUtc(stamp: string | null | undefined): string {
+  const m = stamp ? /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):?(\d{2})?/.exec(stamp) : null;
+  if (!m) return "";
+  return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] ?? 0))).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+}
+
+/** One line of the Monthly Report: who was paid, for what, how much, and when. (The quotation number is left out on purpose.) */
+export type ReportOrder = {
+  id: string;
+  customerName: string;
+  /** UTC stamp, "YYYY-MM-DD HH:MM:SS". */
+  paidAt: string;
+  /** The complete items quoted, one entry each ("Omnipod 5 5pk (G6/G7) (x8)"). */
+  items: string[];
+  /** The final payout: the adjusted total when Receiving set one, otherwise the quoted total. */
+  payout: number;
+};
+
+/** "2026-10" for a viewer-local "YYYY-MM-DD" day. */
+export const monthOfDay = (day: string) => day.slice(0, 7);
+
+export const isMonth = (v: string) => /^\d{4}-(0[1-9]|1[0-2])$/.test(v);
+
+/** The month before or after "YYYY-MM". */
+export function shiftMonth(month: string, by: -1 | 1): string {
+  const [y, m] = month.split("-").map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + by, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+/** "October 2026" for "2026-10". */
+export function monthHeading(month: string): string {
+  const [y, m] = month.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+}
+
+/** The UTC window that is certain to hold every payment of a month on any time zone: the month plus a day either side. */
+export function monthWindowUtc(month: string): { start: string; end: string } {
+  const [y, m] = month.split("-").map(Number);
+  const fmt = (d: Date) => d.toISOString().slice(0, 19).replace("T", " ");
+  return { start: fmt(new Date(Date.UTC(y, m - 1, 0))), end: fmt(new Date(Date.UTC(y, m, 2))) };
+}

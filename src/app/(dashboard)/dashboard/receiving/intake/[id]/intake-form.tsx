@@ -426,7 +426,16 @@ export function IntakeForm(props: Props) {
           </button>
         )}
       </header>
-      {accountsFocus && (
+      {accountsFocus && saved.accountsStatus === "PAID" && (
+        <div role="note" data-testid="paid-banner" className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-green-300 bg-green-50 px-4 py-3 text-green-950 dark:border-green-800 dark:bg-green-950/40 dark:text-green-100">
+          <span aria-hidden="true" className="-rotate-3 rounded-md border-2 border-green-700 px-3 py-1 text-lg font-extrabold tracking-[0.25em] text-green-800 dark:border-green-400 dark:text-green-300">PAID</span>
+          <span className="text-sm">
+            <strong suppressHydrationWarning>{formatUtcStamp(saved.paidAt)}</strong> · ACH direct deposit · <strong className="tabular-nums">{MONEY.format(payout)}</strong>
+          </span>
+          <a href="#step-10" className="ml-auto rounded-md bg-green-700 px-2.5 py-1 text-xs font-semibold text-white hover:brightness-110">See the receipt in Step 10 ↓</a>
+        </div>
+      )}
+      {accountsFocus && saved.accountsStatus !== "PAID" && (
         <p role="note" data-testid="accounts-banner" className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-950 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100">
           <span>This is the complete receiving record, for your review. Accounts works in <strong>Step 10</strong> at the bottom.</span>
           <a href="#step-10" className="rounded-md bg-[var(--dept-accent,#60a5fa)] px-2.5 py-1 text-xs font-semibold text-emerald-950 hover:brightness-95">Go to Step 10 ↓</a>
