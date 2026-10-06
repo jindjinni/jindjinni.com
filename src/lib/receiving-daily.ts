@@ -26,6 +26,8 @@ export type DailyGroup = {
   accepted: number;
   packages: number;
   lines: number;
+  /** Serial numbers recorded for these units (each listed once). */
+  serials: { serial: string; flagged: boolean }[];
 };
 
 export type HeldLine = {
@@ -75,7 +77,7 @@ export function dayOf(receivedAt: string | null | undefined): string {
   return m ? m[1] : "";
 }
 
-export function groupDaily(rows: ReceivedItemRow[]): DailyDay[] {
+export function groupDaily(rows: ReceivedItemRow[], serialsByItem?: Map<string, { serial: string; flagged: boolean }[]>): DailyDay[] {
   const days = new Map<string, { groups: Map<string, DailyGroup & { pk: Set<string> }>; held: HeldLine[]; ships: Set<string>; lines: number }>();
   for (const r of rows) {
     const day = dayOf(r.receivedAt);
@@ -108,8 +110,11 @@ export function groupDaily(rows: ReceivedItemRow[]): DailyDay[] {
     if (!g) {
       d.groups.set(
         key,
-        (g = { key, productName: clean(r.productName), brand: r.brand, productCode: r.productCode, ndc: clean(r.ndc) || null, condition: clean(r.condition) || null, lot: clean(r.lotNumber) || null, expiration, received: 0, returned: 0, accepted: 0, packages: 0, lines: 0, pk: new Set() }),
+        (g = { key, productName: clean(r.productName), brand: r.brand, productCode: r.productCode, ndc: clean(r.ndc) || null, condition: clean(r.condition) || null, lot: clean(r.lotNumber) || null, expiration, received: 0, returned: 0, accepted: 0, packages: 0, lines: 0, serials: [], pk: new Set() }),
       );
+    }
+    for (const s of (r.sourceItemId && serialsByItem?.get(r.sourceItemId)) || []) {
+      if (!g.serials.some((x) => x.serial.toLowerCase() === s.serial.toLowerCase())) g.serials.push(s);
     }
     const accepted = r.quantityAccepted ?? 0;
     g.received += r.quantity;

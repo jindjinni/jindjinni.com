@@ -3,6 +3,7 @@ import { requireOrgApi } from "@/lib/tenant";
 import { canViewReceiving } from "@/lib/permissions";
 import { getReceivedItems } from "@/lib/receiving-queries";
 import { HELD_LABELS, groupDaily } from "@/lib/receiving-daily";
+import { getSerialsByItem } from "@/lib/receiving-serial-register";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -21,12 +22,12 @@ export async function GET(req: NextRequest) {
   if (!canViewReceiving(org.role)) return new NextResponse("Your role can't open Receiving.", { status: 403 });
   const p = req.nextUrl.searchParams;
   const { rows } = await getReceivedItems(org.organizationId, { q: p.get("q") ?? "", from: p.get("from") ?? "", to: p.get("to") ?? "", limit: 5000 });
-  const days = groupDaily(rows);
-  const head = ["Day", "Status", "Product", "Brand", "Product code", "NDC", "Condition", "Lot number", "Expiration", "Quantity received", "Quantity returned", "Quantity accepted", "Packages", "Note"];
+  const days = groupDaily(rows, await getSerialsByItem(org.organizationId, rows.map((r) => r.sourceItemId ?? "")));
+  const head = ["Day", "Status", "Product", "Brand", "Product code", "NDC", "Condition", "Lot number", "Serial numbers", "Expiration", "Quantity received", "Quantity returned", "Quantity accepted", "Packages", "Note"];
   const lines = [head.map(cell).join(",")];
   for (const d of days) {
-    for (const g of d.groups) lines.push([d.day, "Stock", g.productName, g.brand, g.productCode, g.ndc, g.condition, g.lot, g.expiration, g.received, g.returned, g.accepted, g.packages, ""].map(cell).join(","));
-    for (const h of d.held) lines.push([d.day, "Held back", h.productName, "", "", h.ndc, h.condition, h.lot, h.expiration, h.quantity, "", 0, 1, [HELD_LABELS[h.reason], h.detail].filter(Boolean).join(": ")].map(cell).join(","));
+    for (const g of d.groups) lines.push([d.day, "Stock", g.productName, g.brand, g.productCode, g.ndc, g.condition, g.lot, g.serials.map((s) => s.serial).join("; "), g.expiration, g.received, g.returned, g.accepted, g.packages, ""].map(cell).join(","));
+    for (const h of d.held) lines.push([d.day, "Held back", h.productName, "", "", h.ndc, h.condition, h.lot, "", h.expiration, h.quantity, "", 0, 1, [HELD_LABELS[h.reason], h.detail].filter(Boolean).join(": ")].map(cell).join(","));
   }
   return new NextResponse(lines.join("\r\n") + "\r\n", {
     headers: {

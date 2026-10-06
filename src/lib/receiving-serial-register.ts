@@ -3,7 +3,7 @@
 // appear, the same rule as Received Items and Daily Receiving. Read-only; nothing here changes what agents enter.
 // The Inventory department will draw its unit-level records from this.
 
-import { and, desc, eq, like, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, like, or, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { purchasingQuotations, receivingIntakeLogs, receivingItemSerials, receivingItems, receivingPackages, users } from "@/db/schema";
 import { FLAG_LABELS, flagsFromString, severityOf, type SerialFlag } from "@/lib/receiving-serial-rules";
@@ -39,6 +39,29 @@ export function checkLabel(flags: SerialFlag[]): { text: string; tone: "ok" | "w
   const tone = severityOf(flags);
   if (flags.length === 0) return { text: "OK", tone: "ok" };
   return { text: flags.map((f) => FLAG_LABELS[f] ?? f).join(", "), tone };
+}
+
+export type ItemSerial = { serial: string; flagged: boolean };
+
+/** The serial numbers recorded against receiving rows, by row id (one company only). Used by Daily Receiving. */
+export async function getSerialsByItem(organizationId: string, itemIds: string[]): Promise<Map<string, ItemSerial[]>> {
+  const out = new Map<string, ItemSerial[]>();
+  const ids = [...new Set(itemIds.filter(Boolean))];
+  for (let i = 0; i < ids.length; i += 400) {
+    const rows = await db
+      .select({ itemId: receivingItemSerials.itemId, serial: receivingItemSerials.serial, flag: receivingItemSerials.flag })
+      .from(receivingItemSerials)
+      .where(and(eq(receivingItemSerials.organizationId, organizationId), inArray(receivingItemSerials.itemId, ids.slice(i, i + 400)), sql`${receivingItemSerials.serialNorm} is not null`))
+      .orderBy(receivingItemSerials.scannedAt, receivingItemSerials.id);
+    for (const r of rows) {
+      const s = (r.serial ?? "").trim();
+      if (!s) continue;
+      const list = out.get(r.itemId) ?? [];
+      list.push({ serial: s, flagged: r.flag !== "OK" });
+      out.set(r.itemId, list);
+    }
+  }
+  return out;
 }
 
 const isDay = (v: string | undefined) => !!v && /^\d{4}-\d{2}-\d{2}$/.test(v);

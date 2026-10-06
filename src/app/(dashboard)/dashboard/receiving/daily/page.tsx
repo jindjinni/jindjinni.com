@@ -3,6 +3,7 @@ import { requireOrg } from "@/lib/tenant";
 import { getReceivedItems } from "@/lib/receiving-queries";
 import { HELD_LABELS, dayLabel, groupDaily } from "@/lib/receiving-daily";
 import { chipClass } from "@/lib/receiving-ui";
+import { getSerialsByItem } from "@/lib/receiving-serial-register";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,8 @@ export default async function DailyReceivingPage({ searchParams }: { searchParam
   const to = isDay(one(sp.to)) ? one(sp.to) : "";
   const q = one(sp.q);
   const { rows } = await getReceivedItems(org.organizationId, { from, to, q, limit: 5000 });
-  const days = groupDaily(rows);
+  const serialsByItem = await getSerialsByItem(org.organizationId, rows.map((r) => r.sourceItemId ?? ""));
+  const days = groupDaily(rows, serialsByItem);
   const totalAccepted = days.reduce((n, d) => n + d.accepted, 0);
   const totalHeld = days.reduce((n, d) => n + d.heldUnits, 0);
   const csv = `/api/receiving/daily/csv?from=${from}${to ? `&to=${to}` : ""}${q ? `&q=${encodeURIComponent(q)}` : ""}`;
@@ -82,13 +84,14 @@ export default async function DailyReceivingPage({ searchParams }: { searchParam
               {d.heldUnits > 0 && <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-900 dark:bg-red-900/40 dark:text-red-100">{d.heldUnits} held back</span>}
             </summary>
             <div className="overflow-x-auto border-t border-slate-200 dark:border-slate-800">
-              <table className="w-full min-w-[56rem] text-sm">
+              <table className="w-full min-w-[62rem] text-sm">
                 <thead>
                   <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
                     <th className="px-4 py-2">Product</th>
                     <th className="px-3 py-2">NDC</th>
                     <th className="px-3 py-2">Condition</th>
                     <th className="px-3 py-2">Lot #</th>
+                    <th className="px-3 py-2">Serial #</th>
                     <th className="px-3 py-2">Expiration</th>
                     <th className="px-3 py-2 text-right">Received</th>
                     <th className="px-3 py-2 text-right">Returned</th>
@@ -106,6 +109,26 @@ export default async function DailyReceivingPage({ searchParams }: { searchParam
                       <td className="whitespace-nowrap px-3 py-2 tabular-nums">{g.ndc || "—"}</td>
                       <td className="whitespace-nowrap px-3 py-2">{g.condition || "—"}</td>
                       <td className="whitespace-nowrap px-3 py-2">{g.lot || <span className="text-orange-700 dark:text-orange-300">missing</span>}</td>
+                      <td className="px-3 py-2" data-testid="serial-cell">
+                        {g.serials.length === 0 ? (
+                          <span className="text-slate-400">—</span>
+                        ) : g.serials.length <= 2 ? (
+                          <span className="font-mono text-xs">
+                            {g.serials.map((s, i) => (
+                              <span key={s.serial} className={s.flagged ? "text-orange-700 dark:text-orange-300" : ""}>{i > 0 ? ", " : ""}{s.serial}</span>
+                            ))}
+                          </span>
+                        ) : (
+                          <details>
+                            <summary className="cursor-pointer whitespace-nowrap text-xs font-medium text-amber-800 dark:text-amber-300">{g.serials.length} serial numbers</summary>
+                            <ul className="mt-1 max-h-48 space-y-0.5 overflow-y-auto font-mono text-xs">
+                              {g.serials.map((s) => (
+                                <li key={s.serial} className={s.flagged ? "text-orange-700 dark:text-orange-300" : ""}>{s.serial}</li>
+                              ))}
+                            </ul>
+                          </details>
+                        )}
+                      </td>
                       <td className="whitespace-nowrap px-3 py-2 tabular-nums">{g.expiration || "—"}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{g.received}</td>
                       <td className="px-3 py-2 text-right tabular-nums text-slate-500">{g.returned || "—"}</td>
@@ -113,12 +136,12 @@ export default async function DailyReceivingPage({ searchParams }: { searchParam
                       <td className="px-3 py-2 text-right tabular-nums text-slate-500">{g.packages}</td>
                     </tr>
                   ))}
-                  {d.groups.length === 0 && <tr><td colSpan={9} className="px-4 py-5 text-center text-slate-500">Nothing accepted on this day.</td></tr>}
+                  {d.groups.length === 0 && <tr><td colSpan={10} className="px-4 py-5 text-center text-slate-500">Nothing accepted on this day.</td></tr>}
                 </tbody>
                 {d.groups.length > 0 && (
                   <tfoot>
                     <tr className="border-t border-slate-200 text-sm font-semibold dark:border-slate-700">
-                      <td className="px-4 py-2" colSpan={5}>Total for the day</td>
+                      <td className="px-4 py-2" colSpan={6}>Total for the day</td>
                       <td className="px-3 py-2 text-right tabular-nums">{d.groups.reduce((n, g) => n + g.received, 0)}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{d.groups.reduce((n, g) => n + g.returned, 0) || "—"}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{d.accepted}</td>

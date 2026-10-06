@@ -593,9 +593,11 @@ export type ReceivedItemRow = {
   notes: string | null;
   receivedBy: string | null;
   receivedByUserId: string | null;
+  /** The receiving row this line was copied from; serial numbers are recorded against it. */
+  sourceItemId?: string | null;
 };
 
-const isDay = (v: string | undefined) => !!v && /^\d{4}-\d{2}-\d{2}$/.test(v);
+const isDay =(v: string | undefined) => !!v && /^\d{4}-\d{2}-\d{2}$/.test(v);
 
 /** Every product line that has been received and submitted, newest first. One company only. */
 export async function getReceivedItems(organizationId: string, f: ReceivedItemsFilter = {}): Promise<{ rows: ReceivedItemRow[]; total: number; totalQuantity: number }> {
@@ -649,6 +651,7 @@ export async function getReceivedItems(organizationId: string, f: ReceivedItemsF
       recallStatus: receivingIntakeLines.recallStatus,
       recallName: receivingIntakeLines.recallName,
       notes: receivingIntakeLines.itemNotes,
+      sourceItemId: receivingIntakeLines.sourceItemId,
       agentId: sql<string | null>`${agentExpr}`,
       receivedByName: users.name,
       receivedByEmail: users.email,
@@ -705,6 +708,7 @@ export async function getReceivedItems(organizationId: string, f: ReceivedItemsF
       notes: r.notes,
       receivedBy: r.receivedByName || r.receivedByEmail || null,
       receivedByUserId: r.agentId,
+      sourceItemId: r.sourceItemId,
     })),
     total: Number(agg?.n ?? 0),
     totalQuantity: Number(agg?.qty ?? 0),
