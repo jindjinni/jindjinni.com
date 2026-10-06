@@ -214,52 +214,25 @@ export function BoardView({ cards, canMove, canDelete }: { cards: BoardCard[]; c
                       className="block overflow-hidden rounded-t-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-600"
                     >
                       <CardPhoto photoId={c.coverPhotoId} />
-                      <div className="space-y-1.5 p-3">
-                        <p className="truncate text-base font-semibold text-slate-900 dark:text-slate-50">{c.trackingNumber || "No tracking #"}</p>
-                        <dl className="space-y-1.5 text-xs text-slate-600 dark:text-slate-400">
-                          <div>
-                            <dt>Shipment Title</dt>
-                            <dd className="truncate text-sm text-slate-900 dark:text-slate-100">{[c.customerName, c.quotationNumber, c.trackingNumber].filter(Boolean).join(" — ")}</dd>
+                      <div className="space-y-2 p-3">
+                        <span className={`block max-w-full truncate rounded-full px-2.5 py-0.5 text-sm font-medium ${chipClass(c.customerName)}`}>{c.customerName}</span>
+                        <div className="flex items-end justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-50">{c.quotationNumber || "No order #"}</p>
+                            <p className="truncate text-xs text-slate-500 dark:text-slate-400">{c.trackingNumber || "No tracking #"}</p>
                           </div>
-                          <div>
-                            <dt>Customer Name</dt>
-                            <dd><span className={`inline-block max-w-full truncate rounded-full px-2.5 py-0.5 text-sm font-medium ${chipClass(c.customerName)}`}>{c.customerName}</span></dd>
-                          </div>
-                          <div>
-                            <dt>Order Reference &amp; Tracking #</dt>
-                            <dd className="truncate rounded bg-slate-100 px-2 py-1 text-sm text-slate-900 dark:bg-slate-800 dark:text-slate-100">{[c.quotationNumber, c.trackingNumber].filter(Boolean).join(" — ")}</dd>
-                          </div>
-                          <div>
-                            <dt>Order Total</dt>
-                            <dd><span className="inline-block rounded-full bg-sky-100 px-2.5 py-0.5 text-sm font-medium tabular-nums text-sky-900 dark:bg-sky-900/50 dark:text-sky-100">{MONEY.format(c.grandTotal)}</span></dd>
-                          </div>
-                          <div>
-                            <dt>Date/Time Received</dt>
-                            <dd className="text-sm text-slate-900 dark:text-slate-100">{formatStamp(c.receivedAt)}</dd>
-                          </div>
-                          <div>
-                            <dt>Receiving</dt>
-                            <dd><span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_PILL[c.status]}`}>{STATUS_LABELS[c.status]}</span></dd>
-                          </div>
-                          {c.accountsStatus && (
-                            <div>
-                              <dt>Accounts Status</dt>
-                              <dd><span className="inline-block rounded-full bg-slate-200 px-2.5 py-0.5 text-xs font-medium text-slate-800 dark:bg-slate-800 dark:text-slate-100">{c.accountsStatus === "PAID" ? "Paid" : "In Review"}</span></dd>
-                            </div>
+                          <span className="shrink-0 rounded-full bg-sky-100 px-2.5 py-0.5 text-sm font-semibold tabular-nums text-sky-900 dark:bg-sky-900/50 dark:text-sky-100">{MONEY.format(c.grandTotal)}</span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_PILL[c.status]}`}>{STATUS_LABELS[c.status]}</span>
+                          {c.adjustmentNeeded === "YES" && (
+                            <span className="inline-block rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-900 dark:bg-red-900/40 dark:text-red-100">Adjustment needed</span>
                           )}
-                          <div>
-                            <dt>Adjustment Needed?</dt>
-                            <dd>
-                              {c.adjustmentNeeded === "YES" ? (
-                                <span className="inline-block rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-900 dark:bg-red-900/40 dark:text-red-100">Yes</span>
-                              ) : c.adjustmentNeeded === "NO" ? (
-                                <span className="inline-block rounded-full bg-slate-200 px-2.5 py-0.5 text-xs font-medium text-slate-800 dark:bg-slate-800 dark:text-slate-100">No</span>
-                              ) : (
-                                <span className="text-xs text-slate-500">Not checked yet</span>
-                              )}
-                            </dd>
-                          </div>
-                        </dl>
+                          {c.accountsStatus && (
+                            <span className="inline-block rounded-full bg-slate-200 px-2.5 py-0.5 text-xs font-medium text-slate-800 dark:bg-slate-800 dark:text-slate-100">{c.accountsStatus === "PAID" ? "Paid" : "In review"}</span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">Received {formatStamp(c.receivedAt)}</p>
                       </div>
                     </Link>
                     {canDelete && (

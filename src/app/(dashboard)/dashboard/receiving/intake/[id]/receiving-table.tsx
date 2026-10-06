@@ -19,17 +19,22 @@ export function ReceiptPreview({ packageId, receipt }: { packageId: string; rece
   const url = `/api/receiving/packages/${packageId}/quotation-receipt`;
   if (!receipt.present) return <p className="text-sm text-slate-500">No receipt on file for this order.</p>;
   return (
-    <div className="space-y-2">
-      {receipt.isImage ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={url} alt="Quotation receipt" loading="lazy" className="max-h-96 max-w-full rounded-lg border border-slate-200 dark:border-slate-700" />
-      ) : (
-        <iframe title="Quotation receipt" src={url} loading="lazy" className="h-[32rem] w-full max-w-2xl rounded-lg border border-slate-200 bg-white dark:border-slate-700" />
-      )}
-      <a href={url} target="_blank" rel="noreferrer" className="inline-block text-xs font-medium text-amber-800 underline dark:text-amber-300">
-        Open in a new tab
-      </a>
-    </div>
+    <details className="group">
+      <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-amber-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-amber-950/30">
+        <span aria-hidden className="text-xs transition group-open:rotate-90">▶</span> Show the quotation receipt
+      </summary>
+      <div className="mt-2 space-y-2">
+        {receipt.isImage ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={url} alt="Quotation receipt" loading="lazy" className="max-h-96 max-w-full rounded-lg border border-slate-200 dark:border-slate-700" />
+        ) : (
+          <iframe title="Quotation receipt" src={url} loading="lazy" className="h-[32rem] w-full max-w-2xl rounded-lg border border-slate-200 bg-white dark:border-slate-700" />
+        )}
+        <a href={url} target="_blank" rel="noreferrer" className="inline-block text-xs font-medium text-amber-800 underline dark:text-amber-300">
+          Open in a new tab
+        </a>
+      </div>
+    </details>
   );
 }
 

@@ -29,11 +29,11 @@ export function Row({ label, children, hint }: { label: string; children: ReactN
 export function Step({ n, id, title, note, children }: { n: number; id: string; title: string; note?: string; children: ReactNode }) {
   return (
     <section id={id} className="mt-7 scroll-mt-28">
-      <h2 className="flex items-baseline gap-2 border-b-2 border-[var(--dept-accent,#F7B838)] pb-1.5 text-xs font-bold uppercase tracking-wider text-amber-900 dark:text-amber-300">
-        <span className="rounded bg-[var(--dept-accent,#F7B838)] px-1.5 py-0.5 text-amber-950">Step {n}</span>
+      <h2 className="flex items-center gap-2.5 border-b border-slate-200 pb-2 text-base font-semibold text-slate-900 dark:border-slate-700 dark:text-slate-50">
+        <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-[var(--dept-accent,#F7B838)] px-1.5 text-xs font-bold text-amber-950">{n}</span>
         {title}
       </h2>
-      {note && <p className="mt-2 text-xs text-slate-500">{note}</p>}
+      {note && <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{note}</p>}
       {children}
     </section>
   );
