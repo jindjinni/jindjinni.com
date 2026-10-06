@@ -15,7 +15,8 @@
 // local development/testing never spends real money. Set the Live Token
 // only in the production environment.
 
-const SHIPPO_API_BASE = "https://api.goshippo.com";
+// SHIPPO_API_BASE is only ever set by the automated tests (a local stand-in server), never in production.
+const SHIPPO_API_BASE = process.env.SHIPPO_API_BASE || "https://api.goshippo.com";
 
 export class ShippoNotConfiguredError extends Error {
   constructor() {
@@ -133,17 +134,32 @@ export async function createShipment(params: {
   });
 }
 
-/** Finds the UPS Ground or USPS Ground Advantage rate among a shipment's quoted rates. */
-export function pickGroundRate(
+/**
+ * Finds the one service we ever buy among a shipment's quoted rates:
+ * UPS Ground, or USPS Priority Mail (never Ground Advantage, Priority Mail
+ * Express or anything else). There is deliberately NO "closest match"
+ * fallback -- if the exact service isn't offered, nothing is bought rather
+ * than a different, possibly pricier, service.
+ */
+export function pickLabelRate(
   shipment: ShippoShipment,
-  service: "UPS_GROUND" | "USPS_GROUND",
+  service: "UPS_GROUND" | "USPS_PRIORITY",
 ): ShippoRate | null {
   const provider = service === "UPS_GROUND" ? "UPS" : "USPS";
   const candidates = shipment.rates.filter((r) => r.provider.toUpperCase() === provider);
-  const ground = candidates.find((r) =>
-    /ground/i.test(r.servicelevel?.name ?? r.servicelevel?.token ?? ""),
+  if (service === "UPS_GROUND") {
+    // Exactly "UPS Ground" -- not Ground Saver or any air service.
+    return (
+      candidates.find((r) => r.servicelevel?.token === "ups_ground") ??
+      candidates.find((r) => /^ground$/i.test((r.servicelevel?.name ?? "").trim())) ??
+      null
+    );
+  }
+  return (
+    candidates.find((r) => r.servicelevel?.token === "usps_priority") ??
+    candidates.find((r) => /^priority mail$/i.test((r.servicelevel?.name ?? "").trim())) ??
+    null
   );
-  return ground ?? candidates[0] ?? null;
 }
 
 export type ShippoTransaction = {

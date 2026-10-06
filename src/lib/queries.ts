@@ -27,6 +27,7 @@ import {
   purchasingBonusTiers,
   purchasingQuotations,
   purchasingQuotedItems,
+  purchasingQuotationLabels,
   purchasingAuditLog,
   purchasingReceiptVersions,
   purchasingQuotationDocuments,
@@ -1011,6 +1012,14 @@ export async function getPurchasingQuotationsSummary(organizationId: string, opt
 
   const receivingByQuotation = await getReceivingStatusByQuotation(organizationId);
 
+  // How many labels each order has (the Tracking # column shows "+N more").
+  const labelCountRows = await db
+    .select({ quotationId: purchasingQuotationLabels.quotationId, n: sql<number>`count(*)` })
+    .from(purchasingQuotationLabels)
+    .where(eq(purchasingQuotationLabels.organizationId, organizationId))
+    .groupBy(purchasingQuotationLabels.quotationId);
+  const labelCounts = new Map(labelCountRows.map((x) => [x.quotationId, Number(x.n)]));
+
   return visible.map((r) => {
     const items = itemsByQuotation.get(r.id) ?? [];
     const docs = docsByQuotation.get(r.id);
@@ -1054,6 +1063,7 @@ export async function getPurchasingQuotationsSummary(organizationId: string, opt
       trackingNumber: r.trackingNumber,
       labelStatus: r.labelStatus,
       labelUrl: r.labelUrl,
+      labelCount: Math.max(labelCounts.get(r.id) ?? 0, r.labelStatus === "GENERATED" ? 1 : 0),
       archivedAt: r.archivedAt,
       customerId: r.customerId,
       customerName,
@@ -1064,6 +1074,20 @@ export async function getPurchasingQuotationsSummary(organizationId: string, opt
       itemCount: items.length,
     };
   });
+}
+
+/** Every shipping label saved for a quotation, in the order they were bought. */
+export async function getQuotationLabels(organizationId: string, quotationId: string) {
+  return db
+    .select()
+    .from(purchasingQuotationLabels)
+    .where(
+      and(
+        eq(purchasingQuotationLabels.organizationId, organizationId),
+        eq(purchasingQuotationLabels.quotationId, quotationId),
+      ),
+    )
+    .orderBy(purchasingQuotationLabels.labelNumber);
 }
 
 export async function getPurchasingQuotationWithItems(organizationId: string, quotationId: string) {

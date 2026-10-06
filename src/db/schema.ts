@@ -878,7 +878,8 @@ export const purchasingQuotations = sqliteTable(
     // succeeds -- see generatePurchasingShippingLabel in actions/purchasing.ts.
     // On success this also fills in carrier/trackingNumber above so the
     // Quotation Summary table's Tracking # column picks it up automatically.
-    labelCarrier: text("label_carrier", { enum: ["UPS_GROUND", "USPS_GROUND"] })
+    // USPS_GROUND is the older USPS choice (labels already bought); new USPS labels are always USPS_PRIORITY.
+    labelCarrier: text("label_carrier", { enum: ["UPS_GROUND", "USPS_GROUND", "USPS_PRIORITY"] })
       .notNull()
       .default("UPS_GROUND"),
     parcelLengthIn: real("parcel_length_in").notNull().default(10),
@@ -1082,6 +1083,39 @@ export const receivingPackages = sqliteTable(
 );
 
 /** A photo on a shipment. The file itself lives in private file storage (never a public link) and is served only through a signed-in, company-checked route. */
+// Every shipping label bought for a quotation, one row per label. Most
+// orders have one; now and then a customer needs several (5-6 boxes), each
+// with its own tracking number. The single-label columns on
+// purchasing_quotations still mirror the FIRST label so older screens (the
+// Quotation Summary's Tracking # column) keep working; this table is the
+// full record and is what the quotation page shows.
+export const purchasingQuotationLabels = sqliteTable(
+  "purchasing_quotation_labels",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    quotationId: text("quotation_id")
+      .notNull()
+      .references(() => purchasingQuotations.id, { onDelete: "cascade" }),
+    // 1, 2, 3... in the order the labels were bought for this quotation.
+    labelNumber: integer("label_number").notNull(),
+    carrier: text("carrier", { enum: ["UPS_GROUND", "USPS_GROUND", "USPS_PRIORITY"] }).notNull(),
+    shippoShipmentId: text("shippo_shipment_id"),
+    shippoRateId: text("shippo_rate_id"),
+    shippoTransactionId: text("shippo_transaction_id"),
+    labelUrl: text("label_url").notNull(),
+    trackingNumber: text("tracking_number"),
+    trackingUrl: text("tracking_url"),
+    ...timestamps,
+  },
+  (t) => [
+    index("purchasing_quotation_labels_org_idx").on(t.organizationId),
+    index("purchasing_quotation_labels_quotation_idx").on(t.quotationId),
+  ],
+);
+
 export const receivingPackagePhotos = sqliteTable(
   "receiving_package_photos",
   {

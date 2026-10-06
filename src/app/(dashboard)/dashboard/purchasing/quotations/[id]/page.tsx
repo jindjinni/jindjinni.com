@@ -15,6 +15,7 @@ import {
   getOrganization,
   hasShipFromAddress,
   hasCustomerAddress,
+  getQuotationLabels,
 } from "@/lib/queries";
 import { archivePurchasingQuotation, restorePurchasingQuotation } from "@/app/actions/purchasing";
 import { AddQuotedItemForm } from "./add-quoted-item-form";
@@ -26,6 +27,9 @@ import { ActionButton } from "@/components/action-button";
 import type { PriceTables } from "@/lib/purchasing-price";
 import { listRecalls } from "@/lib/receiving-recall-service";
 
+// Buying several labels at once can take a little while.
+export const maxDuration = 60;
+
 export default async function QuotationDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const org = await requireOrg();
@@ -35,6 +39,28 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
   if (!data) notFound();
   const { quotation, items, customer } = data;
   const receiptState = await getReceiptState(org.organizationId, quotation.id, items.length);
+  const savedLabels = await getQuotationLabels(org.organizationId, quotation.id);
+  // An order labelled before multi-label support has its one label only in the old columns -- show it as Label 1.
+  const labels =
+    savedLabels.length === 0 && quotation.labelStatus === "GENERATED" && quotation.labelUrl
+      ? [
+          {
+            id: "legacy",
+            labelNumber: 1,
+            carrier: quotation.labelCarrier,
+            labelUrl: quotation.labelUrl,
+            trackingNumber: quotation.labelTrackingNumber,
+            trackingUrl: quotation.labelTrackingUrl,
+          },
+        ]
+      : savedLabels.map((l) => ({
+          id: l.id,
+          labelNumber: l.labelNumber,
+          carrier: l.carrier,
+          labelUrl: l.labelUrl,
+          trackingNumber: l.trackingNumber,
+          trackingUrl: l.trackingUrl,
+        }));
 
   const [products, conditions, ranges, productConditionsMap, orgRow, multiplierRows, recalls] = await Promise.all([
     getPurchasingProducts(org.organizationId),
@@ -242,10 +268,8 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
           parcelWidthIn={quotation.parcelWidthIn}
           parcelHeightIn={quotation.parcelHeightIn}
           parcelWeightLb={quotation.parcelWeightLb}
+          labels={labels}
           labelStatus={quotation.labelStatus}
-          labelUrl={quotation.labelUrl}
-          labelTrackingNumber={quotation.labelTrackingNumber}
-          labelTrackingUrl={quotation.labelTrackingUrl}
           labelError={quotation.labelError}
           hasOrgAddress={hasShipFromAddress(orgRow)}
           hasCustomerAddr={hasCustomerAddress(customer)}

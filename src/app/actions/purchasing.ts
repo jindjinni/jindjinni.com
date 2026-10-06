@@ -30,6 +30,7 @@ import {
   purchasingBonusTiers,
   purchasingQuotations,
   purchasingQuotedItems,
+  purchasingQuotationLabels,
   purchasingAuditLog,
   purchasingReceiptVersions,
   purchasingReceiptSettings,
@@ -46,6 +47,7 @@ import {
   getOrganization,
   hasShipFromAddress,
   hasCustomerAddress,
+  getQuotationLabels,
 } from "@/lib/queries";
 import { seedPurchasingProductCatalogForOrg } from "@/lib/purchasing-catalog-seed";
 import { seedPurchasingMonthRangesForOrg } from "@/lib/purchasing-month-range-seed";
@@ -59,10 +61,11 @@ import { customerValidationError, missingCustomerFields } from "@/lib/purchasing
 import {
   createShipment,
   createTransaction,
-  pickGroundRate,
+  pickLabelRate,
   isShippoConfigured,
   type ShippoAddress,
 } from "@/lib/shippo";
+import { buyLabels, failureMessage, parseCarrier, parseLabelCount, CARRIER_NAME } from "@/lib/shipping-labels";
 
 export type ActionState = { error?: string } | undefined;
 export type SeedCatalogActionState = { error?: string; message?: string } | undefined;
@@ -1708,7 +1711,7 @@ export async function updatePurchasingQuotationHeader(
 }
 
 /**
- * Generates (purchases) a real UPS Ground or USPS Ground label for this
+ * Generates (purchases) a real UPS Ground or USPS Priority Mail label for this
  * quotation via Shippo -- this is a reverse/inbound label, same idea as
  * Buyback's: the customer is the one shipping a package, and it always
  * ships TO this business's receiving address (Settings -> Business,
@@ -1730,14 +1733,15 @@ export async function generatePurchasingShippingLabel(
   quotationId: string,
   _prevState: ActionState,
   formData: FormData,
-): Promise<ActionState> {
+): Promise<{ error?: string; remaining?: number } | undefined> {
   const org = await requirePurchasingWriter();
   const quotation = await requireOrgQuotation(org.organizationId, quotationId);
   if (!quotation) return { error: "Quotation not found." };
 
-  const labelCarrier = (String(formData.get("labelCarrier") ?? "") || quotation.labelCarrier) as
-    | "UPS_GROUND"
-    | "USPS_GROUND";
+  const labelCarrier = parseCarrier(formData.get("labelCarrier"), quotation.labelCarrier);
+  const parsedCount = parseLabelCount(formData.get("labelCount"));
+  if ("error" in parsedCount) return { error: parsedCount.error };
+  const labelCount = parsedCount.count;
   const parcelLengthIn = Number(formData.get("parcelLengthIn")) || quotation.parcelLengthIn;
   const parcelWidthIn = Number(formData.get("parcelWidthIn")) || quotation.parcelWidthIn;
   const parcelHeightIn = Number(formData.get("parcelHeightIn")) || quotation.parcelHeightIn;
@@ -1750,15 +1754,25 @@ export async function generatePurchasingShippingLabel(
     .set({ labelCarrier, parcelLengthIn, parcelWidthIn, parcelHeightIn, parcelWeightLb })
     .where(eq(purchasingQuotations.id, quotationId));
 
-  if (!isShippoConfigured()) {
-    const message =
-      "Shipping labels aren't connected in this environment. This works once deployed with a live Shippo key.";
-    await db
-      .update(purchasingQuotations)
-      .set({ labelStatus: "ERROR", labelError: message })
-      .where(eq(purchasingQuotations.id, quotationId));
+  const existing = await getQuotationLabels(org.organizationId, quotationId);
+
+  // Only an order with no label yet shows a "failed" state -- an order that
+  // already has saved labels keeps showing them no matter what happens here.
+  async function recordFailure(message: string) {
+    if (existing.length === 0) {
+      await db
+        .update(purchasingQuotations)
+        .set({ labelStatus: "ERROR", labelError: message })
+        .where(eq(purchasingQuotations.id, quotationId));
+    }
     revalidatePath(`/dashboard/purchasing/quotations/${quotationId}`);
     return { error: message };
+  }
+
+  if (!isShippoConfigured()) {
+    return recordFailure(
+      "Shipping labels aren't connected in this environment. This works once deployed with a live Shippo key.",
+    );
   }
 
   const orgRow = await getOrganization(org.organizationId);
@@ -1803,8 +1817,13 @@ export async function generatePurchasingShippingLabel(
     isResidential: false,
   };
 
-  try {
-    const shipment = await createShipment({
+  // Every label is its own Shippo shipment + purchase, so each box gets its
+  // own label and its own tracking number.
+  const { labels, errors } = await buyLabels(
+    { createShipment, pickRate: pickLabelRate, createTransaction },
+    labelCarrier,
+    labelCount,
+    {
       addressFrom,
       addressTo,
       // Explicit, not just relying on Shippo's "defaults to addressFrom"
@@ -1812,55 +1831,100 @@ export async function generatePurchasingShippingLabel(
       // customer -- we're only ever the receiver here, never the sender.
       addressReturn: addressFrom,
       parcel: { lengthIn: parcelLengthIn, widthIn: parcelWidthIn, heightIn: parcelHeightIn, weightLb: parcelWeightLb },
-    });
-    const rate = pickGroundRate(shipment, labelCarrier);
-    if (!rate) {
-      const serviceName = labelCarrier === "UPS_GROUND" ? "UPS Ground" : "USPS Ground";
-      throw new Error(`No ${serviceName} rate was returned for this address.`);
+    },
+  );
+
+  // Save whatever was bought first -- a paid label is never lost, even when
+  // another one in the same batch failed.
+  if (labels.length > 0) {
+    // An order labelled before multi-label support has its one label only in
+    // the old columns; copy it in so it becomes "Label 1" and the new ones
+    // are numbered after it.
+    let copiedLegacy = false;
+    if (existing.length === 0 && quotation.labelStatus === "GENERATED" && quotation.labelUrl) {
+      await db.insert(purchasingQuotationLabels).values({
+        id: newId("plabel"),
+        organizationId: org.organizationId,
+        quotationId,
+        labelNumber: 1,
+        carrier: quotation.labelCarrier,
+        shippoShipmentId: quotation.shippoShipmentId,
+        shippoRateId: quotation.shippoRateId,
+        shippoTransactionId: quotation.shippoTransactionId,
+        labelUrl: quotation.labelUrl,
+        trackingNumber: quotation.labelTrackingNumber,
+        trackingUrl: quotation.labelTrackingUrl,
+      });
+      copiedLegacy = true;
+    }
+    const firstNumber = copiedLegacy ? 2 : existing.reduce((max, l) => Math.max(max, l.labelNumber), 0) + 1;
+    await db.insert(purchasingQuotationLabels).values(
+      labels.map((l, i) => ({
+        id: newId("plabel"),
+        organizationId: org.organizationId,
+        quotationId,
+        labelNumber: firstNumber + i,
+        carrier: labelCarrier,
+        shippoShipmentId: l.shipmentId,
+        shippoRateId: l.rateId,
+        shippoTransactionId: l.transactionId,
+        labelUrl: l.labelUrl,
+        trackingNumber: l.trackingNumber,
+        trackingUrl: l.trackingUrl,
+      })),
+    );
+
+    // The old single-label columns mirror the FIRST label, so the Quotation
+    // Summary's Tracking # column keeps working.
+    if (firstNumber === 1) {
+      const first = labels[0];
+      await db
+        .update(purchasingQuotations)
+        .set({
+          labelStatus: "GENERATED",
+          shippoShipmentId: first.shipmentId,
+          shippoRateId: first.rateId,
+          shippoTransactionId: first.transactionId,
+          labelUrl: first.labelUrl,
+          labelTrackingNumber: first.trackingNumber,
+          labelTrackingUrl: first.trackingUrl,
+          labelError: null,
+          labelGeneratedAt: new Date().toISOString(),
+          carrier: labelCarrier === "UPS_GROUND" ? "UPS" : "USPS",
+          trackingNumber: first.trackingNumber ?? quotation.trackingNumber,
+        })
+        .where(eq(purchasingQuotations.id, quotationId));
+    } else {
+      await db
+        .update(purchasingQuotations)
+        .set({ labelError: null })
+        .where(eq(purchasingQuotations.id, quotationId));
     }
 
-    const transaction = await createTransaction(rate.object_id);
-    if (transaction.status !== "SUCCESS" || !transaction.label_url) {
-      const msg =
-        transaction.messages?.map((m) => m.text).filter(Boolean).join("; ") || "Label purchase did not succeed.";
-      throw new Error(msg);
-    }
-
-    await db
-      .update(purchasingQuotations)
-      .set({
-        labelStatus: "GENERATED",
-        shippoShipmentId: shipment.object_id,
-        shippoRateId: rate.object_id,
-        shippoTransactionId: transaction.object_id,
-        labelUrl: transaction.label_url,
-        labelTrackingNumber: transaction.tracking_number ?? null,
-        labelTrackingUrl: transaction.tracking_url_provider ?? null,
-        labelError: null,
-        labelGeneratedAt: new Date().toISOString(),
-        // Mirror onto the general tracking fields too, so the Quotation
-        // Summary table's Tracking # column picks this up automatically.
-        carrier: labelCarrier === "UPS_GROUND" ? "UPS" : "USPS",
-        trackingNumber: transaction.tracking_number ?? quotation.trackingNumber,
-      })
-      .where(eq(purchasingQuotations.id, quotationId));
-
-    await logAudit(org, "quotation", quotationId, "shipping_label", null, null, "Shipping label generated via Shippo");
-  } catch (err) {
-    let message = err instanceof Error ? err.message : "Label generation failed.";
-    if (/phone/i.test(message) && !customer.phone) {
-      message += " (This customer has no phone number on file yet -- try USPS Ground, or add their phone on their profile and generate the label again.)";
-    }
-    await db
-      .update(purchasingQuotations)
-      .set({ labelStatus: "ERROR", labelError: message })
-      .where(eq(purchasingQuotations.id, quotationId));
-    revalidatePath(`/dashboard/purchasing/quotations/${quotationId}`);
-    return { error: message };
+    await logAudit(
+      org,
+      "quotation",
+      quotationId,
+      "shipping_label",
+      null,
+      null,
+      `${labels.length} ${CARRIER_NAME[labelCarrier]} shipping label${labels.length === 1 ? "" : "s"} generated via Shippo`,
+    );
   }
 
   revalidatePath(`/dashboard/purchasing/quotations/${quotationId}`);
   revalidatePath("/dashboard/purchasing/quotations");
+
+  if (errors.length > 0) {
+    let message = failureMessage(labelCount, labels.length, errors);
+    if (/phone/i.test(message) && !customer.phone) {
+      message += " (This customer has no phone number on file yet -- try USPS Priority Mail, or add their phone on their profile and generate the label again.)";
+    }
+    if (labels.length === 0) return recordFailure(message);
+    // Some were bought: tell the page how many are still missing so the box can be set to exactly that.
+    return { error: message, remaining: labelCount - labels.length };
+  }
+  return undefined;
 }
 
 /** The quotation's manual deduction -- separate from, and on top of, the automatic bonus. A reason is required so the audit trail says why. */

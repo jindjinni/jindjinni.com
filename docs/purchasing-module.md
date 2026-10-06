@@ -83,11 +83,6 @@ customer says something's wrong, even after it was generated):
   price a line differently). Leaving the override-price field blank
   recomputes automatically from the newly chosen condition/expiration
   instead of silently re-applying the old price.
-- **$0 products = "not accepting"**: a product whose standard price is $0
-  shows a "Not accepting" badge on the Products list and "— not accepting"
-  in the quote product picker. Adding (or recomputing) a line for one is
-  refused with an explanatory error; a manager can still quote it by
-  entering an override price.
 - **Remove a line** — isolated per-row state/confirm dialog, no restrictions.
 - Automatic bonus tier and any manual deduction (with a required reason)
   both factor into `grandTotal`, recomputed via `recomputeQuotationTotals()`
@@ -153,8 +148,10 @@ these packages, never the sender.
   addressFrom" behavior.
 - UI (`quotations/[id]/shipping-label-section.tsx`): simplified to
   carrier-choice-and-go — a Service dropdown (UPS Ground, defaulted,
-  regardless of whatever was last saved; USPS Ground one click away) plus a
-  Generate button. Parcel L×W×H/weight sit behind a collapsed "Package
+  regardless of whatever was last saved; **USPS Priority Mail** one click
+  away — Priority Mail is the only USPS service ever bought, never Ground
+  Advantage or Express), a **How many labels?** box (1 by default, up to 10
+  at a time) and a Generate button. Parcel L×W×H/weight sit behind a collapsed "Package
   size (optional)" disclosure, defaulting to 10×10×10in / 3lb.
   Amber banners point at exactly what's missing (business receiving
   address in Settings → Business, or the specific customer's address) when
@@ -173,16 +170,34 @@ these packages, never the sender.
   `labelTrackingNumber`, `labelTrackingUrl`, `labelError`,
   `labelGeneratedAt`.
 
-**Known issue, unresolved**: UPS is connected and active on the Shippo
-account, but returns zero rates (no error message, just silently absent)
-for the business's real receiving address (353 West Inez Road, Unit 5,
-Dothan, AL 36301) — confirmed via a direct Shippo API test, not an app bug.
-USPS Ground Advantage quotes fine for the same address/parcel (~$7.52).
-Until this is sorted out with Shippo support, use the Service dropdown to
-pick **USPS Ground** when generating a real label. UPS is still the
-hardcoded default carrier per an explicit request, so this will keep
-surfacing the "No UPS Ground rate was returned for this address" error
-until Shippo resolves it on their end.
+**Several labels for one quotation (added Oct 2026).** A customer sending
+5-6 boxes gets that many labels from one press: each label is its own
+Shippo shipment + purchase (own tracking number), bought a few at a time
+(`buyLabels()` in `src/lib/shipping-labels.ts`). Every label is saved as a
+row in `purchasing_quotation_labels` (numbered 1, 2, 3…, org- and
+quotation-scoped); the old single-label columns on `purchasing_quotations`
+still mirror Label 1 so the Quotation Summary's Tracking # column works (it
+shows "+N more" when there are several). Rules worth knowing:
+
+- Whatever was bought is saved even if another label in the same batch
+  failed ("2 of 3 labels were created and saved…"); the box is then set to
+  how many are still missing.
+- Once an order has labels the button reads "Add N more labels", and the
+  box returns to 1 after every success, so a batch can't be bought twice by
+  accident. Existing labels are never replaced or deleted here.
+- Rate choice is exact (`pickLabelRate` in `shippo.ts`): UPS = `ups_ground`,
+  USPS = `usps_priority`. There is no "closest match" fallback; if the
+  exact service isn't offered, nothing is bought and the agent is told.
+- Labels bought before this change show as Label 1 (copied into the new
+  table the first time more labels are added). Old `USPS_GROUND` labels are
+  shown as "USPS Ground (older label)".
+- Shippo's USPS carrier account must be switched on (Shippo → Settings →
+  Carriers) or USPS requests return "No USPS Priority Mail rate".
+- Not built (ask if wanted): voiding/refunding a label from the app.
+
+The earlier "UPS returns zero rates for the Dothan address" problem no
+longer reproduces: a rate check on 2026-10-06 returned UPS Ground ($11.14)
+and USPS Priority Mail ($16.71) for that address.
 
 **Worth a second look, not changed**: Buyback's `generateShippingLabel`
 builds `addressFrom` from the org and `addressTo` from the seller — the
@@ -243,6 +258,7 @@ hard-deletable since quotations only ever snapshot a tier's label + amount.
 
 ## Not built yet / explicitly deferred
 
+- A dedicated NDC code field on products.
 - The "Users & Access" system (invitations, roles, department-level
   access) — currently every member of an org has the same
   owner/admin/staff role across the whole app, not per-department.
@@ -255,11 +271,10 @@ hard-deletable since quotations only ever snapshot a tier's label + amount.
 
 ## Deployment
 
-Same pipeline as the rest of the app — no Purchasing-specific steps: a
-schema push runs as part of `npm run build` (via `scripts/safe-push.ts`, see
-below), so every schema change in `src/db/schema.ts` auto-migrates against
-the live Turso database on the next Vercel deploy. No manual migration step,
-unless safe-push blocks a destructive change. See the root
+Same pipeline as the rest of the app — no Purchasing-specific steps:
+`drizzle-kit push --force` runs as part of `npm run build`, so every schema
+change in `src/db/schema.ts` auto-migrates against the live Turso database
+on the next Vercel deploy. No manual migration step, ever. See the root
 `README.md` for the general run/deploy instructions.
 
 ## Schema pushes are guarded (safe-push)
