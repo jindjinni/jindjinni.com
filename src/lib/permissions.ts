@@ -125,6 +125,15 @@ export function settingsSectionsFor(role: string): SettingsSection[] {
     out.push({ href: "/dashboard/settings/billing", label: "Plan & billing", blurb: "Your plan and team size." });
   }
   out.push({ href: "/dashboard/settings/activity", label: "Security & activity", blurb: "Sign-ins and changes." });
+  if (isPurchasingManager(role)) {
+    out.push({ href: "/dashboard/settings/archive", label: "Archive", blurb: "Archived quotations, products and customers, and how to restore them." });
+  }
+  if (isPurchasingManager(role) || role === "accountant") {
+    out.push({ href: "/dashboard/settings/audit-log", label: "Audit log", blurb: "Every price override and other audited change in Purchasing." });
+  }
+  if (isPurchasingManager(role)) {
+    out.push({ href: "/dashboard/settings/database", label: "Database", blurb: "A read-only view of every Purchasing table." });
+  }
   if (isOwner(role)) {
     out.push({ href: "/dashboard/settings/close-company", label: "Close company", blurb: "Download your data or close the account." });
   }

@@ -15,9 +15,9 @@ export default async function PurchasingLayout({ children }: { children: React.R
   const isManager = isPurchasingManager(org.role);
   const viewOnly = org.role === "accountant";
 
-  // Everyone sees the four everyday tabs. Managers also see the Setup tabs; the view-only accountant sees only the Audit log.
+  // Everyone sees the four everyday tabs. Managers also see the Setup tabs. (Archive, Audit log and Database are under Settings.)
   const everyday = DEPARTMENT_MENUS.purchasing.items.filter((i) => !i.setup).map((i) => i.id);
-  const allowed = isManager ? DEPARTMENT_MENUS.purchasing.items.map((i) => i.id) : viewOnly ? [...everyday, "audit-log"] : everyday;
+  const allowed = isManager ? DEPARTMENT_MENUS.purchasing.items.map((i) => i.id) : everyday;
   const menu = resolveMenu("purchasing", await getSavedSidebarMenus(org.organizationId), allowed);
 
   return (

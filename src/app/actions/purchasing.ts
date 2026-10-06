@@ -255,7 +255,7 @@ export async function restorePurchasingCustomer(
     .where(and(eq(purchasingCustomers.id, customerId), eq(purchasingCustomers.organizationId, org.organizationId)));
 
   revalidatePath("/dashboard/purchasing/customers");
-  revalidatePath("/dashboard/purchasing/archive");
+  revalidatePath("/dashboard/settings/archive");
 }
 
 // ---------------------------------------------------------------------------
@@ -311,7 +311,7 @@ export async function restorePurchasingCategory(
     .where(and(eq(purchasingCategories.id, categoryId), eq(purchasingCategories.organizationId, org.organizationId)));
 
   revalidatePath("/dashboard/purchasing/categories");
-  revalidatePath("/dashboard/purchasing/archive");
+  revalidatePath("/dashboard/settings/archive");
 }
 
 // ---------------------------------------------------------------------------
@@ -426,7 +426,7 @@ export async function restorePurchasingProduct(
     .where(and(eq(purchasingProducts.id, productId), eq(purchasingProducts.organizationId, org.organizationId)));
 
   revalidatePath("/dashboard/purchasing/products");
-  revalidatePath("/dashboard/purchasing/archive");
+  revalidatePath("/dashboard/settings/archive");
 }
 
 /** Makes an independent copy of a product -- own id, own price, own multipliers never carried over (intentionally: a copy shouldn't silently inherit pricing rules the person may be about to change). Lands on the new product's own page so it can be tweaked right away. */
@@ -714,7 +714,7 @@ export async function restorePurchasingCondition(
     .where(and(eq(purchasingConditions.id, conditionId), eq(purchasingConditions.organizationId, org.organizationId)));
 
   revalidatePath("/dashboard/purchasing/conditions");
-  revalidatePath("/dashboard/purchasing/archive");
+  revalidatePath("/dashboard/settings/archive");
 }
 
 /** Permanent delete -- blocked once a quoted line has actually used this condition (it keeps conditionNameSnapshot for display, but the live conditionId foreign key would dangle). Use Archive instead for a condition you just don't want offered anymore. */
@@ -1029,7 +1029,7 @@ export async function restorePurchasingExpirationRange(
     .where(and(eq(purchasingExpirationRanges.id, rangeId), eq(purchasingExpirationRanges.organizationId, org.organizationId)));
 
   revalidatePath("/dashboard/purchasing/expiration-ranges");
-  revalidatePath("/dashboard/purchasing/archive");
+  revalidatePath("/dashboard/settings/archive");
 }
 
 // ---------------------------------------------------------------------------
@@ -1155,7 +1155,7 @@ export async function restorePurchasingBonusTier(
     .where(and(eq(purchasingBonusTiers.id, tierId), eq(purchasingBonusTiers.organizationId, org.organizationId)));
 
   revalidatePath("/dashboard/purchasing/bonus-tiers");
-  revalidatePath("/dashboard/purchasing/archive");
+  revalidatePath("/dashboard/settings/archive");
 }
 
 // ---------------------------------------------------------------------------
@@ -2023,7 +2023,7 @@ export async function restorePurchasingQuotation(
     .where(and(eq(purchasingQuotations.id, quotationId), eq(purchasingQuotations.organizationId, org.organizationId)));
 
   revalidatePath("/dashboard/purchasing/quotations");
-  revalidatePath("/dashboard/purchasing/archive");
+  revalidatePath("/dashboard/settings/archive");
 }
 
 /**
@@ -2321,7 +2321,7 @@ export async function updatePurchasingProductsFromFile(
   }
 
   revalidatePath("/dashboard/purchasing/products");
-  revalidatePath("/dashboard/purchasing/audit-log");
+  revalidatePath("/dashboard/settings/audit-log");
 
   const parts = [`${pricesSet} price(s) set`, `${otherFieldsFilled} product(s) had a code, NDC or note filled in`];
   if (added > 0) parts.push(`${added} new product(s) added`);

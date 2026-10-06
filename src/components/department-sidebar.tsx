@@ -62,6 +62,14 @@ export function DepartmentSidebar({
   const [setupName, setSetupName] = useState("");
   const [error, setError] = useState("");
   const [pending, start] = useTransition();
+  // The Setup group stays folded until it is clicked, unless you are on one of its pages (so the page you are on shows).
+  // A choice made by clicking lasts until you move to another page.
+  const [setupChoice, setSetupChoice] = useState<boolean | null>(null);
+  const [choicePath, setChoicePath] = useState(path);
+  if (choicePath !== path) {
+    setChoicePath(path);
+    setSetupChoice(null);
+  }
 
   const byId = new Map(items.map((i) => [i.id, i]));
   const isActive = (i: ResolvedItem) => (i.exact ? path === i.href : path === i.href || path.startsWith(i.href + "/"));
@@ -146,6 +154,7 @@ export function DepartmentSidebar({
 
   const mainItems = items.filter((i) => !i.setup);
   const setupItems = items.filter((i) => i.setup);
+  const setupOpen = setupChoice ?? setupItems.some(isActive);
 
   return (
     <aside className={`shrink-0 md:w-56 print:hidden ${t.aside}`}>
@@ -190,8 +199,22 @@ export function DepartmentSidebar({
           {mainItems.map(link)}
           {setupItems.length > 0 && (
             <>
-              <p className={`whitespace-nowrap px-3 pt-1 text-[11px] font-semibold uppercase tracking-wider md:pt-4 ${t.muted}`}>{setupLabel}</p>
-              {setupItems.map(link)}
+              <button
+                type="button"
+                onClick={() => setSetupChoice(!setupOpen)}
+                aria-expanded={setupOpen}
+                aria-controls={`sidebar-setup-${dept}`}
+                data-testid="setup-toggle"
+                className={`flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-[11px] font-semibold uppercase tracking-wider md:mt-2 ${t.muted} ${t.hover} focus-visible:outline focus-visible:outline-2 ${t.focus}`}
+              >
+                <span aria-hidden="true" className={`text-[9px] transition-transform ${setupOpen ? "rotate-90" : ""}`}>▶</span>
+                {setupLabel}
+              </button>
+              {setupOpen && (
+                <div id={`sidebar-setup-${dept}`} className="flex items-center gap-1 md:flex-col md:items-stretch">
+                  {setupItems.map(link)}
+                </div>
+              )}
             </>
           )}
         </nav>

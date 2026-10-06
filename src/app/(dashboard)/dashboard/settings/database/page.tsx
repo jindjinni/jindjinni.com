@@ -253,7 +253,7 @@ export default async function DatabasePage({
         {order.map((key) => (
           <Link
             key={key}
-            href={`/dashboard/database?table=${key}`}
+            href={`/dashboard/settings/database?table=${key}`}
             className={`rounded-full px-3 py-1.5 text-xs font-medium ${
               key === activeKey
                 ? "bg-slate-900 text-white dark:bg-slate-50 dark:text-slate-900"

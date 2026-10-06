@@ -40,8 +40,6 @@ export const DEPARTMENT_MENUS: Record<MenuDept, DepartmentMenu> = {
       { id: "product-multipliers", href: `${P}/product-multipliers`, label: "Product Multipliers", setup: true },
       { id: "bonus-tiers", href: `${P}/bonus-tiers`, label: "Bonus tiers", setup: true },
       { id: "receipt-layout", href: `${P}/receipt-layout`, label: "Quotation Receipt Layout", setup: true },
-      { id: "archive", href: `${P}/archive`, label: "Archive", setup: true },
-      { id: "audit-log", href: `${P}/audit-log`, label: "Audit log", setup: true },
     ],
   },
   receiving: {
