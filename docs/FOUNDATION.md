@@ -45,7 +45,8 @@ To go back to it if something breaks badly: `git checkout foundation-v1` (or bra
 
 (The later review, decisions and follow-ups are kept in `docs/OPEN-ITEMS.md`.)
 
-- Not yet built: Accounts Department, Accounting Paid Orders, Customer Service Department (including emails), Weekly Received Tracker, Products Received Tracker.
+- Built (first sketch): **Accounts Department** (`/dashboard/accounts`; the accountant, Admin and Owner only). *To Be Paid* fills itself with every submitted order Receiving set to "Need to Be Paid" (grouped by the day received, oldest first). Opening one shows the customer, what was quoted and the amount to pay (the adjusted total if Receiving set one); the accountant pays it on the separate payables system by ACH, attaches the receipt screenshot (the same `PAYMENT_CONFIRMATION` file as Receiving's Step 10) and presses Mark as Paid, which stamps the date and time and sets the Accounts Decision/Status to Paid (one record: Receiving's Step 10 shows the same thing). *Paid Orders* is the database of everything paid, grouped by the viewer's own day with a Today badge, totals, search, date range, receipt link and a CSV download. Code: `src/app/(dashboard)/dashboard/accounts/`, `src/lib/accounts-queries.ts`, `src/lib/accounts-rules.ts`, `src/app/actions/accounts.ts` (`markOrderPaid`). Payment is ACH only, so there is no payment-method field. Marking Paid here does NOT email the customer; that moves to the Customer Service department, which will use the stored receipt.
+- Not yet built: Customer Service Department (including emails), Weekly Received Tracker, Products Received Tracker.
 - Dexcom G7 receiver recall has no official lot/serial list to load; the Omnipod official lot list can be pasted in Step 6 > Manage recalls.
 - Duplicate "5-6 months" expiration ranges (50% and 80%) to tidy up.
 - Group-photo reading needs real-product testing to tune it.

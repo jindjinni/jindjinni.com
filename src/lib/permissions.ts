@@ -92,11 +92,17 @@ export function canWritePayment(role: string): boolean {
   return role === "accountant" || isAdmin(role);
 }
 
+/** May open the Accounts department (the orders waiting to be paid and the Paid Orders database): the accountant, Admin and the Owner. */
+export function canViewAccounts(role: string): boolean {
+  return canWritePayment(role);
+}
+
 /** Which departments a role can open, for the menu and the home redirect. */
 export function departmentsFor(role: string): string[] {
   const out: string[] = [];
   if (canViewPurchasing(role)) out.push("purchasing");
   if (canViewReceiving(role)) out.push("receiving");
+  if (canViewAccounts(role)) out.push("accounts");
   return out;
 }
 

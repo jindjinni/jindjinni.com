@@ -5,7 +5,7 @@
 // To give a new department this sidebar: add it to DEPARTMENT_MENUS below, then render <DepartmentSidebar> in
 // that department's layout (see receiving/layout.tsx). Renaming and re-ordering then work there with no more code.
 
-export type MenuDept = "purchasing" | "receiving";
+export type MenuDept = "purchasing" | "receiving" | "accounts";
 
 export type MenuItemDef = {
   /** Never changes, even when the tab is renamed: it is how a saved name or position finds its tab. */
@@ -24,6 +24,7 @@ export type DepartmentMenu = { title: string; setupLabel: string; items: MenuIte
 
 const P = "/dashboard/purchasing";
 const R = "/dashboard/receiving";
+const A = "/dashboard/accounts";
 
 export const DEPARTMENT_MENUS: Record<MenuDept, DepartmentMenu> = {
   purchasing: {
@@ -53,6 +54,14 @@ export const DEPARTMENT_MENUS: Record<MenuDept, DepartmentMenu> = {
       { id: "tracker", href: `${R}/tracker`, label: "Lot & Serial Tracker", icon: "🔎" },
       { id: "products", href: `${R}/products`, label: "Products", icon: "🏷️" },
       { id: "adjustments", href: `${R}/adjustments`, label: "Order Adjustments", icon: "🧾" },
+    ],
+  },
+  accounts: {
+    title: "Accounts Department",
+    setupLabel: "Setup",
+    items: [
+      { id: "to-be-paid", href: A, label: "To Be Paid", icon: "💵", exact: true },
+      { id: "paid-orders", href: `${A}/paid`, label: "Paid Orders", icon: "✅" },
     ],
   },
 };
