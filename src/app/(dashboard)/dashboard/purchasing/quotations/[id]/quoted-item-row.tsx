@@ -2,6 +2,8 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { removePurchasingQuotedItem, updatePurchasingQuotedItem } from "@/app/actions/purchasing";
+import { expiryMultiplierFor, pct, priceBreakdown, type PriceTables } from "@/lib/purchasing-price";
+import { LivePrice, useManualPrice } from "./live-price";
 
 const inputClass =
   "rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none focus:border-emerald-600 dark:border-slate-700 dark:bg-slate-800";
@@ -18,6 +20,7 @@ type Item = {
   expirationRangeId: string | null;
   expirationRangeLabelSnapshot: string | null;
   quantity: number;
+  baseUnitPrice: number;
   finalUnitPrice: number;
   lineTotal: number;
 };
@@ -41,6 +44,7 @@ export function QuotedItemRow({
   productExpiryOptions,
   noExpirationProductIds,
   canOverridePrice,
+  priceTables,
 }: {
   item: Item;
   index: number;
@@ -50,6 +54,7 @@ export function QuotedItemRow({
   productExpiryOptions: Record<string, string[]>;
   noExpirationProductIds: string[];
   canOverridePrice: boolean;
+  priceTables: PriceTables;
 }) {
   const [editing, setEditing] = useState(false);
   const [removePending, startRemove] = useTransition();
@@ -87,6 +92,7 @@ export function QuotedItemRow({
             ranges={availableRanges}
             neverExpires={neverExpires}
             canOverridePrice={canOverridePrice}
+            priceTables={priceTables}
             onDone={() => setEditing(false)}
           />
         </td>
@@ -137,6 +143,7 @@ function EditQuotedItemForm({
   ranges,
   neverExpires,
   canOverridePrice,
+  priceTables,
   onDone,
 }: {
   item: Item;
@@ -144,12 +151,25 @@ function EditQuotedItemForm({
   ranges: Range[];
   neverExpires: boolean;
   canOverridePrice: boolean;
+  priceTables: PriceTables;
   onDone: () => void;
 }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [conditionSelection, setConditionSelection] = useState(item.conditionId ?? "");
   const isCustomCondition = conditionSelection === CUSTOM_CONDITION_VALUE;
+  const [rangeId, setRangeId] = useState(item.expirationRangeId ?? "");
+  const [qty, setQty] = useState(String(item.quantity));
+  const [customMult, setCustomMult] = useState("");
+
+  // Live price. A line keeps the base price it was quoted at (see updatePurchasingQuotedItem), so the preview does too.
+  const customN = Number(customMult);
+  const conditionMult = isCustomCondition ? (customMult.trim() !== "" && !Number.isNaN(customN) && customN >= 0 ? customN : 1) : conditionSelection ? priceTables.conditionMultipliers[conditionSelection] ?? 1 : 1;
+  const effectiveRange = neverExpires ? "" : rangeId;
+  const breakdown = item.productId ? priceBreakdown(item.baseUnitPrice, expiryMultiplierFor(priceTables, item.productId, effectiveRange || null, neverExpires), conditionMult) : null;
+  // A line that was saved with a manual price keeps showing it until the condition or expiry is changed.
+  const wasManual = !!breakdown && item.finalUnitPrice !== priceBreakdown(item.baseUnitPrice, expiryMultiplierFor(priceTables, item.productId, item.expirationRangeId, neverExpires), item.conditionId ? priceTables.conditionMultipliers[item.conditionId] ?? 1 : 1).unitPrice;
+  const price = useManualPrice(wasManual ? item.finalUnitPrice.toFixed(2) : null);
 
   function submit(formData: FormData) {
     setError(null);
@@ -173,12 +193,15 @@ function EditQuotedItemForm({
           name="conditionId"
           className={inputClass}
           value={conditionSelection}
-          onChange={(e) => setConditionSelection(e.target.value)}
+          onChange={(e) => {
+            setConditionSelection(e.target.value);
+            price.reset();
+          }}
         >
           <option value="">— None —</option>
           {availableConditions.map((c) => (
             <option key={c.id} value={c.id}>
-              {c.name}
+              {c.name} — {pct(priceTables.conditionMultipliers[c.id] ?? 1)}
             </option>
           ))}
           <option value={CUSTOM_CONDITION_VALUE}>Custom…</option>
@@ -200,6 +223,11 @@ function EditQuotedItemForm({
               min="0"
               required
               placeholder="e.g. 0.60"
+              value={customMult}
+              onChange={(e) => {
+                setCustomMult(e.target.value);
+                price.reset();
+              }}
               className={`w-24 ${inputClass}`}
             />
           </label>
@@ -211,11 +239,19 @@ function EditQuotedItemForm({
         {neverExpires ? (
           <span className={`${inputClass} bg-slate-50 text-slate-500 dark:bg-slate-800/50 dark:text-slate-400`}>Does not expire</span>
         ) : (
-          <select name="expirationRangeId" className={inputClass} defaultValue={item.expirationRangeId ?? ""}>
+          <select
+            name="expirationRangeId"
+            className={inputClass}
+            value={rangeId}
+            onChange={(e) => {
+              setRangeId(e.target.value);
+              price.reset();
+            }}
+          >
             <option value="">— None —</option>
             {ranges.map((r) => (
               <option key={r.id} value={r.id}>
-                {r.label}
+                {r.label} — {pct(expiryMultiplierFor(priceTables, item.productId, r.id, false))}
               </option>
             ))}
           </select>
@@ -224,22 +260,19 @@ function EditQuotedItemForm({
 
       <label className="flex flex-col gap-1 text-xs text-slate-600 dark:text-slate-400">
         Qty
-        <input name="quantity" type="number" min="1" step="1" required defaultValue={item.quantity} className={`w-16 ${inputClass}`} />
+        <input name="quantity" type="number" min="1" step="1" required value={qty} onChange={(e) => setQty(e.target.value)} className={`w-16 ${inputClass}`} />
       </label>
 
-      {canOverridePrice && (
-        <label className="flex flex-col gap-1 text-xs text-slate-600 dark:text-slate-400">
-          Override unit price ($)
-          <input
-            name="overrideUnitPrice"
-            type="number"
-            step="0.01"
-            min="0"
-            placeholder={`auto (now $${item.finalUnitPrice.toFixed(2)})`}
-            className={`w-36 ${inputClass}`}
-          />
-        </label>
-      )}
+      <LivePrice
+        idPrefix={`edit-${item.id}`}
+        b={breakdown}
+        quantity={Number(qty)}
+        manual={price.manual}
+        onManual={price.setManual}
+        canOverride={canOverridePrice}
+        notAccepting={!!breakdown && item.baseUnitPrice <= 0}
+        missing={[]}
+      />
 
       <div className="flex gap-2">
         <button

@@ -23,6 +23,7 @@ import { DeductionForm } from "./deduction-form";
 import { QuotedItemRow } from "./quoted-item-row";
 import { ShippingLabelSection } from "./shipping-label-section";
 import { ActionButton } from "@/components/action-button";
+import type { PriceTables } from "@/lib/purchasing-price";
 import { listRecalls } from "@/lib/receiving-recall-service";
 
 export default async function QuotationDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -51,6 +52,13 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
   const productExpiryOptions: Record<string, string[]> = {};
   for (const m of multiplierRows) (productExpiryOptions[m.productId] ??= []).push(m.expirationRangeId);
   const noExpirationProductIds = products.filter((p) => p.noExpiration).map((p) => p.id);
+  // The percentages behind the live price shown on the Add line / Edit forms (same numbers the server uses to price a line).
+  const priceTables: PriceTables = {
+    rangeDefaults: Object.fromEntries(ranges.map((r) => [r.id, r.defaultMultiplier ?? 1])),
+    productMultipliers: {},
+    conditionMultipliers: Object.fromEntries(conditions.map((c) => [c.id, c.multiplier])),
+  };
+  for (const m of multiplierRows) (priceTables.productMultipliers[m.productId] ??= {})[m.expirationRangeId] = m.multiplier;
 
   return (
     <div>
@@ -179,6 +187,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
                 productExpiryOptions={productExpiryOptions}
                 noExpirationProductIds={noExpirationProductIds}
                 canOverridePrice={canEdit}
+                priceTables={priceTables}
               />
             ))}
           </tbody>
@@ -195,6 +204,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
         noExpirationProductIds={noExpirationProductIds}
         canOverridePrice={canEdit}
         recalls={recalls}
+        priceTables={priceTables}
       />
 
       <DeductionForm

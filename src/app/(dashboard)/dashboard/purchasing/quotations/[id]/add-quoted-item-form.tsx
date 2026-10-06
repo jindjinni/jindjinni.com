@@ -3,7 +3,9 @@
 import { useActionState, useMemo, useState } from "react";
 import { addPurchasingQuotedItem } from "@/app/actions/purchasing";
 import type { RecallView } from "@/lib/receiving-recall-service";
+import { expiryMultiplierFor, pct, priceBreakdown, type PriceTables } from "@/lib/purchasing-price";
 import { QuickRecallCheck } from "../quick-recall-check";
+import { LivePrice, useManualPrice } from "./live-price";
 
 type ActionState = { error?: string } | undefined;
 
@@ -26,6 +28,7 @@ export function AddQuotedItemForm({
   noExpirationProductIds,
   canOverridePrice,
   recalls,
+  priceTables,
 }: {
   quotationId: string;
   products: Product[];
@@ -38,6 +41,8 @@ export function AddQuotedItemForm({
   canOverridePrice: boolean;
   /** The company's recalls, for the quick recall check shown above the form. */
   recalls: RecallView[];
+  /** Expiry % and condition % for the live price. */
+  priceTables: PriceTables;
 }) {
   const [state, formAction, pending] = useActionState<ActionState, FormData>(
     addPurchasingQuotedItem.bind(null, quotationId),
@@ -46,6 +51,10 @@ export function AddQuotedItemForm({
   const [productId, setProductId] = useState("");
   const [conditionSelection, setConditionSelection] = useState("");
   const isCustomCondition = conditionSelection === CUSTOM_CONDITION_VALUE;
+  const [rangeId, setRangeId] = useState("");
+  const [qty, setQty] = useState("1");
+  const [customMult, setCustomMult] = useState("");
+  const price = useManualPrice();
 
   const availableConditions = useMemo(() => {
     const assigned = productConditions[productId];
@@ -60,7 +69,18 @@ export function AddQuotedItemForm({
   // A product with exactly one option (e.g. test strips: 10+ months) preselects it.
   const onlyOptionId = productExpiryOptions[productId]?.length === 1 && availableRanges.length === 1 ? availableRanges[0].id : "";
 
-  const productName = products.find((p) => p.id === productId)?.name;
+  const product = products.find((p) => p.id === productId);
+  const productName = product?.name;
+  // A product with a single expiry option has it picked for the agent.
+  const effectiveRangeId = productNeverExpires ? "" : rangeId || onlyOptionId;
+  const customN = Number(customMult);
+  const conditionMult = isCustomCondition ? (customMult.trim() !== "" && !Number.isNaN(customN) && customN >= 0 ? customN : 1) : conditionSelection ? priceTables.conditionMultipliers[conditionSelection] ?? 1 : 1;
+  const breakdown = product ? priceBreakdown(product.standardPrice, expiryMultiplierFor(priceTables, product.id, effectiveRangeId || null, productNeverExpires), conditionMult) : null;
+  const missing: string[] = [];
+  if (product) {
+    if (!conditionSelection) missing.push("a condition");
+    if (!productNeverExpires && !effectiveRangeId) missing.push("an expiry");
+  }
 
   return (
     <>
@@ -78,6 +98,8 @@ export function AddQuotedItemForm({
           onChange={(e) => {
             setProductId(e.target.value);
             setConditionSelection("");
+            setRangeId("");
+            price.reset();
           }}
         >
           <option value="" disabled>
@@ -96,12 +118,15 @@ export function AddQuotedItemForm({
           name="conditionId"
           className={inputClass}
           value={conditionSelection}
-          onChange={(e) => setConditionSelection(e.target.value)}
+          onChange={(e) => {
+            setConditionSelection(e.target.value);
+            price.reset();
+          }}
         >
           <option value="">— None —</option>
           {availableConditions.map((c) => (
             <option key={c.id} value={c.id}>
-              {c.name}
+              {c.name} — {pct(priceTables.conditionMultipliers[c.id] ?? 1)}
             </option>
           ))}
           <option value={CUSTOM_CONDITION_VALUE}>Custom…</option>
@@ -127,6 +152,11 @@ export function AddQuotedItemForm({
               min="0"
               required
               placeholder="e.g. 0.60"
+              value={customMult}
+              onChange={(e) => {
+                setCustomMult(e.target.value);
+                price.reset();
+              }}
               className={`w-28 ${inputClass}`}
             />
           </label>
@@ -137,11 +167,20 @@ export function AddQuotedItemForm({
         {productNeverExpires ? (
           <span className={`${inputClass} bg-slate-50 text-slate-500 dark:bg-slate-800/50 dark:text-slate-400`}>Does not expire</span>
         ) : (
-          <select key={productId} name="expirationRangeId" className={inputClass} defaultValue={onlyOptionId}>
+          <select
+            key={productId}
+            name="expirationRangeId"
+            className={inputClass}
+            value={effectiveRangeId}
+            onChange={(e) => {
+              setRangeId(e.target.value);
+              price.reset();
+            }}
+          >
             <option value="">— None —</option>
             {availableRanges.map((r) => (
               <option key={r.id} value={r.id}>
-                {r.label}
+                {r.label} — {pct(expiryMultiplierFor(priceTables, productId, r.id, false))}
               </option>
             ))}
           </select>
@@ -149,14 +188,18 @@ export function AddQuotedItemForm({
       </label>
       <label className="flex flex-col gap-1 text-sm">
         <span className="text-slate-600 dark:text-slate-400">Qty</span>
-        <input name="quantity" type="number" min="1" step="1" required defaultValue={1} className={`w-20 ${inputClass}`} />
+        <input name="quantity" type="number" min="1" step="1" required value={qty} onChange={(e) => setQty(e.target.value)} className={`w-20 ${inputClass}`} />
       </label>
-      {canOverridePrice && (
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="text-slate-600 dark:text-slate-400">Override unit price ($)</span>
-          <input name="overrideUnitPrice" type="number" step="0.01" min="0" placeholder="auto" className={`w-32 ${inputClass}`} />
-        </label>
-      )}
+      <LivePrice
+        idPrefix="add-line"
+        b={breakdown}
+        quantity={Number(qty)}
+        manual={price.manual}
+        onManual={price.setManual}
+        canOverride={canOverridePrice}
+        notAccepting={!!product && product.standardPrice <= 0}
+        missing={missing}
+      />
       <button
         type="submit"
         disabled={pending}

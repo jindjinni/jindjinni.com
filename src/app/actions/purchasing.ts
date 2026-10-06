@@ -12,6 +12,7 @@
 // quantities, totals, tracking numbers, customer info, product rules,
 // multipliers) records a row to purchasing_audit_log via logAudit() below.
 
+import { priceBreakdown, roundCents } from "@/lib/purchasing-price";
 import { canWritePurchasing, isPurchasingManager } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -79,7 +80,6 @@ async function readUploadedFile(formData: FormData): Promise<{ buffer: Buffer; f
 }
 
 /** Money is always whole cents: a unit price like $0.768 is stored as $0.77, so unit price x quantity on a receipt always equals the line total. */
-const roundCents = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
 /**
  * Every Purchasing server action starts here. Server actions are always
@@ -1486,7 +1486,7 @@ export async function addPurchasingQuotedItem(
   });
   if ("error" in pricing) return { error: pricing.error };
 
-  const computedUnitPrice = roundCents(pricing.baseUnitPrice * pricing.appliedMultiplier * pricing.conditionMultiplier);
+  const computedUnitPrice = priceBreakdown(pricing.baseUnitPrice, pricing.appliedMultiplier, pricing.conditionMultiplier).unitPrice;
   const overrideRaw = formData.get("overrideUnitPrice");
   const hasOverride = overrideRaw !== null && String(overrideRaw).trim() !== "";
   let finalUnitPrice = computedUnitPrice;
@@ -1587,7 +1587,7 @@ export async function updatePurchasingQuotedItem(
   // The line keeps the base price it was quoted at, so fixing a quantity or
   // condition never silently re-prices it to today's product price.
   const baseUnitPrice = existing.productId ? existing.baseUnitPrice : pricing.baseUnitPrice;
-  const computedUnitPrice = roundCents(baseUnitPrice * pricing.appliedMultiplier * pricing.conditionMultiplier);
+  const computedUnitPrice = priceBreakdown(baseUnitPrice, pricing.appliedMultiplier, pricing.conditionMultiplier).unitPrice;
   const overrideRaw = formData.get("overrideUnitPrice");
   const hasOverride = overrideRaw !== null && String(overrideRaw).trim() !== "";
   let finalUnitPrice = computedUnitPrice;
