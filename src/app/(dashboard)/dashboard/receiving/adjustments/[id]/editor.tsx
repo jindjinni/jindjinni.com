@@ -47,14 +47,20 @@ type EditorProps = {
   /** Embedded only: saves the intake form first (so Step 6 is up to date). Returns an error message, or null. */
   beforeAction?: () => Promise<string | null>;
   /** Embedded only: told about what happened, so the form can stay in step. */
+  /** Embedded only: a message to show on first render (the editor restarts after a regenerate, which would lose one set before it). */
+  initialNotice?: string;
   onChanged?: (e: { kind: "finalized" | "regenerated" | "discarded" | "saved"; adjustedTotal: number; difference: number }) => void;
 };
 
-export function AdjustmentEditor({ adjustment: a, canWrite, embedded = false, beforeAction, onChanged }: EditorProps) {
+export function AdjustmentEditor({ adjustment: a, canWrite, embedded = false, beforeAction, initialNotice = "", onChanged }: EditorProps) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
+  const [notice, setNotice] = useState(initialNotice);
+  // Bumped after every save / finalize / regenerate so the inline PDF below reloads and shows the new quotation.
+  const [rev, setRev] = useState(0);
+  // The editing boxes start closed once a reason is set: the quotation itself is what the agent looks at.
+  const [editOpen, setEditOpen] = useState(!a.reasonCategory);
   const [reason, setReason] = useState(a.reasonCategory);
   const [notes, setNotes] = useState(a.reasonNotes);
   const [bonus, setBonus] = useState(String(a.bonusAmount));
@@ -108,8 +114,9 @@ export function AdjustmentEditor({ adjustment: a, canWrite, embedded = false, be
       if (before) return setError(before);
       const r = kind === "finalize" ? await finalizeAdjustmentAction(a.id, payload()) : await saveAdjustment(a.id, payload());
       if (r.error) return setError(r.error);
-      if (kind === "preview") window.open(`/api/receiving/adjustments/${a.id}/pdf`, "_blank", "noopener");
-      setNotice(kind === "save" ? "Saved." : kind === "preview" ? "Saved. The preview opened in a new tab." : (r.notice ?? "Finalized."));
+      if (kind === "preview" && !embedded) window.open(`/api/receiving/adjustments/${a.id}/pdf`, "_blank", "noopener");
+      setRev((n) => n + 1);
+      setNotice(kind === "save" ? "Saved. The quotation above is updated." : kind === "preview" ? (embedded ? "Saved. The quotation above is updated." : "Saved. The preview opened in a new tab.") : (r.notice ?? "Finalized."));
       onChanged?.({ kind: kind === "finalize" ? "finalized" : "saved", adjustedTotal: totals.adjustedTotal, difference: diff });
       router.refresh();
     });
@@ -124,6 +131,7 @@ export function AdjustmentEditor({ adjustment: a, canWrite, embedded = false, be
       if (before) return setError(before);
       const r = await regenerateAdjustment(a.id);
       if (r.error) return setError(r.error);
+      setRev((n) => n + 1);
       onChanged?.({ kind: "regenerated", adjustedTotal: a.adjustedTotal, difference: adjustmentDifference(a.originalTotal, a.adjustedTotal) });
       router.refresh();
     });
@@ -163,6 +171,34 @@ export function AdjustmentEditor({ adjustment: a, canWrite, embedded = false, be
       {error && <p role="alert" className="mt-4 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-100">{error}</p>}
       {notice && <p role="status" className="mt-4 rounded-lg border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-100">{notice}</p>}
 
+      {embedded && (
+        <section className="mt-5" aria-label="Adjustment quotation">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Adjustment quotation (what the customer receives)</h2>
+            <a href={`/api/receiving/adjustments/${a.id}/pdf`} target="_blank" rel="noreferrer" className="text-xs font-medium text-amber-800 underline dark:text-amber-300">Open in a new tab</a>
+          </div>
+          <p className="mt-1 text-sm text-slate-700 dark:text-slate-300" data-testid="adj-reason-line">
+            <span className="font-semibold">Reason:</span> {a.reasonNotes.trim() || a.reasonCategory || "not set yet. Open the boxes below and choose one."}
+            {" · "}
+            <span className="font-semibold">Adjusted total:</span> {MONEY.format(a.adjustedTotal)}
+            {" · "}
+            <span className={a.adjustedTotal - a.originalTotal < 0 ? "font-medium text-red-700 dark:text-red-300" : ""}>
+              {a.adjustedTotal - a.originalTotal > 0 ? "+" : ""}
+              {MONEY.format(a.adjustedTotal - a.originalTotal)} from the original
+            </span>
+          </p>
+          <iframe
+            key={rev}
+            title={`Adjustment Quotation ${a.number}`}
+            src={`/api/receiving/adjustments/${a.id}/pdf?v=${rev}-${a.adjustedTotal}-${a.lines.length}-${a.reasonNotes.length}#toolbar=0&navpanes=0&view=FitH`}
+            className="mt-2 h-[44rem] w-full max-w-3xl rounded-lg border border-slate-200 bg-white dark:border-slate-700"
+          />
+          <p className="mt-1 text-xs text-slate-500">This is the saved quotation. After you change anything below, press Save & update quotation to refresh it.</p>
+        </section>
+      )}
+
+      <details className="mt-5" open={editOpen} onToggle={(e) => setEditOpen((e.currentTarget as HTMLDetailsElement).open)}>
+        <summary className="cursor-pointer text-sm font-semibold text-slate-900 dark:text-slate-50">Edit the reason, lines, bonus and deduction</summary>
       <section className="mt-5 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
         <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Reason for adjustment</h2>
         <div className="mt-3 grid gap-3 sm:grid-cols-[16rem_1fr]">
@@ -268,6 +304,8 @@ export function AdjustmentEditor({ adjustment: a, canWrite, embedded = false, be
         </div>
       </section>
 
+      </details>
+
       <div className="mt-6 flex flex-wrap items-center gap-3">
         {editable ? (
           <>
@@ -275,7 +313,7 @@ export function AdjustmentEditor({ adjustment: a, canWrite, embedded = false, be
               {pending ? "Working…" : a.status === "FINAL" ? "Finalize again & re-attach" : "Finalize & attach to the order"}
             </button>
             <button type="button" disabled={pending} onClick={() => run("save")} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:hover:bg-slate-800">Save adjustment draft</button>
-            <button type="button" disabled={pending} onClick={() => run("preview")} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:hover:bg-slate-800">Save & preview PDF</button>
+            <button type="button" disabled={pending} onClick={() => run("preview")} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:hover:bg-slate-800">{embedded ? "Save & update quotation" : "Save & preview PDF"}</button>
             <button type="button" disabled={pending} onClick={regenerate} title="Start over from the original quotation and what you entered in Step 6" className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:hover:bg-slate-800">Regenerate from received items</button>
             <button type="button" disabled={pending} onClick={discard} className="ml-auto rounded-lg px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-60 dark:text-red-300 dark:hover:bg-red-950">Discard</button>
           </>

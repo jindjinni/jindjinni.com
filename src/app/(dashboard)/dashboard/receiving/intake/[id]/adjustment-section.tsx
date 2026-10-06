@@ -27,6 +27,7 @@ export function AdjustmentSection({
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState("");
+  const [carryNotice, setCarryNotice] = useState("");
 
   // After "Regenerate" the editor has to start over from the rebuilt lines. They only arrive once the page has refreshed,
   // which is when the line ids change -- so that is the moment to remount the editor.
@@ -41,13 +42,14 @@ export function AdjustmentSection({
   }, [lineSig]);
   const changed = (e: AdjustmentChange) => {
     if (e.kind === "regenerated") regenerating.current = true;
+    setCarryNotice(e.kind === "regenerated" ? "Rebuilt from the original quotation and what you entered in Step 6. The quotation above is the new one." : "");
     onChanged(e);
   };
 
   if (view) {
     return (
       <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50/40 p-4 dark:border-amber-800 dark:bg-amber-950/20" id="adjustment-quotation">
-        <AdjustmentEditor key={`${view.id}:${editorKey}`} adjustment={view} canWrite={canWrite} embedded beforeAction={beforeAction} onChanged={changed} />
+        <AdjustmentEditor key={`${view.id}:${editorKey}`} adjustment={view} canWrite={canWrite} embedded beforeAction={beforeAction} initialNotice={carryNotice} onChanged={changed} />
       </div>
     );
   }
