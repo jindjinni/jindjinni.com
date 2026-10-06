@@ -1,9 +1,13 @@
 import { redirect } from "next/navigation";
 import { requireOrg } from "@/lib/tenant";
-import { canViewPurchasing, isPurchasingManager } from "@/lib/permissions";
-import { PurchasingContent, PurchasingNav, type NavEntry } from "./purchasing-tabs";
+import { canViewPurchasing, isAdmin, isPurchasingManager } from "@/lib/permissions";
+import { DEPARTMENT_MENUS, resolveMenu } from "@/lib/sidebar-menu";
+import { getSavedSidebarMenus } from "@/lib/sidebar-menu-store";
+import { DepartmentSidebar } from "@/components/department-sidebar";
+import { PurchasingContent } from "./purchasing-content";
 
 // Purchasing is its own department, laid out like Receiving: a colored sidebar down the left, a full-width workspace.
+// The sidebar's names and order can be changed by an Administrator (Edit menu); see lib/sidebar-menu.ts.
 export default async function PurchasingLayout({ children }: { children: React.ReactNode }) {
   const org = await requireOrg();
   // Receivers (and any future role without Purchasing) are sent home.
@@ -11,30 +15,23 @@ export default async function PurchasingLayout({ children }: { children: React.R
   const isManager = isPurchasingManager(org.role);
   const viewOnly = org.role === "accountant";
 
-  const links: NavEntry[] = [
-    { href: "/dashboard/purchasing", label: "Dashboard", icon: "🏠" },
-    { href: "/dashboard/purchasing/quotations", label: "Quotations", icon: "🧾" },
-    { href: "/dashboard/purchasing/customers", label: "Customers", icon: "👥" },
-    { href: "/dashboard/purchasing/products", label: "Products", icon: "🏷️" },
-    ...(isManager
-      ? [
-          { href: "/dashboard/purchasing/categories", label: "Categories", secondary: true },
-          { href: "/dashboard/purchasing/conditions", label: "Conditions", secondary: true },
-          { href: "/dashboard/purchasing/expiration-ranges", label: "Month Range", secondary: true },
-          { href: "/dashboard/purchasing/product-multipliers", label: "Product Multipliers", secondary: true },
-          { href: "/dashboard/purchasing/bonus-tiers", label: "Bonus tiers", secondary: true },
-          { href: "/dashboard/purchasing/receipt-layout", label: "Quotation Receipt Layout", secondary: true },
-          { href: "/dashboard/purchasing/archive", label: "Archive", secondary: true },
-          { href: "/dashboard/purchasing/audit-log", label: "Audit log", secondary: true },
-        ]
-      : viewOnly
-        ? [{ href: "/dashboard/purchasing/audit-log", label: "Audit log", icon: "📜" }]
-        : []),
-  ];
+  // Everyone sees the four everyday tabs. Managers also see the Setup tabs; the view-only accountant sees only the Audit log.
+  const everyday = DEPARTMENT_MENUS.purchasing.items.filter((i) => !i.setup).map((i) => i.id);
+  const allowed = isManager ? DEPARTMENT_MENUS.purchasing.items.map((i) => i.id) : viewOnly ? [...everyday, "audit-log"] : everyday;
+  const menu = resolveMenu("purchasing", await getSavedSidebarMenus(org.organizationId), allowed);
 
   return (
     <div className="-my-8 mx-[calc(50%-50vw)] flex min-h-[calc(100vh-3.4rem)] w-screen flex-col md:flex-row print:m-0 print:w-auto">
-      <PurchasingNav orgName={org.organizationName} items={links} />
+      <DepartmentSidebar
+        dept="purchasing"
+        tone="emerald"
+        title={menu.title}
+        orgName={org.organizationName}
+        items={menu.items}
+        setupLabel={menu.setupLabel}
+        defaultSetupLabel={menu.defaultSetupLabel}
+        canEdit={isAdmin(org.role)}
+      />
       <div className="min-w-0 flex-1 bg-stone-50 dark:bg-slate-950">
         <PurchasingContent>
           {viewOnly && (
