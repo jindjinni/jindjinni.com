@@ -17,14 +17,14 @@ export default async function PurchasingLayout({ children }: { children: React.R
     { href: "/dashboard/purchasing/products", label: "Products" },
     ...(isManager
       ? [
-          { href: "/dashboard/purchasing/categories", label: "Categories" },
-          { href: "/dashboard/purchasing/conditions", label: "Conditions" },
-          { href: "/dashboard/purchasing/expiration-ranges", label: "Month Range" },
-          { href: "/dashboard/purchasing/product-multipliers", label: "Product Multipliers" },
-          { href: "/dashboard/purchasing/bonus-tiers", label: "Bonus tiers" },
-          { href: "/dashboard/purchasing/receipt-layout", label: "Quotation Receipt Layout" },
-          { href: "/dashboard/purchasing/archive", label: "Archive" },
-          { href: "/dashboard/purchasing/audit-log", label: "Audit log" },
+          { href: "/dashboard/purchasing/categories", label: "Categories", secondary: true },
+          { href: "/dashboard/purchasing/conditions", label: "Conditions", secondary: true },
+          { href: "/dashboard/purchasing/expiration-ranges", label: "Month Range", secondary: true },
+          { href: "/dashboard/purchasing/product-multipliers", label: "Product Multipliers", secondary: true },
+          { href: "/dashboard/purchasing/bonus-tiers", label: "Bonus tiers", secondary: true },
+          { href: "/dashboard/purchasing/receipt-layout", label: "Quotation Receipt Layout", secondary: true },
+          { href: "/dashboard/purchasing/archive", label: "Archive", secondary: true },
+          { href: "/dashboard/purchasing/audit-log", label: "Audit log", secondary: true },
         ]
       : viewOnly
         ? [{ href: "/dashboard/purchasing/audit-log", label: "Audit log" }]

@@ -50,6 +50,13 @@ export default async function PurchasingProductsPage() {
         <PublishMasterPanel latest={latestTemplate ? { version: latestTemplate.version, publishedAt: latestTemplate.publishedAt } : null} />
       )}
       {canEdit && (
+        <details className="group mt-4 rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+          <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100">
+            <span aria-hidden className="text-xs transition group-open:rotate-90">▶</span> Add or import products
+            <span className="text-xs font-normal text-slate-500">Add one product, or bring in / update many from a spreadsheet</span>
+          </summary>
+          <div className="mt-2">
+      {canEdit && (
         <ImportSpreadsheetForm
           action={importPurchasingProducts}
           title="Import from CSV/Excel"
@@ -80,6 +87,9 @@ export default async function PurchasingProductsPage() {
         />
       )}
       {canEdit && <AddProductForm categories={categories} />}
+          </div>
+        </details>
+      )}
 
       <div className="mt-6 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <table className="w-full text-left text-sm">
