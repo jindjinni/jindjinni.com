@@ -39,7 +39,13 @@ export function RecallCheck({
   onChecks,
   onPatchMany,
   onError,
+  focus,
+  onBack,
 }: {
+  /** Set by the form when a product that needs the checker was just chosen: this row is selected for the check. */
+  focus?: { rowId: string; n: number } | null;
+  /** Puts the receiver back on the Items tab. */
+  onBack?: () => void;
   packageId: string;
   items: ItemState[];
   editable: boolean;
@@ -59,6 +65,14 @@ export function RecallCheck({
   const [removing, startRemove] = useTransition();
   const runner = useRecallRunner({ packageId, recalls, onChecks, onPatchMany, onError });
   const { outcome, setOutcome, note: scanMsg, pending } = runner;
+
+  // When the form switches the checker on for a row, select that row (adjusting state while rendering).
+  const [seenFocus, setSeenFocus] = useState(focus?.n ?? 0);
+  if (focus && focus.n !== seenFocus) {
+    setSeenFocus(focus.n);
+    setRowId(focus.rowId);
+    setOutcome(null);
+  }
 
   const row = rows.find((r) => r.id === rowId) ?? rows[0];
   const rowChecks = checks.filter((c) => c.itemId === row?.id);
@@ -88,7 +102,14 @@ export function RecallCheck({
 
   return (
     <div className="mt-8" id="recall-check">
-      <h3 className="text-lg font-bold text-slate-900 dark:text-slate-50">Recall check</h3>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-lg font-bold text-slate-900 dark:text-slate-50">Recall check</h3>
+        {onBack && (
+          <button type="button" onClick={onBack} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-amber-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+            &larr; Back to items received
+          </button>
+        )}
+      </div>
       <p className="mt-1 max-w-3xl text-sm text-slate-600 dark:text-slate-300">
         Some products are under recall (Omnipod 5 Pods, FreeStyle Libre 3 sensors, Dexcom G7 receivers). Check the lot or serial number before accepting. A product found on a recall list is marked for return.
       </p>

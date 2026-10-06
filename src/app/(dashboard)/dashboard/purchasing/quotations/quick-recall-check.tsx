@@ -7,6 +7,7 @@ import { useState, useTransition } from "react";
 import { quickRecallLookup } from "@/app/actions/purchasing-recalls";
 import type { RecallView } from "@/lib/receiving-recall-service";
 import { recallsForProduct } from "@/lib/receiving-recall";
+import { needsRecallChecker } from "@/lib/recall-watch";
 
 type Outcome = { tone: "bad" | "info"; title: string; lines: string[] };
 
@@ -33,7 +34,9 @@ export function QuickRecallCheck({
   const active = recalls.filter((r) => r.active);
   const mine = productName ? recallsForProduct(productName, active) : [];
   const ordered = [...mine, ...active.filter((r) => !mine.some((m) => m.id === r.id))];
-  const [open, setOpen] = useState(defaultOpen || mine.length > 0);
+  // Switched on as soon as a product that needs it is chosen (the form re-creates this panel when the product changes).
+  const activated = needsRecallChecker(productName, active);
+  const [open, setOpen] = useState(defaultOpen || activated);
   const [input, setInput] = useState("");
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [error, setError] = useState("");
@@ -72,7 +75,7 @@ export function QuickRecallCheck({
   }
 
   return (
-    <div className={`rounded-xl border ${mine.length > 0 ? "border-sky-400 bg-sky-50/50 dark:border-sky-700 dark:bg-sky-950/20" : "border-slate-200 dark:border-slate-700"}`}>
+    <div className={`rounded-xl border ${activated ? "border-sky-400 bg-sky-50/50 dark:border-sky-700 dark:bg-sky-950/20" : "border-slate-200 dark:border-slate-700"}`}>
       <button
         type="button"
         aria-expanded={open}

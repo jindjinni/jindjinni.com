@@ -40,6 +40,7 @@ import { severityOf } from "@/lib/receiving-serial-rules";
 import { RowScanDialog } from "./row-scan-dialog";
 import type { RecallCheckView, RecallView } from "@/lib/receiving-recall-service";
 import { recallsForProduct, rowRecallState } from "@/lib/receiving-recall";
+import { needsRecallChecker } from "@/lib/recall-watch";
 
 export type FormValues = {
   trackingNumber: string;
@@ -159,6 +160,24 @@ export function IntakeForm(props: Props) {
   const [numbersItemId, setNumbersItemId] = useState("");
   const [recalls, setRecalls] = useState<RecallView[]>(props.recalls);
   const [scanItemId, setScanItemId] = useState<string | null>(null);
+  // The recall checker switches itself on the moment a product that needs it is chosen on a row (Dexcom G7, Omnipod,
+  // FreeStyle Libre 3 / 3 Plus, or anything on an active recall). Rows already on the shipment when it opened do not
+  // jump the screen; only a product chosen now does, once per row and product.
+  const [recallSeen, setRecallSeen] = useState<Record<string, string>>(() => Object.fromEntries(props.items.map((i) => [i.id, i.productName.trim().toLowerCase()])));
+  const [recallFocus, setRecallFocus] = useState<{ rowId: string; n: number } | null>(null);
+  {
+    // Adjusting state while rendering (React's own pattern for "when X changes, set Y").
+    const changed = editable ? items.filter((i) => (recallSeen[i.id] ?? "") !== i.productName.trim().toLowerCase()) : [];
+    if (changed.length > 0) {
+      setRecallSeen((m) => ({ ...m, ...Object.fromEntries(changed.map((i) => [i.id, i.productName.trim().toLowerCase()])) }));
+      const activeRecalls = recalls.filter((r) => r.active);
+      const hit = changed.find((i) => needsRecallChecker(i.productName, activeRecalls));
+      if (hit) {
+        setRecallFocus((f) => ({ rowId: hit.id, n: (f?.n ?? 0) + 1 }));
+        setStep6Tab("recall");
+      }
+    }
+  }
   const recallStates: Record<string, "RECALLED" | "CHECKED"> = {};
   for (const it of props.items) {
     const st = rowRecallState(recallChecks.filter((c) => c.itemId === it.id));
@@ -597,6 +616,8 @@ export function IntakeForm(props: Props) {
             onChecks={setRecallChecks}
             onPatchMany={patchMany}
             onError={setError}
+            focus={recallFocus}
+            onBack={() => setStep6Tab("items")}
           />
           </div>
           {scanItemId && items.find((i) => i.id === scanItemId) && (
