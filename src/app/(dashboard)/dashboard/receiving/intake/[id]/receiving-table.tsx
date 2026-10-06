@@ -382,6 +382,8 @@ export function ReceivedItemsGrid({
   onRemoveMany,
   recallStates,
   onScanRow,
+  onNumbersRow,
+  numberCounts,
 }: {
   packageId: string;
   items: ItemState[];
@@ -398,6 +400,10 @@ export function ReceivedItemsGrid({
   recallStates?: Record<string, "RECALLED" | "CHECKED">;
   /** Opens the scan dialog for a row (the scan button in its Lot Number cell). */
   onScanRow?: (itemId: string) => void;
+  /** Opens the Lot & serial numbers tab on this product. */
+  onNumbersRow?: (itemId: string) => void;
+  /** Lots and serials already recorded per product line. */
+  numberCounts?: Record<string, { lots: number; serials: number }>;
 }) {
   const router = useRouter();
   const [busy, startTransition] = useTransition();
@@ -595,7 +601,17 @@ export function ReceivedItemsGrid({
                             </svg>
                           </button>
                         )}
+                        {editable && onNumbersRow && it.productName.trim() && !notReceived && (
+                          <button type="button" title="Enter or photograph the lot and serial numbers" aria-label={`Lot and serial numbers, ${label}`} onClick={() => onNumbersRow(it.id)} className="mr-1 shrink-0 rounded p-1.5 text-xs font-semibold text-slate-500 hover:bg-sky-50 hover:text-sky-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-600 dark:hover:bg-sky-950/40 dark:hover:text-sky-200">
+                            <span aria-hidden>#</span>
+                          </button>
+                        )}
                       </div>
+                      {numberCounts && it.productName.trim() && !notReceived && (
+                        <button type="button" onClick={() => onNumbersRow?.(it.id)} disabled={!onNumbersRow} className="mt-0.5 block text-left text-[11px] text-slate-500 underline-offset-2 hover:underline disabled:no-underline dark:text-slate-400">
+                          {numberCounts[it.id] && numberCounts[it.id].serials + numberCounts[it.id].lots > 0 ? `${numberCounts[it.id].lots} lot${numberCounts[it.id].lots === 1 ? "" : "s"}, ${numberCounts[it.id].serials} serial${numberCounts[it.id].serials === 1 ? "" : "s"} recorded` : "Enter lot & serial numbers"}
+                        </button>
+                      )}
                     </td>
                     <td className={td}>
                       {multi ? (

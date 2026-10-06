@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "tsx scripts/safe-push.ts && next build",
+    "dev": "node scripts/copy-ocr-assets.mjs && next dev",
+    "build": "node scripts/copy-ocr-assets.mjs && tsx scripts/safe-push.ts && next build",
     "start": "next start",
     "lint": "eslint",
     "db:push": "drizzle-kit push",
@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@libsql/client": "^0.18.0",
+    "@tesseract.js-data/eng": "^1.0.0",
     "@vercel/blob": "^2.8.0",
     "@zxing/browser": "^0.2.1",
     "@zxing/library": "^0.23.0",
@@ -24,6 +25,7 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "resend": "^6.32.0",
+    "tesseract.js": "^5.1.1",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

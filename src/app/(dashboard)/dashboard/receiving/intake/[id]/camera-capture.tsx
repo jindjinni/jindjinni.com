@@ -20,6 +20,7 @@ export function CameraCapture({
   onCapture,
   onClose,
   multiple = true,
+  highRes = false,
 }: {
   title?: string;
   /** Called with each photo as a JPEG file. May return a promise; the camera waits for it before the next shot. Return false when the photo could not be saved. */
@@ -27,6 +28,8 @@ export function CameraCapture({
   onClose: () => void;
   /** Keep the camera open for more photos (default). When false the camera closes after the first photo. */
   multiple?: boolean;
+  /** Ask the camera for 4K and keep the full picture (for group photos whose small print must stay readable). */
+  highRes?: boolean;
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -36,6 +39,7 @@ export function CameraCapture({
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [taken, setTaken] = useState(0);
+  const [size, setSize] = useState("");
   const mounted = useMounted();
   const closeRef = useRef(onClose);
   useEffect(() => {
@@ -56,8 +60,8 @@ export function CameraCapture({
       }
       try {
         const video: MediaTrackConstraints = deviceId
-          ? { deviceId: { exact: deviceId }, width: { ideal: 1920 }, height: { ideal: 1080 } }
-          : { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } };
+          ? { deviceId: { exact: deviceId }, width: { ideal: highRes ? 3840 : 1920 }, height: { ideal: highRes ? 2160 : 1080 } }
+          : { facingMode: { ideal: "environment" }, width: { ideal: highRes ? 3840 : 1920 }, height: { ideal: highRes ? 2160 : 1080 } };
         const stream = await navigator.mediaDevices.getUserMedia({ video, audio: false });
         streamRef.current = stream;
         if (videoRef.current) {
@@ -69,6 +73,8 @@ export function CameraCapture({
         setCams(all.map((d, i) => ({ id: d.deviceId, label: d.label || `Camera ${i + 1}` })));
         const active = stream.getVideoTracks()[0]?.getSettings().deviceId;
         if (active) setCamId(active);
+        const st = stream.getVideoTracks()[0]?.getSettings();
+        if (st?.width && st?.height) setSize(`${st.width} × ${st.height}`);
         setReady(true);
       } catch (e) {
         const denied = e instanceof Error && /denied|permission|notallowed/i.test(`${e.name} ${e.message}`);
@@ -82,7 +88,7 @@ export function CameraCapture({
         );
       }
     },
-    [stop],
+    [stop, highRes],
   );
 
   useEffect(() => {
@@ -111,12 +117,12 @@ export function CameraCapture({
     if (!v || !ready || busy || !v.videoWidth) return;
     setBusy(true);
     try {
-      const scale = Math.min(1, 2200 / Math.max(v.videoWidth, v.videoHeight));
+      const scale = Math.min(1, (highRes ? 4096 : 2200) / Math.max(v.videoWidth, v.videoHeight));
       const canvas = document.createElement("canvas");
       canvas.width = Math.round(v.videoWidth * scale);
       canvas.height = Math.round(v.videoHeight * scale);
       canvas.getContext("2d")?.drawImage(v, 0, 0, canvas.width, canvas.height);
-      const blob: Blob | null = await new Promise((res) => canvas.toBlob(res, "image/jpeg", 0.88));
+      const blob: Blob | null = await new Promise((res) => canvas.toBlob(res, "image/jpeg", highRes ? 0.93 : 0.88));
       if (!blob) {
         setError("Couldn't take that photo. Try again.");
         return;
@@ -181,7 +187,7 @@ export function CameraCapture({
             </label>
           )}
           {taken > 0 && <span role="status" className="text-sm font-medium text-green-700 dark:text-green-400">{taken} photo{taken === 1 ? "" : "s"} added</span>}
-          <span className="basis-full text-xs text-slate-500">Keep patient names and pharmacy stickers out of the picture.</span>
+          <span className="basis-full text-xs text-slate-500">{highRes && size ? `Camera is giving ${size}.${/^(3840|4096)/.test(size) ? "" : " That is below 4K: small print may not read well. Try another camera, or use the phone's own camera button."} ` : ""}Keep patient names and pharmacy stickers out of the picture.</span>
         </div>
       </div>
     </div>,

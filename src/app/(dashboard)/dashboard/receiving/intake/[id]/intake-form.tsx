@@ -34,6 +34,7 @@ import { ItemAdjustmentCard, itemFactsOf, toItemState, type ItemState } from "./
 import { ReceiptPreview, ReceivedItemsGrid } from "./receiving-table";
 import { RecallCheck } from "./recall-check";
 import { ScanStation } from "./scan-station";
+import { NumbersTab, numbersFor } from "./numbers-tab";
 import type { SerialView } from "@/lib/receiving-serial-service";
 import { severityOf } from "@/lib/receiving-serial-rules";
 import { RowScanDialog } from "./row-scan-dialog";
@@ -153,6 +154,9 @@ export function IntakeForm(props: Props) {
   // Recall checks made in Step 6 (saved on the server as they are made).
   const [recallChecks, setRecallChecks] = useState<RecallCheckView[]>(props.recallChecks);
   const [serials, setSerials] = useState<SerialView[]>(props.serials);
+  // Step 6 has four tabs. Every tab stays on the page (just hidden) so nothing typed in one is lost by looking at another.
+  const [step6Tab, setStep6Tab] = useState<"items" | "numbers" | "scan" | "recall">("items");
+  const [numbersItemId, setNumbersItemId] = useState("");
   const [recalls, setRecalls] = useState<RecallView[]>(props.recalls);
   const [scanItemId, setScanItemId] = useState<string | null>(null);
   const recallStates: Record<string, "RECALLED" | "CHECKED"> = {};
@@ -510,6 +514,29 @@ export function IntakeForm(props: Props) {
         <Step n={6} id="step-6" title="Verify what arrived" note="Add a record for each product that arrived. Choose the product from the list (its NDC fills in), then enter the quantity, condition, lot number and expiration date.">
           <Row label="Items Quoted For This Order"><span className="whitespace-pre-line">{brief.itemsText}</span></Row>
           <Row label="Quotation / Invoice Photo (from Order)"><ReceiptPreview packageId={packageId} receipt={receipt} /></Row>
+          <div role="tablist" aria-label="Step 6 sections" className="mt-6 flex flex-wrap gap-1 border-b border-slate-200 dark:border-slate-700">
+            {([
+              ["items", "Items received", ""],
+              ["numbers", "Lot & serial numbers", serials.length ? ` (${serials.length})` : ""],
+              ["scan", "Scan station", ""],
+              ["recall", "Recall check", recallChecks.length ? ` (${recallChecks.length})` : ""],
+            ] as const).map(([key, label, count]) => (
+              <button
+                key={key}
+                type="button"
+                role="tab"
+                id={`s6tab-${key}`}
+                aria-selected={step6Tab === key}
+                aria-controls={`s6panel-${key}`}
+                onClick={() => setStep6Tab(key)}
+                className={`-mb-px rounded-t-lg border px-4 py-2 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-600 ${step6Tab === key ? "border-slate-200 border-b-white bg-white text-slate-900 dark:border-slate-700 dark:border-b-slate-900 dark:bg-slate-900 dark:text-slate-50" : "border-transparent text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"}`}
+              >
+                {label}
+                {count}
+              </button>
+            ))}
+          </div>
+          <div role="tabpanel" id="s6panel-items" aria-labelledby="s6tab-items" hidden={step6Tab !== "items"}>
           <ReceivedItemsGrid
             packageId={packageId}
             items={items}
@@ -524,8 +551,26 @@ export function IntakeForm(props: Props) {
             onRemoveMany={removeItems}
             recallStates={recallStates}
             onScanRow={editable ? setScanItemId : undefined}
+            onNumbersRow={editable ? (id) => { setNumbersItemId(id); setStep6Tab("numbers"); } : undefined}
+            numberCounts={Object.fromEntries(items.map((i) => { const n = numbersFor(serials, i.id); return [i.id, { lots: n.lots.length, serials: n.serials.length }]; }))}
           />
 
+          </div>
+          <div role="tabpanel" id="s6panel-numbers" aria-labelledby="s6tab-numbers" hidden={step6Tab !== "numbers"}>
+            <NumbersTab
+              packageId={packageId}
+              items={items}
+              editable={editable}
+              serials={serials}
+              onSerials={setSerials}
+              onChecks={setRecallChecks}
+              onPatchMany={patchMany}
+              onError={setError}
+              selectedId={numbersItemId}
+              onSelect={setNumbersItemId}
+            />
+          </div>
+          <div role="tabpanel" id="s6panel-scan" aria-labelledby="s6tab-scan" hidden={step6Tab !== "scan"}>
           <ScanStation
             packageId={packageId}
             items={items}
@@ -538,6 +583,8 @@ export function IntakeForm(props: Props) {
             onError={setError}
           />
 
+          </div>
+          <div role="tabpanel" id="s6panel-recall" aria-labelledby="s6tab-recall" hidden={step6Tab !== "recall"}>
           <RecallCheck
             packageId={packageId}
             items={items}
@@ -551,6 +598,7 @@ export function IntakeForm(props: Props) {
             onPatchMany={patchMany}
             onError={setError}
           />
+          </div>
           {scanItemId && items.find((i) => i.id === scanItemId) && (
             <RowScanDialog
               packageId={packageId}
