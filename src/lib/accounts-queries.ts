@@ -51,7 +51,19 @@ type Row = {
   adjustedTotal: number | null;
 };
 
-function toOrder(r: Row, receipts: Map<string, { count: number; first: string }>): AccountsOrder {
+async function coversFor(organizationId: string, packageIds: string[]) {
+  const out = new Map<string, string>();
+  if (packageIds.length === 0) return out;
+  const rows = await db
+    .select({ id: receivingPackagePhotos.id, packageId: receivingPackagePhotos.packageId })
+    .from(receivingPackagePhotos)
+    .where(and(eq(receivingPackagePhotos.organizationId, organizationId), eq(receivingPackagePhotos.kind, "UNOPENED_PACKAGE"), inArray(receivingPackagePhotos.packageId, packageIds)))
+    .orderBy(receivingPackagePhotos.createdAt);
+  for (const r of rows) if (!out.has(r.packageId)) out.set(r.packageId, r.id);
+  return out;
+}
+
+function toOrder(r: Row, receipts: Map<string, { count: number; first: string }>, covers: Map<string, string>): AccountsOrder {
   const rc = receipts.get(r.id);
   return {
     id: r.id,
@@ -64,6 +76,7 @@ function toOrder(r: Row, receipts: Map<string, { count: number; first: string }>
     adjusted: r.adjustedTotal != null && r.adjustedTotal !== r.grandTotal,
     receipts: rc?.count ?? 0,
     receiptId: rc?.first ?? null,
+    coverPhotoId: covers.get(r.id) ?? null,
   };
 }
 
@@ -83,8 +96,9 @@ export async function getToBePaid(organizationId: string): Promise<AccountsOrder
       ),
     )
     .orderBy(receivingPackages.receivedAt, receivingPackages.createdAt);
-  const receipts = await receiptsFor(organizationId, rows.map((r) => r.id));
-  return rows.map((r) => toOrder(r, receipts));
+  const ids = rows.map((r) => r.id);
+  const [receipts, covers] = await Promise.all([receiptsFor(organizationId, ids), coversFor(organizationId, ids)]);
+  return rows.map((r) => toOrder(r, receipts, covers));
 }
 
 export const PAID_LIMIT = 5000;
@@ -99,6 +113,7 @@ export async function getPaidOrders(organizationId: string): Promise<AccountsOrd
     .where(and(eq(receivingPackages.organizationId, organizationId), eq(receivingPackages.accountsStatus, "PAID"), isNotNull(receivingPackages.paidAt)))
     .orderBy(desc(receivingPackages.paidAt))
     .limit(PAID_LIMIT);
-  const receipts = await receiptsFor(organizationId, rows.map((r) => r.id));
-  return rows.map((r) => toOrder(r, receipts));
+  const ids = rows.map((r) => r.id);
+  const [receipts, covers] = await Promise.all([receiptsFor(organizationId, ids), coversFor(organizationId, ids)]);
+  return rows.map((r) => toOrder(r, receipts, covers));
 }

@@ -92,7 +92,7 @@ export function PaidOrders({ orders, truncated }: { orders: AccountsOrder[]; tru
                     <tr key={o.id} data-testid="paid-order">
                       <td className="whitespace-nowrap px-4 py-2 tabular-nums">{formatUtcStamp(o.paidAt)}</td>
                       <td className="px-3 py-2"><span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${chipClass(o.customerName)}`}>{o.customerName}</span></td>
-                      <td className="px-3 py-2"><Link href={`/dashboard/accounts/${o.id}`} className="font-medium text-emerald-800 underline dark:text-emerald-300">{o.quotationNumber}</Link></td>
+                      <td className="px-3 py-2"><Link href={`/dashboard/accounts/${o.id}?from=paid`} className="font-medium text-emerald-800 underline dark:text-emerald-300">{o.quotationNumber}</Link></td>
                       <td className="px-3 py-2 text-right tabular-nums">{MONEY.format(o.amount)}</td>
                       <td className="px-3 py-2">
                         {o.receiptId ? <a href={`/api/receiving/photos/${o.receiptId}`} target="_blank" rel="noreferrer" className="text-emerald-800 underline dark:text-emerald-300">View{o.receipts > 1 ? ` (${o.receipts})` : ""}</a> : <span className="text-slate-400">—</span>}

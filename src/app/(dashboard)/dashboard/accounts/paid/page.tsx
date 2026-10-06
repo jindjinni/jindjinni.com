@@ -9,7 +9,7 @@ export default async function PaidOrdersPage() {
   const org = await requireOrg();
   const orders = await getPaidOrders(org.organizationId);
   return (
-    <div>
+    <div className="mx-auto w-full max-w-6xl px-6 py-8 print:max-w-none print:p-0">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-slate-900 dark:text-slate-50">Paid Orders</h1>

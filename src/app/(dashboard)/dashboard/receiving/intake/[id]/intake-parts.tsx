@@ -26,12 +26,14 @@ export function Row({ label, children, hint }: { label: string; children: ReactN
   );
 }
 
-export function Step({ n, id, title, note, children }: { n: number; id: string; title: string; note?: string; children: ReactNode }) {
+/** `highlight` marks the step the person viewing it is meant to work in (Accounts sees Step 10 this way): a colored frame and a badge with that text. */
+export function Step({ n, id, title, note, highlight, children }: { n: number; id: string; title: string; note?: string; highlight?: string; children: ReactNode }) {
   return (
-    <section id={id} className="mt-7 scroll-mt-28">
-      <h2 className="flex items-center gap-2.5 border-b border-slate-200 pb-2 text-base font-semibold text-slate-900 dark:border-slate-700 dark:text-slate-50">
+    <section id={id} data-highlight={highlight ? "true" : undefined} className={`mt-7 scroll-mt-28 ${highlight ? "rounded-xl border-2 border-[var(--dept-accent,#60a5fa)] bg-white p-4 shadow-md dark:bg-slate-900" : ""}`}>
+      <h2 className="flex flex-wrap items-center gap-2.5 border-b border-slate-200 pb-2 text-base font-semibold text-slate-900 dark:border-slate-700 dark:text-slate-50">
         <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-[var(--dept-accent,#F7B838)] px-1.5 text-xs font-bold text-amber-950">{n}</span>
         {title}
+        {highlight && <span className="ml-auto rounded-full bg-[var(--dept-accent,#60a5fa)] px-3 py-0.5 text-xs font-bold text-emerald-950">{highlight}</span>}
       </h2>
       {note && <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{note}</p>}
       {children}

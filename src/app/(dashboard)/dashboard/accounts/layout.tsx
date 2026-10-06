@@ -32,7 +32,7 @@ export default async function AccountsLayout({ children }: { children: React.Rea
             File storage isn&apos;t connected yet, so payment receipts can&apos;t be attached. Everything else in Accounts works.
           </p>
         )}
-        <div className="pz mx-auto w-full max-w-6xl px-6 py-8 print:max-w-none print:p-0">{children}</div>
+        <div className="pz">{children}</div>
       </div>
     </div>
   );

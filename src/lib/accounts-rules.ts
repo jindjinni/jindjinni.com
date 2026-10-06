@@ -17,6 +17,8 @@ export type AccountsOrder = {
   receipts: number;
   /** The first receipt, for a quick link. */
   receiptId: string | null;
+  /** The unopened-package photo Receiving took, for the small card. */
+  coverPhotoId: string | null;
 };
 
 export type DayGroup = { day: string; orders: AccountsOrder[]; total: number; receipts: number };

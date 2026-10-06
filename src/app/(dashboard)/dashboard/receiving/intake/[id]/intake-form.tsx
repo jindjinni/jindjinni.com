@@ -28,6 +28,7 @@ import {
   type PhotoKind,
 } from "@/lib/receiving-rules";
 import { MONEY, STATUS_PILL, chipClass, formatUtcStamp } from "@/lib/receiving-ui";
+import { MarkPaidButton } from "@/app/(dashboard)/dashboard/accounts/mark-paid-button";
 import { LocalTime } from "@/components/local-time";
 import { Choice, PhotoAddContext, PhotoSlot, Row, Step, YN, YN_RISK, field } from "./intake-parts";
 import { ItemAdjustmentCard, itemFactsOf, toItemState, type ItemState } from "./item-card";
@@ -78,6 +79,8 @@ type Props = {
   canAccounts: boolean;
   /** Accounts team only (accountant, Admin, Owner): may change Step 10. */
   canPayment: boolean;
+  /** "accounts": the Accounts department is showing this record. Everything is read-only except Step 10, which is highlighted and gets the Mark as Paid button. */
+  focus?: "accounts";
   isAdminUser: boolean;
   storageOk: boolean;
   brief: QuotationBrief;
@@ -125,6 +128,71 @@ const STEPS = [
 
 const fieldKeysForAccounts = ["adjustedOrderTotal", "adjustmentAmountEmail", "customerEmailNote", "accountsDecision", "accountsStatus"] as const;
 
+/** Step 10 as the Accounts department sees it: status, the amount, the receipt and the one button that marks the order Paid. */
+function AccountsPayment({
+  packageId,
+  photos,
+  storageOk,
+  canPayment,
+  decision,
+  paid,
+  submitted,
+  paidAt,
+  amount,
+  quoted,
+  onError,
+}: {
+  packageId: string;
+  photos: PackagePhoto[];
+  storageOk: boolean;
+  canPayment: boolean;
+  decision: string;
+  paid: boolean;
+  submitted: boolean;
+  paidAt: string | null;
+  amount: number;
+  quoted: number;
+  onError: (m: string) => void;
+}) {
+  const waiting = !paid && submitted && decision === "NEED_TO_BE_PAID";
+  const receipts = photos.filter((p) => p.kind === "PAYMENT_CONFIRMATION");
+  const canChange = canPayment && waiting;
+  return (
+    <div data-testid="accounts-payment">
+      <p role="note" className="mt-2 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-950 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100">
+        {paid
+          ? "This order has been paid."
+          : waiting
+            ? "Pay this order by ACH direct deposit on your payables system, attach a screenshot of the receipt below, then mark it Paid. The date and time are stamped for you."
+            : "Receiving hasn't sent this order to Accounts yet (it must be submitted and set to Need to Be Paid), so it can't be paid from here."}
+      </p>
+      <Row label="Accounts Status">
+        <span data-testid="order-state" className={`rounded-full px-2.5 py-1 text-xs font-medium ${paid ? "bg-green-100 text-green-900 dark:bg-green-900/40 dark:text-green-100" : waiting ? "bg-blue-100 text-blue-900 dark:bg-blue-900/40 dark:text-blue-100" : "bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-100"}`}>
+          {paid ? "Paid" : waiting ? "Need to Be Paid" : "Not waiting for payment"}
+        </span>
+      </Row>
+      <Row label={paid ? "Amount Paid" : "Amount To Pay"}>
+        <span className="text-lg font-bold tabular-nums" data-testid="order-amount">{MONEY.format(amount)}</span>
+        {amount !== quoted && <span className="ml-2 text-xs text-slate-500">Quoted {MONEY.format(quoted)}, adjusted by Receiving</span>}
+      </Row>
+      <Row label="Paid Date/Time">
+        {paid ? <span data-testid="paid-stamp" suppressHydrationWarning>{formatUtcStamp(paidAt)} <span className="text-xs text-slate-500">· ACH direct deposit</span></span> : <span className="text-slate-500">Filled in automatically when you mark the order Paid.</span>}
+      </Row>
+      <Row label="Payment Receipt" hint="A screenshot from your payables system (or a PDF).">
+        <div data-testid="receipt-slot">
+          <PhotoSlot packageId={packageId} kind="PAYMENT_CONFIRMATION" photos={photos} editable={canChange} canAdd={canChange} storageOk={storageOk} onError={onError} />
+          {receipts.length === 0 && !canChange && <span className="text-slate-500">None attached.</span>}
+        </div>
+      </Row>
+      {waiting && canPayment && (
+        <Row label="Mark as Paid">
+          <MarkPaidButton packageId={packageId} hasReceipt={receipts.length > 0} />
+        </Row>
+      )}
+    </div>
+  );
+}
+
 export function IntakeForm(props: Props) {
   const { packageId, status, canWrite, canAccounts, canPayment, storageOk, brief, receipt, photos, saved } = props;
   const router = useRouter();
@@ -137,6 +205,7 @@ export function IntakeForm(props: Props) {
 
   const locked = status !== "IN_PROGRESS";
   const editable = canWrite;
+  const accountsFocus = props.focus === "accounts";
   const set = <K extends keyof FormValues>(k: K, val: FormValues[K]) => setV((p) => ({ ...p, [k]: val }));
 
   // Product lines: the server's list, with whatever the agent has typed over the top.
@@ -357,7 +426,13 @@ export function IntakeForm(props: Props) {
           </button>
         )}
       </header>
-      {!canWrite && !canAccounts && <p className="mt-3 rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-700 dark:bg-slate-800 dark:text-slate-200">Your role can view Receiving but can&apos;t make changes.</p>}
+      {accountsFocus && (
+        <p role="note" data-testid="accounts-banner" className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-950 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100">
+          <span>This is the complete receiving record, for your review. Accounts works in <strong>Step 10</strong> at the bottom.</span>
+          <a href="#step-10" className="rounded-md bg-[var(--dept-accent,#60a5fa)] px-2.5 py-1 text-xs font-semibold text-emerald-950 hover:brightness-95">Go to Step 10 ↓</a>
+        </p>
+      )}
+      {!accountsFocus && !canWrite && !canAccounts && <p className="mt-3 rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-700 dark:bg-slate-800 dark:text-slate-200">Your role can view Receiving but can&apos;t make changes.</p>}
       {props.duplicates.length > 0 && (
         <p role="status" className="mt-3 rounded-lg border border-orange-300 bg-orange-50 px-3 py-2 text-sm text-orange-950 dark:border-orange-800 dark:bg-orange-950/40 dark:text-orange-100">
           Possible duplicate order: another order has the same reference or tracking number ({props.duplicates.map((d) => d.number).join(", ")}). Check before paying.
@@ -366,8 +441,16 @@ export function IntakeForm(props: Props) {
 
       <nav aria-label="Steps" className="sticky top-0 z-10 -mx-4 mt-4 flex gap-1 overflow-x-auto border-b border-slate-200 bg-stone-50/95 px-4 py-2 backdrop-blur sm:-mx-8 sm:px-8 dark:border-slate-800 dark:bg-slate-950/95">
         {STEPS.map((s, i) => (
-          <a key={s} href={`#step-${i + 1}`} className="shrink-0 rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-medium text-slate-700 hover:bg-amber-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-amber-950/30">
-            <span className="font-bold text-amber-800 dark:text-amber-300">{i + 1}</span> {s}
+          <a
+            key={s}
+            href={`#step-${i + 1}`}
+            className={`shrink-0 rounded-full border px-3 py-1 text-xs font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-600 ${
+              accountsFocus && i === 9
+                ? "border-[var(--dept-accent,#60a5fa)] bg-[var(--dept-accent,#60a5fa)] font-bold text-emerald-950"
+                : "border-slate-300 bg-white text-slate-700 hover:bg-amber-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-amber-950/30"
+            }`}
+          >
+            <span className={`font-bold ${accountsFocus && i === 9 ? "" : "text-amber-800 dark:text-amber-300"}`}>{i + 1}</span> {s}
           </a>
         ))}
       </nav>
@@ -750,7 +833,23 @@ export function IntakeForm(props: Props) {
       </Step>
 
       {/* STEP 10 */}
-      <Step n={10} id="step-10" title="Accounts">
+      <Step n={10} id="step-10" title="Accounts" highlight={accountsFocus ? "Accounts works here" : undefined}>
+        {accountsFocus ? (
+          <AccountsPayment
+            packageId={packageId}
+            photos={photos}
+            storageOk={storageOk}
+            canPayment={canPayment}
+            decision={v.accountsDecision}
+            paid={saved.accountsStatus === "PAID"}
+            submitted={locked}
+            paidAt={saved.paidAt}
+            amount={payout}
+            quoted={total}
+            onError={setError}
+          />
+        ) : (
+          <>
         <p role="note" className="mt-2 rounded-lg border border-sky-300 bg-sky-50 px-3 py-2 text-sm font-medium text-sky-950 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-100">
           For Accounts purposes only. The Accounts team works in this step. Receiving: please don&apos;t change anything here.
         </p>
@@ -767,6 +866,8 @@ export function IntakeForm(props: Props) {
           </Row>
           <Row label="Payment Confirmation Photo">{slot("PAYMENT_CONFIRMATION", { accounts: true, payment: true })}</Row>
         </fieldset>
+          </>
+        )}
         <Row label="Submitted By">{locked ? submittedBy ?? "—" : "—"}</Row>
         <Row label="Submission Date/Time">{locked ? <span suppressHydrationWarning>{formatUtcStamp(saved.submittedAt)}</span> : "—"}</Row>
         <Row label="Record Created"><span suppressHydrationWarning>{formatUtcStamp(saved.createdAt)}</span></Row>
