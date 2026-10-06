@@ -170,8 +170,7 @@ export function IntakeForm(props: Props) {
     const changed = editable ? items.filter((i) => (recallSeen[i.id] ?? "") !== i.productName.trim().toLowerCase()) : [];
     if (changed.length > 0) {
       setRecallSeen((m) => ({ ...m, ...Object.fromEntries(changed.map((i) => [i.id, i.productName.trim().toLowerCase()])) }));
-      const activeRecalls = recalls.filter((r) => r.active);
-      const hit = changed.find((i) => needsRecallChecker(i.productName, activeRecalls));
+      const hit = changed.find((i) => needsRecallChecker(i.productName));
       if (hit) {
         setRecallFocus((f) => ({ rowId: hit.id, n: (f?.n ?? 0) + 1 }));
         setStep6Tab("recall");

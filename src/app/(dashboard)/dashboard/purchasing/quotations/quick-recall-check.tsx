@@ -35,7 +35,7 @@ export function QuickRecallCheck({
   const mine = productName ? recallsForProduct(productName, active) : [];
   const ordered = [...mine, ...active.filter((r) => !mine.some((m) => m.id === r.id))];
   // Switched on as soon as a product that needs it is chosen (the form re-creates this panel when the product changes).
-  const activated = needsRecallChecker(productName, active);
+  const activated = needsRecallChecker(productName);
   const [open, setOpen] = useState(defaultOpen || activated);
   const [input, setInput] = useState("");
   const [outcome, setOutcome] = useState<Outcome | null>(null);
