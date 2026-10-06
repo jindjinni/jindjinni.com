@@ -331,11 +331,14 @@ export async function createPurchasingProduct(
   const standardPrice = Number(formData.get("standardPrice") ?? 0);
   if (Number.isNaN(standardPrice) || standardPrice < 0) return { error: "Standard price must be a positive number." };
 
+  const categoryId = trimmed(formData, "categoryId");
+  if (categoryId && !(await orgHasCategory(org.organizationId, categoryId))) return { error: "Choose a category from your list." };
+
   const productId = newId("pprod");
   await db.insert(purchasingProducts).values({
     id: productId,
     organizationId: org.organizationId,
-    categoryId: trimmed(formData, "categoryId"),
+    categoryId,
     name,
     productCode: trimmed(formData, "productCode"),
     ndc: trimmed(formData, "ndc"),
@@ -372,6 +375,8 @@ export async function updatePurchasingProduct(
   const standardPrice = Number(formData.get("standardPrice") ?? 0);
   if (Number.isNaN(standardPrice) || standardPrice < 0) return { error: "Standard price must be a positive number." };
   const active = formData.get("active") === "on";
+  const categoryId = trimmed(formData, "categoryId");
+  if (categoryId && !(await orgHasCategory(org.organizationId, categoryId))) return { error: "Choose a category from your list." };
 
   if (standardPrice !== product.standardPrice) {
     await logAudit(org, "product", productId, "standard_price", product.standardPrice, standardPrice);
@@ -380,7 +385,7 @@ export async function updatePurchasingProduct(
   await db
     .update(purchasingProducts)
     .set({
-      categoryId: trimmed(formData, "categoryId"),
+      categoryId,
       name,
       productCode: trimmed(formData, "productCode"),
       ndc: trimmed(formData, "ndc"),
@@ -495,6 +500,20 @@ export async function deletePurchasingProduct(
   revalidatePath("/dashboard/purchasing/products");
 }
 
+// A form can send any id, so an id that points at another company's row must be refused before it is saved.
+async function orgHasCondition(organizationId: string, id: string) {
+  const [r] = await db.select({ id: purchasingConditions.id }).from(purchasingConditions).where(and(eq(purchasingConditions.id, id), eq(purchasingConditions.organizationId, organizationId))).limit(1);
+  return !!r;
+}
+async function orgHasRange(organizationId: string, id: string) {
+  const [r] = await db.select({ id: purchasingExpirationRanges.id }).from(purchasingExpirationRanges).where(and(eq(purchasingExpirationRanges.id, id), eq(purchasingExpirationRanges.organizationId, organizationId))).limit(1);
+  return !!r;
+}
+async function orgHasCategory(organizationId: string, id: string) {
+  const [r] = await db.select({ id: purchasingCategories.id }).from(purchasingCategories).where(and(eq(purchasingCategories.id, id), eq(purchasingCategories.organizationId, organizationId))).limit(1);
+  return !!r;
+}
+
 /** Shared by setProductMultiplier (per-product page, productId bound) and createProductMultiplier (the standalone Product Multipliers page, productId picked from the form) so the upsert + audit logic stays in one place. */
 async function upsertProductMultiplier(
   org: CurrentOrg,
@@ -550,6 +569,7 @@ export async function setProductMultiplier(
   const multiplier = Number(formData.get("multiplier"));
   if (!expirationRangeId) return { error: "Choose an expiration range." };
   if (Number.isNaN(multiplier) || multiplier < 0) return { error: "Multiplier must be a positive number." };
+  if (!(await orgHasRange(org.organizationId, expirationRangeId))) return { error: "Choose an expiration range from your list." };
 
   await upsertProductMultiplier(org, productId, expirationRangeId, multiplier);
   revalidatePath(`/dashboard/purchasing/products/${productId}`);
@@ -570,6 +590,7 @@ export async function createProductMultiplier(_prevState: ActionState, formData:
 
   const product = await requireOrgProduct(org.organizationId, productId);
   if (!product) return { error: "Product not found." };
+  if (!(await orgHasRange(org.organizationId, expirationRangeId))) return { error: "Choose a month range from your list." };
 
   await upsertProductMultiplier(org, productId, expirationRangeId, multiplier);
   revalidatePath("/dashboard/purchasing/product-multipliers");
@@ -787,6 +808,7 @@ export async function addProductCondition(
 
   const conditionId = String(formData.get("conditionId") ?? "");
   if (!conditionId) return { error: "Choose a condition." };
+  if (!(await orgHasCondition(org.organizationId, conditionId))) return { error: "Choose a condition from your list." };
 
   const [existing] = await db
     .select({ id: purchasingProductConditions.id })
@@ -1391,7 +1413,7 @@ async function resolveQuotedItemPricing(
       const [cat] = await db
         .select({ name: purchasingCategories.name })
         .from(purchasingCategories)
-        .where(eq(purchasingCategories.id, product.categoryId))
+        .where(and(eq(purchasingCategories.id, product.categoryId), eq(purchasingCategories.organizationId, org.organizationId)))
         .limit(1);
       categoryNameSnapshot = cat?.name ?? null;
     }

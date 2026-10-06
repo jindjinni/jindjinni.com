@@ -9,7 +9,7 @@ import { headers } from "next/headers";
 import { and, eq, isNull, ne } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { db } from "@/db/client";
-import { memberships, organizations, purchasingAuditLog, teamInvitations, users } from "@/db/schema";
+import { memberships, purchasingAuditLog, teamInvitations, users } from "@/db/schema";
 import { requireOrg, type CurrentOrg } from "@/lib/tenant";
 import { auth, signIn } from "@/lib/auth";
 import { newId } from "@/lib/ids";
@@ -359,10 +359,4 @@ export async function acceptInvitation(token: string, _prev: TeamActionState, fo
     }
   }
   redirect("/dashboard");
-}
-
-/** Used by the Admin page to read the company name for display without exposing other tenants. */
-export async function getOrganizationName(organizationId: string) {
-  const [o] = await db.select({ name: organizations.name }).from(organizations).where(eq(organizations.id, organizationId)).limit(1);
-  return o?.name ?? "";
 }
