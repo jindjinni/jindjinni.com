@@ -13,6 +13,7 @@ import { finalPayout, pickEmailTemplate } from "@/lib/receiving-rules";
 import { getEmailTemplates, getReceivingPackage, getReceivingSettings } from "@/lib/receiving-queries";
 import { planCustomerEmail } from "@/lib/receiving-service";
 import { emailReadiness, type CsOrder } from "@/lib/customer-service-rules";
+import { getConnection } from "@/lib/email-connector";
 
 // What the Customer Service department reads. Every query is limited to the signed-in company.
 
@@ -97,11 +98,12 @@ async function finalAdjustments(organizationId: string, packageIds: string[]) {
   return out;
 }
 
-function toOrder(r: Row, o: { emailsEnabled: boolean; hasWebsiteLink: boolean; photos: Map<string, { receipt: number; revised: number }>; finals: Set<string>; emailedAt: string | null; count: number }): CsOrder {
+function toOrder(r: Row, o: { emailsEnabled: boolean; hasWebsiteLink: boolean; senderProblem: string | null; photos: Map<string, { receipt: number; revised: number }>; finals: Set<string>; emailedAt: string | null; count: number }): CsOrder {
   const p = o.photos.get(r.id);
   const readiness = emailReadiness({
     emailsEnabled: o.emailsEnabled,
     hasWebsiteLink: o.hasWebsiteLink,
+    senderProblem: o.senderProblem,
     toEmail: customerEmail(r),
     status: r.status,
     accountsStatus: r.accountsStatus,
@@ -146,8 +148,8 @@ export async function getToBeEmailed(organizationId: string): Promise<CsOrder[]>
     .orderBy(receivingPackages.paidAt)
     .limit(CS_LIMIT);
   const ids = rows.map((r) => r.id);
-  const [settings, photos, finals] = await Promise.all([getReceivingSettings(organizationId), photoKindCounts(organizationId, ids), finalAdjustments(organizationId, ids)]);
-  return rows.map((r) => toOrder(r, { emailsEnabled: settings.emailsEnabled, hasWebsiteLink: !!settings.quoteLinkUrl.trim(), photos, finals, emailedAt: null, count: 0 }));
+  const [settings, photos, finals, conn] = await Promise.all([getReceivingSettings(organizationId), photoKindCounts(organizationId, ids), finalAdjustments(organizationId, ids), getConnection(organizationId)]);
+  return rows.map((r) => toOrder(r, { emailsEnabled: settings.emailsEnabled, hasWebsiteLink: !!settings.quoteLinkUrl.trim(), senderProblem: senderProblemOf(conn), photos, finals, emailedAt: null, count: 0 }));
 }
 
 /** Orders the customer was emailed about (the payment email), the most recently emailed first. */
@@ -171,7 +173,7 @@ export async function getEmailed(organizationId: string): Promise<CsOrder[]> {
     .leftJoin(purchasingCustomers, eq(purchasingCustomers.id, purchasingQuotations.customerId))
     .where(and(eq(receivingPackages.organizationId, organizationId), inArray(receivingPackages.id, sent.map((s) => s.packageId))));
   const by = new Map(rows.map((r) => [r.id, r]));
-  const empty = { emailsEnabled: true, hasWebsiteLink: true, photos: new Map<string, { receipt: number; revised: number }>(), finals: new Set<string>() };
+  const empty = { emailsEnabled: true, hasWebsiteLink: true, senderProblem: null, photos: new Map<string, { receipt: number; revised: number }>(), finals: new Set<string>() };
   const out: CsOrder[] = [];
   for (const s of sent) {
     const r = by.get(s.packageId);
@@ -193,6 +195,7 @@ export type SentEmail = {
   skippedAttachments: number;
   sentAt: string;
   sentByName: string | null;
+  sentFrom: string | null;
 };
 
 function names(json: string | null): string[] {
@@ -224,6 +227,7 @@ export async function getSentEmails(organizationId: string, packageId: string): 
     skippedAttachments: e.skippedAttachments,
     sentAt: e.sentAt,
     sentByName: byName || byEmail || null,
+    sentFrom: e.sentFrom,
   }));
 }
 
@@ -253,6 +257,8 @@ export type EmailDraft = {
   blockers: string[];
   ready: boolean;
   emailsEnabled: boolean;
+  /** Who the customer will see as the sender: the connected mailbox, or the platform's address. */
+  from: { name: string; address: string | null };
   history: SentEmail[];
 };
 
@@ -260,6 +266,7 @@ export type EmailDraft = {
 export async function getEmailDraft(org: { organizationId: string; organizationName: string }, packageId: string): Promise<EmailDraft | null> {
   const data = await getReceivingPackage(org.organizationId, packageId);
   if (!data) return null;
+  const conn = await getConnection(org.organizationId);
   const { pkg, brief, settings } = data;
   const plan = planCustomerEmail(org.organizationName, data, "STATUS", await getEmailTemplates(org.organizationId));
   const receipts = data.photos.filter((p) => !p.itemId && p.kind === "PAYMENT_CONFIRMATION");
@@ -267,6 +274,7 @@ export async function getEmailDraft(org: { organizationId: string; organizationN
   const readiness = emailReadiness({
     emailsEnabled: settings.emailsEnabled,
     hasWebsiteLink: !!settings.quoteLinkUrl.trim(),
+    senderProblem: senderProblemOf(conn),
     toEmail: plan.to,
     status: pkg.status,
     accountsStatus: pkg.accountsStatus,
@@ -279,6 +287,7 @@ export async function getEmailDraft(org: { organizationId: string; organizationN
     hasRevisedInvoice: data.photos.some((p) => !p.itemId && p.kind === "REVISED_INVOICE") || !!adjFinal,
   });
   const history = await getSentEmails(org.organizationId, packageId);
+  const fromName = settings.fromName.trim() || org.organizationName;
   return {
     packageId,
     quotationNumber: brief.quotationNumber,
@@ -303,8 +312,14 @@ export async function getEmailDraft(org: { organizationId: string; organizationN
     blockers: readiness.blockers,
     ready: readiness.ready,
     emailsEnabled: settings.emailsEnabled,
+    from: { name: fromName, address: conn?.accountEmail ?? null },
     history,
   };
 }
 
 export { getReceivingSettings };
+
+/** Why the connected mailbox can't send right now, in words an agent can act on; null when it is fine (or none is connected). */
+function senderProblemOf(conn: Awaited<ReturnType<typeof getConnection>>): string | null {
+  return conn && conn.status !== "ACTIVE" ? `The connected email (${conn.accountEmail}) needs to be reconnected. An Admin can do that in Email Settings.` : null;
+}

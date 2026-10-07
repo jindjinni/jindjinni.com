@@ -1117,6 +1117,34 @@ export const purchasingQuotationLabels = sqliteTable(
   ],
 );
 
+// The mailbox a company sends its customer emails from (an admin connects it with Google's sign-in, like Airtable's
+// "connect a Gmail account"). We keep only the long-lived refresh token, encrypted; the company's password is never seen.
+// One per company. With none, emails go from the platform's own sending address.
+export const emailConnections = sqliteTable(
+  "email_connections",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    provider: text("provider", { enum: ["GOOGLE", "MICROSOFT", "SMTP"] }).notNull().default("GOOGLE"),
+    // The mailbox the customer sees as the sender.
+    accountEmail: text("account_email").notNull(),
+    // AES-256-GCM encrypted secret (see lib/email-connector-crypto.ts): the sign-in permission (refresh token) for
+    // Google and Microsoft, or the mail server login (JSON) for "other" mailboxes.
+    credentialEnc: text("credential_enc").notNull(),
+    // ACTIVE, or NEEDS_RECONNECT when Google says the permission was removed or expired.
+    status: text("status", { enum: ["ACTIVE", "NEEDS_RECONNECT"] }).notNull().default("ACTIVE"),
+    lastError: text("last_error"),
+    connectedByUserId: text("connected_by_user_id").references(() => users.id),
+    connectedAt: text("connected_at")
+      .notNull()
+      .default(sql`(current_timestamp)`),
+    lastUsedAt: text("last_used_at"),
+  },
+  (t) => [uniqueIndex("email_connections_org_idx").on(t.organizationId)],
+);
+
 // A company's edited wording for one customer email (subject and text, with {placeholders}). A template with no row
 // here uses the original wording built into lib/email-templates.ts.
 export const receivingEmailTemplates = sqliteTable(
@@ -1160,6 +1188,8 @@ export const receivingCustomerEmails = sqliteTable(
     // JSON array of the attached file names.
     attachmentNames: text("attachment_names"),
     skippedAttachments: integer("skipped_attachments").notNull().default(0),
+    // The address the email was sent from: the connected mailbox, or null when it went from the platform address.
+    sentFrom: text("sent_from"),
     sentByUserId: text("sent_by_user_id").references(() => users.id),
     sentAt: text("sent_at")
       .notNull()

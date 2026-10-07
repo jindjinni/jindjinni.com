@@ -34,6 +34,7 @@ function SentCard({ e }: { e: SentEmail }) {
         <span className="text-slate-600 dark:text-slate-300">{when(e.sentAt)}</span>
         <span className="text-slate-600 dark:text-slate-300">by {e.sentByName ?? "unknown"}</span>
         <span className="text-slate-600 dark:text-slate-300">to {e.toEmail}</span>
+        {e.sentFrom && <span className="text-slate-600 dark:text-slate-300">from {e.sentFrom}</span>}
         <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="ml-auto text-emerald-800 underline dark:text-emerald-300">
           {open ? "Hide the email" : "Show the email"}
         </button>
@@ -136,6 +137,7 @@ export function Composer({ draft }: { draft: EmailDraft }) {
           <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-medium text-slate-800 dark:bg-slate-800 dark:text-slate-100" data-testid="cs-template">{TEMPLATE_LABEL[draft.template] ?? draft.template}</span>
         </div>
         <p className="mt-2 text-sm text-slate-800 dark:text-slate-100" data-testid="cs-subject"><span className="font-medium">Subject:</span> {draft.subject}</p>
+        <p className="text-xs text-slate-500" data-testid="cs-from">From: {draft.from.address ? `${draft.from.name} <${draft.from.address}>` : `${draft.from.name} (the platform's sending address)`}</p>
         <p className="text-xs text-slate-500">To: {draft.to ?? "—"}{draft.bcc.length > 0 && ` · hidden copy to ${draft.bcc.join(", ")}`}</p>
         <div className="mt-2">{ready ? <EmailFrame html={draft.bodyHtml} title="Email preview" /> : <p className="text-sm text-slate-500">Loading the preview…</p>}</div>
       </section>

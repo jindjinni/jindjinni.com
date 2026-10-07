@@ -18,7 +18,8 @@ import {
   receivingRecallChecks,
 } from "@/db/schema";
 import { newId } from "@/lib/ids";
-import { sendCustomerEmail, type EmailAttachment } from "@/lib/email";
+import type { EmailAttachment } from "@/lib/email";
+import { sendOrgEmail } from "@/lib/email-connector";
 import { getEmailTemplates, getReceivingPackage } from "@/lib/receiving-queries";
 import { buildCustomerEmail, buildPackagingWarning } from "@/lib/receiving-emails";
 import { isRecalledResult, rowRecallState } from "@/lib/receiving-recall";
@@ -251,7 +252,7 @@ export async function deliverCustomerEmail(org: OrgRef, packageId: string, kind:
   }
 
   const bcc = splitEmails(settings.bccEmails);
-  const sent = await sendCustomerEmail({
+  const sent = await sendOrgEmail(org.organizationId, {
     to,
     subject: built.subject,
     text: built.text,
@@ -289,6 +290,7 @@ export async function deliverCustomerEmail(org: OrgRef, packageId: string, kind:
     bodyHtml: built.html,
     attachmentNames: JSON.stringify(attachments.map((a) => a.filename)),
     skippedAttachments: skipped,
+    sentFrom: sent.from,
     sentByUserId: org.userId,
   });
   await auditReceiving(org, pkg.quotationId, "customer-service", `Customer email sent (${template}) to ${to}${attachments.length ? `, ${attachments.length} attachment(s)` : ""}`);
