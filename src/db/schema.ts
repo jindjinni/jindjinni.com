@@ -1248,6 +1248,52 @@ export const jinUsage = sqliteTable(
   (t) => [uniqueIndex("jin_usage_org_user_day_idx").on(t.organizationId, t.userId, t.day)],
 );
 
+// Jin's industry library: facts the platform owner records (a maker's lot/serial layout, recall notes, counterfeit signs...).
+// This is PLATFORM content, shared by every company's Jin, so it deliberately has no organizationId and must never hold a
+// company's private records. Only LIVE entries reach Jin; DRAFT ones are the owner's work in progress.
+export const jinKnowledge = sqliteTable(
+  "jin_knowledge",
+  {
+    id: text("id").primaryKey(),
+    title: text("title").notNull(),
+    category: text("category").notNull(),
+    brand: text("brand"),
+    body: text("body").notNull(),
+    source: text("source").notNull().default(""),
+    // The day someone last checked this against its source, "YYYY-MM-DD".
+    verifiedOn: text("verified_on"),
+    // Lot or serial layouts in the plain symbols 9 / A / X, one per line (see industry-checks.ts).
+    formats: text("formats"),
+    formatKind: text("format_kind"),
+    status: text("status", { enum: ["DRAFT", "LIVE"] }).notNull().default("DRAFT"),
+    createdByUserId: text("created_by_user_id"),
+    ...timestamps,
+  },
+  (t) => [index("jin_knowledge_status_idx").on(t.status)],
+);
+
+// What people say about Jin's answers. Only saved when a person presses "Helpful" or "Not right"; the platform owner reads
+// these to improve the library. A company's name is kept so the owner knows where a note came from.
+export const jinFeedback = sqliteTable(
+  "jin_feedback",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    rating: text("rating", { enum: ["UP", "DOWN"] }).notNull(),
+    question: text("question").notNull(),
+    answer: text("answer").notNull(),
+    note: text("note"),
+    status: text("status", { enum: ["NEW", "REVIEWED", "DISMISSED"] }).notNull().default("NEW"),
+    createdAt: text("created_at").notNull().default(sql`(current_timestamp)`),
+  },
+  (t) => [index("jin_feedback_status_idx").on(t.status, t.createdAt)],
+);
+
 // Industry news is a built-in courtesy for every company, paid for by the platform. To keep that cheap, Claude checks each
 // headline once per BRAND, not once per company: the verdict is kept here and reused by every company that buys that brand.
 // Nothing in these two tables belongs to a company; it is public information about a brand and its news.

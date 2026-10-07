@@ -113,3 +113,11 @@ export function parseAnswer(text: string): Block[] {
 
 /** "3 questions left today" style hint. */
 export const remainingText = (left: number) => (left <= 0 ? "That was your last question for today." : left <= 5 ? `${left} question${left === 1 ? "" : "s"} left today.` : "");
+
+/** An answer as plain sentences for reading aloud: no bold marks, link labels only, list items on their own lines. */
+export function plainText(answer: string): string {
+  const inl = (parts: Inline[]) => parts.map((p) => p.text).join("");
+  return parseAnswer(answer)
+    .map((b) => (b.kind === "p" ? inl(b.inline) : b.items.map((it, i) => (b.kind === "ol" ? `${i + 1}. ` : "") + inl(it)).join(". ")))
+    .join("\n");
+}

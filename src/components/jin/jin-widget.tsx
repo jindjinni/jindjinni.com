@@ -1,11 +1,43 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { GenieLamp } from "@/components/jin/genie-lamp";
-import { parseAnswer, remainingText, type Inline, type JinMessage } from "@/lib/jin-rules";
+import { parseAnswer, plainText, remainingText, type Inline, type JinMessage } from "@/lib/jin-rules";
 
 type Shown = JinMessage & { error?: boolean };
+
+// The browser's own speech tools (no extra service, no cost). Chrome, Edge and Safari have them; others simply don't show the buttons.
+type Recognition = {
+  lang: string;
+  interimResults: boolean;
+  continuous: boolean;
+  onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
+  onend: (() => void) | null;
+  onerror: ((e: { error?: string }) => void) | null;
+  start: () => void;
+  stop: () => void;
+};
+type RecognitionCtor = new () => Recognition;
+const recognitionCtor = (): RecognitionCtor | null => {
+  const w = window as unknown as { SpeechRecognition?: RecognitionCtor; webkitSpeechRecognition?: RecognitionCtor };
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
+};
+
+const noopSubscribe = () => () => {};
+
+const MicIcon = ({ className = "h-5 w-5" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <rect x="9" y="3" width="6" height="11" rx="3" />
+    <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+  </svg>
+);
+const SpeakerIcon = ({ on, className = "h-5 w-5" }: { on: boolean; className?: string }) => (
+  <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M4 9v6h4l5 4V5L8 9H4Z" />
+    {on ? <path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12" /> : <path d="m17 9 5 6m0-6-5 6" />}
+  </svg>
+);
 
 const STARTERS = ["What can you help me with?", "Where do I create a quotation?", "How is my company doing today?"];
 
@@ -67,6 +99,22 @@ export function JinWidget() {
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const recRef = useRef<Recognition | null>(null);
+  // What this browser can do is read once on the client (the server always says no, and the panel isn't drawn until it is opened).
+  const canListen = useSyncExternalStore(noopSubscribe, () => !!recognitionCtor(), () => false);
+  const canSpeak = useSyncExternalStore(noopSubscribe, () => "speechSynthesis" in window, () => false);
+  const [listening, setListening] = useState(false);
+  const [speakOn, setSpeakOn] = useState(() => {
+    try {
+      return typeof window !== "undefined" && localStorage.getItem("jin-speak") === "1";
+    } catch {
+      return false; // storage can be blocked; reading aloud then just starts off
+    }
+  });
+  const [voiceMsg, setVoiceMsg] = useState("");
+  const [rated, setRated] = useState<Record<number, "UP" | "DOWN" | "sent">>({});
+  const [noteFor, setNoteFor] = useState<number | null>(null);
+  const [note, setNote] = useState("");
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end" });
@@ -83,7 +131,87 @@ export function JinWidget() {
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
 
-  useEffect(() => () => abortRef.current?.abort(), []);
+  useEffect(
+    () => () => {
+      abortRef.current?.abort();
+      recRef.current?.stop();
+      if (typeof window !== "undefined" && "speechSynthesis" in window) window.speechSynthesis.cancel();
+    },
+    [],
+  );
+
+  const speak = useCallback((answer: string) => {
+    // Reading aloud is a nicety: if the browser refuses, the written answer still stands.
+    try {
+      if (!("speechSynthesis" in window)) return;
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(plainText(answer));
+      u.lang = navigator.language || "en-US";
+      window.speechSynthesis.speak(u);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const toggleSpeak = () => {
+    const next = !speakOn;
+    setSpeakOn(next);
+    try {
+      localStorage.setItem("jin-speak", next ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+    if (!next && "speechSynthesis" in window) window.speechSynthesis.cancel();
+  };
+
+  const toggleListen = () => {
+    if (listening) {
+      recRef.current?.stop();
+      return;
+    }
+    const Ctor = recognitionCtor();
+    if (!Ctor) return;
+    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+    const rec = new Ctor();
+    rec.lang = navigator.language || "en-US";
+    rec.interimResults = true;
+    rec.continuous = false;
+    const before = text ? text.trimEnd() + " " : "";
+    rec.onresult = (e) => {
+      let heard = "";
+      for (let i = 0; i < e.results.length; i++) heard += e.results[i][0].transcript;
+      setText((before + heard).slice(0, 1500));
+    };
+    rec.onerror = (e) => setVoiceMsg(e.error === "not-allowed" || e.error === "service-not-allowed" ? "The microphone is blocked. Allow it in your browser's address bar, then try again." : e.error === "no-speech" ? "I didn't hear anything. Try again." : "Voice didn't work this time. You can type instead.");
+    rec.onend = () => {
+      setListening(false);
+      inputRef.current?.focus();
+    };
+    recRef.current = rec;
+    setVoiceMsg("");
+    setListening(true);
+    try {
+      rec.start();
+    } catch {
+      setListening(false);
+    }
+  };
+
+  const sendFeedback = useCallback(
+    async (i: number, rating: "UP" | "DOWN", noteText: string) => {
+      const question = msgs[i - 1]?.content ?? "";
+      const answer = msgs[i]?.content ?? "";
+      setRated((r) => ({ ...r, [i]: "sent" }));
+      setNoteFor(null);
+      setNote("");
+      try {
+        await fetch("/api/jin/feedback", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ rating, question, answer, note: noteText }) });
+      } catch {
+        /* feedback is best effort */
+      }
+    },
+    [msgs],
+  );
 
   const send = useCallback(
     async (raw: string) => {
@@ -101,6 +229,7 @@ export function JinWidget() {
         if (res.ok && data.answer) {
           setMsgs((m) => [...m, { role: "assistant", content: data.answer! }]);
           setLeft(typeof data.left === "number" ? data.left : null);
+          if (speakOn) speak(data.answer);
         } else {
           setMsgs((m) => [...m, { role: "assistant", content: data.error ?? "I couldn't answer that just now. Please try again.", error: true }]);
         }
@@ -110,7 +239,7 @@ export function JinWidget() {
         setBusy(false);
       }
     },
-    [busy, msgs],
+    [busy, msgs, speakOn, speak],
   );
 
   return (
@@ -139,9 +268,16 @@ export function JinWidget() {
               <GenieLamp className="h-6 w-6" />
               Jin <span className="text-xs font-normal text-emerald-100">your wish is my command</span>
             </span>
-            <button type="button" onClick={() => setOpen(false)} className="rounded-md px-2 py-1 text-lg leading-none hover:bg-emerald-600" aria-label="Close Jin" data-testid="jin-close">
-              ×
-            </button>
+            <span className="flex items-center gap-1">
+              {canSpeak && (
+                <button type="button" onClick={toggleSpeak} className="rounded-md p-1.5 hover:bg-emerald-600" aria-label={speakOn ? "Stop reading answers aloud" : "Read answers aloud"} aria-pressed={speakOn} title={speakOn ? "Reading answers aloud: on" : "Read answers aloud: off"} data-testid="jin-speak">
+                  <SpeakerIcon on={speakOn} />
+                </button>
+              )}
+              <button type="button" onClick={() => setOpen(false)} className="rounded-md px-2 py-1 text-lg leading-none hover:bg-emerald-600" aria-label="Close Jin" data-testid="jin-close">
+                ×
+              </button>
+            </span>
           </header>
           <div className="flex-1 space-y-3 overflow-y-auto px-4 py-3 text-sm text-slate-800 dark:text-slate-100" data-testid="jin-messages" aria-live="polite">
             {msgs.length === 0 && (
@@ -164,6 +300,31 @@ export function JinWidget() {
               ) : (
                 <div key={i} className={`mr-4 rounded-2xl rounded-bl-sm px-3 py-2 ${m.error ? "bg-amber-50 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200" : "bg-slate-100 dark:bg-slate-800"}`} data-testid={m.error ? "jin-error" : "jin-answer"}>
                   <Answer text={m.content} />
+                  {!m.error && (
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                      {rated[i] === "sent" ? (
+                        <span data-testid="jin-thanks">Thank you, that helps Jin learn.</span>
+                      ) : (
+                        <>
+                          <button type="button" onClick={() => sendFeedback(i, "UP", "")} className="rounded-full border border-slate-300 px-2 py-0.5 hover:bg-white dark:border-slate-600 dark:hover:bg-slate-700" data-testid="jin-up">
+                            Helpful
+                          </button>
+                          <button type="button" onClick={() => { setNoteFor(noteFor === i ? null : i); setNote(""); }} className="rounded-full border border-slate-300 px-2 py-0.5 hover:bg-white dark:border-slate-600 dark:hover:bg-slate-700" data-testid="jin-down">
+                            Not right
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                  {noteFor === i && rated[i] !== "sent" && (
+                    <div className="mt-2 flex flex-col gap-1.5">
+                      <label htmlFor={`jin-note-${i}`} className="text-xs text-slate-600 dark:text-slate-300">What should Jin have said? (optional) This question and answer go to the Jin team.</label>
+                      <textarea id={`jin-note-${i}`} value={note} onChange={(e) => setNote(e.target.value)} rows={2} maxLength={1000} className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-600 dark:bg-slate-900" data-testid="jin-note" />
+                      <button type="button" onClick={() => sendFeedback(i, "DOWN", note)} className="self-start rounded-md bg-emerald-700 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-800" data-testid="jin-note-send">
+                        Send to the Jin team
+                      </button>
+                    </div>
+                  )}
                 </div>
               ),
             )}
@@ -202,10 +363,20 @@ export function JinWidget() {
                 className="min-h-[2.75rem] flex-1 resize-none rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                 data-testid="jin-input"
               />
+              {canListen && (
+                <button type="button" onClick={toggleListen} className={`rounded-lg border px-2.5 py-2 ${listening ? "animate-pulse border-red-400 bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300" : "border-slate-300 text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"}`} aria-label={listening ? "Stop listening" : "Talk to Jin"} aria-pressed={listening} title="Talk to Jin" data-testid="jin-mic">
+                  <MicIcon />
+                </button>
+              )}
               <button type="submit" disabled={busy || !text.trim()} className="rounded-lg bg-emerald-700 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50 dark:bg-emerald-600" data-testid="jin-send">
                 Send
               </button>
             </div>
+            {(listening || voiceMsg) && (
+              <p className={`mt-1.5 text-xs ${voiceMsg ? "text-amber-700 dark:text-amber-300" : "text-red-600 dark:text-red-300"}`} role="status" data-testid="jin-voice-status">
+                {listening ? "Listening… speak now. Check what I heard, then press Send." : voiceMsg}
+              </p>
+            )}
             <p className="mt-1.5 text-[11px] leading-snug text-slate-500 dark:text-slate-400">
               {left != null && remainingText(left) ? `${remainingText(left)} ` : ""}Jin can make mistakes. Check important numbers on the page itself.
             </p>

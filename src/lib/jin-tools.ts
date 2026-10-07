@@ -8,6 +8,9 @@ import { BOARD_COLUMN_LABELS } from "@/lib/receiving-rules";
 import { getToBePaid } from "@/lib/accounts-queries";
 import { getInventory } from "@/lib/inventory-service";
 import { homeStories, watchedBrands } from "@/lib/industry-service";
+import { activeRecallChecks } from "@/lib/industry-service";
+import { checkGtin, checkLotOrSerial, checkNdc, describeExpiry, parseGs1 } from "@/lib/industry-checks";
+import { formatEntries, liveKnowledge, searchKnowledge } from "@/lib/jin-library";
 import { canViewAccounts, canViewInventory, canViewPurchasing, canViewReceiving, type CurrentOrgLike } from "@/lib/jin-access";
 
 export type JinToolDef = {
@@ -31,6 +34,78 @@ const lim = (v: unknown, def = 10) => {
 };
 const money = (n: number) => Math.round(n * 100) / 100;
 const has = (hay: string, needle: string) => !needle || hay.toLowerCase().includes(needle.toLowerCase());
+
+const DISCLAIMER = "A check can show a number is badly formed or does not fit a recorded layout. It can never prove a product is genuine, safe, recall-free or unexpired in reality.";
+const todayIso = () => new Date().toISOString().slice(0, 10);
+
+const SPECIALIST_TOOLS: Tool[] = [
+  {
+    name: "check_ndc",
+    description: "Check an NDC (National Drug Code) for correct shape and show its 10- and 11-digit spellings. Use for any question about an NDC number.",
+    input_schema: { type: "object", properties: { ndc: { type: "string" } }, required: ["ndc"] },
+    allowed: () => true,
+    async run(_w, input) {
+      return { result: checkNdc(str(input.ndc, 40)), note: DISCLAIMER };
+    },
+  },
+  {
+    name: "check_barcode",
+    description: "Check a barcode number (UPC, EAN, GTIN) or read the text of a GS1/UDI barcode such as (01)...(17)...(10)...(21)... into GTIN, lot, serial and expiry, with the GTIN check digit and date checks.",
+    input_schema: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
+    allowed: () => true,
+    async run(_w, input) {
+      const text = str(input.text, 200);
+      if (/^[\d\s-]+$/.test(text) && !text.includes("(") && text.replace(/[\s-]/g, "").length <= 14) return { kind: "gtin", result: checkGtin(text), note: DISCLAIMER };
+      const g = parseGs1(text);
+      return { kind: "gs1", result: g, expiryNote: g.ok && g.expiry ? describeExpiry(g.expiry, todayIso()) : null, note: DISCLAIMER };
+    },
+  },
+  {
+    name: "check_lot_or_serial",
+    description: "Compare a lot number or serial number with the layouts recorded in the platform library for a brand. Say which brand when you know it.",
+    input_schema: {
+      type: "object",
+      properties: { value: { type: "string" }, brand: { type: "string" }, kind: { type: "string", enum: ["lot", "serial"] } },
+      required: ["value"],
+    },
+    allowed: () => true,
+    async run(_w, input) {
+      const kind = input.kind === "lot" || input.kind === "serial" ? input.kind : undefined;
+      const brand = str(input.brand, 60) || undefined;
+      const all = await liveKnowledge();
+      const result = checkLotOrSerial(str(input.value, 60), formatEntries(all, brand, kind));
+      return {
+        result,
+        brand: brand ?? null,
+        note: `${DISCLAIMER} If the brand has no recorded layout, say so plainly and do not guess one.`,
+      };
+    },
+  },
+  {
+    name: "industry_knowledge",
+    description: "Search the platform's industry library (lot and serial layouts, NDC and barcode facts, recalls, counterfeit signs, manufacturer notes). Use it before answering any industry question, and cite the entry title and its last-checked date.",
+    input_schema: { type: "object", properties: { query: { type: "string" }, brand: { type: "string" } }, required: ["query"] },
+    allowed: () => true,
+    async run(_w, input) {
+      const hits = searchKnowledge(await liveKnowledge(), str(input.query, 200), str(input.brand, 60) || undefined, 5);
+      return {
+        found: hits.length,
+        entries: hits.map((e) => ({ title: e.title, category: e.category, brand: e.brand, source: e.source, lastChecked: e.verifiedOn, text: e.body.slice(0, 1500), recordedLayouts: e.formats?.length ?? 0 })),
+        note: hits.length ? undefined : "Nothing is recorded about this yet. Say so, and do not fill the gap from memory as if it were verified.",
+      };
+    },
+  },
+  {
+    name: "recall_checks",
+    description: "The recalls this company's Receiving team is actively checking received lots against.",
+    input_schema: { type: "object", properties: {} },
+    allowed: (w) => canViewReceiving(w),
+    async run(w) {
+      const rows = await activeRecallChecks(w.organizationId);
+      return { total: rows.length, recalls: rows.slice(0, MAX_ROWS).map((r) => ({ name: r.name, manufacturer: r.manufacturer })), manage: "/dashboard/receiving" };
+    },
+  },
+];
 
 const TOOLS: Tool[] = [
   {
@@ -187,6 +262,8 @@ const TOOLS: Tool[] = [
     },
   },
 ];
+
+TOOLS.push(...SPECIALIST_TOOLS);
 
 /** The tools this person may use (the AI service never even hears about the others). */
 export function toolsFor(who: CurrentOrgLike): JinToolDef[] {
