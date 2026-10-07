@@ -4,8 +4,8 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { users } from "@/db/schema";
 import { requireOrg } from "@/lib/tenant";
-import { canRefreshIndustryNews, canViewCompanyPerformance, canViewReceiving, isAdmin } from "@/lib/permissions";
-import { activeRecallChecks, aiSummariesOn, homeStories, isStale, lastRun, ownersOf, runIndustryWatch, watchedBrands } from "@/lib/industry-service";
+import { canRefreshIndustryNews, canViewCompanyPerformance, canViewReceiving } from "@/lib/permissions";
+import { activeRecallChecks, homeStories, isStale, lastRun, ownersOf, runIndustryWatch, watchedBrands } from "@/lib/industry-service";
 import { groupNews, needsAttention } from "@/lib/industry-rules";
 import { getCompanyPulse } from "@/lib/home-stats";
 import { greeting, hourIn, longDay, plural } from "@/lib/home-rules";
@@ -25,7 +25,7 @@ export default async function HomePage() {
   const org = await requireOrg();
   const showPerformance = canViewCompanyPerformance(org.role);
   const brands = await watchedBrands(org.organizationId);
-  const [stories, run, owners, checks, pulse, me, terms, aiOn] = await Promise.all([
+  const [stories, run, owners, checks, pulse, me, terms] = await Promise.all([
     homeStories(org.organizationId, brands),
     lastRun(org.organizationId),
     ownersOf(org.organizationId, brands),
@@ -33,7 +33,6 @@ export default async function HomePage() {
     showPerformance ? getCompanyPulse(org.organizationId) : Promise.resolve(null),
     db.select({ name: users.name }).from(users).where(eq(users.id, org.userId)).limit(1),
     getPaymentTerms(org.organizationId).catch(() => null),
-    aiSummariesOn(org.organizationId),
   ]);
 
   // The news is a few hours old (or has never been fetched): look again quietly after this page is sent.
@@ -113,11 +112,6 @@ export default async function HomePage() {
                 <p role="status" className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200" data-testid="industry-problems">
                   Some sources didn&apos;t answer the last time: {run.problems.slice(0, 3).join(" ")}
                   {run.problems.length > 3 ? ` (and ${run.problems.length - 3} more)` : ""} It will try again.
-                </p>
-              )}
-              {!aiOn && canRefresh && (
-                <p className="mt-1 text-xs text-slate-500">
-                  Headlines are sorted by keywords. {isAdmin(org.role) ? <>Connect your company&apos;s Claude key in <Link href="/dashboard/settings/connectors" className="underline">Settings → Connectors</Link> to have Claude check and summarise each one.</> : "An owner or admin can connect Claude to have it check and summarise each one."}
                 </p>
               )}
               <IndustryBoard groups={groups} attention={attention} nowIso={now.toISOString()} updating={updating} />

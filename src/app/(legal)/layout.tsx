@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { BrandLogo } from "@/components/landing/icons";
-import { LEGAL_LINKS } from "@/lib/legal";
+import { LEGAL_LINKS, OPERATOR_NAME } from "@/lib/legal";
 
 export default function LegalLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -24,6 +24,9 @@ export default function LegalLayout({ children }: { children: React.ReactNode })
             </Link>
           ))}
         </nav>
+        <p className="mx-auto max-w-3xl px-4 pb-6 text-xs text-muted sm:px-6">
+          © {new Date().getFullYear()} {OPERATOR_NAME}. All rights reserved. jindjinni, its software, design and content are proprietary and may not be copied, scraped or used to train AI.
+        </p>
       </footer>
     </div>
   );

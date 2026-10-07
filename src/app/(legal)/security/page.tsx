@@ -57,9 +57,16 @@ const sections: LegalSection[] = [
     ],
   },
   {
+    heading: "Protecting the Service itself",
+    paras: [
+      "How jindjinni is built is protected too. Our source code is kept in a private repository and runs on our servers, so it is never sent to your browser. Signed-in pages are marked so that search engines and AI crawlers are told not to collect them, and the Service cannot be shown inside another website. We log activity, watch for automated or bulk access, and may block or suspend accounts that copy or scrape the Service. Our Terms of Service and Acceptable Use Policy forbid copying, reverse engineering and using AI tools to clone the Service, and we will enforce them.",
+    ],
+  },
+  {
     heading: "What we ask of you",
     items: [
-      "Use a strong password you don't use anywhere else, and don't share logins.",
+      "Use a strong password you don't use anywhere else, and don't share logins. Each person on your team should have their own.",
+      "Don't give outside developers, agencies or AI tools access to your account or to screens of the Service.",
       "Invite people with the role they need and no more, and turn access off when someone leaves.",
       "Keep patient health information, payment card numbers and similar highly sensitive data out of the workspace.",
       "Keep your own devices and email accounts secure.",

@@ -1205,8 +1205,8 @@ export const shippoConnections = sqliteTable(
   (t) => [uniqueIndex("shippo_connections_org_idx").on(t.organizationId)],
 );
 
-// A company's own Claude (Anthropic) key, for the AI features that company uses (reading label photos, checking industry
-// news). Pasted by an owner or admin in Settings -> Connectors, checked with Anthropic first, kept encrypted, shown only as
+// A company's own Claude (Anthropic) key, for the AI features that cost money per use (reading label photos).
+// Pasted by an owner or admin in Settings -> Connectors, checked with Anthropic first, kept encrypted, shown only as
 // the last 4 characters. One per company. Usage is billed to that company's own Anthropic account.
 export const aiConnections = sqliteTable(
   "ai_connections",
@@ -1227,6 +1227,44 @@ export const aiConnections = sqliteTable(
     lastCheckedAt: text("last_checked_at"),
   },
   (t) => [uniqueIndex("ai_connections_org_idx").on(t.organizationId)],
+);
+
+// Industry news is a built-in courtesy for every company, paid for by the platform. To keep that cheap, Claude checks each
+// headline once per BRAND, not once per company: the verdict is kept here and reused by every company that buys that brand.
+// Nothing in these two tables belongs to a company; it is public information about a brand and its news.
+export const industryAiCache = sqliteTable(
+  "industry_ai_cache",
+  {
+    id: text("id").primaryKey(),
+    brandKey: text("brand_key").notNull(),
+    fingerprint: text("fingerprint").notNull(),
+    relevant: integer("relevant", { mode: "boolean" }).notNull(),
+    kind: text("kind").notNull(),
+    severity: text("severity").notNull(),
+    summary: text("summary"),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(current_timestamp)`),
+  },
+  (t) => [uniqueIndex("industry_ai_cache_brand_fp_idx").on(t.brandKey, t.fingerprint)],
+);
+
+// Who owns a brand, as worked out once by Claude and shared by every company that buys that brand.
+export const industryMakerCache = sqliteTable(
+  "industry_maker_cache",
+  {
+    id: text("id").primaryKey(),
+    brandKey: text("brand_key").notNull(),
+    owner: text("owner").notNull(),
+    firms: text("firms").notNull().default(""),
+    terms: text("terms").notNull().default(""),
+    broadMaker: integer("broad_maker", { mode: "boolean" }).notNull().default(false),
+    ambiguous: integer("ambiguous", { mode: "boolean" }).notNull().default(false),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(current_timestamp)`),
+  },
+  (t) => [uniqueIndex("industry_maker_cache_brand_idx").on(t.brandKey)],
 );
 
 // The mailbox a company sends its customer emails from (an admin connects it with Google's sign-in, like Airtable's

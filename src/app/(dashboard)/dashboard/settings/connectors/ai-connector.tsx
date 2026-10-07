@@ -31,10 +31,10 @@ export function AiConnector(props: { source: "company" | "platform" | "none"; st
     <section className={card} data-testid="ai-connector">
       <h3 className="text-base font-semibold text-slate-900 dark:text-slate-50">Claude (AI)</h3>
       <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-        Reads lot and serial numbers from label photos in Receiving, and checks and summarises the industry news on Home. Usage is billed to <strong>your</strong> Anthropic account.
+        Reads lot and serial numbers from label photos in Receiving. Usage is billed to <strong>your</strong> Anthropic account. The industry news on Home is a built-in courtesy for every company and does not need this.
       </p>
       <div className="mt-3 text-sm" data-testid="ai-state">
-        {props.source === "none" && <p className="text-amber-800 dark:text-amber-300">Not connected. These AI features are off for {props.companyName}; the news is still sorted by keywords.</p>}
+        {props.source === "none" && <p className="text-amber-800 dark:text-amber-300">Not connected. Label-photo reading is off for {props.companyName}. Type or scan the numbers instead; the Home news is not affected.</p>}
         {props.source === "platform" && <p className="text-slate-700 dark:text-slate-300">Using the platform&apos;s own Claude account. You can connect your own below at any time.</p>}
         {own && props.status === "ACTIVE" && (
           <p className="text-slate-700 dark:text-slate-300">
@@ -43,7 +43,7 @@ export function AiConnector(props: { source: "company" | "platform" | "none"; st
         )}
         {own && props.status === "NEEDS_ATTENTION" && (
           <div className="text-red-700 dark:text-red-400">
-            <p className="font-medium">Needs attention. The AI features are paused until this is fixed.</p>
+            <p className="font-medium">Needs attention. Label-photo reading is paused until this is fixed.</p>
             {props.lastError && <p className="mt-0.5">{props.lastError}</p>}
           </div>
         )}
@@ -57,7 +57,7 @@ export function AiConnector(props: { source: "company" | "platform" | "none"; st
             <button type="button" className={dangerBtn} onClick={() => setConfirmOff(true)}>Disconnect</button>
           ) : (
             <form action={disconnect} className="flex items-center gap-3">
-              <span className="text-sm text-slate-700 dark:text-slate-300">The AI features stop until you connect again. Disconnect?</span>
+              <span className="text-sm text-slate-700 dark:text-slate-300">Label-photo reading stops until you connect again. Disconnect?</span>
               <button className={dangerBtn} disabled={disconnecting}>Yes, disconnect</button>
               <button type="button" className={linkBtn} onClick={() => setConfirmOff(false)}>Keep it</button>
             </form>

@@ -1,11 +1,13 @@
 // Each company's own Claude (Anthropic) key: where it is kept, how it is checked, and which key a request may use.
 //
 //  - An owner or admin pastes the company's key in Settings -> Connectors. We check it with Anthropic first, keep it
-//    encrypted, and use it only for THAT company's AI features (reading label photos, checking industry news). The
-//    cost lands on the company's own Anthropic account.
-//  - The platform's own key (the ANTHROPIC_API_KEY setting on Vercel) is used only for the companies the platform runs
-//    itself (same list as the Shippo account) and only when that company has not connected its own. Any other company
-//    without a key simply doesn't get the AI features, so nobody can run up charges on the platform's account.
+//    encrypted, and use it only for THAT company's label-photo reading. The cost lands on the company's own Anthropic
+//    account.
+//  - The platform's own key (the ANTHROPIC_API_KEY setting on Vercel) is used here only for the companies the platform
+//    runs itself (same list as the Shippo account) and only when that company has not connected its own. Any other
+//    company without a key simply doesn't get label-photo reading, so nobody can run up charges on the platform's account.
+//  - The industry news on Home is different: it is a built-in courtesy for every company, runs on the platform's key and
+//    is shared per brand (see newsAiKey in industry-service.ts), so it needs nothing from the company.
 
 import { eq } from "drizzle-orm";
 import { db } from "@/db/client";

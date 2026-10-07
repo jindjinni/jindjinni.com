@@ -48,7 +48,7 @@ export const CONNECTORS: Record<ConnectorKey, ConnectorInfo> = {
   ai: {
     key: "ai",
     title: "Claude (AI)",
-    what: "Reads lot and serial numbers from label photos in Receiving and checks and summarises the industry news on Home. Usage is billed to your own Anthropic account.",
+    what: "Reads lot and serial numbers from label photos in Receiving. Usage is billed to your own Anthropic account. (The industry news on Home is a built-in courtesy and needs no connection.)",
     scope: "company",
     manageHref: "/dashboard/settings/connectors",
     manageWhere: "Settings → Connectors",
@@ -116,8 +116,8 @@ export async function connectorStatuses(organizationId: string): Promise<Record<
         ? { key: "ai", state: "connected", detail: `Key ending ${ai.keyHint}.` }
         : { key: "ai", state: "attention", detail: ai.lastError ?? "Anthropic isn't accepting the saved key." }
       : ai.source === "platform"
-        ? { key: "ai", state: "platform", detail: "AI features use the platform's own Claude account." }
-        : { key: "ai", state: "not_connected", detail: "Label-photo reading and AI news summaries are off. News is still sorted by keywords." };
+        ? { key: "ai", state: "platform", detail: "Label-photo reading uses the platform's own Claude account." }
+        : { key: "ai", state: "not_connected", detail: "Label-photo reading is off. The industry news on Home works without it." };
 
   return {
     shippo: shippoStatus,

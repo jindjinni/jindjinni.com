@@ -522,7 +522,7 @@ export default function Home() {
           </Link>
           <p className="max-w-md text-center">
             Your business wishes, our command.
-            <span className="block text-xs">© 2026 jindjinni. All rights reserved. jindjinni is business software. It does not provide legal, tax, accounting or medical advice.</span>
+            <span className="block text-xs">© 2026 Plantarz Property Solutions LLC. All rights reserved. jindjinni, its software, design and content are proprietary and may not be copied, scraped or used to train AI. jindjinni is business software. It does not provide legal, tax, accounting or medical advice.</span>
           </p>
           <div className="flex flex-wrap justify-center gap-x-5 gap-y-2 font-semibold">
             <Link href="/login" className="hover:text-ink">Sign In</Link>

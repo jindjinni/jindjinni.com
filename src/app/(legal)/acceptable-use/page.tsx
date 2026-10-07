@@ -73,7 +73,26 @@ const sections: LegalSection[] = [
       "Don't use bots, scrapers or scripts to pull data from the Service in bulk, other than the data download we provide.",
       "Don't overload the Service, including the shipping-label, tracking, address-search, news and photo features.",
       "Don't upload malware or other harmful code, or files you have no right to share.",
-      "Don't copy, resell, white-label, benchmark for a competitor or reverse engineer the Service.",
+      "Don't copy, resell, white-label, benchmark for a competitor or reverse engineer the Service (see the section on protecting our work below).",
+    ],
+  },
+  {
+    heading: "Protect our work: no copying, scraping or AI cloning",
+    paras: [
+      "jindjinni was designed and built over years by the company that runs it, and how it is organised and how it behaves are valuable, confidential work. The Terms of Service explain this in full (see the section called No copying, scraping, reverse engineering or AI cloning). In plain words, these are not allowed, whether you do them yourself, through a script, or with an AI tool:",
+    ],
+    items: [
+      "Copying, cloning, imitating or reselling the Service, its screens, layouts, menus, workflows, templates, rules or look and feel.",
+      "Reverse engineering it, or trying to work out how it is built or how its rules and calculations are done.",
+      "Using bots, scrapers, browser automation, AI agents or AI assistants to sign in, explore, record, map or document the Service, or taking bulk screenshots or recordings of it.",
+      "Putting screens, screenshots, settings, templates, layouts, documentation or other non-public parts of the Service into an AI tool, or using them to train or prompt a model, to build something similar.",
+      "Letting a developer, agency, contractor, competitor or AI tool use your login, or look at the Service, so that they can build a similar product.",
+      "Sharing logins or invitations with anyone who has no business reason to be on your team.",
+      "Benchmarking the Service for a competitor, or using it to build, train or improve a competing product.",
+    ],
+    after: [
+      "Your own business data is yours. You can download it and use it however you like. This policy is about the Service itself, not about your data.",
+      "We log activity and may use technical measures to detect and block copying and automated access. If we find it, we may suspend or end access immediately and take legal action.",
     ],
   },
   {

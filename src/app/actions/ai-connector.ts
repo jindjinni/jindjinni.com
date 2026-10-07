@@ -26,7 +26,7 @@ export async function connectAiAction(_prev: AiActionState, formData: FormData):
   const r = await connectAi(org, String(formData.get("key") ?? ""));
   if (!r.ok) return { error: r.error };
   refresh();
-  return { message: "Claude connected. Label-photo reading and news summaries are on, billed to your Anthropic account." };
+  return { message: "Claude connected. Label-photo reading is on, billed to your Anthropic account." };
 }
 
 export async function recheckAiAction(_prev: AiActionState, _formData: FormData): Promise<AiActionState> {
@@ -40,5 +40,5 @@ export async function disconnectAiAction(_prev: AiActionState, _formData: FormDa
   const org = await requireAdmin();
   await disconnectAi(org.organizationId);
   refresh();
-  return { message: "Claude disconnected. Label-photo reading and AI news summaries are off." };
+  return { message: "Claude disconnected. Label-photo reading is off." };
 }

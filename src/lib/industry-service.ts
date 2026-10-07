@@ -6,7 +6,7 @@
 import { aiKeyFor, anthropicBase, noteAiRefused, type AiKey } from "@/lib/ai-connection";
 import { and, desc, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@/db/client";
-import { industryBrandMakers, industryNews, industryWatchRuns, organizations, purchasingCategories, purchasingProducts, receivingRecalls } from "@/db/schema";
+import { industryAiCache, industryBrandMakers, industryMakerCache, industryNews, industryWatchRuns, organizations, purchasingCategories, purchasingProducts, receivingRecalls } from "@/db/schema";
 import { newId } from "@/lib/ids";
 import { fitsBrand, isListedBrand, makerQuery, newsQuery, profileFor, type BrandProfile, type LearnedMaker } from "@/lib/industry-brands";
 import {
@@ -35,8 +35,19 @@ const fdaUrl = () => `${testBase("OPENFDA_TEST_BASE") || "https://api.fda.gov"}/
 const newsUrl = () => `${testBase("NEWS_TEST_BASE") || "https://news.google.com"}/rss/search`;
 const anthropicUrl = () => `${anthropicBase()}/v1/messages`;
 
-/** Is Claude on for this company? Only with the company's own key (or the platform's, for companies the platform runs). */
-export const aiSummariesOn = async (organizationId: string) => !!(await aiKeyFor(organizationId));
+/**
+ * The Claude key the industry news uses. News and recall updates about the brands a company buys are a built-in courtesy
+ * for every company, so they run on the platform's own key (ANTHROPIC_API_KEY) and need nothing from the company. The cost
+ * stays small because each headline is checked once per brand and shared (industry_ai_cache). Only if the platform has no
+ * key does a company's own connected key get used.
+ */
+export async function newsAiKey(organizationId: string): Promise<AiKey | null> {
+  const platform = process.env.ANTHROPIC_API_KEY;
+  if (platform) return { key: platform, source: "platform" };
+  return aiKeyFor(organizationId);
+}
+
+export const aiSummariesOn = async (organizationId: string) => !!(await newsAiKey(organizationId));
 
 /** Home counts as out of date after this many hours; opening it then refreshes in the background. */
 export const STALE_HOURS = 6;
@@ -223,6 +234,19 @@ export async function aiMaker(brand: string, ai: AiKey | null, organizationId: s
   }
 }
 
+async function cachedMaker(brand: string): Promise<LearnedMaker | null> {
+  const [r] = await db.select().from(industryMakerCache).where(eq(industryMakerCache.brandKey, brand.toLowerCase())).limit(1);
+  if (!r) return null;
+  return { owner: r.owner, firms: r.firms ? r.firms.split(" | ").filter(Boolean) : [], terms: r.terms ? r.terms.split(" | ").filter(Boolean) : [], broadMaker: r.broadMaker, ambiguous: r.ambiguous };
+}
+
+async function saveMakerCache(brand: string, m: LearnedMaker): Promise<void> {
+  await db
+    .insert(industryMakerCache)
+    .values({ id: newId("imc"), brandKey: brand.toLowerCase(), owner: m.owner, firms: m.firms.join(" | "), terms: m.terms.join(" | "), broadMaker: m.broadMaker, ambiguous: m.ambiguous })
+    .onConflictDoNothing();
+}
+
 /** Every watched brand with its owner. A brand off the built-in list is looked up once by Claude (when it is on) and kept. */
 export async function profilesFor(organizationId: string, brands: string[], lookUp: AiKey | null): Promise<BrandProfile[]> {
   const saved = new Map(
@@ -235,7 +259,12 @@ export async function profilesFor(organizationId: string, brands: string[], look
   for (const brand of brands) {
     let learned = saved.get(brand.toLowerCase()) ?? null;
     if (!learned && lookUp && !isListedBrand(brand)) {
-      learned = await aiMaker(brand, lookUp, organizationId);
+      // Another company that buys this brand may already have had it looked up: reuse that, ask Claude only once per brand.
+      learned = await cachedMaker(brand);
+      if (!learned) {
+        learned = await aiMaker(brand, lookUp, organizationId);
+        if (learned) await saveMakerCache(brand, learned);
+      }
       if (learned) {
         await db
           .insert(industryBrandMakers)
@@ -291,7 +320,7 @@ export async function runIndustryWatch(organizationId: string, trigger: "auto" |
   let added = 0;
   let aiUsed = false;
   try {
-    const ai = await aiKeyFor(organizationId);
+    const ai = await newsAiKey(organizationId);
     const profiles = await profilesFor(organizationId, brands, ai);
     const found = await pool(profiles, 4, async (p) => ({
       brand: p.brand,
@@ -318,11 +347,35 @@ export async function runIndustryWatch(organizationId: string, trigger: "auto" |
 
     // Claude (when on) double-checks and summarises the news headlines; the FDA records are already specific.
     const forAi = fresh.filter((f) => f.needsAi).slice(0, MAX_AI_ITEMS);
-    const verdicts = await aiCheck(forAi.map((f) => ({ brand: f.brand, title: f.story.title, source: f.story.source })), ai, organizationId);
-    if (ai && verdicts === null && forAi.length > 0) problems.push("The AI summary didn't answer, so headlines were sorted by keywords only.");
-    aiUsed = verdicts !== null;
+    // A headline another company already had checked (same brand, same story) is reused; only new ones go to Claude.
     const verdictOf = new Map<Fresh, AiVerdict>();
-    if (verdicts) for (const v of verdicts) verdictOf.set(forAi[v.id], v);
+    const keyOf = (f: Fresh) => `${f.brand.toLowerCase()}|${f.story.fingerprint}`;
+    const cachedRows = forAi.length
+      ? await db
+          .select()
+          .from(industryAiCache)
+          .where(inArray(industryAiCache.fingerprint, [...new Set(forAi.map((f) => f.story.fingerprint))]))
+      : [];
+    const cache = new Map(cachedRows.map((r) => [`${r.brandKey}|${r.fingerprint}`, r]));
+    const toAsk: Fresh[] = [];
+    for (const f of forAi) {
+      const c = cache.get(keyOf(f));
+      if (c && isKind(c.kind) && isSeverity(c.severity)) verdictOf.set(f, { id: 0, relevant: c.relevant, kind: c.kind, severity: c.severity, summary: c.summary });
+      else toAsk.push(f);
+    }
+    const verdicts = await aiCheck(toAsk.map((f) => ({ brand: f.brand, title: f.story.title, source: f.story.source })), ai, organizationId);
+    if (ai && verdicts === null && toAsk.length > 0) problems.push("The AI summary didn't answer, so headlines were sorted by keywords only.");
+    if (verdicts) {
+      for (const v of verdicts) {
+        const f = toAsk[v.id];
+        verdictOf.set(f, v);
+        await db
+          .insert(industryAiCache)
+          .values({ id: newId("iac"), brandKey: f.brand.toLowerCase(), fingerprint: f.story.fingerprint, relevant: v.relevant, kind: v.kind, severity: v.severity, summary: v.summary })
+          .onConflictDoNothing();
+      }
+    }
+    aiUsed = verdictOf.size > 0;
 
     const profileOf = new Map(profiles.map((p) => [p.brand.toLowerCase(), p]));
     const rows = fresh

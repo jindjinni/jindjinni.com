@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { LegalPage, type LegalSection } from "@/components/legal/legal-page";
-import { CLOSE_GRACE_DAYS, CONTACT_EMAIL, OPERATOR_NAME, OPERATOR_STATE } from "@/lib/legal";
+import { CLOSE_GRACE_DAYS, CONTACT_EMAIL, OPERATOR_NAME, OPERATOR_STATE, SERVICE_NAME } from "@/lib/legal";
 
 export const metadata: Metadata = { title: "Terms of Service | jindjinni" };
 
@@ -104,8 +104,32 @@ const sections: LegalSection[] = [
   {
     heading: "Our rights and what you may not do",
     paras: [
-      "We and our licensors own the Service, including its software, design, text, graphics, the jindjinni name and logo, and everything we make for it, except Your Data. We give you a limited, non-exclusive, non-transferable, revocable right to use the Service for your own internal business during these Terms. You may not copy, resell, sublicense, white-label, reverse engineer or build a competing product from the Service, or remove notices from it.",
+      `${SERVICE_NAME} is owned and operated by ${OPERATOR_NAME}. We and our licensors own the Service, including its software and source code, design, screens, layouts, menus and department structure, workflows and business rules, calculation methods, templates, wording, text, graphics, data structures, documentation, the jindjinni name and logo, and the way these are selected and arranged together, and everything we make for it, except Your Data. The Service reflects years of operating experience and a great deal of work by us. It is protected by copyright, trade secret and other laws. We give you a limited, non-exclusive, non-transferable, revocable right to use the Service for your own company's internal business during these Terms, and nothing more. We keep every right we do not expressly give you.`,
+      "You may not copy, clone, imitate, resell, sublicense, white-label, host for others, or build a competing or similar product from the Service or from what you learn by using it, and you may not remove or hide notices from it. The next section sets out in detail what this includes.",
       "If you send us ideas or feedback, you give us the right to use them freely without payment or credit.",
+    ],
+  },
+  {
+    heading: "No copying, scraping, reverse engineering or AI cloning",
+    paras: [
+      "The non-public parts of the Service, meaning everything you can see only after signing in, how its screens are laid out and connected, how its departments and settings are organised, how its rules and calculations behave, and how it is built, are our confidential information and trade secrets. You are given access to use the Service for your business, not to learn from it in order to reproduce it. Whether done by a person, a script, or an artificial intelligence system, you agree that you and everyone you give access to will not:",
+    ],
+    items: [
+      "copy, clone, recreate, mirror, frame or imitate the Service, any of its screens, layouts, menus, workflows, forms, templates, rules, calculations or look and feel, in whole or in part, for use anywhere other than your own use of the Service;",
+      "reverse engineer, decompile, disassemble, deobfuscate, or otherwise try to discover or derive the source code, structure, database design, algorithms, business rules, prompts or inner workings of the Service, except to the limited extent the law does not allow us to forbid it;",
+      "scrape, crawl, harvest, systematically record, screenshot, screen-capture or download the Service's pages, screens, settings, templates, field layouts or flows, other than the data download we provide for Your Data;",
+      "use bots, scripts, browser-automation tools, AI agents, AI assistants or large language models to sign in to, explore, map, document, test or reproduce the Service, or to extract how it works;",
+      "feed any non-public part of the Service (screens, screenshots, recordings, page content, settings, templates, layouts, workflows, rules, documentation, or outputs gathered in bulk) into any artificial intelligence or machine learning system, or use any of it to train, fine-tune, evaluate or prompt a model, or to generate software, designs or documents that replicate or resemble the Service. (Putting your own business data into your own tools is your choice and is not covered by this item);",
+      "give anyone who builds, designs or sells software, including a competitor, a developer, a contractor, an agency or an AI tool, access to your account or to screens, recordings or descriptions of the Service for the purpose of building a similar product;",
+      "share a login, an invitation or a connector with anyone outside your company, or with anyone you have no business reason to give access to, to get around the rules in this section;",
+      "use the Service, its connectors or its accounts to build, train, benchmark or improve a competing product or service, or to compare it for a competitor; or",
+      "help, encourage or allow anyone else to do any of the above.",
+    ],
+    after: [
+      "Information that is public, such as our website's home page, may be viewed normally, but it remains protected by copyright and these Terms, and automated copying or AI cloning of it is not allowed.",
+      "We log activity in the Service and may monitor use of it, including sign-ins, the pace and pattern of requests, and automated behaviour, to protect the Service and enforce these Terms. We may use technical measures to detect and block copying and automated access, and to identify the account responsible.",
+      "Confidentiality. You will use our non-public information only to use the Service as allowed, protect it with at least the care you use for your own confidential information, tell us promptly if you learn of any misuse, and keep doing so after these Terms end.",
+      "Consequences. If you or anyone you gave access to breaks this section, we may suspend or end your access immediately without refund or notice, delete the accounts involved, and take legal action. Because this kind of harm cannot be fully repaired with money, we may ask a court for an immediate order (an injunction) to stop it without having to prove actual damages, and without posting a bond where the law allows. We may also seek every other remedy available, including damages, recovery of any profits gained, our costs and our reasonable attorneys' fees, under copyright law, trade secret law (including the Defend Trade Secrets Act and the Florida Uniform Trade Secrets Act), computer misuse laws (including the Computer Fraud and Abuse Act) and any other law that applies. You remain responsible for everything done through your accounts.",
     ],
   },
   {
@@ -156,6 +180,7 @@ const sections: LegalSection[] = [
       "Individual claims only. To the fullest extent the law allows, all claims must be brought in your or our individual capacity, and not as a plaintiff or member of any class, collective, consolidated or representative action. The arbitrator may not combine claims or award relief to anyone but the parties.",
       "No jury. To the fullest extent the law allows, each side gives up the right to a jury trial and to take part in a class action.",
       "Time limit. Any claim related to the Service or these Terms must be filed within one year after it arose, or it is permanently barred, to the extent the law allows.",
+      "Protecting our intellectual property. Despite the arbitration and class-action terms above, we may go to any court that has jurisdiction at any time to stop or prevent the copying, misuse or disclosure of the Service, our intellectual property or our confidential information, and to enforce the section called No copying, scraping, reverse engineering or AI cloning.",
     ],
   },
   {
