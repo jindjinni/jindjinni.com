@@ -129,6 +129,21 @@ export function canWriteInventory(role: string): boolean {
   return isPurchasingManager(role);
 }
 
+/** May open the Sales department (quotations, invoices, buyers, price comparison): the Purchasing roles, the accountant (look only), Admin and the Owner. */
+export function canViewSales(role: string): boolean {
+  return canViewPurchasing(role);
+}
+
+/** May create and send quotations and invoices, and keep the buyers and their price sheets: everyone who can view Sales except the accountant. */
+export function canWriteSales(role: string): boolean {
+  return canWritePurchasing(role);
+}
+
+/** May change the company profile invoices come from and its numbering: Purchasing managers, Admin and the Owner. */
+export function canManageSalesSettings(role: string): boolean {
+  return isPurchasingManager(role);
+}
+
 /** Which departments a role can open, for the menu and the home redirect. */
 export function departmentsFor(role: string): string[] {
   const out: string[] = [];
@@ -137,6 +152,7 @@ export function departmentsFor(role: string): string[] {
   if (canViewAccounts(role)) out.push("accounts");
   if (canViewCustomerService(role)) out.push("customer-service");
   if (canViewInventory(role)) out.push("inventory");
+  if (canViewSales(role)) out.push("sales");
   return out;
 }
 

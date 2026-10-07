@@ -281,6 +281,93 @@ export async function deductStock(org: { organizationId: string; userId: string 
   return { ok: true, movementIds: rows.map((r) => r.id), units: input.quantity };
 }
 
+export type DeductManyResult =
+  | { ok: true; results: { movementIds: string[]; takes: { expiry: string | null; lot: string | null; quantity: number }[] }[] }
+  | { ok: false; index: number; error: string; available: number };
+
+/**
+ * Takes out several products in one go (one invoice). The layers are read once and each line is taken from what the
+ * lines before it left; nothing is written unless EVERY line can be filled, so a short line never leaves a half-sold
+ * invoice. With `dryRun` nothing is written either way (used to find the real expiration dates behind a quotation).
+ */
+export async function deductStockMany(org: { organizationId: string; userId: string }, inputs: DeductInput[], opts: { dryRun?: boolean } = {}): Promise<DeductManyResult> {
+  const [terms, ranges, received, moves] = await Promise.all([getPaymentTerms(org.organizationId), getExpiryRanges(org.organizationId), receivedLayers(org.organizationId), movementLayers(org.organizationId)]);
+  const today = todayIn(terms.timeZone);
+  const working: StockLayer[] = [...received, ...moves];
+  const rows: (typeof inventoryMovements.$inferInsert)[] = [];
+  const results: { movementIds: string[]; takes: { expiry: string | null; lot: string | null; quantity: number }[] }[] = [];
+  for (const [index, input] of inputs.entries()) {
+    const plan = allocateTake(working, { productKey: input.productKey, condition: input.condition, groupKey: input.groupKey ?? null, quantity: input.quantity }, today, ranges);
+    if (!plan.ok) return { ok: false, index, available: plan.available, error: plan.available <= 0 ? "None of that product is in stock." : `Only ${plan.available} in stock, ${plan.wanted} wanted.` };
+    const ids: string[] = [];
+    for (const t of plan.takes) {
+      const id = newId("invmove");
+      ids.push(id);
+      rows.push({
+        id,
+        organizationId: org.organizationId,
+        kind: "SALE",
+        productId: t.productId,
+        productKey: t.productKey,
+        productName: t.productName,
+        brand: t.brand,
+        condition: t.condition,
+        expirationDate: t.expiry,
+        lotNumber: t.lot,
+        quantity: -t.quantity,
+        unitCost: t.unitCost,
+        note: input.note ?? null,
+        refType: input.refType ?? null,
+        refId: input.refId ?? null,
+        createdByUserId: org.userId,
+      });
+      // The next line must not take the same units again.
+      working.push({ source: "SALE", refId: id, productKey: t.productKey, productId: t.productId, productName: t.productName, brand: t.brand, condition: t.condition, expiry: t.expiry, lot: t.lot, quantity: -t.quantity, unitCost: t.unitCost, day: today });
+    }
+    results.push({ movementIds: ids, takes: plan.takes.map((t) => ({ expiry: t.expiry, lot: t.lot, quantity: t.quantity })) });
+  }
+  if (!opts.dryRun && rows.length) await db.insert(inventoryMovements).values(rows);
+  return { ok: true, results };
+}
+
+/** Puts back what a sale took out (an invoice voided): one positive ADJUSTMENT per sale row, same layer, same cost. */
+export async function returnSale(org: { organizationId: string; userId: string }, refType: string, refId: string, note: string): Promise<number> {
+  const sold = await db
+    .select()
+    .from(inventoryMovements)
+    .where(and(eq(inventoryMovements.organizationId, org.organizationId), eq(inventoryMovements.kind, "SALE"), eq(inventoryMovements.refType, refType), eq(inventoryMovements.refId, refId)));
+  const back = sold.filter((m) => m.quantity < 0);
+  if (!back.length) return 0;
+  await db.insert(inventoryMovements).values(
+    back.map((m) => ({
+      id: newId("invmove"),
+      organizationId: org.organizationId,
+      kind: "ADJUSTMENT" as const,
+      productId: m.productId,
+      productKey: m.productKey,
+      productName: m.productName,
+      brand: m.brand,
+      condition: m.condition,
+      expirationDate: m.expirationDate,
+      lotNumber: m.lotNumber,
+      quantity: -m.quantity,
+      unitCost: m.unitCost,
+      note,
+      refType,
+      refId,
+      createdByUserId: org.userId,
+    })),
+  );
+  return back.reduce((n, m) => n - m.quantity, 0);
+}
+
+/** Removes movement rows made a moment ago in the same request (undoing a sale whose email failed). */
+export async function discardMovements(organizationId: string, ids: string[]) {
+  for (let i = 0; i < ids.length; i += 200) {
+    await db.delete(inventoryMovements).where(and(eq(inventoryMovements.organizationId, organizationId), inArray(inventoryMovements.id, ids.slice(i, i + 200))));
+  }
+}
+
 /** The most recent hand-made and sale movements, newest first (the Movements history shows Receiving's separately). */
 export async function recentMovements(organizationId: string, limit = 300) {
   return db.select().from(inventoryMovements).where(eq(inventoryMovements.organizationId, organizationId)).orderBy(desc(inventoryMovements.createdAt)).limit(limit);

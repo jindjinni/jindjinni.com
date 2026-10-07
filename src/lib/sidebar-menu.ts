@@ -5,7 +5,7 @@
 // To give a new department this sidebar: add it to DEPARTMENT_MENUS below, then render <DepartmentSidebar> in
 // that department's layout (see receiving/layout.tsx). Renaming and re-ordering then work there with no more code.
 
-export type MenuDept = "purchasing" | "receiving" | "accounts" | "customer-service" | "inventory";
+export type MenuDept = "purchasing" | "receiving" | "accounts" | "customer-service" | "inventory" | "sales";
 
 export type MenuItemDef = {
   /** Never changes, even when the tab is renamed: it is how a saved name or position finds its tab. */
@@ -27,6 +27,7 @@ const R = "/dashboard/receiving";
 const A = "/dashboard/accounts";
 const C = "/dashboard/customer-service";
 const I = "/dashboard/inventory";
+const S = "/dashboard/sales";
 
 export const DEPARTMENT_MENUS: Record<MenuDept, DepartmentMenu> = {
   purchasing: {
@@ -88,6 +89,17 @@ export const DEPARTMENT_MENUS: Record<MenuDept, DepartmentMenu> = {
       { id: "manual-add", href: `${I}/manual-add`, label: "Manual Add", icon: "➕" },
       { id: "movements", href: `${I}/movements`, label: "Stock History", icon: "🕘" },
       { id: "estimated-prices", href: `${I}/estimated-prices`, label: "Estimated Prices", setup: true },
+    ],
+  },
+  sales: {
+    title: "Sales Department",
+    setupLabel: "Settings",
+    items: [
+      { id: "quotations", href: S, label: "Quotations", icon: "🧾", exact: true },
+      { id: "invoices", href: `${S}/invoices`, label: "Invoices", icon: "💵" },
+      { id: "buyers", href: `${S}/buyers`, label: "Buyers", icon: "👥" },
+      { id: "price-comparison", href: `${S}/price-comparison`, label: "Price Comparison", icon: "⚖️" },
+      { id: "company-profile", href: `${S}/company-profile`, label: "Company Profile", setup: true },
     ],
   },
 };

@@ -1918,3 +1918,203 @@ export const inventoryEstimates = sqliteTable(
   },
   (t) => [uniqueIndex("inventory_estimates_unique").on(t.organizationId, t.productKey, t.conditionKey)],
 );
+
+// ---------------------------------------------------------------------------
+// Sales department. Quotations and invoices to wholesale buyers, fed by Inventory (live stock beside each item; units are
+// held by a DRAFT invoice and taken out of Inventory when the invoice is SENT). Buyers carry an uploaded price sheet so
+// the Price Comparison tab can say who pays the most for each product.
+// ---------------------------------------------------------------------------
+
+/** The company the invoices come from (name, address, email, phone, logo) and the numbering. One row per company. */
+export const salesProfiles = sqliteTable(
+  "sales_profiles",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    companyName: text("company_name"),
+    address: text("address"),
+    email: text("email"),
+    phone: text("phone"),
+    logoData: text("logo_data"),
+    logoContentType: text("logo_content_type"),
+    showLogo: integer("show_logo", { mode: "boolean" }).notNull().default(true),
+    defaultTerms: text("default_terms").notNull().default("Due on Receipt"),
+    defaultNotes: text("default_notes"),
+    footerText: text("footer_text"),
+    nextInvoiceNumber: integer("next_invoice_number").notNull().default(1001),
+    nextQuotationNumber: integer("next_quotation_number").notNull().default(1001),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex("sales_profiles_org_unique").on(t.organizationId)],
+);
+
+export const salesBuyers = sqliteTable(
+  "sales_buyers",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    companyName: text("company_name").notNull(),
+    contactName: text("contact_name"),
+    email: text("email"),
+    phone: text("phone"),
+    billingAddress: text("billing_address"),
+    shippingAddress: text("shipping_address"),
+    paymentTerms: text("payment_terms"),
+    taxInfo: text("tax_info"),
+    taxExempt: integer("tax_exempt", { mode: "boolean" }).notNull().default(false),
+    defaultNotes: text("default_notes"),
+    active: integer("active", { mode: "boolean" }).notNull().default(true),
+    ...timestamps,
+  },
+  (t) => [index("sales_buyers_org_idx").on(t.organizationId)],
+);
+
+/** The file a buyer sent (kept as it came) and what was read from it. One current sheet per buyer. */
+export const salesPriceSheets = sqliteTable(
+  "sales_price_sheets",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    buyerId: text("buyer_id")
+      .notNull()
+      .references(() => salesBuyers.id, { onDelete: "cascade" }),
+    fileName: text("file_name").notNull(),
+    fileContentType: text("file_content_type"),
+    fileData: text("file_data"), // base64 of the original upload
+    uploadedByUserId: text("uploaded_by_user_id"),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex("sales_price_sheets_buyer_unique").on(t.organizationId, t.buyerId)],
+);
+
+/** One price a buyer pays: for a product (matched to the catalog, or not yet) in a condition. */
+export const salesPriceItems = sqliteTable(
+  "sales_price_items",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    buyerId: text("buyer_id")
+      .notNull()
+      .references(() => salesBuyers.id, { onDelete: "cascade" }),
+    sheetId: text("sheet_id").references(() => salesPriceSheets.id, { onDelete: "cascade" }),
+    /** The name exactly as the buyer's sheet wrote it. */
+    rawName: text("raw_name").notNull(),
+    productId: text("product_id"),
+    productKey: text("product_key"),
+    condition: text("condition").notNull().default("Mint"),
+    price: real("price").notNull(),
+    ...timestamps,
+  },
+  (t) => [index("sales_price_items_org_buyer_idx").on(t.organizationId, t.buyerId), index("sales_price_items_product_idx").on(t.organizationId, t.productKey)],
+);
+
+export const SALES_KINDS = ["QUOTATION", "INVOICE"] as const;
+export const SALES_STATUSES = ["DRAFT", "SENT", "PARTIALLY_PAID", "PAID", "ACCEPTED", "DECLINED", "CONVERTED", "VOID"] as const;
+
+export const salesDocuments = sqliteTable(
+  "sales_documents",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: SALES_KINDS }).notNull(),
+    seq: integer("seq").notNull(),
+    number: text("number").notNull(),
+    status: text("status", { enum: SALES_STATUSES }).notNull().default("DRAFT"),
+    buyerId: text("buyer_id"),
+    // The buyer and the company are copied onto the document when it is made, so changing a buyer later never changes an old invoice.
+    buyerCompany: text("buyer_company"),
+    buyerContact: text("buyer_contact"),
+    buyerBillingAddress: text("buyer_billing_address"),
+    buyerShippingAddress: text("buyer_shipping_address"),
+    buyerEmail: text("buyer_email"),
+    buyerPhone: text("buyer_phone"),
+    fromName: text("from_name"),
+    fromAddress: text("from_address"),
+    fromEmail: text("from_email"),
+    fromPhone: text("from_phone"),
+    docDate: text("doc_date").notNull(),
+    dueDate: text("due_date"), // an invoice's due date; a quotation's "valid until"
+    terms: text("terms"),
+    reference: text("reference"),
+    discount: real("discount").notNull().default(0),
+    shipping: real("shipping").notNull().default(0),
+    tax: real("tax").notNull().default(0),
+    otherCharges: real("other_charges").notNull().default(0),
+    subtotal: real("subtotal").notNull().default(0),
+    total: real("total").notNull().default(0),
+    amountPaid: real("amount_paid").notNull().default(0),
+    paidAt: text("paid_at"),
+    sentAt: text("sent_at"),
+    emailedTo: text("emailed_to"),
+    customerNotes: text("customer_notes"),
+    internalNotes: text("internal_notes"),
+    convertedFromId: text("converted_from_id"),
+    convertedToId: text("converted_to_id"),
+    /** Stock has been taken out of Inventory for this invoice. */
+    inventoryPosted: integer("inventory_posted", { mode: "boolean" }).notNull().default(false),
+    createdByUserId: text("created_by_user_id"),
+    ...timestamps,
+  },
+  (t) => [
+    index("sales_documents_org_idx").on(t.organizationId, t.kind),
+    uniqueIndex("sales_documents_number_unique").on(t.organizationId, t.kind, t.seq),
+  ],
+);
+
+export const salesDocumentLines = sqliteTable(
+  "sales_document_lines",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    documentId: text("document_id")
+      .notNull()
+      .references(() => salesDocuments.id, { onDelete: "cascade" }),
+    position: integer("position").notNull().default(0),
+    productId: text("product_id"),
+    productKey: text("product_key").notNull(),
+    productName: text("product_name").notNull(),
+    condition: text("condition").notNull().default("Mint"),
+    /** The expiration group the units come from (a stock line's group key), or null for "any, earliest first". */
+    groupKey: text("group_key"),
+    groupLabel: text("group_label"),
+    quantity: integer("quantity").notNull(),
+    unitPrice: real("unit_price").notNull().default(0),
+    /** What prints in the Expires column; filled from the real stock when the document is sent. */
+    expiryText: text("expiry_text"),
+    note: text("note"),
+    ...timestamps,
+  },
+  (t) => [index("sales_document_lines_doc_idx").on(t.documentId)],
+);
+
+export const salesPayments = sqliteTable(
+  "sales_payments",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    documentId: text("document_id")
+      .notNull()
+      .references(() => salesDocuments.id, { onDelete: "cascade" }),
+    amount: real("amount").notNull(),
+    paidOn: text("paid_on").notNull(),
+    method: text("method"),
+    note: text("note"),
+    createdByUserId: text("created_by_user_id"),
+    ...timestamps,
+  },
+  (t) => [index("sales_payments_doc_idx").on(t.documentId)],
+);

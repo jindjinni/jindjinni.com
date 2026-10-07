@@ -8,7 +8,7 @@ import { logout } from "@/app/actions/auth";
 import { parseDepartmentThemes } from "@/lib/theme";
 import { ThemeScope } from "@/components/theme-scope";
 import { MainNav, type NavItem } from "./main-nav";
-import { ROLE_LABELS, canViewAccounts, canViewCustomerService, canViewInventory, canViewPurchasing, canViewReceiving } from "@/lib/permissions";
+import { ROLE_LABELS, canViewAccounts, canViewCustomerService, canViewInventory, canViewPurchasing, canViewReceiving, canViewSales } from "@/lib/permissions";
 
 export default async function DashboardLayout({
   children,
@@ -31,6 +31,7 @@ export default async function DashboardLayout({
     ...(canViewAccounts(org.role) ? [{ href: "/dashboard/accounts", label: "Accounts" }] : []),
     ...(canViewCustomerService(org.role) ? [{ href: "/dashboard/customer-service", label: "Customer Service" }] : []),
     ...(canViewInventory(org.role) ? [{ href: "/dashboard/inventory", label: "Inventory" }] : []),
+    ...(canViewSales(org.role) ? [{ href: "/dashboard/sales", label: "Sales" }] : []),
     { href: "/dashboard/settings", label: "Settings" },
   ];
 
