@@ -132,6 +132,7 @@ export const DEPARTMENTS = [
   { key: "purchasing", label: "Purchasing", blurb: "Quotations, customers and the product catalog.", fallback: "green" },
   { key: "receiving", label: "Receiving", blurb: "Shipments, received items and order adjustments.", fallback: "yellow" },
   { key: "accounts", label: "Accounts", blurb: "Orders waiting to be paid and the Paid Orders database.", fallback: "blue" },
+  { key: "customer-service", label: "Customer Service", blurb: "Payment emails to customers and the Emailed database.", fallback: "purple" },
   { key: "general", label: "Everything else", blurb: "Settings, Database and the home screen.", fallback: "green" },
 ] as const;
 export type DepartmentKey = (typeof DEPARTMENTS)[number]["key"];
@@ -160,6 +161,7 @@ export function departmentOfPath(pathname: string): DepartmentKey {
   if (pathname === "/dashboard/purchasing" || pathname.startsWith("/dashboard/purchasing/")) return "purchasing";
   if (pathname === "/dashboard/receiving" || pathname.startsWith("/dashboard/receiving/")) return "receiving";
   if (pathname === "/dashboard/accounts" || pathname.startsWith("/dashboard/accounts/")) return "accounts";
+  if (pathname === "/dashboard/customer-service" || pathname.startsWith("/dashboard/customer-service/")) return "customer-service";
   return "general";
 }
 
@@ -174,8 +176,8 @@ export function themeStyle(key: ThemeKey, dept: DepartmentKey = "general"): CSSP
   if (key !== "green") for (const [shade, value] of Object.entries(ramp)) style[`--color-emerald-${shade}`] = value;
   // Receiving and Purchasing both have a colored sidebar, painted with the department's accent color.
   if (dept === "purchasing") style["--dept-accent"] = THEMES[key].accent;
-  // Accounts reuses Receiving's photo and form pieces (written in gold), so its amber shades follow its color too.
-  if (dept === "receiving" || dept === "accounts") {
+  // Accounts and Customer Service reuse Receiving's photo and form pieces (written in gold), so their amber shades follow their color too.
+  if (dept === "receiving" || dept === "accounts" || dept === "customer-service") {
     style["--dept-accent"] = THEMES[key].accent;
     if (key !== "yellow") for (const [shade, value] of Object.entries(ramp)) style[`--color-amber-${shade}`] = value;
   }

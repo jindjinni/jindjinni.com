@@ -3,7 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { receivingPackagePhotos } from "@/db/schema";
 import { requireOrgApi } from "@/lib/tenant";
-import { canViewReceiving } from "@/lib/permissions";
+import { canOpenReceivingFiles } from "@/lib/permissions";
 import { storage } from "@/lib/receiving-storage";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +15,7 @@ export const maxDuration = 30;
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const org = await requireOrgApi();
   if (!org) return new NextResponse("Sign in first.", { status: 401 });
-  if (!canViewReceiving(org.role)) return new NextResponse("Your role can't open Receiving photos.", { status: 403 });
+  if (!canOpenReceivingFiles(org.role)) return new NextResponse("Your role can't open Receiving photos.", { status: 403 });
 
   const { id } = await params;
   const [ph] = await db

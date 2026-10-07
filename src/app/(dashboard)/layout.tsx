@@ -8,7 +8,7 @@ import { logout } from "@/app/actions/auth";
 import { parseDepartmentThemes } from "@/lib/theme";
 import { ThemeScope } from "@/components/theme-scope";
 import { MainNav, type NavItem } from "./main-nav";
-import { ROLE_LABELS, canViewAccounts, canViewPurchasing, canViewReceiving } from "@/lib/permissions";
+import { ROLE_LABELS, canViewAccounts, canViewCustomerService, canViewPurchasing, canViewReceiving } from "@/lib/permissions";
 
 export default async function DashboardLayout({
   children,
@@ -29,6 +29,7 @@ export default async function DashboardLayout({
     ...(canViewPurchasing(org.role) ? [{ href: "/dashboard/purchasing", label: "Purchasing" }] : []),
     ...(canViewReceiving(org.role) ? [{ href: "/dashboard/receiving", label: "Receiving" }] : []),
     ...(canViewAccounts(org.role) ? [{ href: "/dashboard/accounts", label: "Accounts" }] : []),
+    ...(canViewCustomerService(org.role) ? [{ href: "/dashboard/customer-service", label: "Customer Service" }] : []),
     { href: "/dashboard/settings", label: "Settings" },
   ];
 

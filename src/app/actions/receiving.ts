@@ -20,7 +20,6 @@ import {
   receivingItemSerials,
   receivingPackagePhotos,
   receivingPackages,
-  receivingSettings,
   RECEIVING_ACCOUNTS_DECISIONS,
   RECEIVING_ADJUSTMENT_REASONS,
   RECEIVING_CONDITIONS,
@@ -47,7 +46,7 @@ import {
   type PhotoKind,
 } from "@/lib/receiving-rules";
 import { storage, STORAGE_NOT_CONNECTED } from "@/lib/receiving-storage";
-import { auditReceiving, deleteIntakeLog, deliverCustomerEmail, refreshIntakeLogPrice, writeIntakeLog } from "@/lib/receiving-service";
+import { auditReceiving, deleteIntakeLog, refreshIntakeLogPrice, writeIntakeLog } from "@/lib/receiving-service";
 import { finalPayout } from "@/lib/receiving-rules";
 import { isShipmentLocked } from "@/lib/receiving-test-lock";
 import { clearNearHolds, listChecks, openNearHolds, rowIsRecalled, type RecallCheckView } from "@/lib/receiving-recall-service";
@@ -450,19 +449,6 @@ async function applyAccountsFields(org: CurrentOrg, p: typeof receivingPackages.
   return { ok: true };
 }
 
-/**
- * The old "Send customer email when Paid" automation: once a submitted shipment is Paid and
- * emails are on, the customer is told (once). Never throws; the reason comes back as a notice.
- */
-async function maybeAutoNotify(org: CurrentOrg, packageId: string): Promise<string | undefined> {
-  const data = await getReceivingPackage(org.organizationId, packageId);
-  if (!data) return undefined;
-  const { pkg, settings } = data;
-  if (pkg.status === "IN_PROGRESS" || pkg.accountsStatus !== "PAID" || pkg.customerNotifiedAt || !settings.emailsEnabled) return undefined;
-  const r = await deliverCustomerEmail(org, packageId, "STATUS");
-  return r.ok ? "The customer was emailed that their order was processed." : `The customer email wasn't sent: ${r.error}`;
-}
-
 /** Saves Steps 2-9 as a draft (nothing is required yet). Only while the shipment is In Progress. */
 export async function saveReceiving(packageId: string, formData: FormData): Promise<ReceivingActionState> {
   const org = await requireWriter();
@@ -578,7 +564,7 @@ export async function submitReceiving(packageId: string, formData: FormData): Pr
     );
   await writeIntakeLog(org, packageId);
   await auditReceiving(org, pkg.quotationId, "receiving", `Receiving submitted: ${status === "RECEIVING_COMPLETE" ? "complete" : "complete with discrepancy"}`);
-  const notice = [saved.notice, await maybeAutoNotify(org, packageId)].filter(Boolean).join(" ") || undefined;
+  const notice = saved.notice || undefined;
   refresh(packageId);
   return { ok: true, id: packageId, notice, itemPatches: saved.itemPatches, recallChecks: await listChecks(org.organizationId, packageId) };
 }
@@ -613,9 +599,8 @@ export async function saveFollowUp(packageId: string, formData: FormData): Promi
     const data = await getReceivingPackage(org.organizationId, packageId);
     if (data) await refreshIntakeLogPrice(packageId, finalPayout(data.brief.grandTotal, data.pkg.adjustedOrderTotal));
   }
-  const notice = await maybeAutoNotify(org, packageId);
   refresh(packageId);
-  return { ok: true, id: packageId, notice };
+  return { ok: true, id: packageId };
 }
 
 /** Board drag-and-drop: moves a shipment to another column (its Accounts Decision). Dropping on Paid marks it paid. */
@@ -635,9 +620,8 @@ export async function moveReceivingCard(packageId: string, target: string): Prom
   const r = await applyAccountsFields(org, p, f);
   if (r.error) return r;
   await auditReceiving(org, p.quotationId, "receiving", `Moved to ${BOARD_COLUMN_LABELS[col]}`);
-  const notice = col === "PAID" ? await maybeAutoNotify(org, packageId) : undefined;
   refresh(packageId);
-  return { ok: true, id: packageId, notice };
+  return { ok: true, id: packageId };
 }
 
 // ---- product lines ------------------------------------------------------------
@@ -966,67 +950,7 @@ export async function deleteReceivingPhoto(photoId: string): Promise<ReceivingAc
   return { ok: true, id: ph.packageId };
 }
 
-// ---- customer emails ----------------------------------------------------------
-
-/** Sends (or re-sends) the "package received & processed" email that matches the shipment. */
-export async function sendCustomerNotification(packageId: string): Promise<ReceivingActionState> {
-  const org = await requireAccounts();
-  const p = await ownPackage(org.organizationId, packageId);
-  if (!p) return { error: "That shipment wasn't found." };
-  const r = await deliverCustomerEmail(org, packageId, "STATUS");
-  if (!r.ok) return { error: r.error };
-  refresh(packageId);
-  return { ok: true, id: packageId, notice: r.skipped ? `Email sent. ${r.skipped} attachment(s) were too large or unavailable and were left off.` : "Email sent to the customer." };
-}
-
-/** Sends the stand-alone packaging requirements warning. */
-export async function sendPackagingWarning(packageId: string): Promise<ReceivingActionState> {
-  const org = await requireAccounts();
-  const p = await ownPackage(org.organizationId, packageId);
-  if (!p) return { error: "That shipment wasn't found." };
-  const r = await deliverCustomerEmail(org, packageId, "WARNING");
-  if (!r.ok) return { error: r.error };
-  refresh(packageId);
-  return { ok: true, id: packageId, notice: "Packaging warning sent to the customer." };
-}
-
-const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
-
-/** Email Settings (admin only): on/off switch, sender name, reply-to, hidden copies, and the two links used in the emails. */
-export async function saveReceivingSettings(formData: FormData): Promise<ReceivingActionState> {
-  const org = await requireOrg();
-  if (!isAdmin(org.role)) return { error: "Only an owner or admin can change Email Settings." };
-
-  const replyTo = text(formData.get("replyTo"), 200);
-  if (replyTo && !EMAIL_RE.test(replyTo)) return { error: "Reply-to must be a valid email address." };
-  const bccRaw = text(formData.get("bccEmails"), 500);
-  const bccList = (bccRaw ?? "").split(/[,;\s]+/).filter(Boolean);
-  if (bccList.some((e) => !EMAIL_RE.test(e))) return { error: "One of the hidden-copy (BCC) addresses isn't valid." };
-  if (bccList.length > 5) return { error: "Add up to 5 hidden-copy (BCC) addresses." };
-  const url = (raw: FormDataEntryValue | null): string | null | "bad" => {
-    const v = text(raw, 500);
-    if (!v) return null;
-    return /^https:\/\/[^\s]+$/i.test(v) ? v : "bad";
-  };
-  const quote = url(formData.get("quoteLinkUrl"));
-  const guide = url(formData.get("packagingGuideUrl"));
-  if (quote === "bad" || guide === "bad") return { error: "Links must start with https://" };
-
-  const values = {
-    emailsEnabled: formData.get("emailsEnabled") === "on" || formData.get("emailsEnabled") === "true",
-    fromName: text(formData.get("fromName"), 80),
-    replyTo,
-    bccEmails: bccList.length ? bccList.join(", ") : null,
-    quoteLinkUrl: quote,
-    packagingGuideUrl: guide,
-  };
-  await db
-    .insert(receivingSettings)
-    .values({ organizationId: org.organizationId, ...values })
-    .onConflictDoUpdate({ target: receivingSettings.organizationId, set: { ...values, updatedAt: sql`(current_timestamp)` } });
-  revalidatePath("/dashboard/receiving", "layout");
-  return { ok: true };
-}
+// Customer emails (and their settings) are sent from the Customer Service department: see actions/customer-service.ts.
 
 /** Look up orders in the Quotation Summary to start receiving (reference #, customer, email or tracking #). */
 export async function searchOrdersToReceive(term: string) {

@@ -12,6 +12,7 @@ import {
   receivingIntakeLines,
   receivingIntakeLogs,
   receivingPackagePhotos,
+  receivingCustomerEmails,
   receivingPackages,
   receivingRecallChecks,
 } from "@/db/schema";
@@ -147,57 +148,77 @@ function splitEmails(raw: string): string[] {
 
 export type DeliverResult = { ok: true; template: string; attached: number; skipped: number } | { ok: false; error: string };
 
+type PackageData = NonNullable<Awaited<ReturnType<typeof getReceivingPackage>>>;
+const INSPECTION_KINDS = ["DAMAGE", "PACKAGING_ISSUE", "ITEM_DAMAGE", "ITEM_DISCREPANCY"];
+
+export type EmailPlan = {
+  template: string;
+  built: ReturnType<typeof buildCustomerEmail>;
+  to: string | null;
+  isAdjustment: boolean;
+  /** The stored files that go with this email (payment receipt, revised invoice, note photos, inspection photos). */
+  wanted: PackageData["photos"];
+};
+
+/**
+ * What the email for this shipment looks like and what goes with it -- subject, body, the files to attach.
+ * Nothing is read from storage and nothing is sent, so the Customer Service screen can show exactly what the
+ * customer will get, and deliverCustomerEmail sends the very same thing.
+ */
+export function planCustomerEmail(orgName: string, data: PackageData, kind: "STATUS" | "WARNING"): EmailPlan {
+  const { pkg, brief, settings } = data;
+  const companyName = settings.fromName.trim() || orgName;
+  const orderLabel = [brief.quotationNumber, pkg.trackingNumber ?? brief.trackingNumber].filter(Boolean).join(" — ");
+  const to = brief.email?.trim() || null;
+  if (kind === "WARNING") {
+    const built = buildPackagingWarning({ companyName, customerName: brief.customerName, orderLabel, packagingGuideUrl: settings.packagingGuideUrl || null });
+    return { template: "PACKAGING_WARNING", built, to, isAdjustment: false, wanted: [] };
+  }
+  const template = pickEmailTemplate(pkg);
+  const built = buildCustomerEmail(template, {
+    companyName,
+    customerName: brief.customerName,
+    orderLabel,
+    orderTotal: brief.grandTotal,
+    adjustedOrderTotal: pkg.adjustedOrderTotal,
+    adjustmentAmount: pkg.adjustmentAmountEmail,
+    customerNote: pkg.customerEmailNote,
+    adjustmentDetails: pkg.adjustmentDetails,
+    quoteLinkUrl: settings.quoteLinkUrl || null,
+    packagingGuideUrl: settings.packagingGuideUrl || null,
+  });
+  // Adjustment emails also carry the inspection photos (damage / discrepancy / packaging issue) the email refers to.
+  const isAdjustment = template === "ADJUSTMENT_ONLY" || template === "ADJUSTMENT_PACKAGING";
+  const wanted = data.photos
+    .filter((p) => (!p.itemId && (built.attachKinds as string[]).includes(p.kind)) || (isAdjustment && INSPECTION_KINDS.includes(p.kind)))
+    .slice(0, MAX_ATTACH_FILES);
+  return { template, built, to, isAdjustment, wanted };
+}
+
 /**
  * Sends the shipment's customer email.
  *  - "STATUS": the "package received & processed" email that matches the shipment (standard / packaging notice / adjustment).
  *  - "WARNING": the stand-alone packaging requirements warning.
- * Stamps customerNotifiedAt / packagingWarningSentAt only when the send worked.
+ * Stamps customerNotifiedAt / packagingWarningSentAt and writes the email log only when the send worked.
  */
 export async function deliverCustomerEmail(org: OrgRef, packageId: string, kind: "STATUS" | "WARNING"): Promise<DeliverResult> {
   const data = await getReceivingPackage(org.organizationId, packageId);
   if (!data) return { ok: false, error: "That shipment wasn't found." };
   if (!data.settings.emailsEnabled) return { ok: false, error: "Customer emails are turned off. An admin can turn them on under Email Settings." };
-  const to = data.brief.email?.trim();
+  const { pkg, settings } = data;
+  const plan = planCustomerEmail(org.organizationName, data, kind);
+  const to = plan.to;
   if (!to || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) return { ok: false, error: "This customer has no valid email address on the order." };
-
-  const { pkg, brief, settings } = data;
-  const companyName = settings.fromName.trim() || org.organizationName;
-  const orderLabel = [brief.quotationNumber, pkg.trackingNumber ?? brief.trackingNumber].filter(Boolean).join(" — ");
-
-  let built;
-  let template: string;
-  if (kind === "WARNING") {
-    template = "PACKAGING_WARNING";
-    built = buildPackagingWarning({ companyName, customerName: brief.customerName, orderLabel, packagingGuideUrl: settings.packagingGuideUrl || null });
-  } else {
+  if (kind === "STATUS") {
     if (pkg.status === "IN_PROGRESS") return { ok: false, error: "Submit receiving first. The customer isn't told anything until the package is processed." };
     if (pkg.accountsStatus !== "PAID") return { ok: false, error: "Accounts Status must be Paid before the customer is notified." };
-    const key = pickEmailTemplate(pkg);
-    template = key;
-    built = buildCustomerEmail(key, {
-      companyName,
-      customerName: brief.customerName,
-      orderLabel,
-      orderTotal: brief.grandTotal,
-      adjustedOrderTotal: pkg.adjustedOrderTotal,
-      adjustmentAmount: pkg.adjustmentAmountEmail,
-      customerNote: pkg.customerEmailNote,
-      adjustmentDetails: pkg.adjustmentDetails,
-      quoteLinkUrl: settings.quoteLinkUrl || null,
-      packagingGuideUrl: settings.packagingGuideUrl || null,
-    });
   }
+  const { template, built, isAdjustment, wanted } = plan;
 
   // Attachments: the payment confirmation, revised invoice and note photos that apply to this email.
   const attachments: EmailAttachment[] = [];
   let skipped = 0;
   let bytes = 0;
-  // Adjustment emails also carry the inspection photos (damage / discrepancy / packaging issue) the email refers to.
-  const isAdjustment = template === "ADJUSTMENT_ONLY" || template === "ADJUSTMENT_PACKAGING";
-  const inspectionKinds = ["DAMAGE", "PACKAGING_ISSUE", "ITEM_DAMAGE", "ITEM_DISCREPANCY"];
-  const wanted = data.photos
-    .filter((p) => (!p.itemId && (built.attachKinds as string[]).includes(p.kind)) || (isAdjustment && inspectionKinds.includes(p.kind)))
-    .slice(0, MAX_ATTACH_FILES);
   for (const p of wanted) {
     const [row] = await db.select().from(receivingPackagePhotos).where(and(eq(receivingPackagePhotos.id, p.id), eq(receivingPackagePhotos.organizationId, org.organizationId))).limit(1);
     if (!row) continue;
@@ -227,6 +248,7 @@ export async function deliverCustomerEmail(org: OrgRef, packageId: string, kind:
     }
   }
 
+  const bcc = splitEmails(settings.bccEmails);
   const sent = await sendCustomerEmail({
     to,
     subject: built.subject,
@@ -234,7 +256,7 @@ export async function deliverCustomerEmail(org: OrgRef, packageId: string, kind:
     html: built.html,
     fromName: settings.fromName.trim() || null,
     replyTo: settings.replyTo.trim() || null,
-    bcc: splitEmails(settings.bccEmails),
+    bcc,
     attachments,
   });
   if (!sent.ok) return { ok: false, error: sent.error };
@@ -252,7 +274,21 @@ export async function deliverCustomerEmail(org: OrgRef, packageId: string, kind:
       })
       .where(eq(receivingPackages.id, packageId));
   }
-  await auditReceiving(org, pkg.quotationId, "receiving", `Customer email sent (${template}) to ${to}${attachments.length ? `, ${attachments.length} attachment(s)` : ""}`);
+  // The log: exactly what went out, who sent it, when.
+  await db.insert(receivingCustomerEmails).values({
+    id: newId("remail"),
+    organizationId: org.organizationId,
+    packageId,
+    kind,
+    template,
+    toEmail: to,
+    bccEmails: bcc.length ? bcc.join(", ") : null,
+    subject: built.subject,
+    bodyHtml: built.html,
+    attachmentNames: JSON.stringify(attachments.map((a) => a.filename)),
+    skippedAttachments: skipped,
+    sentByUserId: org.userId,
+  });
+  await auditReceiving(org, pkg.quotationId, "customer-service", `Customer email sent (${template}) to ${to}${attachments.length ? `, ${attachments.length} attachment(s)` : ""}`);
   return { ok: true, template, attached: attachments.length, skipped };
 }
-

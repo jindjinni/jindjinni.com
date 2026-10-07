@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireOrgApi } from "@/lib/tenant";
-import { canViewReceiving } from "@/lib/permissions";
+import { canOpenReceivingFiles } from "@/lib/permissions";
 import { renderAdjustmentPdf } from "@/lib/receiving-adjustment-service";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +11,7 @@ export const maxDuration = 30;
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const org = await requireOrgApi();
   if (!org) return new NextResponse("Sign in first.", { status: 401 });
-  if (!canViewReceiving(org.role)) return new NextResponse("Your role can't open Receiving documents.", { status: 403 });
+  if (!canOpenReceivingFiles(org.role)) return new NextResponse("Your role can't open Receiving documents.", { status: 403 });
   const { id } = await params;
   const pdf = await renderAdjustmentPdf(org.organizationId, org.organizationName, id);
   if (!pdf) return new NextResponse("Adjustment not found.", { status: 404 });

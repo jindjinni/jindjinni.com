@@ -219,7 +219,7 @@ export const memberships = sqliteTable(
     // See src/lib/permissions.ts for what each role can do. "staff" is the
     // legacy pre-Admin-panel role and behaves like purchasing_agent.
     role: text("role", {
-      enum: ["owner", "admin", "purchasing_manager", "purchasing_agent", "receiver", "accountant", "staff"],
+      enum: ["owner", "admin", "purchasing_manager", "purchasing_agent", "receiver", "accountant", "customer_service", "staff"],
     })
       .notNull()
       .default("staff"),
@@ -245,7 +245,7 @@ export const teamInvitations = sqliteTable(
       .references(() => organizations.id, { onDelete: "cascade" }),
     email: text("email").notNull(),
     role: text("role", {
-      enum: ["admin", "purchasing_manager", "purchasing_agent", "receiver", "accountant"],
+      enum: ["admin", "purchasing_manager", "purchasing_agent", "receiver", "accountant", "customer_service"],
     }).notNull(),
     tokenHash: text("token_hash").notNull().unique(),
     invitedByUserId: text("invited_by_user_id").references(() => users.id),
@@ -1113,6 +1113,40 @@ export const purchasingQuotationLabels = sqliteTable(
   (t) => [
     index("purchasing_quotation_labels_org_idx").on(t.organizationId),
     index("purchasing_quotation_labels_quotation_idx").on(t.quotationId),
+  ],
+);
+
+// Every customer email the Customer Service department sends (the "package received & processed" emails and the
+// stand-alone packaging warning): the exact message and attachments, who sent it and when. Resends add a new row.
+// A row only exists once the email service accepted the message.
+export const receivingCustomerEmails = sqliteTable(
+  "receiving_customer_emails",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    packageId: text("package_id")
+      .notNull()
+      .references(() => receivingPackages.id, { onDelete: "cascade" }),
+    // STATUS = the payment email, WARNING = the stand-alone packaging warning.
+    kind: text("kind", { enum: ["STATUS", "WARNING"] }).notNull(),
+    template: text("template").notNull(),
+    toEmail: text("to_email").notNull(),
+    bccEmails: text("bcc_emails"),
+    subject: text("subject").notNull(),
+    bodyHtml: text("body_html").notNull(),
+    // JSON array of the attached file names.
+    attachmentNames: text("attachment_names"),
+    skippedAttachments: integer("skipped_attachments").notNull().default(0),
+    sentByUserId: text("sent_by_user_id").references(() => users.id),
+    sentAt: text("sent_at")
+      .notNull()
+      .default(sql`(current_timestamp)`),
+  },
+  (t) => [
+    index("receiving_customer_emails_org_idx").on(t.organizationId),
+    index("receiving_customer_emails_package_idx").on(t.packageId),
   ],
 );
 

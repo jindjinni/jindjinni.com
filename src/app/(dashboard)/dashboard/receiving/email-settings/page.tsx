@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-// Customer emails will live in the Customer Service department. Until then there is nothing to set here.
+// Customer emails now live in the Customer Service department; this old address just forwards there.
 export default function EmailSettingsMoved() {
-  redirect("/dashboard/receiving");
+  redirect("/dashboard/customer-service/email-settings");
 }

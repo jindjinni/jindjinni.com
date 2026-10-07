@@ -9,6 +9,7 @@
 //   purchasing_agent    Purchasing day-to-day: customers, quotations, labels -- no overrides/settings
 //   receiver            Receiving department only -- no Purchasing access
 //   accountant          Purchasing in view-only mode (quotations, customers, receipts, audit log)
+//   customer_service    Customer Service department only (emails paid customers) -- no Purchasing, Receiving or Accounts
 //   staff               legacy role from before the Admin panel; behaves exactly like purchasing_agent
 
 export const ROLES = [
@@ -18,12 +19,13 @@ export const ROLES = [
   "purchasing_agent",
   "receiver",
   "accountant",
+  "customer_service",
   "staff",
 ] as const;
 export type Role = (typeof ROLES)[number];
 
 /** Roles an admin can hand out when inviting or editing someone ("owner" and legacy "staff" are never assigned). */
-export const ASSIGNABLE_ROLES: Role[] = ["admin", "purchasing_manager", "purchasing_agent", "receiver", "accountant"];
+export const ASSIGNABLE_ROLES: Role[] = ["admin", "purchasing_manager", "purchasing_agent", "receiver", "accountant", "customer_service"];
 
 export const ROLE_LABELS: Record<Role, string> = {
   owner: "Owner",
@@ -32,6 +34,7 @@ export const ROLE_LABELS: Record<Role, string> = {
   purchasing_agent: "Purchasing Agent",
   receiver: "Receiver",
   accountant: "Accountant",
+  customer_service: "Customer Service",
   staff: "Purchasing Agent",
 };
 
@@ -42,6 +45,7 @@ export const ROLE_DESCRIPTIONS: Record<Role, string> = {
   purchasing_agent: "Purchasing day-to-day: customers, quotations and shipping labels. No price overrides or settings.",
   receiver: "Receiving department: log incoming packages, photos and checks. No access to Purchasing.",
   accountant: "View-only access to Purchasing: quotations, customers, receipts and the audit log.",
+  customer_service: "Customer Service department: email customers once they've been paid. No access to Purchasing, Receiving or Accounts.",
   staff: "Purchasing day-to-day: customers, quotations and shipping labels.",
 };
 
@@ -61,7 +65,7 @@ export function isPurchasingManager(role: string): boolean {
 
 /** May open the Purchasing department at all (accountants view only). */
 export function canViewPurchasing(role: string): boolean {
-  return role !== "receiver";
+  return role !== "receiver" && role !== "customer_service";
 }
 
 /** May change data in Purchasing (everyone who can view it except accountants). */
@@ -69,9 +73,17 @@ export function canWritePurchasing(role: string): boolean {
   return canViewPurchasing(role) && role !== "accountant";
 }
 
-/** May open the Receiving department (every role can look; Purchasing roles and accountants are view-only there). */
+/** May open the Receiving department (every role can look, except Customer Service; Purchasing roles and accountants are view-only there). */
 export function canViewReceiving(role: string): boolean {
-  return (ROLES as readonly string[]).includes(role);
+  return (ROLES as readonly string[]).includes(role) && role !== "customer_service";
+}
+
+/**
+ * May open the files Receiving stores for an order (photos, the payment receipt, the adjustment quotation PDF).
+ * Customer Service needs these to check what is attached to the customer's email, without opening Receiving itself.
+ */
+export function canOpenReceivingFiles(role: string): boolean {
+  return canViewReceiving(role) || role === "customer_service";
 }
 
 /** May change data in Receiving: the Receiver role, Admin and the Owner. */
@@ -97,12 +109,23 @@ export function canViewAccounts(role: string): boolean {
   return canWritePayment(role);
 }
 
+/** May open the Customer Service department (the paid orders waiting for their email, and the Emailed database): Customer Service, Admin and the Owner. */
+export function canViewCustomerService(role: string): boolean {
+  return role === "customer_service" || isAdmin(role);
+}
+
+/** May send the customer emails. Same people who can open the department. */
+export function canSendCustomerEmails(role: string): boolean {
+  return canViewCustomerService(role);
+}
+
 /** Which departments a role can open, for the menu and the home redirect. */
 export function departmentsFor(role: string): string[] {
   const out: string[] = [];
   if (canViewPurchasing(role)) out.push("purchasing");
   if (canViewReceiving(role)) out.push("receiving");
   if (canViewAccounts(role)) out.push("accounts");
+  if (canViewCustomerService(role)) out.push("customer-service");
   return out;
 }
 

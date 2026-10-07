@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { saveReceivingSettings } from "@/app/actions/receiving";
+import { saveEmailSettings } from "@/app/actions/customer-service";
 
 type Initial = { emailsEnabled: boolean; fromName: string; replyTo: string; bccEmails: string; quoteLinkUrl: string; packagingGuideUrl: string };
 
@@ -25,7 +25,7 @@ export function EmailSettingsForm({ initial, companyName }: { initial: Initial; 
     fd.set("quoteLinkUrl", v.quoteLinkUrl);
     fd.set("packagingGuideUrl", v.packagingGuideUrl);
     startTransition(async () => {
-      const res = await saveReceivingSettings(fd);
+      const res = await saveEmailSettings(fd);
       if (res.error) setError(res.error);
       else setMessage("Saved.");
     });
@@ -38,7 +38,7 @@ export function EmailSettingsForm({ initial, companyName }: { initial: Initial; 
         <span>
           <span className="block text-sm font-semibold">Send customer emails</span>
           <span className="block text-xs text-slate-500">
-            When on, the customer is emailed automatically the first time a submitted shipment is marked Paid. You can also send or resend from the shipment. Emails only go out from a verified sending domain.
+            When on, Customer Service can send payment emails to customers. Nothing is sent automatically: an agent checks each email and presses Send. Emails only reach customers once your sending domain is verified.
           </span>
         </span>
       </label>

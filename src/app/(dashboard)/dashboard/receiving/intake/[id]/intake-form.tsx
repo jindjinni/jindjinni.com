@@ -880,6 +880,15 @@ export function IntakeForm(props: Props) {
         <Row label="Submitted By">{locked ? submittedBy ?? "—" : "—"}</Row>
         <Row label="Submission Date/Time">{locked ? <span suppressHydrationWarning>{formatUtcStamp(saved.submittedAt)}</span> : "—"}</Row>
         <Row label="Record Created"><span suppressHydrationWarning>{formatUtcStamp(saved.createdAt)}</span></Row>
+        <Row label="Customer Email" hint="The customer is told by email only, and only from Customer Service.">
+          <span data-testid="customer-email-state" suppressHydrationWarning>
+            {saved.customerNotifiedAt
+              ? `Customer Service emailed the customer on ${formatUtcStamp(saved.customerNotifiedAt)}.`
+              : saved.accountsStatus === "PAID"
+                ? "Paid. Waiting for Customer Service to email the customer."
+                : "Customer Service emails the customer once the order is paid."}
+          </span>
+        </Row>
       </Step>
 
       {error && <p role="alert" className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-950/50 dark:text-red-200">{error}</p>}
