@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useState, useTransition } from "react";
 import { updatePurchasingQuotationHeader } from "@/app/actions/purchasing";
 
 type ActionState = { error?: string } | undefined;
@@ -14,6 +14,7 @@ export function QuotationHeaderForm({
   trackingNumber,
   carrier,
   packageStatus,
+  deliveredDay,
   notes,
 }: {
   quotationId: string;
@@ -21,20 +22,30 @@ export function QuotationHeaderForm({
   trackingNumber: string | null;
   carrier: string | null;
   packageStatus: string;
+  /** The day it was delivered (the company's own calendar day), or "" when none is on file. */
+  deliveredDay: string;
   notes: string | null;
 }) {
   const [editing, setEditing] = useState(false);
-  const [state, formAction, pending] = useActionState<ActionState, FormData>(
-    updatePurchasingQuotationHeader.bind(null, quotationId),
-    undefined,
-  );
+  // The delivered day as it was when the form was opened: what the date box starts with, and what a save compares against.
+  const [startDay, setStartDay] = useState(deliveredDay);
+  const [error, setError] = useState("");
+  const [pending, startTransition] = useTransition();
 
   if (!editing) {
     return (
       <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
         {new Date(quotationDate).toLocaleDateString()} · {packageStatus}
+        {packageStatus === "Delivered" && deliveredDay ? ` ${deliveredDay}` : ""}
         {trackingNumber ? ` · Tracking ${trackingNumber}` : ""}{" "}
-        <button type="button" onClick={() => setEditing(true)} className="font-medium text-emerald-700 hover:underline dark:text-emerald-400">
+        <button
+          type="button"
+          onClick={() => {
+            setStartDay(deliveredDay);
+            setEditing(true);
+          }}
+          className="font-medium text-emerald-700 hover:underline dark:text-emerald-400"
+        >
           Edit
         </button>
       </p>
@@ -43,9 +54,16 @@ export function QuotationHeaderForm({
 
   return (
     <form
-      action={(formData) => {
-        formAction(formData);
-        setEditing(false);
+      onSubmit={(e) => {
+        e.preventDefault();
+        const formData = new FormData(e.currentTarget);
+        setError("");
+        // Stay open when the save is refused (for example a delivered date in the future), so the message is seen.
+        startTransition(async () => {
+          const res: ActionState = await updatePurchasingQuotationHeader(quotationId, undefined, formData);
+          if (res?.error) setError(res.error);
+          else setEditing(false);
+        });
       }}
       className="mt-2 flex flex-wrap items-end gap-3 rounded-lg border border-dashed border-slate-300 p-3 dark:border-slate-700"
     >
@@ -78,6 +96,11 @@ export function QuotationHeaderForm({
         </select>
       </label>
       <label className="flex flex-col gap-1 text-sm">
+        <span className="text-slate-600 dark:text-slate-400">Delivered on</span>
+        <input type="hidden" name="deliveredOnWas" value={startDay} />
+        <input name="deliveredOn" type="date" defaultValue={startDay} className={inputClass} title="Only used when the status is Delivered. It starts the clock on when the customer is paid." />
+      </label>
+      <label className="flex flex-col gap-1 text-sm">
         <span className="text-slate-600 dark:text-slate-400">Notes</span>
         <input name="notes" defaultValue={notes ?? ""} className={inputClass} />
       </label>
@@ -87,7 +110,7 @@ export function QuotationHeaderForm({
       <button type="button" onClick={() => setEditing(false)} className="text-sm text-slate-500 hover:underline dark:text-slate-400">
         Cancel
       </button>
-      {state?.error && <p className="w-full text-sm text-red-600 dark:text-red-400">{state.error}</p>}
+      {error && <p role="alert" data-testid="header-error" className="w-full text-sm text-red-600 dark:text-red-400">{error}</p>}
     </form>
   );
 }

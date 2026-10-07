@@ -1,8 +1,9 @@
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, ne, or } from "drizzle-orm";
 import { db } from "@/db/client";
-import { purchasingCustomers, purchasingQuotations, purchasingQuotedItems, receivingPackagePhotos, receivingPackages } from "@/db/schema";
+import { accountsClosureDays, accountsSettings, purchasingCustomers, purchasingQuotations, purchasingQuotedItems, receivingPackagePhotos, receivingPackages } from "@/db/schema";
 import { finalPayout } from "@/lib/receiving-rules";
 import type { AccountsOrder, ReportOrder } from "@/lib/accounts-rules";
+import { DEFAULT_TERMS, paymentDue, type PaymentTerms } from "@/lib/payment-due";
 
 // What the Accounts department reads. Every query is limited to the signed-in company.
 
@@ -19,6 +20,7 @@ const select = {
   paidAt: receivingPackages.paidAt,
   grandTotal: purchasingQuotations.grandTotal,
   adjustedTotal: receivingPackages.adjustedOrderTotal,
+  deliveredAt: purchasingQuotations.deliveredAt,
 };
 
 async function receiptsFor(organizationId: string, packageIds: string[]) {
@@ -49,6 +51,7 @@ type Row = {
   paidAt: string | null;
   grandTotal: number;
   adjustedTotal: number | null;
+  deliveredAt: string | null;
 };
 
 async function coversFor(organizationId: string, packageIds: string[]) {
@@ -63,8 +66,23 @@ async function coversFor(organizationId: string, packageIds: string[]) {
   return out;
 }
 
-function toOrder(r: Row, receipts: Map<string, { count: number; first: string }>, covers: Map<string, string>): AccountsOrder {
+/** The company's payment terms: business days to pay after delivery, holidays, closure days and time zone. */
+export async function getPaymentTerms(organizationId: string): Promise<PaymentTerms> {
+  const [[row], closures] = await Promise.all([
+    db.select().from(accountsSettings).where(eq(accountsSettings.organizationId, organizationId)).limit(1),
+    db.select({ day: accountsClosureDays.day }).from(accountsClosureDays).where(eq(accountsClosureDays.organizationId, organizationId)),
+  ]);
+  return {
+    businessDays: row?.payWithinBusinessDays ?? DEFAULT_TERMS.businessDays,
+    skipUsHolidays: row?.skipUsHolidays ?? DEFAULT_TERMS.skipUsHolidays,
+    timeZone: row?.timeZone ?? DEFAULT_TERMS.timeZone,
+    closureDays: closures.map((c) => c.day),
+  };
+}
+
+function toOrder(r: Row, receipts: Map<string, { count: number; first: string }>, covers: Map<string, string>, terms?: PaymentTerms): AccountsOrder {
   const rc = receipts.get(r.id);
+  const due = terms ? paymentDue({ deliveredAt: r.deliveredAt, receivedAt: r.receivedAt ?? r.createdAt }, terms) : null;
   return {
     id: r.id,
     quotationNumber: r.quotationNumber,
@@ -77,11 +95,15 @@ function toOrder(r: Row, receipts: Map<string, { count: number; first: string }>
     receipts: rc?.count ?? 0,
     receiptId: rc?.first ?? null,
     coverPhotoId: covers.get(r.id) ?? null,
+    dueDay: due?.dueDay ?? null,
+    dueStartDay: due?.startDay ?? null,
+    dueBasis: due?.basis ?? null,
   };
 }
 
-/** Submitted orders Receiving sent to Accounts ("Need to Be Paid") that are not paid yet. Oldest first. */
-export async function getToBePaid(organizationId: string): Promise<AccountsOrder[]> {
+/** Submitted orders Receiving sent to Accounts ("Need to Be Paid") that are not paid yet. Soonest due first. */
+export async function getToBePaid(organizationId: string, terms?: PaymentTerms): Promise<AccountsOrder[]> {
+  const t = terms ?? (await getPaymentTerms(organizationId));
   const rows = await db
     .select(select)
     .from(receivingPackages)
@@ -98,7 +120,7 @@ export async function getToBePaid(organizationId: string): Promise<AccountsOrder
     .orderBy(receivingPackages.receivedAt, receivingPackages.createdAt);
   const ids = rows.map((r) => r.id);
   const [receipts, covers] = await Promise.all([receiptsFor(organizationId, ids), coversFor(organizationId, ids)]);
-  return rows.map((r) => toOrder(r, receipts, covers));
+  return rows.map((r) => toOrder(r, receipts, covers, t));
 }
 
 export const PAID_LIMIT = 5000;

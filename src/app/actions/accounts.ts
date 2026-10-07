@@ -3,9 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { and, eq, isNull, ne, or, sql } from "drizzle-orm";
 import { db } from "@/db/client";
-import { receivingPackagePhotos, receivingPackages } from "@/db/schema";
+import { accountsClosureDays, accountsSettings, receivingPackagePhotos, receivingPackages } from "@/db/schema";
 import { requireOrg } from "@/lib/tenant";
-import { canWritePayment } from "@/lib/permissions";
+import { canWritePayment, isAdmin } from "@/lib/permissions";
+import { isDay, isUsTimeZone, MAX_BUSINESS_DAYS } from "@/lib/payment-due";
+import { newId } from "@/lib/ids";
 import { auditReceiving } from "@/lib/receiving-service";
 
 export type AccountsActionState = { ok?: boolean; error?: string };
@@ -54,5 +56,50 @@ export async function markOrderPaid(packageId: string): Promise<AccountsActionSt
   revalidatePath("/dashboard/accounts", "layout");
   revalidatePath("/dashboard/receiving", "layout");
   revalidatePath("/dashboard/purchasing/quotations");
+  return { ok: true };
+}
+
+/** Payment Terms (Accounts -> Payment Terms): how many business days after delivery a customer is paid. Owner or admin only. */
+export async function savePaymentTerms(input: { businessDays: number; skipUsHolidays: boolean; timeZone: string }): Promise<AccountsActionState> {
+  const org = await requireOrg();
+  if (!isAdmin(org.role)) return { error: "Only an owner or admin can change the payment terms." };
+  const days = Number(input.businessDays);
+  if (!Number.isInteger(days) || days < 0 || days > MAX_BUSINESS_DAYS) return { error: `Enter a whole number of business days from 0 to ${MAX_BUSINESS_DAYS}.` };
+  if (!isUsTimeZone(input.timeZone)) return { error: "Pick one of the listed time zones." };
+  const values = { payWithinBusinessDays: days, skipUsHolidays: !!input.skipUsHolidays, timeZone: input.timeZone };
+  await db
+    .insert(accountsSettings)
+    .values({ organizationId: org.organizationId, ...values })
+    .onConflictDoUpdate({ target: accountsSettings.organizationId, set: { ...values, updatedAt: sql`(current_timestamp)` } });
+  revalidatePath("/dashboard/accounts", "layout");
+  revalidatePath("/dashboard/customer-service", "layout");
+  return { ok: true };
+}
+
+/** A day the company is closed, so it doesn't count toward the payment terms. */
+export async function addClosureDay(day: string, label: string): Promise<AccountsActionState> {
+  const org = await requireOrg();
+  if (!isAdmin(org.role)) return { error: "Only an owner or admin can change the payment terms." };
+  const d = String(day ?? "").trim();
+  if (!isDay(d)) return { error: "Pick a real date." };
+  if (d < "2000-01-01" || d > "2100-12-31") return { error: "Pick a date between the years 2000 and 2100." };
+  const [{ n }] = await db.select({ n: sql<number>`count(*)` }).from(accountsClosureDays).where(eq(accountsClosureDays.organizationId, org.organizationId));
+  if (Number(n) >= 400) return { error: "That's the most closure days we can keep. Remove old ones first." };
+  const res = await db
+    .insert(accountsClosureDays)
+    .values({ id: newId("aclose"), organizationId: org.organizationId, day: d, label: String(label ?? "").trim().slice(0, 80) || null })
+    .onConflictDoNothing();
+  if (res.rowsAffected === 0) return { error: "That day is already on the list." };
+  revalidatePath("/dashboard/accounts", "layout");
+  revalidatePath("/dashboard/customer-service", "layout");
+  return { ok: true };
+}
+
+export async function removeClosureDay(id: string): Promise<AccountsActionState> {
+  const org = await requireOrg();
+  if (!isAdmin(org.role)) return { error: "Only an owner or admin can change the payment terms." };
+  await db.delete(accountsClosureDays).where(and(eq(accountsClosureDays.id, id), eq(accountsClosureDays.organizationId, org.organizationId)));
+  revalidatePath("/dashboard/accounts", "layout");
+  revalidatePath("/dashboard/customer-service", "layout");
   return { ok: true };
 }

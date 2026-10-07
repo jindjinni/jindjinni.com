@@ -3,16 +3,35 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
-import { dayHeading, dayOf, groupByDay, orderMatches, sumAmounts, type AccountsOrder } from "@/lib/accounts-rules";
+import { dayHeading, groupByDay, orderMatches, sumAmounts, type AccountsOrder } from "@/lib/accounts-rules";
 import { chipClass, MONEY } from "@/lib/receiving-ui";
+import { dueState, type DueState } from "@/lib/payment-due";
 
-/** The waiting orders as small cards (like the Receiving intake list), under closed day headings: the day each was received, oldest first. */
-export function AccountsList({ orders }: { orders: AccountsOrder[] }) {
+const shortDay = (day: string) => {
+  const [y, m, d] = day.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+};
+
+const DUE_BADGE: Record<DueState, { text: string; cls: string } | null> = {
+  OVERDUE: { text: "Overdue", cls: "bg-red-100 text-red-900 dark:bg-red-900/40 dark:text-red-100" },
+  TODAY: { text: "Due today", cls: "bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-100" },
+  TOMORROW: { text: "Due tomorrow", cls: "bg-sky-100 text-sky-900 dark:bg-sky-900/40 dark:text-sky-100" },
+  LATER: null,
+};
+
+/**
+ * The waiting orders as small cards (like the Receiving intake list), under closed headings by the day the payment
+ * is due under the company's payment terms (Accounts -> Payment Terms): soonest first, overdue at the top.
+ * `today` is the company's own calendar day, worked out on the server.
+ */
+export function AccountsList({ orders, today }: { orders: AccountsOrder[]; today: string }) {
   const path = usePathname();
   const [q, setQ] = useState("");
   const shown = useMemo(() => orders.filter((o) => orderMatches(o, q)), [orders, q]);
-  const days = useMemo(() => groupByDay(shown, (o) => dayOf(o.receivedAt), false), [shown]);
+  const days = useMemo(() => groupByDay(shown, (o) => o.dueDay ?? "", false), [shown]);
   const searching = q.trim() !== "";
+  const overdue = shown.filter((o) => o.dueDay && dueState(o.dueDay, today) === "OVERDUE").length;
+  const dueToday = shown.filter((o) => o.dueDay && dueState(o.dueDay, today) === "TODAY").length;
 
   return (
     <div className="flex flex-col">
@@ -21,6 +40,12 @@ export function AccountsList({ orders }: { orders: AccountsOrder[] }) {
         <p className="mt-1 text-sm text-slate-700 dark:text-slate-200" data-testid="tbp-totals">
           <strong className="tabular-nums">{shown.length}</strong> {shown.length === 1 ? "order" : "orders"} waiting · <strong className="tabular-nums">{MONEY.format(sumAmounts(shown))}</strong> to pay
         </p>
+        {(overdue > 0 || dueToday > 0) && (
+          <p className="mt-1 flex flex-wrap gap-1.5 text-[11px] font-medium" data-testid="tbp-urgent">
+            {overdue > 0 && <span className={`rounded-full px-2 py-0.5 ${DUE_BADGE.OVERDUE!.cls}`}>{overdue} overdue</span>}
+            {dueToday > 0 && <span className={`rounded-full px-2 py-0.5 ${DUE_BADGE.TODAY!.cls}`}>{dueToday} due today</span>}
+          </p>
+        )}
       </div>
       <div className="border-b border-slate-200 p-3 dark:border-slate-800">
         <label htmlFor="tbp-q" className="sr-only">Search orders waiting to be paid</label>
@@ -46,7 +71,10 @@ export function AccountsList({ orders }: { orders: AccountsOrder[] }) {
             <details key={d.day || "none"} open={searching || hasActive} data-testid="tbp-day" className="group">
               <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-3 gap-y-0.5 px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/60">
                 <span aria-hidden className="text-[10px] text-slate-400 transition group-open:rotate-90">▶</span>
-                <span className="text-sm font-semibold text-slate-900 dark:text-slate-50">{d.day ? dayHeading(d.day) : "No date"}</span>
+                <span className="text-sm font-semibold text-slate-900 dark:text-slate-50" data-testid="tbp-day-title">{d.day ? dayHeading(d.day) : "No date to count from"}</span>
+                {d.day && DUE_BADGE[dueState(d.day, today)] && (
+                  <span data-testid="tbp-day-badge" className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${DUE_BADGE[dueState(d.day, today)]!.cls}`}>{DUE_BADGE[dueState(d.day, today)]!.text}</span>
+                )}
                 <span className="text-xs text-slate-600 dark:text-slate-300">
                   <strong className="tabular-nums">{d.orders.length}</strong> · <strong className="tabular-nums">{MONEY.format(d.total)}</strong>
                 </span>
@@ -82,6 +110,11 @@ export function AccountsList({ orders }: { orders: AccountsOrder[] }) {
                           <div className="flex flex-wrap gap-1.5">
                             <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${chipClass(o.customerName)}`}>{o.customerName}</span>
                             <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-medium tabular-nums text-blue-900 dark:bg-blue-900/40 dark:text-blue-100">{MONEY.format(o.amount)}</span>
+                            {o.dueStartDay && (
+                              <span data-testid="tbp-basis" className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-800 dark:bg-slate-800 dark:text-slate-100">
+                                {o.dueBasis === "DELIVERED" ? `Delivered ${shortDay(o.dueStartDay)}` : `Received ${shortDay(o.dueStartDay)}`}
+                              </span>
+                            )}
                             {o.adjusted && <span className="rounded-full bg-orange-100 px-2 py-0.5 text-[11px] font-medium text-orange-900 dark:bg-orange-900/40 dark:text-orange-100">Adjusted</span>}
                             <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${o.receipts > 0 ? "bg-green-100 text-green-900 dark:bg-green-900/40 dark:text-green-100" : "bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-100"}`}>
                               {o.receipts > 0 ? "Receipt attached" : "Needs receipt"}

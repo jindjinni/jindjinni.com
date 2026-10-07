@@ -12,6 +12,8 @@
 // quantities, totals, tracking numbers, customer info, product rules,
 // multipliers) records a row to purchasing_audit_log via logAudit() below.
 
+import { getPaymentTerms } from "@/lib/accounts-queries";
+import { isDay, todayIn } from "@/lib/payment-due";
 import { priceBreakdown, roundCents } from "@/lib/purchasing-price";
 import { canWritePurchasing, isPurchasingManager } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
@@ -1695,6 +1697,24 @@ export async function updatePurchasingQuotationHeader(
   const carrier = (trimmed(formData, "carrier") as typeof quotation.carrier) ?? null;
   const packageStatus = (trimmed(formData, "packageStatus") as typeof quotation.packageStatus) ?? quotation.packageStatus;
 
+  // The delivered day starts the clock on when the customer is paid (Accounts -> Payment Terms). Marking the package
+  // Delivered stamps it now; a person can also type the day it really arrived. Moving the status off Delivered clears it.
+  const terms = await getPaymentTerms(org.organizationId);
+  // Only a day the person actually changed counts as typed; the form's own starting value is sent back as "deliveredOnWas",
+  // so saving some other field never rewrites a delivered day with a stale one.
+  const deliveredOn = trimmed(formData, "deliveredOn");
+  const typedDay = deliveredOn && deliveredOn !== trimmed(formData, "deliveredOnWas") ? deliveredOn : null;
+  let deliveredAt = quotation.deliveredAt;
+  if (packageStatus !== "Delivered") {
+    if (quotation.packageStatus === "Delivered") deliveredAt = null;
+  } else if (typedDay) {
+    if (!isDay(typedDay)) return { error: "Enter the delivered date as a real date." };
+    if (typedDay > todayIn(terms.timeZone)) return { error: "The delivered date can't be in the future." };
+    deliveredAt = `${typedDay} 12:00:00`;
+  } else if (!deliveredAt && quotation.packageStatus !== "Delivered") {
+    deliveredAt = new Date().toISOString().slice(0, 19).replace("T", " ");
+  }
+
   await db
     .update(purchasingQuotations)
     .set({
@@ -1702,6 +1722,7 @@ export async function updatePurchasingQuotationHeader(
       trackingNumber: newTracking,
       carrier,
       packageStatus,
+      deliveredAt,
       notes: trimmed(formData, "notes"),
     })
     .where(eq(purchasingQuotations.id, quotationId));

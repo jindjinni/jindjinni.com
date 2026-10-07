@@ -19,6 +19,11 @@ export type AccountsOrder = {
   receiptId: string | null;
   /** The unopened-package photo Receiving took, for the small card. */
   coverPhotoId: string | null;
+  /** The day payment is due ("YYYY-MM-DD") under the company's payment terms; null on the Paid pages or when there is no day to count from. */
+  dueDay?: string | null;
+  /** The day the payment clock started: the delivered day, or the received day when no delivered day is on file. */
+  dueStartDay?: string | null;
+  dueBasis?: "DELIVERED" | "RECEIVED" | null;
 };
 
 export type DayGroup = { day: string; orders: AccountsOrder[]; total: number; receipts: number };

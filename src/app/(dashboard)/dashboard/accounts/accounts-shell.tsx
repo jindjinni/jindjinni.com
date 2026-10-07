@@ -12,19 +12,19 @@ import { PaidList } from "./paid/paid-list";
 
 const DETAIL = { waiting: /^\/dashboard\/accounts\/(?!paid(\/|$))[^/]+/, paid: /^\/dashboard\/accounts\/paid\/[^/]+/ };
 
-export function AccountsShell({ mode = "waiting", orders, children }: { mode?: "waiting" | "paid"; orders: AccountsOrder[]; children: React.ReactNode }) {
+export function AccountsShell({ mode = "waiting", orders, today = "", children }: { mode?: "waiting" | "paid"; orders: AccountsOrder[]; /** The company's calendar day, for the due-date badges (To Be Paid only). */ today?: string; children: React.ReactNode }) {
   const path = usePathname();
   // Open only for the page it was opened on, so moving to another order closes it by itself.
   const [openFor, setOpenFor] = useState<string | null>(null);
   const open = openFor === path;
 
-  const List = mode === "paid" ? PaidList : AccountsList;
+  const list = mode === "paid" ? <PaidList orders={orders} /> : <AccountsList orders={orders} today={today} />;
   const title = mode === "paid" ? "Paid Orders" : "To Be Paid";
   if (!DETAIL[mode].test(path)) {
     return (
       <div className="flex flex-col lg:flex-row">
         <div className="w-full shrink-0 border-b border-slate-200 bg-white lg:sticky lg:top-0 lg:h-[calc(100vh-3.4rem)] lg:w-[22rem] lg:self-start lg:overflow-y-auto lg:border-b-0 lg:border-r dark:border-slate-800 dark:bg-slate-900">
-          <List orders={orders} />
+          {list}
         </div>
         <div className="min-w-0 flex-1 px-4 py-6 sm:px-8">{children}</div>
       </div>
@@ -54,7 +54,7 @@ export function AccountsShell({ mode = "waiting", orders, children }: { mode?: "
                 Close
               </button>
             </div>
-            <List orders={orders} />
+            {list}
           </div>
           <button type="button" aria-label="Close the list" onClick={() => setOpenFor(null)} className="flex-1 bg-black/30" />
         </div>

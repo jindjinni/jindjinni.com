@@ -1145,6 +1145,38 @@ export const emailConnections = sqliteTable(
   (t) => [uniqueIndex("email_connections_org_idx").on(t.organizationId)],
 );
 
+/**
+ * How a company pays its customers: how many business days after a package is delivered the payment is due, whether
+ * US federal holidays are skipped, and the time zone that turns a delivered time into a calendar day. One row per
+ * company; no row means the defaults (3 business days, holidays skipped, Eastern time).
+ */
+export const accountsSettings = sqliteTable("accounts_settings", {
+  organizationId: text("organization_id")
+    .primaryKey()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  payWithinBusinessDays: integer("pay_within_business_days").notNull().default(3),
+  skipUsHolidays: integer("skip_us_holidays", { mode: "boolean" }).notNull().default(true),
+  timeZone: text("time_zone").notNull().default("America/New_York"),
+  ...timestamps,
+});
+
+/** A day the company is closed (on top of weekends and US federal holidays), so it doesn't count toward the payment terms. */
+export const accountsClosureDays = sqliteTable(
+  "accounts_closure_days",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    day: text("day").notNull(), // "YYYY-MM-DD"
+    label: text("label"),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(current_timestamp)`),
+  },
+  (t) => [uniqueIndex("accounts_closure_day_idx").on(t.organizationId, t.day)],
+);
+
 // A company's edited wording for one customer email (subject and text, with {placeholders}). A template with no row
 // here uses the original wording built into lib/email-templates.ts.
 export const receivingEmailTemplates = sqliteTable(

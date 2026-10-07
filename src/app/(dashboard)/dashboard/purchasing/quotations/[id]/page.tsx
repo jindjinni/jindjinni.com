@@ -4,6 +4,8 @@ import { ReceiptCell } from "../receipt-cell";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { requireOrg } from "@/lib/tenant";
+import { getPaymentTerms } from "@/lib/accounts-queries";
+import { dayInZone } from "@/lib/payment-due";
 import {
   getPurchasingQuotationWithItems,
   getPurchasingProducts,
@@ -118,6 +120,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
             trackingNumber={quotation.trackingNumber}
             carrier={quotation.carrier}
             packageStatus={quotation.packageStatus}
+            deliveredDay={dayInZone(quotation.deliveredAt, (await getPaymentTerms(org.organizationId)).timeZone)}
             notes={quotation.notes}
           />
         </div>
