@@ -1,7 +1,9 @@
 "use client";
 
 // Live camera for receiving photos: opens the camera attached to this computer or phone (a webcam, a USB document camera,
-// the phone's back camera), shows a large picture, and turns a click into a photo. Nothing is sent anywhere until the caller
+// the phone's back camera) as a full-screen "visualizer" view (the picture fills the whole screen, controls float over it),
+// and turns a click, or the space bar, into a photo. The picture is wide (16:9) and zoomed all the way out by default so
+// several boxes fit in one photo. Nothing is sent anywhere until the caller
 // uploads the file it is given. "Choose a file" stays available next to this wherever photos are added.
 //
 // Sharpness: the camera is asked for the biggest picture it can give (up to 8K) and, where the browser allows it, the photo
@@ -15,11 +17,17 @@ import { fitImageToBytes, MAX_PIXELS, resolutionLabel } from "@/lib/client-image
 
 type Cam = { id: string; label: string };
 type Quality = "max" | "4k" | "hd";
+type Shape = "wide" | "standard";
 
-const QUALITY: Record<Quality, { label: string; w: number; h: number }> = {
-  max: { label: "Highest the camera can do (up to 8K)", w: 7680, h: 4320 },
-  "4k": { label: "4K", w: 3840, h: 2160 },
-  hd: { label: "Full HD", w: 1920, h: 1080 },
+/** Picture sizes, by height; the width follows from the shape. */
+const QUALITY: Record<Quality, { label: string; h: number }> = {
+  max: { label: "Highest (up to 8K)", h: 4320 },
+  "4k": { label: "4K", h: 2160 },
+  hd: { label: "Full HD", h: 1080 },
+};
+const SHAPE: Record<Shape, { label: string; ratio: number }> = {
+  wide: { label: "Wide (16:9)", ratio: 16 / 9 },
+  standard: { label: "Standard (4:3)", ratio: 4 / 3 },
 };
 
 export const cameraSupported = () => typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia;
@@ -29,8 +37,8 @@ export const useCameraSupported = () => useSyncExternalStore(noSubscribe, camera
 const useMounted = () => useSyncExternalStore(noSubscribe, () => true, () => false);
 
 // Camera controls the standard typings don't list yet.
-type FancyCaps = MediaTrackCapabilities & { focusMode?: string[]; exposureMode?: string[]; whiteBalanceMode?: string[] };
-const advanced = (c: Record<string, string>) => ({ advanced: [c] }) as unknown as MediaTrackConstraints;
+type FancyCaps = MediaTrackCapabilities & { focusMode?: string[]; exposureMode?: string[]; whiteBalanceMode?: string[]; zoom?: { min: number; max: number; step?: number } };
+const advanced = (c: Record<string, string | number>) => ({ advanced: [c] }) as unknown as MediaTrackConstraints;
 
 type StillCamera = {
   getPhotoCapabilities(): Promise<{ imageWidth?: { max: number }; imageHeight?: { max: number } }>;
@@ -64,6 +72,13 @@ export function CameraCapture({
   const [cams, setCams] = useState<Cam[]>([]);
   const [camId, setCamId] = useState("");
   const [quality, setQuality] = useState<Quality>("max");
+  const [shape, setShape] = useState<Shape>("wide");
+  const [zoomCaps, setZoomCaps] = useState<{ min: number; max: number; step: number } | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const [isFull, setIsFull] = useState(false);
+  const [review, setReview] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const snapRef = useRef<() => void>(() => undefined);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -90,15 +105,16 @@ export function CameraCapture({
   }, []);
 
   const start = useCallback(
-    async (deviceId: string, q: Quality) => {
+    async (deviceId: string, q: Quality, sh: Shape) => {
       stop();
       if (!cameraSupported()) {
         setError("This browser can't open a camera. Use Choose a file instead.");
         return;
       }
       try {
-        const want = QUALITY[q];
-        const size = { width: { ideal: want.w }, height: { ideal: want.h }, resizeMode: "none" } as MediaTrackConstraints;
+        const ratio = SHAPE[sh].ratio;
+        const h = QUALITY[q].h;
+        const size = { width: { ideal: Math.round(h * ratio) }, height: { ideal: h }, aspectRatio: { ideal: ratio }, resizeMode: "none" } as MediaTrackConstraints;
         const video: MediaTrackConstraints = deviceId ? { deviceId: { exact: deviceId }, ...size } : { facingMode: { ideal: "environment" }, ...size };
         const stream = await navigator.mediaDevices.getUserMedia({ video, audio: false });
         streamRef.current = stream;
@@ -109,6 +125,12 @@ export function CameraCapture({
           if (modes?.includes("continuous")) await track.applyConstraints(advanced({ [key]: "continuous" })).catch(() => undefined);
         }
         setCanRefocus(!!caps.focusMode?.includes("single-shot") && !!caps.focusMode?.includes("continuous"));
+        // Zoomed all the way out = the widest view the camera has, so several boxes fit in one photo.
+        if (caps.zoom && caps.zoom.max > caps.zoom.min) {
+          await track.applyConstraints(advanced({ zoom: caps.zoom.min })).catch(() => undefined);
+          setZoomCaps({ min: caps.zoom.min, max: caps.zoom.max, step: caps.zoom.step || (caps.zoom.max - caps.zoom.min) / 100 });
+          setZoom(caps.zoom.min);
+        } else setZoomCaps(null);
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           await videoRef.current.play().catch(() => undefined);
@@ -136,7 +158,7 @@ export function CameraCapture({
   );
 
   useEffect(() => {
-    const t = setTimeout(() => void start("", quality), 0);
+    const t = setTimeout(() => void start("", quality, shape), 0);
     return () => {
       clearTimeout(t);
       stop();
@@ -148,15 +170,53 @@ export function CameraCapture({
   useEffect(() => {
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeRef.current();
-    };
-    document.addEventListener("keydown", onKey);
     return () => {
       document.body.style.overflow = prev;
-      document.removeEventListener("keydown", onKey);
     };
   }, []);
+
+  // Escape closes the big view of the last photo first, then the camera. Space takes a photo (unless a control has the keyboard).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (review) setReview(false);
+        else closeRef.current();
+      } else if ((e.key === " " || e.code === "Space") && !review) {
+        const t = e.target as HTMLElement | null;
+        if (t && /^(BUTTON|SELECT|INPUT|TEXTAREA)$/.test(t.tagName)) return;
+        e.preventDefault();
+        snapRef.current();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [review]);
+
+  // Full screen: the picture fills the whole screen, browser bars and all. Asked for as soon as the camera opens; the button toggles it.
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!mounted || !el) return;
+    const onChange = () => setIsFull(document.fullscreenElement === el);
+    document.addEventListener("fullscreenchange", onChange);
+    void el.requestFullscreen?.().catch(() => undefined);
+    return () => {
+      document.removeEventListener("fullscreenchange", onChange);
+      if (document.fullscreenElement === el) void document.exitFullscreen().catch(() => undefined);
+    };
+  }, [mounted]);
+
+  function toggleFull() {
+    const el = rootRef.current;
+    if (!el) return;
+    if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+    else void el.requestFullscreen?.().catch(() => undefined);
+  }
+
+  async function changeZoom(v: number) {
+    setZoom(v);
+    const track = streamRef.current?.getVideoTracks()[0];
+    await track?.applyConstraints(advanced({ zoom: v })).catch(() => undefined);
+  }
 
   /** Asks the camera to focus again (for cameras with their own focus), then goes back to automatic focus. */
   async function refocus() {
@@ -167,7 +227,7 @@ export function CameraCapture({
   }
 
   /** The camera's own still photo at its biggest size, when the browser can do it and it beats the video picture. */
-  async function stillPhoto(track: MediaStreamTrack | undefined, videoPixels: number): Promise<Blob | null> {
+  async function stillPhoto(track: MediaStreamTrack | undefined, videoPixels: number, videoRatio: number): Promise<Blob | null> {
     if (!track) return null;
     try {
       const still = stillCameraFor(track);
@@ -181,8 +241,11 @@ export function CameraCapture({
       const blob = await still.takePhoto(settings);
       const bmp = await createImageBitmap(blob);
       const pixels = bmp.width * bmp.height;
+      const bw = bmp.width, bh = bmp.height;
       bmp.close?.();
-      return pixels >= videoPixels ? blob : null;
+      // What is saved must be what is on the screen: skip a still photo that is cut differently from the live picture.
+      const sameShape = Math.abs(bw / bh - videoRatio) / videoRatio < 0.03;
+      return pixels >= videoPixels && sameShape ? blob : null;
     } catch {
       return null;
     }
@@ -196,7 +259,7 @@ export function CameraCapture({
       const stamp = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14);
       const name = `camera-${stamp}.jpg`;
       const track = streamRef.current?.getVideoTracks()[0];
-      const still = await stillPhoto(track, v.videoWidth * v.videoHeight);
+      const still = await stillPhoto(track, v.videoWidth * v.videoHeight, v.videoWidth / v.videoHeight);
       let file: File | null = null;
       if (still) {
         file = fitToUpload ? await fitImageToBytes(still, name) : new File([still], name, { type: still.type || "image/jpeg" });
@@ -243,105 +306,175 @@ export function CameraCapture({
     }
   }
 
+  useEffect(() => {
+    snapRef.current = () => void snap();
+  });
+
   const longSide = dims ? Math.max(dims.w, dims.h) : 0;
   const below4k = quality === "max" && dims && longSide < 3700;
 
   if (!mounted) return null;
+  const btn = "rounded-lg border border-white/30 bg-black/55 px-3 py-1.5 text-sm font-medium text-white backdrop-blur hover:bg-black/75 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-400";
+  const pick = "max-w-[14rem] rounded-lg border border-white/30 bg-black/60 px-2 py-1.5 text-sm text-white";
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-2 sm:p-4" role="dialog" aria-modal="true" aria-label={title} data-testid="camera-window">
-      <div className="flex h-[96vh] w-[98vw] max-w-[110rem] flex-col overflow-hidden rounded-2xl bg-white shadow-xl dark:bg-slate-900">
-        <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-2.5 dark:border-slate-700">
-          <h2 className="text-base font-bold text-slate-900 dark:text-slate-50">{title}</h2>
-          <button type="button" onClick={onClose} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-800 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-800">
-            {taken > 0 ? "Done" : "Close"}
+    <div ref={rootRef} className="fixed inset-0 z-50 bg-black text-white" role="dialog" aria-modal="true" aria-label={title} data-testid="camera-window">
+      <video ref={videoRef} className="absolute inset-0 h-full w-full object-contain" muted playsInline aria-label="Live camera picture" data-testid="camera-video" />
+      {!ready && !error && <p className="absolute inset-0 flex items-center justify-center text-sm text-slate-200">Starting the camera…</p>}
+
+      <div className="pointer-events-none absolute left-3 top-3 flex max-w-[min(34rem,60vw)] flex-col items-start gap-2">
+        <span className="rounded-md bg-black/60 px-2 py-1 text-xs font-semibold">{title}</span>
+        {dims && ready && (
+          <span className="rounded-md bg-black/60 px-2 py-1 text-xs font-medium" data-testid="camera-size">
+            {dims.w} × {dims.h} · {resolutionLabel(dims.w, dims.h)}
+          </span>
+        )}
+        {below4k && (
+          <span className="rounded-md bg-black/60 px-2 py-1 text-xs">
+            The camera is giving {dims?.w} × {dims?.h}. If it is a 4K camera, plug it into a USB 3 port (blue) with the cable it came with, close other programs using it, and pick it in the Camera list.
+          </span>
+        )}
+      </div>
+
+      <div className="absolute right-3 top-3 flex items-center gap-2">
+        <button type="button" onClick={toggleFull} className={btn} data-testid="camera-fullscreen">
+          {isFull ? "Exit full screen" : "Full screen"}
+        </button>
+        <button type="button" onClick={onClose} className={btn}>
+          {taken > 0 ? "Done" : "Close"}
+        </button>
+      </div>
+
+      {error && (
+        <p role="alert" className="absolute left-1/2 top-14 w-[min(40rem,92vw)] -translate-x-1/2 rounded-lg border border-red-300 bg-red-50 px-4 py-2 text-sm text-red-900">
+          {error}
+        </p>
+      )}
+
+      <div className="absolute inset-x-0 bottom-0 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 bg-black/65 px-4 py-3 backdrop-blur">
+        <button
+          type="button"
+          onClick={snap}
+          disabled={!ready || busy}
+          className="rounded-full bg-white px-8 py-3 text-base font-bold text-slate-900 hover:bg-slate-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-400 disabled:opacity-50"
+        >
+          {busy ? "Saving…" : "Take photo"}
+        </button>
+        {canRefocus && (
+          <button type="button" onClick={() => void refocus()} className={btn}>
+            Focus again
           </button>
-        </div>
-        <div className="relative min-h-0 flex-1 bg-black">
-          <video ref={videoRef} className="absolute inset-0 h-full w-full object-contain" muted playsInline aria-label="Live camera picture" data-testid="camera-video" />
-          {!ready && !error && <p className="absolute inset-0 flex items-center justify-center text-sm text-slate-200">Starting the camera…</p>}
-          {dims && ready && (
-            <span className="absolute left-3 top-3 rounded-md bg-black/60 px-2 py-1 text-xs font-medium text-white" data-testid="camera-size">
-              {dims.w} × {dims.h} · {resolutionLabel(dims.w, dims.h)}
-            </span>
-          )}
-          {last && (
-            <div className="absolute bottom-3 right-3 flex items-center gap-2 rounded-lg bg-black/60 p-1.5 pr-3 text-xs text-white" data-testid="camera-last">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={last.url} alt="The last photo taken" className="h-14 w-20 rounded object-cover" />
-              <span>
-                Last photo
-                <br />
-                {last.w} × {last.h} · {mb(last.bytes)}
-              </span>
-            </div>
-          )}
-        </div>
-        {error && <p role="alert" className="border-t border-red-200 bg-red-50 px-4 py-2 text-sm text-red-900 dark:border-red-900 dark:bg-red-950/40 dark:text-red-100">{error}</p>}
-        <div className="flex flex-wrap items-center gap-3 border-t border-slate-200 px-4 py-3 dark:border-slate-700">
-          <button
-            type="button"
-            onClick={snap}
-            disabled={!ready || busy}
-            className="rounded-lg bg-slate-900 px-6 py-2.5 text-sm font-semibold text-white hover:bg-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 disabled:opacity-50 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-300"
+        )}
+        {zoomCaps && (
+          <label className="flex items-center gap-2 text-xs text-slate-200">
+            Wider
+            <input
+              type="range"
+              min={zoomCaps.min}
+              max={zoomCaps.max}
+              step={zoomCaps.step}
+              value={zoom}
+              onChange={(e) => void changeZoom(Number(e.target.value))}
+              className="w-40 accent-white"
+              aria-label="Zoom: wider to closer"
+              data-testid="camera-zoom"
+            />
+            Closer
+          </label>
+        )}
+        <label className="flex items-center gap-2 text-xs text-slate-200">
+          Shape
+          <select
+            className={pick}
+            value={shape}
+            data-testid="camera-shape"
+            onChange={(e) => {
+              const sh = e.target.value as Shape;
+              setShape(sh);
+              setReady(false);
+              setError("");
+              void start(camId, quality, sh);
+            }}
           >
-            {busy ? "Saving…" : "Take photo"}
-          </button>
-          {canRefocus && (
-            <button type="button" onClick={() => void refocus()} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-800">
-              Focus again
-            </button>
-          )}
-          <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
-            Picture size
+            {(Object.keys(SHAPE) as Shape[]).map((k) => (
+              <option key={k} value={k}>
+                {SHAPE[k].label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex items-center gap-2 text-xs text-slate-200">
+          Picture size
+          <select
+            className={pick}
+            value={quality}
+            data-testid="camera-quality"
+            onChange={(e) => {
+              const q = e.target.value as Quality;
+              setQuality(q);
+              setReady(false);
+              setError("");
+              void start(camId, q, shape);
+            }}
+          >
+            {(Object.keys(QUALITY) as Quality[]).map((k) => (
+              <option key={k} value={k}>
+                {QUALITY[k].label}
+              </option>
+            ))}
+          </select>
+        </label>
+        {cams.length > 1 && (
+          <label className="flex items-center gap-2 text-xs text-slate-200">
+            Camera
             <select
-              className="max-w-[16rem] rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
-              value={quality}
-              data-testid="camera-quality"
+              className={pick}
+              value={camId}
               onChange={(e) => {
-                const q = e.target.value as Quality;
-                setQuality(q);
+                setCamId(e.target.value);
                 setReady(false);
                 setError("");
-                void start(camId, q);
+                void start(e.target.value, quality, shape);
               }}
             >
-              {(Object.keys(QUALITY) as Quality[]).map((k) => (
-                <option key={k} value={k}>
-                  {QUALITY[k].label}
+              {cams.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.label}
                 </option>
               ))}
             </select>
           </label>
-          {cams.length > 1 && (
-            <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
-              Camera
-              <select
-                className="max-w-[14rem] rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
-                value={camId}
-                onChange={(e) => {
-                  setCamId(e.target.value);
-                  setReady(false);
-                  setError("");
-                  void start(e.target.value, quality);
-                }}
-              >
-                {cams.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-          {taken > 0 && <span role="status" className="text-sm font-medium text-green-700 dark:text-green-400">{taken} photo{taken === 1 ? "" : "s"} added</span>}
-          <span className="basis-full text-xs text-slate-500">
-            {below4k
-              ? `The camera is giving ${dims?.w} × ${dims?.h}. If it is a 4K camera, plug it into a USB 3 port (blue) with the cable it came with, close other programs using it, and pick it in the Camera list. Small print reads best at 4K. `
-              : ""}
-            {fitToUpload ? "Each photo is saved at the biggest size that fits 4 MB. " : ""}Keep patient names and pharmacy stickers out of the picture.
-          </span>
-        </div>
+        )}
+        {taken > 0 && <span role="status" className="text-sm font-medium text-green-300">{taken} photo{taken === 1 ? "" : "s"} added</span>}
+        {last && (
+          <button type="button" onClick={() => setReview(true)} className="flex items-center gap-2 rounded-lg bg-white/10 p-1.5 pr-3 text-left text-xs hover:bg-white/20" data-testid="camera-last" title="Click to see the photo big">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={last.url} alt="The last photo taken" className="h-12 w-20 rounded object-cover" />
+            <span>
+              Last photo (click to enlarge)
+              <br />
+              {last.w} × {last.h} · {mb(last.bytes)}
+            </span>
+          </button>
+        )}
+        <span className="basis-full text-center text-xs text-slate-300">
+          Press the space bar to take a photo. {fitToUpload ? "Each photo is saved at the biggest size that fits 4 MB. " : ""}Keep patient names and pharmacy stickers out of the picture.
+        </span>
       </div>
+
+      {review && last && (
+        <div className="absolute inset-0 z-10 flex flex-col bg-black" data-testid="camera-review">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={last.url} alt="The last photo, full size" className="min-h-0 flex-1 object-contain" />
+          <div className="flex items-center justify-between gap-3 bg-black/80 px-4 py-3 text-sm">
+            <span>
+              {last.w} × {last.h} · {mb(last.bytes)}
+            </span>
+            <button type="button" onClick={() => setReview(false)} className={btn} data-testid="camera-review-close">
+              Back to the camera
+            </button>
+          </div>
+        </div>
+      )}
     </div>,
     document.body,
   );
