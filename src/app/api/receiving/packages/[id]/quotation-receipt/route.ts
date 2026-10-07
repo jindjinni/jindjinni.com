@@ -15,7 +15,7 @@ export const maxDuration = 30;
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const org = await requireOrgApi();
   if (!org) return new NextResponse("Sign in first.", { status: 401 });
-  if (!canViewReceiving(org.role)) return new NextResponse("Your role can't open Receiving.", { status: 403 });
+  if (!canViewReceiving(org.role, org.access)) return new NextResponse("Your role can't open Receiving.", { status: 403 });
 
   const { id } = await params;
   const [pkg] = await db

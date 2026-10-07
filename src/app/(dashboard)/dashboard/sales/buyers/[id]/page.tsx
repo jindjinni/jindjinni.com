@@ -17,7 +17,7 @@ export default async function BuyerPage({ params }: { params: Promise<{ id: stri
   const { id } = await params;
   const buyer = await getBuyer(org.organizationId, id);
   if (!buyer) notFound();
-  const canWrite = canWriteSales(org.role);
+  const canWrite = canWriteSales(org.role, org.access);
   const [sheet, items, products, invoices, terms] = await Promise.all([
     getPriceSheet(org.organizationId, id),
     listPriceItems(org.organizationId, id),

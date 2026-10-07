@@ -11,13 +11,15 @@ import { and, eq, isNotNull, isNull } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/db/client";
 import { memberships, organizations } from "@/db/schema";
-import type { Role } from "@/lib/permissions";
+import { parseAccess, type Access, type Role } from "@/lib/permissions";
 
 export type CurrentOrg = {
   userId: string;
   organizationId: string;
   organizationName: string;
   role: Role;
+  /** Departments an admin opened for this person by hand, on top of the role (empty for most people). */
+  access: Access;
 };
 
 /**
@@ -43,6 +45,7 @@ export async function requireOrg(): Promise<CurrentOrg> {
       organizationId: organizations.id,
       organizationName: organizations.name,
       role: memberships.role,
+      deptAccess: memberships.deptAccess,
     })
     .from(memberships)
     .innerJoin(organizations, eq(memberships.organizationId, organizations.id))
@@ -84,6 +87,7 @@ export async function requireOrg(): Promise<CurrentOrg> {
     organizationId: row!.organizationId,
     organizationName: row!.organizationName,
     role: row!.role as CurrentOrg["role"],
+    access: parseAccess(row!.deptAccess),
   };
 }
 
@@ -101,13 +105,20 @@ export async function requireOrgApi(): Promise<CurrentOrg | null> {
       organizationId: organizations.id,
       organizationName: organizations.name,
       role: memberships.role,
+      deptAccess: memberships.deptAccess,
     })
     .from(memberships)
     .innerJoin(organizations, eq(memberships.organizationId, organizations.id))
     .where(and(eq(memberships.userId, userId), isNull(memberships.deactivatedAt), isNull(organizations.closedAt)))
     .limit(1);
   if (!row) return null;
-  return { userId, organizationId: row.organizationId, organizationName: row.organizationName, role: row.role as CurrentOrg["role"] };
+  return {
+    userId,
+    organizationId: row.organizationId,
+    organizationName: row.organizationName,
+    role: row.role as CurrentOrg["role"],
+    access: parseAccess(row.deptAccess),
+  };
 }
 
 export type ClosedCompany = {

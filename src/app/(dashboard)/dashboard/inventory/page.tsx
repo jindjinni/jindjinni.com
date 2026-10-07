@@ -45,5 +45,5 @@ export default async function InventoryPage() {
       })),
     })),
   }));
-  return <StockList brands={brands} totals={totals} today={snap.today} canWrite={canWriteInventory(org.role)} />;
+  return <StockList brands={brands} totals={totals} today={snap.today} canWrite={canWriteInventory(org.role, org.access)} />;
 }

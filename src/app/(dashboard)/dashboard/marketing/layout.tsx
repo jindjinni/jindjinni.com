@@ -9,7 +9,7 @@ import { DepartmentSidebar } from "@/components/department-sidebar";
 // managers can use it: it reaches customers by email (and, later, by text).
 export default async function MarketingLayout({ children }: { children: React.ReactNode }) {
   const org = await requireOrg();
-  if (!canViewMarketing(org.role)) notFound();
+  if (!canViewMarketing(org.role, org.access)) notFound();
   const menu = resolveMenu("marketing", await getSavedSidebarMenus(org.organizationId));
 
   return (

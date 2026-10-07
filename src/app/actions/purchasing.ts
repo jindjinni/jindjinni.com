@@ -97,7 +97,7 @@ async function readUploadedFile(formData: FormData): Promise<{ buffer: Buffer; f
  */
 async function requirePurchasingWriter(): Promise<CurrentOrg> {
   const org = await requireOrg();
-  if (!canWritePurchasing(org.role)) {
+  if (!canWritePurchasing(org.role, org.access)) {
     throw new Error("Your role can't make changes in Purchasing.");
   }
   return org;

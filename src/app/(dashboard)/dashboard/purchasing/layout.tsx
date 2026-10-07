@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { requireOrg } from "@/lib/tenant";
-import { canViewPurchasing, isAdmin, isPurchasingManager } from "@/lib/permissions";
+import { canViewPurchasing, canWritePurchasing, isAdmin, isPurchasingManager } from "@/lib/permissions";
 import { DEPARTMENT_MENUS, resolveMenu } from "@/lib/sidebar-menu";
 import { getSavedSidebarMenus } from "@/lib/sidebar-menu-store";
 import { DepartmentSidebar } from "@/components/department-sidebar";
@@ -11,9 +11,9 @@ import { PurchasingContent } from "./purchasing-content";
 export default async function PurchasingLayout({ children }: { children: React.ReactNode }) {
   const org = await requireOrg();
   // Receivers (and any future role without Purchasing) are sent home.
-  if (!canViewPurchasing(org.role)) redirect("/dashboard");
+  if (!canViewPurchasing(org.role, org.access)) redirect("/dashboard");
   const isManager = isPurchasingManager(org.role);
-  const viewOnly = org.role === "accountant";
+  const viewOnly = !canWritePurchasing(org.role, org.access);
 
   // Everyone sees the four everyday tabs. Managers also see the Setup tabs. (Archive, Audit log and Database are under Settings.)
   const everyday = DEPARTMENT_MENUS.purchasing.items.filter((i) => !i.setup).map((i) => i.id);

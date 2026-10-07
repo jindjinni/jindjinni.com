@@ -20,7 +20,7 @@ export type AccountsActionState = { ok?: boolean; error?: string };
  */
 export async function markOrderPaid(packageId: string): Promise<AccountsActionState> {
   const org = await requireOrg();
-  if (!canWritePayment(org.role)) return { error: "Only Accounts can mark an order Paid." };
+  if (!canWritePayment(org.role, org.access)) return { error: "Only Accounts can mark an order Paid." };
 
   const [p] = await db
     .select()

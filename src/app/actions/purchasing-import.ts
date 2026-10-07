@@ -62,7 +62,7 @@ export type QuotationImportState =
 
 async function requireWriter(): Promise<CurrentOrg> {
   const org = await requireOrg();
-  if (!canWritePurchasing(org.role)) throw new Error("Your role can't make changes in Purchasing.");
+  if (!canWritePurchasing(org.role, org.access)) throw new Error("Your role can't make changes in Purchasing.");
   return org;
 }
 

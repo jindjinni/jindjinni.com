@@ -9,7 +9,7 @@ export const metadata = { title: "Chat" };
 
 export default async function ChatPage({ searchParams }: { searchParams: Promise<{ room?: string }> }) {
   const org = await requireOrg();
-  const ctx = { organizationId: org.organizationId, userId: org.userId, role: org.role };
+  const ctx = { organizationId: org.organizationId, userId: org.userId, role: org.role, access: org.access };
   const now = Date.parse(new Date().toISOString());
   await touchPresence(ctx, now);
 
@@ -23,7 +23,7 @@ export default async function ChatPage({ searchParams }: { searchParams: Promise
   return (
     <ChatApp
       me={{ id: org.userId, name: me?.name ?? "You", canModerate: isAdmin(org.role) }}
-      rooms={groupRoomsFor(org.role)}
+      rooms={groupRoomsFor(org.role, org.access)}
       initialRoom={room}
       initialPeople={people}
       initialUnread={unread}

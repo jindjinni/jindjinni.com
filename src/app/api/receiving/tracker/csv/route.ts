@@ -18,7 +18,7 @@ const cell = (v: unknown) => {
 export async function GET(req: NextRequest) {
   const org = await requireOrgApi();
   if (!org) return new NextResponse("Sign in first.", { status: 401 });
-  if (!canViewReceiving(org.role)) return new NextResponse("Your role can't open Receiving.", { status: 403 });
+  if (!canViewReceiving(org.role, org.access)) return new NextResponse("Your role can't open Receiving.", { status: 403 });
   const p = req.nextUrl.searchParams;
   const view = p.get("view") === "serials" ? "serials" : "lots";
   const f = { q: p.get("q") ?? "", from: p.get("from") ?? "", to: p.get("to") ?? "", limit: 20000 };

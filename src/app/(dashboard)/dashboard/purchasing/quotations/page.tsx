@@ -15,7 +15,7 @@ export default async function PurchasingQuotationsPage() {
     // (10 columns) has real room. Capped at max-w-[100rem] so it doesn't stretch edge-to-edge on an ultra-wide monitor.
     <div className="w-full">
       <div className="mx-auto max-w-[100rem]">
-        <QuotationsTable quotations={quotations} canImport={canWritePurchasing(org.role)} />
+        <QuotationsTable quotations={quotations} canImport={canWritePurchasing(org.role, org.access)} />
       </div>
     </div>
   );

@@ -21,7 +21,7 @@ export type AdjustmentActionState = { error?: string; ok?: boolean; id?: string;
 
 async function requireWriter(): Promise<CurrentOrg> {
   const org = await requireOrg();
-  if (!canWriteAccounts(org.role)) throw new Error("Your role can view Receiving but can't make changes.");
+  if (!canWriteAccounts(org.role, org.access)) throw new Error("Your role can view Receiving but can't make changes.");
   return org;
 }
 

@@ -10,7 +10,7 @@ export default async function IntakeLayout({ children }: { children: React.React
   const org = await requireOrg();
   const cards = await getReceivingBoard(org.organizationId);
   return (
-    <IntakeShell cards={cards} canWrite={canWriteReceiving(org.role)}>
+    <IntakeShell cards={cards} canWrite={canWriteReceiving(org.role, org.access)}>
       {children}
     </IntakeShell>
   );

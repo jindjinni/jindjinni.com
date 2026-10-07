@@ -9,18 +9,36 @@ import { headers } from "next/headers";
 import { and, eq, isNull, ne } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { db } from "@/db/client";
-import { memberships, purchasingAuditLog, teamInvitations, users } from "@/db/schema";
+import { memberships, organizations, purchasingAuditLog, teamInvitations, users } from "@/db/schema";
 import { requireOrg, type CurrentOrg } from "@/lib/tenant";
 import { auth, signIn } from "@/lib/auth";
 import { newId } from "@/lib/ids";
 import { sendEmail } from "@/lib/email";
-import { ASSIGNABLE_ROLES, ROLE_LABELS, isAdmin, isRole, type Role } from "@/lib/permissions";
+import {
+  ASSIGNABLE_ROLES,
+  ROLE_LABELS,
+  accessFromForm,
+  describeAccess,
+  isAdmin,
+  isRole,
+  serializeAccess,
+  type Role,
+} from "@/lib/permissions";
+import { buildUsername, cleanLoginName, generatePassword, staffEmailFor } from "@/lib/staff-login";
 import { getSeatUsage } from "@/lib/seats";
 import { TERMS_VERSION } from "@/lib/legal";
 import { INVITE_VALID_DAYS, lookupInvitation, newInviteToken } from "@/lib/invitations";
 
 export type TeamActionState =
-  | { error?: string; message?: string; inviteLink?: string; emailed?: boolean; inviteEmail?: string }
+  | {
+      error?: string;
+      message?: string;
+      inviteLink?: string;
+      emailed?: boolean;
+      inviteEmail?: string;
+      /** A staff login that was just created or reset: shown to the admin once, never stored in readable form. */
+      credentials?: { name: string; username: string; password: string };
+    }
   | undefined;
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -120,11 +138,13 @@ export async function createInvitation(_prev: TeamActionState, formData: FormDat
 
   const { token, tokenHash, expiresAt } = newInviteToken();
   const id = newId("tinv");
+  const deptAccess = role === "admin" ? null : serializeAccess(accessFromForm(formData));
   await db.insert(teamInvitations).values({
     id,
     organizationId: org.organizationId,
     email,
     role: role as Exclude<Role, "owner" | "staff">,
+    deptAccess,
     tokenHash,
     invitedByUserId: org.userId,
     expiresAt,
@@ -260,6 +280,124 @@ export async function setMemberActive(membershipId: string, active: boolean, _pr
   return { message: `${target.email} can no longer sign in to your workspace.` };
 }
 
+/** Change someone's role AND the departments opened for them by hand, in one save. */
+export async function saveMemberAccess(membershipId: string, _prev: TeamActionState, formData: FormData): Promise<TeamActionState> {
+  const org = await requireAdmin();
+  const target = await loadTargetMember(org, membershipId);
+  if (!target) return { error: "Team member not found." };
+  const blocked = cannotManage(org, target);
+  if (blocked) return { error: blocked };
+
+  const role = String(formData.get("role") ?? "");
+  if (!isRole(role) || !ASSIGNABLE_ROLES.includes(role)) return { error: "Choose a valid role." };
+  if (role === "admin" && org.role !== "owner") return { error: "Only the owner can make someone an admin." };
+
+  const [current] = await db.select({ deptAccess: memberships.deptAccess }).from(memberships).where(eq(memberships.id, target.id)).limit(1);
+  const nextAccess = role === "admin" ? null : serializeAccess(accessFromForm(formData));
+  if (role === target.role && (current?.deptAccess ?? null) === nextAccess) return { message: "Nothing changed." };
+
+  await db
+    .update(memberships)
+    .set({ role: role as Exclude<Role, "owner">, deptAccess: nextAccess })
+    .where(eq(memberships.id, target.id));
+  await audit(
+    org,
+    target.id,
+    "access",
+    `${target.role}${current?.deptAccess ? ` + ${current.deptAccess}` : ""}`,
+    `${role}${nextAccess ? ` + ${nextAccess}` : ""}`,
+    `Access changed for ${target.email}`,
+  );
+  const extras = nextAccess ? describeAccess(JSON.parse(nextAccess)) : "";
+  return { message: `${target.email} is now ${ROLE_LABELS[role]}${extras ? ` with ${extras}` : ""}.` };
+}
+
+/**
+ * Creates a staff login for someone with no email of their own: a username tied
+ * to this company plus a generated password, shown to the admin once. The person
+ * signs in on the normal sign-in page and lands in this company.
+ */
+export async function createStaffLogin(_prev: TeamActionState, formData: FormData): Promise<TeamActionState> {
+  const org = await requireAdmin();
+  const name = String(formData.get("name") ?? "").trim().replace(/\s+/g, " ");
+  const loginName = cleanLoginName(String(formData.get("login") ?? "") || name.split(" ")[0] || "");
+  const role = String(formData.get("role") ?? "");
+
+  if (!name) return { error: "Enter the person's name." };
+  if (name.length > 100) return { error: "That name is too long." };
+  if (loginName.length < 2) return { error: "Choose a login name of at least 2 letters or numbers (for example maria)." };
+  if (!isRole(role) || !ASSIGNABLE_ROLES.includes(role)) return { error: "Choose a role for this person." };
+  if (role === "admin" && org.role !== "owner") return { error: "Only the owner can create another admin." };
+
+  const [orgRow] = await db.select({ slug: organizations.slug }).from(organizations).where(eq(organizations.id, org.organizationId)).limit(1);
+  if (!orgRow) return { error: "Company not found." };
+  const username = buildUsername(loginName, orgRow.slug);
+
+  const [taken] = await db.select({ id: users.id }).from(users).where(eq(users.username, username)).limit(1);
+  if (taken) return { error: `${username} is already taken. Choose a different login name.` };
+
+  const seats = await getSeatUsage(org.organizationId);
+  if (seats.full) {
+    return { error: `Your team is full (${seats.used} of ${seats.limit} seats used, counting pending invitations). Remove someone or cancel a pending invitation, or contact us to raise your limit.` };
+  }
+
+  const password = generatePassword();
+  const userId = newId("user");
+  const deptAccess = role === "admin" ? null : serializeAccess(accessFromForm(formData));
+  await db.batch([
+    db.insert(users).values({
+      id: userId,
+      email: staffEmailFor(username),
+      username,
+      name,
+      passwordHash: await bcrypt.hash(password, 10),
+      managedByOrgId: org.organizationId,
+      mustChangePassword: true,
+    }),
+    db.insert(memberships).values({
+      id: newId("mem"),
+      userId,
+      organizationId: org.organizationId,
+      role: role as Exclude<Role, "owner">,
+      deptAccess,
+    }),
+  ]);
+  await audit(org, userId, "staff_login", null, `${username} as ${ROLE_LABELS[role]}`, "Staff login created");
+  return {
+    message: `Login created for ${name}. Copy the password now. It is shown only once.`,
+    credentials: { name, username, password },
+  };
+}
+
+/** Gives a staff login a new generated password (and clears any sign-in pause). Only for logins this company created. */
+export async function resetStaffPassword(membershipId: string, _prev: TeamActionState, _formData: FormData): Promise<TeamActionState> {
+  const org = await requireAdmin();
+  const target = await loadTargetMember(org, membershipId);
+  if (!target) return { error: "Team member not found." };
+  const blocked = cannotManage(org, target);
+  if (blocked) return { error: blocked };
+
+  const [u] = await db
+    .select({ id: users.id, name: users.name, username: users.username, managedByOrgId: users.managedByOrgId })
+    .from(users)
+    .where(eq(users.id, target.userId))
+    .limit(1);
+  if (!u?.username || u.managedByOrgId !== org.organizationId) {
+    return { error: "Only logins you created with a username can be reset here. Others use their own email to sign in." };
+  }
+
+  const password = generatePassword();
+  await db
+    .update(users)
+    .set({ passwordHash: await bcrypt.hash(password, 10), mustChangePassword: true, failedLogins: 0, lockedUntil: null })
+    .where(eq(users.id, u.id));
+  await audit(org, target.id, "password", null, null, `Password reset for ${u.username}`);
+  return {
+    message: `New password created for ${u.name || u.username}. Copy it now. It is shown only once.`,
+    credentials: { name: u.name || u.username, username: u.username, password },
+  };
+}
+
 /**
  * Public (no admin needed): the person opens their invite link and accepts.
  *  - Already signed in as the invited email -> just joins.
@@ -328,7 +466,7 @@ export async function acceptInvitation(token: string, _prev: TeamActionState, fo
   if (existingMembership) {
     await db
       .update(memberships)
-      .set({ deactivatedAt: null, role: invitation.role })
+      .set({ deactivatedAt: null, role: invitation.role, deptAccess: invitation.deptAccess })
       .where(eq(memberships.id, existingMembership.id));
   } else {
     await db.insert(memberships).values({
@@ -336,6 +474,7 @@ export async function acceptInvitation(token: string, _prev: TeamActionState, fo
       userId,
       organizationId: invitation.organizationId,
       role: invitation.role,
+      deptAccess: invitation.deptAccess,
     });
   }
   await db.update(teamInvitations).set({ acceptedAt: new Date().toISOString() }).where(eq(teamInvitations.id, invitation.id));

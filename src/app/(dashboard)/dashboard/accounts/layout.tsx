@@ -11,7 +11,7 @@ import { DepartmentSidebar } from "@/components/department-sidebar";
 // changed by an Administrator (Edit menu); see lib/sidebar-menu.ts.
 export default async function AccountsLayout({ children }: { children: React.ReactNode }) {
   const org = await requireOrg();
-  if (!canViewAccounts(org.role)) notFound();
+  if (!canViewAccounts(org.role, org.access)) notFound();
   const menu = resolveMenu("accounts", await getSavedSidebarMenus(org.organizationId));
 
   return (

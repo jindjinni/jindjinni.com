@@ -11,7 +11,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const org = await requireOrgApi();
   if (!org) return new NextResponse("Sign in first.", { status: 401 });
   const { id } = await params;
-  const a = await attachmentForViewer({ organizationId: org.organizationId, userId: org.userId, role: org.role }, id);
+  const a = await attachmentForViewer({ organizationId: org.organizationId, userId: org.userId, role: org.role, access: org.access }, id);
   if (!a) return new NextResponse("File not found.", { status: 404 });
   if (!storage.configured()) return new NextResponse("File storage isn't connected.", { status: 503 });
   let file: Awaited<ReturnType<typeof storage.read>> = null;

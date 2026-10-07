@@ -8,5 +8,5 @@ export const dynamic = "force-dynamic";
 export default async function AllShipmentsPage() {
   const org = await requireOrg();
   const cards = await getReceivingBoard(org.organizationId);
-  return <BoardView cards={cards} canMove={canWriteAccounts(org.role)} canDelete={canWriteReceiving(org.role)} />;
+  return <BoardView cards={cards} canMove={canWriteAccounts(org.role, org.access)} canDelete={canWriteReceiving(org.role, org.access)} />;
 }

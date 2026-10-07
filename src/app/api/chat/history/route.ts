@@ -15,6 +15,6 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ ok: false, error: "Bad request." }, { status: 400 });
   }
-  const r = await fetchMessages({ organizationId: org.organizationId, userId: org.userId, role: org.role }, { room: b.room, before: typeof b.before === "number" ? b.before : null });
+  const r = await fetchMessages({ organizationId: org.organizationId, userId: org.userId, role: org.role, access: org.access }, { room: b.room, before: typeof b.before === "number" ? b.before : null });
   return NextResponse.json(r, { status: r.ok ? 200 : 403, headers: { "Cache-Control": "no-store" } });
 }

@@ -54,7 +54,7 @@ export type RecallActionState = {
 
 async function requireWriter(): Promise<CurrentOrg> {
   const org = await requireOrg();
-  if (!canWriteReceiving(org.role)) throw new Error("Your role can view Receiving but can't make changes.");
+  if (!canWriteReceiving(org.role, org.access)) throw new Error("Your role can view Receiving but can't make changes.");
   return org;
 }
 async function requireRecallAdmin(): Promise<CurrentOrg> {

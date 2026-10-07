@@ -16,7 +16,7 @@ const cell = (v: string | number | null) => {
 export async function GET() {
   const org = await requireOrgApi();
   if (!org) return new NextResponse("Sign in first.", { status: 401 });
-  if (!canViewAccounts(org.role)) return new NextResponse("Your role can't open Accounts.", { status: 403 });
+  if (!canViewAccounts(org.role, org.access)) return new NextResponse("Your role can't open Accounts.", { status: 403 });
   const rows = await getPaidOrders(org.organizationId);
   const lines = [
     ["Paid (UTC)", "Customer", "Quotation", "Tracking", "Amount paid", "Receipt attached"].map(cell).join(","),

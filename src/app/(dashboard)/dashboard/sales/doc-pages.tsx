@@ -14,7 +14,7 @@ const backOf = (kind: "QUOTATION" | "INVOICE") => (kind === "INVOICE" ? "/dashbo
 
 export async function DocNewPage({ kind, buyerId }: { kind: "QUOTATION" | "INVOICE"; buyerId?: string }) {
   const org = await requireOrg();
-  if (!canWriteSales(org.role)) notFound();
+  if (!canWriteSales(org.role, org.access)) notFound();
   const data = await loadEditorData(org.organizationId, null);
   const isInvoice = kind === "INVOICE";
   const buyer = data.buyers.find((b) => b.id === buyerId);
@@ -58,7 +58,7 @@ export async function DocDetailPage({ kind, id }: { kind: "QUOTATION" | "INVOICE
   const found = await getDocument(org.organizationId, id);
   if (!found || found.doc.kind !== kind) notFound();
   const { doc, lines, payments } = found;
-  const canWrite = canWriteSales(org.role);
+  const canWrite = canWriteSales(org.role, org.access);
   const isInvoice = kind === "INVOICE";
   const data = await loadEditorData(org.organizationId, doc.status === "DRAFT" ? doc.id : null);
   const status = shownStatus(doc, data.today);

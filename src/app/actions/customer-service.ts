@@ -24,7 +24,7 @@ const NOTE_MAX = 4000;
 
 async function requireAgent(): Promise<CurrentOrg> {
   const org = await requireOrg();
-  if (!canSendCustomerEmails(org.role)) throw new Error("Your role can't send customer emails.");
+  if (!canSendCustomerEmails(org.role, org.access)) throw new Error("Your role can't send customer emails.");
   return org;
 }
 

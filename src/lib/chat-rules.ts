@@ -1,7 +1,7 @@
 // Chat rules that don't touch the database or the screen -- who may read which room, statuses, message and file checks, link detection.
 // Pure functions only, so they can be unit tested and shared by the server and the browser.
 
-import { departmentsFor } from "@/lib/permissions";
+import { departmentsFor, type Access } from "@/lib/permissions";
 
 export const MAX_MESSAGE = 2000;
 export const MAX_NOTE = 60;
@@ -90,8 +90,8 @@ export const EVERYONE = "everyone";
 export type Room = { key: string; label: string; kind: "everyone" | "dept" };
 
 /** The group rooms this role can open: the whole-company room, then a room for each department they can open. */
-export function groupRoomsFor(role: string): Room[] {
-  const mine = new Set(departmentsFor(role));
+export function groupRoomsFor(role: string, access?: Access): Room[] {
+  const mine = new Set(departmentsFor(role, access));
   return [
     { key: EVERYONE, label: "Everyone", kind: "everyone" },
     ...DEPT_ROOMS.filter((d) => mine.has(d.dept)).map((d) => ({ key: `dept:${d.dept}`, label: d.label, kind: "dept" as const })),
@@ -121,11 +121,11 @@ export function parseRoom(key: unknown): ParsedRoom | null {
 }
 
 /** Whether this person may read and post in this room. (For a private message the server also checks the other person is in the company.) */
-export function canUseRoom(key: unknown, userId: string, role: string): boolean {
+export function canUseRoom(key: unknown, userId: string, role: string, access?: Access): boolean {
   const r = parseRoom(key);
   if (!r) return false;
   if (r.kind === "everyone") return true;
-  if (r.kind === "dept") return departmentsFor(role).includes(r.dept);
+  if (r.kind === "dept") return departmentsFor(role, access).includes(r.dept);
   return r.a === userId || r.b === userId;
 }
 

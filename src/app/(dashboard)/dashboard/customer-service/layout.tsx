@@ -10,7 +10,7 @@ import { DepartmentSidebar } from "@/components/department-sidebar";
 // Only the Customer Service role, Admin and Owner can open it. This is the one place customers are emailed about a paid order.
 export default async function CustomerServiceLayout({ children }: { children: React.ReactNode }) {
   const org = await requireOrg();
-  if (!canViewCustomerService(org.role)) notFound();
+  if (!canViewCustomerService(org.role, org.access)) notFound();
   const menu = resolveMenu("customer-service", await getSavedSidebarMenus(org.organizationId));
 
   return (

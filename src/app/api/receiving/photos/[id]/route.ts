@@ -15,7 +15,7 @@ export const maxDuration = 30;
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const org = await requireOrgApi();
   if (!org) return new NextResponse("Sign in first.", { status: 401 });
-  if (!canOpenReceivingFiles(org.role)) return new NextResponse("Your role can't open Receiving photos.", { status: 403 });
+  if (!canOpenReceivingFiles(org.role, org.access)) return new NextResponse("Your role can't open Receiving photos.", { status: 403 });
 
   const { id } = await params;
   const [ph] = await db

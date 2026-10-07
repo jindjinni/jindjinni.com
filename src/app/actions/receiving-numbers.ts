@@ -49,7 +49,7 @@ function trimTo(v: unknown): string {
 
 export async function saveNumberBatch(packageId: string, itemId: string, entries: NumberEntry[], source: string): Promise<NumbersBatchResult> {
   const org = await requireOrg();
-  if (!canWriteReceiving(org.role)) return { error: "Your role can view Receiving but can't make changes." };
+  if (!canWriteReceiving(org.role, org.access)) return { error: "Your role can view Receiving but can't make changes." };
   if (!Array.isArray(entries) || entries.length === 0) return { error: "There are no numbers to save." };
   if (entries.length > BATCH_CHUNK) return { error: `Send at most ${BATCH_CHUNK} numbers at a time.` };
   const row = await openRow(org, packageId, itemId);

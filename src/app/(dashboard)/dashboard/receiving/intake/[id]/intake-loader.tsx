@@ -57,9 +57,9 @@ export async function IntakeFormFor({ id, focus }: { id: string; focus?: "accoun
       packageId={pkg.id}
       status={pkg.status}
       focus={focus}
-      canWrite={focus === "accounts" ? false : canWriteReceiving(org.role)}
-      canAccounts={focus === "accounts" ? false : canWriteAccounts(org.role)}
-      canPayment={canWritePayment(org.role)}
+      canWrite={focus === "accounts" ? false : canWriteReceiving(org.role, org.access)}
+      canAccounts={focus === "accounts" ? false : canWriteAccounts(org.role, org.access)}
+      canPayment={canWritePayment(org.role, org.access)}
       isAdminUser={focus === "accounts" ? false : isAdmin(org.role)}
       storageOk={storage.configured()}
       brief={data.brief}

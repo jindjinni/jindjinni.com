@@ -6,6 +6,8 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { signInEvents, users } from "@/db/schema";
 import { newId } from "@/lib/ids";
+import { afterFailedLogin, lockMinutesLeft } from "@/lib/login-throttle";
+import { looksLikeUsername } from "@/lib/staff-login";
 
 // "Remember me" on the login form: unchecked, a session is good for a day;
 // checked (the default -- see the login form and server action), it's good
@@ -48,20 +50,28 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         rememberMe: { label: "Remember me", type: "text" },
       },
       authorize: async (credentials) => {
-        const email = credentials?.email as string | undefined;
+        // The "email" field also accepts a staff username ("maria_acme-supplies").
+        const identifier = (credentials?.email as string | undefined)?.trim().toLowerCase();
         const password = credentials?.password as string | undefined;
-        if (!email || !password) return null;
+        if (!identifier || !password) return null;
 
         const [user] = await db
           .select()
           .from(users)
-          .where(eq(users.email, email.toLowerCase()))
+          .where(looksLikeUsername(identifier) ? eq(users.username, identifier) : eq(users.email, identifier))
           .limit(1);
 
         if (!user?.passwordHash) return null;
 
+        // Paused after too many wrong passwords (the sign-in form tells the person why).
+        if (lockMinutesLeft(user.lockedUntil, Date.now()) > 0) return null;
+
         const valid = await bcrypt.compare(password, user.passwordHash);
-        if (!valid) return null;
+        if (!valid) {
+          const next = afterFailedLogin(user.failedLogins, Date.now());
+          await db.update(users).set(next).where(eq(users.id, user.id)).catch(() => {});
+          return null;
+        }
 
         // Missing entirely (e.g. the sign-up flow's auto sign-in) defaults
         // to "remembered" -- only an explicit "false" shortens the session.
@@ -69,7 +79,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // Best effort -- never block a sign-in over a bookkeeping write.
         await db
           .update(users)
-          .set({ lastLoginAt: new Date().toISOString() })
+          .set({ lastLoginAt: new Date().toISOString(), failedLogins: 0, lockedUntil: null })
           .where(eq(users.id, user.id))
           .catch(() => {});
         await db.insert(signInEvents).values({ id: newId("signin"), userId: user.id }).catch(() => {});

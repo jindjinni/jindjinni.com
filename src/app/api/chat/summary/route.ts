@@ -8,6 +8,6 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const org = await requireOrgApi();
   if (!org) return NextResponse.json({ ok: false, error: "Sign in first." }, { status: 401 });
-  const s = await summary({ organizationId: org.organizationId, userId: org.userId, role: org.role }, Date.now());
+  const s = await summary({ organizationId: org.organizationId, userId: org.userId, role: org.role, access: org.access }, Date.now());
   return NextResponse.json({ ok: true, ...s }, { headers: { "Cache-Control": "no-store" } });
 }

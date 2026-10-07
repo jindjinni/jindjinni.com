@@ -10,8 +10,8 @@ import { DepartmentSidebar } from "@/components/department-sidebar";
 // The sidebar's names and order can be changed by an Administrator (Edit menu); see lib/sidebar-menu.ts.
 export default async function InventoryLayout({ children }: { children: React.ReactNode }) {
   const org = await requireOrg();
-  if (!canViewInventory(org.role)) notFound();
-  const canWrite = canWriteInventory(org.role);
+  if (!canViewInventory(org.role, org.access)) notFound();
+  const canWrite = canWriteInventory(org.role, org.access);
   // Everyone sees the stock and its history; only people who can change Inventory see Manual Add and Estimated Prices.
   const allowed = canWrite ? undefined : ["stock", "movements"];
   const menu = resolveMenu("inventory", await getSavedSidebarMenus(org.organizationId), allowed);

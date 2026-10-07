@@ -43,7 +43,7 @@ const NOT_ALLOWED = "Your role can look at Sales but can't change it.";
 
 async function writer(): Promise<{ org: CurrentOrg } | { error: string }> {
   const org = await requireOrg();
-  if (!canWriteSales(org.role)) return { error: NOT_ALLOWED };
+  if (!canWriteSales(org.role, org.access)) return { error: NOT_ALLOWED };
   return { org };
 }
 

@@ -11,5 +11,5 @@ export default async function AdjustmentPage({ params }: { params: Promise<{ id:
   const { id } = await params;
   const adj = await getAdjustmentById(org.organizationId, id);
   if (!adj) notFound();
-  return <AdjustmentEditor key={`${adj.id}:${adj.status}:${adj.adjustedTotal}`} adjustment={adj} canWrite={canWriteAccounts(org.role)} />;
+  return <AdjustmentEditor key={`${adj.id}:${adj.status}:${adj.adjustedTotal}`} adjustment={adj} canWrite={canWriteAccounts(org.role, org.access)} />;
 }

@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export default async function OrderAdjustmentsPage() {
   const org = await requireOrg();
   const [rows, waiting] = await Promise.all([listAdjustments(org.organizationId), listNeedingAdjustment(org.organizationId)]);
-  const canWrite = canWriteAccounts(org.role);
+  const canWrite = canWriteAccounts(org.role, org.access);
   return (
     <div className="mx-auto max-w-5xl px-4 py-6">
       <h1 className="text-xl font-bold text-slate-900 dark:text-slate-50">Order Adjustments</h1>

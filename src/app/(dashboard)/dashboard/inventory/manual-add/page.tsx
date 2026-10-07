@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 // Pick the brand and product, say how many, the condition and expiration, what it cost and what you expect to sell it for.
 export default async function ManualAddPage() {
   const org = await requireOrg();
-  if (!canWriteInventory(org.role)) notFound();
+  if (!canWriteInventory(org.role, org.access)) notFound();
   const rows = await db
     .select({ id: purchasingProducts.id, name: purchasingProducts.name, category: purchasingCategories.name, noExpiration: purchasingProducts.noExpiration })
     .from(purchasingProducts)

@@ -1,9 +1,12 @@
 import { redirect } from "next/navigation";
+import { eq } from "drizzle-orm";
+import { db } from "@/db/client";
+import { organizations } from "@/db/schema";
 import { requireOrg } from "@/lib/tenant";
 import { ASSIGNABLE_ROLES, ROLE_DESCRIPTIONS, ROLE_LABELS, isAdmin } from "@/lib/permissions";
 import { getSeatUsage } from "@/lib/seats";
 import { getOpenInvitations, getTeamMembers } from "@/lib/team-queries";
-import { InviteForm, InvitationRow, MemberRow } from "./team-forms";
+import { AddPerson, InvitationRow, MemberRow } from "./team-forms";
 
 /**
  * Admin -> Team. Owner and Admins invite people, choose what each role can
@@ -15,7 +18,8 @@ export default async function AdminPage() {
   const org = await requireOrg();
   if (!isAdmin(org.role)) redirect("/dashboard");
 
-  const [members, invitations, seats] = await Promise.all([
+  const [[orgRow], members, invitations, seats] = await Promise.all([
+    db.select({ slug: organizations.slug }).from(organizations).where(eq(organizations.id, org.organizationId)).limit(1),
     getTeamMembers(org.organizationId),
     getOpenInvitations(org.organizationId),
     getSeatUsage(org.organizationId),
@@ -31,7 +35,7 @@ export default async function AdminPage() {
       <div>
         <h2 className="text-2xl font-semibold text-slate-900 dark:text-slate-50">Team &amp; access</h2>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          Invite people to your workspace and choose what each of them can do.
+          Add people to your workspace and choose exactly what each of them can see and do.
         </p>
         <p className="mt-3 inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-300">
           {seats.unlimited
@@ -41,8 +45,8 @@ export default async function AdminPage() {
       </div>
 
       <section className="rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
-        <h2 className="text-base font-semibold text-slate-900 dark:text-slate-50">Invite someone</h2>
-        <InviteForm roles={roleChoices} full={seats.full} limit={seats.limit} />
+        <h2 className="text-base font-semibold text-slate-900 dark:text-slate-50">Add someone</h2>
+        <AddPerson roles={roleChoices} full={seats.full} limit={seats.limit} orgSlug={orgRow?.slug ?? ""} />
       </section>
 
       {invitations.length > 0 && (
@@ -75,6 +79,8 @@ export default async function AdminPage() {
                 membershipId={m.membershipId}
                 name={m.name || m.email}
                 email={m.email}
+                username={m.username}
+                deptAccess={m.deptAccess}
                 role={m.role}
                 roleLabel={ROLE_LABELS[m.role] ?? m.role}
                 isYou={m.userId === org.userId}
@@ -82,6 +88,8 @@ export default async function AdminPage() {
                 lastLoginAt={m.lastLoginAt}
                 roles={roleChoices}
                 locked={locked}
+                paused={m.paused}
+                canReset={!!m.username && m.managedByOrgId === org.organizationId}
               />
             );
           })}

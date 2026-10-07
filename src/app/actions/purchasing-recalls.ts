@@ -17,7 +17,7 @@ export type QuickRecallResult = {
 
 export async function quickRecallLookup(input: string): Promise<QuickRecallResult> {
   const org = await requireOrg();
-  if (!canViewPurchasing(org.role)) throw new Error("Your role can't use the Purchasing recall check.");
+  if (!canViewPurchasing(org.role, org.access)) throw new Error("Your role can't use the Purchasing recall check.");
   const numbers = numbersToCheck(String(input ?? "").slice(0, 600));
   if (numbers.length === 0) return { error: "Enter a lot or serial number (at least 4 letters or digits)." };
   if (numbers.length > 12) return { error: "Check up to 12 numbers at a time." };

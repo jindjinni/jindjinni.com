@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 // condition. Live Stock multiplies them by what is in stock to show an estimated value range.
 export default async function EstimatedPricesPage() {
   const org = await requireOrg();
-  if (!canWriteInventory(org.role)) notFound();
+  if (!canWriteInventory(org.role, org.access)) notFound();
   const snap = await getInventory(org.organizationId);
   const seen = new Map<string, PriceRow>();
   for (const l of snap.lines) {

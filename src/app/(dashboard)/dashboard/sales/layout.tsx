@@ -10,7 +10,7 @@ import { DepartmentSidebar } from "@/components/department-sidebar";
 // the invoices come from is for Purchasing managers, Admin and the Owner.
 export default async function SalesLayout({ children }: { children: React.ReactNode }) {
   const org = await requireOrg();
-  if (!canViewSales(org.role)) notFound();
+  if (!canViewSales(org.role, org.access)) notFound();
   const all = ["quotations", "invoices", "buyers", "price-comparison", "company-profile"];
   const allowed = canManageSalesSettings(org.role) ? undefined : all.filter((id) => id !== "company-profile");
   const menu = resolveMenu("sales", await getSavedSidebarMenus(org.organizationId), allowed);

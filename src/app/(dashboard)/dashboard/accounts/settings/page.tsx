@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 // Accounts can see the terms; only an owner or admin changes them.
 export default async function PaymentTermsPage() {
   const org = await requireOrg();
-  if (!canViewAccounts(org.role)) notFound();
+  if (!canViewAccounts(org.role, org.access)) notFound();
   const terms = await getPaymentTerms(org.organizationId);
   const closures = await db
     .select({ id: accountsClosureDays.id, day: accountsClosureDays.day, label: accountsClosureDays.label })

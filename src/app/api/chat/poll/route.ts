@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Bad request." }, { status: 400 });
   }
   const r = await pollRoom(
-    { organizationId: org.organizationId, userId: org.userId, role: org.role },
+    { organizationId: org.organizationId, userId: org.userId, role: org.role, access: org.access },
     { room: b.room, since: typeof b.since === "string" ? b.since : null, visible: b.visible === true },
     Date.now(),
   );

@@ -36,7 +36,7 @@ export async function DocsPage({ kind }: { kind: "QUOTATION" | "INVOICE" }) {
               : "Prices you offer a buyer before they order. A quotation doesn't touch Inventory; when the buyer says yes, make it into an invoice."}
           </p>
         </div>
-        {canWriteSales(org.role) && (
+        {canWriteSales(org.role, org.access) && (
           <Link href={`${base}/new`} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800" data-testid="doc-new">
             + New {isInvoice ? "invoice" : "quotation"}
           </Link>

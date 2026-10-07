@@ -8,7 +8,7 @@ import { NameForm, PasswordForm } from "./account-forms";
 export default async function MyAccountPage() {
   const org = await requireOrg();
   const [me] = await db
-    .select({ name: users.name, email: users.email, termsAcceptedAt: users.termsAcceptedAt })
+    .select({ name: users.name, email: users.email, username: users.username, termsAcceptedAt: users.termsAcceptedAt })
     .from(users)
     .where(eq(users.id, org.userId))
     .limit(1);
@@ -23,8 +23,8 @@ export default async function MyAccountPage() {
       <section className="rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
         <dl className="grid gap-4 text-sm sm:grid-cols-2">
           <div>
-            <dt className="text-xs font-medium text-slate-500 dark:text-slate-400">Email (your sign-in)</dt>
-            <dd className="mt-1 text-slate-900 dark:text-slate-50">{me?.email}</dd>
+            <dt className="text-xs font-medium text-slate-500 dark:text-slate-400">{me?.username ? "Username (your sign-in)" : "Email (your sign-in)"}</dt>
+            <dd className="mt-1 break-all text-slate-900 dark:text-slate-50">{me?.username ?? me?.email}</dd>
           </div>
           <div>
             <dt className="text-xs font-medium text-slate-500 dark:text-slate-400">Company</dt>
@@ -38,7 +38,7 @@ export default async function MyAccountPage() {
           </div>
         </dl>
         <p className="mt-4 text-xs text-slate-500 dark:text-slate-400">
-          To change your email address or role, ask an admin.
+          To change your sign-in name or role, ask an admin.
         </p>
       </section>
 

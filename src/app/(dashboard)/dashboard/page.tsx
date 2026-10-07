@@ -29,7 +29,7 @@ export default async function HomePage() {
     homeStories(org.organizationId, brands),
     lastRun(org.organizationId),
     ownersOf(org.organizationId, brands),
-    canViewReceiving(org.role) ? activeRecallChecks(org.organizationId) : Promise.resolve([]),
+    canViewReceiving(org.role, org.access) ? activeRecallChecks(org.organizationId) : Promise.resolve([]),
     showPerformance ? getCompanyPulse(org.organizationId) : Promise.resolve(null),
     db.select({ name: users.name }).from(users).where(eq(users.id, org.userId)).limit(1),
     getPaymentTerms(org.organizationId).catch(() => null),

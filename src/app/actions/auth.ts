@@ -24,6 +24,8 @@ import { encodeLogoFile } from "@/lib/logo-validation";
 import { consumeSignupVerificationCode } from "@/lib/signup-verification";
 import { signupNeedsEmailVerification } from "@/lib/signup-settings";
 import { TERMS_VERSION } from "@/lib/legal";
+import { lockMinutesLeft, lockedMessage } from "@/lib/login-throttle";
+import { looksLikeUsername } from "@/lib/staff-login";
 
 export type ActionState = { error?: string } | undefined;
 
@@ -39,10 +41,21 @@ export async function login(
   // every visit. See src/lib/auth.ts for how this shortens the session.
   const rememberMe = formData.get("rememberMe") === "on" ? "true" : "false";
 
+  // Tell the person when sign-in is paused (too many wrong passwords) instead of a confusing "doesn't match".
+  const [found] = email
+    ? await db
+        .select({ lockedUntil: users.lockedUntil })
+        .from(users)
+        .where(looksLikeUsername(email) ? eq(users.username, email) : eq(users.email, email))
+        .limit(1)
+    : [];
+  const minutes = lockMinutesLeft(found?.lockedUntil, Date.now());
+  if (minutes > 0) return { error: lockedMessage(minutes) };
+
   try {
     await signIn("credentials", { email, password, rememberMe, redirect: false });
   } catch {
-    return { error: "That email and password don't match an account." };
+    return { error: "That email or username and password don't match an account." };
   }
 
   // Optional "come back to" page (e.g. an invitation link). Only same-site

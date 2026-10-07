@@ -88,12 +88,12 @@ function localStamp(v: string | null | undefined): string | null {
 
 async function requireWriter(): Promise<CurrentOrg> {
   const org = await requireOrg();
-  if (!canWriteReceiving(org.role)) throw new Error("Your role can view Receiving but can't make changes.");
+  if (!canWriteReceiving(org.role, org.access)) throw new Error("Your role can view Receiving but can't make changes.");
   return org;
 }
 async function requireAccounts(): Promise<CurrentOrg> {
   const org = await requireOrg();
-  if (!canWriteAccounts(org.role)) throw new Error("Your role can view Receiving but can't make changes.");
+  if (!canWriteAccounts(org.role, org.access)) throw new Error("Your role can view Receiving but can't make changes.");
   return org;
 }
 
@@ -428,7 +428,7 @@ async function applyAccountsFields(org: CurrentOrg, p: typeof receivingPackages.
     const decChanged = decision !== p.accountsDecision;
     const stChanged = status !== p.accountsStatus;
     // Step 10 is for Accounts only: Receiving staff can't change the payment status or move an order into / out of Paid.
-    if (!canWritePayment(org.role) && (stChanged || (decChanged && (decision === "PAID" || p.accountsDecision === "PAID")))) {
+    if (!canWritePayment(org.role, org.access) && (stChanged || (decChanged && (decision === "PAID" || p.accountsDecision === "PAID")))) {
       return { error: "Only Accounts can change the payment status or mark an order Paid." };
     }
     if (stChanged && status === "PAID") decision = "PAID";
@@ -813,7 +813,7 @@ export async function deleteReceivingItem(packageId: string, itemId: string): Pr
 /** Catalog lookup for "add a product that wasn't on the order". */
 export async function searchProductsForReceiving(term: string) {
   const org = await requireOrg();
-  if (!canViewReceiving(org.role)) return [];
+  if (!canViewReceiving(org.role, org.access)) return [];
   const t = term.trim().replace(/[%_\\]/g, "");
   if (t.length < 2) return [];
   const pat = `%${t.toLowerCase()}%`;
@@ -843,7 +843,7 @@ export async function uploadReceivingPhoto(packageId: string, kind: string, form
   if (!(RECEIVING_PHOTO_KINDS as readonly string[]).includes(kind)) return { error: "Unknown photo type." };
   const k = kind as PhotoKind;
   const accountsKind = ACCOUNTS_PHOTO_KINDS.includes(k);
-  if (k === "PAYMENT_CONFIRMATION" ? !canWritePayment(org.role) : accountsKind ? !canWriteAccounts(org.role) : !canWriteReceiving(org.role)) {
+  if (k === "PAYMENT_CONFIRMATION" ? !canWritePayment(org.role, org.access) : accountsKind ? !canWriteAccounts(org.role, org.access) : !canWriteReceiving(org.role, org.access)) {
     return { error: "Your role can view Receiving but can't make changes." };
   }
   const p = await ownPackage(org.organizationId, packageId);
@@ -921,7 +921,7 @@ export async function deleteReceivingPhoto(photoId: string): Promise<ReceivingAc
     .limit(1);
   if (!ph) return { error: "That photo wasn't found." };
   const accountsKind = ACCOUNTS_PHOTO_KINDS.includes(ph.kind);
-  if (ph.kind === "PAYMENT_CONFIRMATION" ? !canWritePayment(org.role) : accountsKind ? !canWriteAccounts(org.role) : !canWriteReceiving(org.role)) {
+  if (ph.kind === "PAYMENT_CONFIRMATION" ? !canWritePayment(org.role, org.access) : accountsKind ? !canWriteAccounts(org.role, org.access) : !canWriteReceiving(org.role, org.access)) {
     return { error: "Your role can view Receiving but can't make changes." };
   }
   if (!accountsKind) {
@@ -955,6 +955,6 @@ export async function deleteReceivingPhoto(photoId: string): Promise<ReceivingAc
 /** Look up orders in the Quotation Summary to start receiving (reference #, customer, email or tracking #). */
 export async function searchOrdersToReceive(term: string) {
   const org = await requireOrg();
-  if (!canViewReceiving(org.role)) return [];
+  if (!canViewReceiving(org.role, org.access)) return [];
   return searchQuotationsForReceiving(org.organizationId, term);
 }

@@ -5,7 +5,7 @@ import { and, asc, desc, eq, gte, inArray, isNull, lt, ne, or, sql } from "drizz
 import { db } from "@/db/client";
 import { chatAttachments, chatMessages, chatPresence, chatReads, memberships, users } from "@/db/schema";
 import { newId } from "@/lib/ids";
-import { ROLE_LABELS, isAdmin } from "@/lib/permissions";
+import { ROLE_LABELS, isAdmin, type Access } from "@/lib/permissions";
 import { storage } from "@/lib/receiving-storage";
 import {
   EVERYONE,
@@ -34,7 +34,7 @@ import {
   type ChatStatus,
 } from "@/lib/chat-rules";
 
-export type Ctx = { organizationId: string; userId: string; role: string };
+export type Ctx = { organizationId: string; userId: string; role: string; access?: Access };
 type Result<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 
 export const FILES_NOT_CONNECTED = "Sending files isn't connected yet. An admin needs to connect the file storage in Vercel (the same one Receiving photos use). Messages work meanwhile.";
@@ -103,7 +103,7 @@ export async function setMyStatus(ctx: Ctx, status: unknown, note: unknown, nowM
 
 /** Whether this person may use the room right now. A private message also needs the other person to work for the company. */
 export async function roomAccess(ctx: Ctx, room: unknown): Promise<Result<{ room: string }>> {
-  if (!canUseRoom(room, ctx.userId, ctx.role)) return { ok: false, error: "That chat isn't available to you." };
+  if (!canUseRoom(room, ctx.userId, ctx.role, ctx.access)) return { ok: false, error: "That chat isn't available to you." };
   const key = room as string;
   const partner = dmPartner(key, ctx.userId);
   if (partner) {
@@ -307,7 +307,7 @@ export async function latestSeq(ctx: Ctx, room: string): Promise<number> {
 }
 
 function unreadWhere(ctx: Ctx) {
-  const groupKeys = groupRoomsFor(ctx.role).map((r) => r.key);
+  const groupKeys = groupRoomsFor(ctx.role, ctx.access).map((r) => r.key);
   return and(
     eq(chatMessages.organizationId, ctx.organizationId),
     ne(chatMessages.senderUserId, ctx.userId),

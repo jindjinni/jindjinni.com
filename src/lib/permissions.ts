@@ -10,6 +10,7 @@
 //   receiver            Receiving department only -- no Purchasing access
 //   accountant          Purchasing in view-only mode (quotations, customers, receipts, audit log)
 //   customer_service    Customer Service department only (emails paid customers) -- no Purchasing, Receiving or Accounts
+//   custom              starts with no departments; the admin hand-picks them (see Access below)
 //   staff               legacy role from before the Admin panel; behaves exactly like purchasing_agent
 
 export const ROLES = [
@@ -20,12 +21,13 @@ export const ROLES = [
   "receiver",
   "accountant",
   "customer_service",
+  "custom",
   "staff",
 ] as const;
 export type Role = (typeof ROLES)[number];
 
 /** Roles an admin can hand out when inviting or editing someone ("owner" and legacy "staff" are never assigned). */
-export const ASSIGNABLE_ROLES: Role[] = ["admin", "purchasing_manager", "purchasing_agent", "receiver", "accountant", "customer_service"];
+export const ASSIGNABLE_ROLES: Role[] = ["admin", "purchasing_manager", "purchasing_agent", "receiver", "accountant", "customer_service", "custom"];
 
 export const ROLE_LABELS: Record<Role, string> = {
   owner: "Owner",
@@ -35,6 +37,7 @@ export const ROLE_LABELS: Record<Role, string> = {
   receiver: "Receiver",
   accountant: "Accountant",
   customer_service: "Customer Service",
+  custom: "Custom access",
   staff: "Purchasing Agent",
 };
 
@@ -46,12 +49,80 @@ export const ROLE_DESCRIPTIONS: Record<Role, string> = {
   receiver: "Receiving department: log incoming packages, photos and checks. No access to Purchasing.",
   accountant: "View-only access to Purchasing: quotations, customers, receipts and the audit log.",
   customer_service: "Customer Service department: email customers once they've been paid. No access to Purchasing, Receiving or Accounts.",
+  custom: "Starts with no departments at all. You pick exactly which departments they can see or work in.",
   staff: "Purchasing day-to-day: customers, quotations and shipping labels.",
 };
 
 export function isRole(value: unknown): value is Role {
   return typeof value === "string" && (ROLES as readonly string[]).includes(value);
 }
+
+// ---------------------------------------------------------------------------
+// Hand-picked access. A role is the starting point; on top of it an admin can
+// open any other department for one person, either to LOOK ("view") or to
+// WORK in it ("work"). It only ever adds -- to take something away, give the
+// person a smaller role (or "Custom access", which starts empty). HR, the Admin
+// panel, price overrides and archive/settings powers stay with the role.
+// ---------------------------------------------------------------------------
+
+/** The departments an admin can open for someone by hand (HR is always admin-only). */
+export const GRANTABLE_DEPTS = ["purchasing", "receiving", "accounts", "customer-service", "inventory", "sales", "marketing"] as const;
+export type GrantableDept = (typeof GRANTABLE_DEPTS)[number];
+export type DeptLevel = "view" | "work";
+export type Access = Partial<Record<GrantableDept, DeptLevel>>;
+
+export const GRANTABLE_DEPT_LABELS: Record<GrantableDept, string> = {
+  purchasing: "Purchasing",
+  receiving: "Receiving",
+  accounts: "Accounts",
+  "customer-service": "Customer Service",
+  inventory: "Inventory",
+  sales: "Sales",
+  marketing: "Marketing",
+};
+
+/** Departments where "see" and "use" are the same thing, so the picker offers only "Can use". */
+export const USE_ONLY_DEPTS: GrantableDept[] = ["customer-service", "marketing"];
+
+/** Reads the JSON saved in memberships.dept_access; anything unreadable or unknown is ignored (never throws). */
+export function parseAccess(raw: string | null | undefined): Access {
+  if (!raw) return {};
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const out: Access = {};
+    for (const dept of GRANTABLE_DEPTS) {
+      const level = (parsed as Record<string, unknown>)[dept];
+      if (level === "view" || level === "work") out[dept] = level;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+/** The JSON to store, or null when nothing extra is granted. */
+export function serializeAccess(access: Access): string | null {
+  const clean: Access = {};
+  for (const dept of GRANTABLE_DEPTS) {
+    const level = access[dept];
+    if (level === "view" || level === "work") clean[dept] = level;
+  }
+  return Object.keys(clean).length ? JSON.stringify(clean) : null;
+}
+
+/** Reads the picker's form fields (access_<dept> = "" | "view" | "work"). */
+export function accessFromForm(formData: FormData): Access {
+  const out: Access = {};
+  for (const dept of GRANTABLE_DEPTS) {
+    const v = String(formData.get(`access_${dept}`) ?? "");
+    if (v === "view" || v === "work") out[dept] = USE_ONLY_DEPTS.includes(dept) ? "work" : v;
+  }
+  return out;
+}
+
+const sees = (access: Access | undefined, dept: GrantableDept) => !!access?.[dept];
+const works = (access: Access | undefined, dept: GrantableDept) => access?.[dept] === "work";
 
 /** Owner or Admin: company identity, Business settings and the Admin panel. */
 export function isAdmin(role: string): boolean {
@@ -63,80 +134,91 @@ export function isPurchasingManager(role: string): boolean {
   return role === "owner" || role === "admin" || role === "purchasing_manager";
 }
 
+/** Roles that open Purchasing (and Sales) on their own. */
+function rolePurchasing(role: string): boolean {
+  return ["owner", "admin", "purchasing_manager", "purchasing_agent", "accountant", "staff"].includes(role);
+}
+
+/** Roles that can look at Receiving and Inventory on their own (everyone except Customer Service and Custom access). */
+function roleLooksAtReceiving(role: string): boolean {
+  return (ROLES as readonly string[]).includes(role) && role !== "customer_service" && role !== "custom";
+}
+
 /** May open the Purchasing department at all (accountants view only). */
-export function canViewPurchasing(role: string): boolean {
-  return role !== "receiver" && role !== "customer_service";
+export function canViewPurchasing(role: string, access?: Access): boolean {
+  return rolePurchasing(role) || sees(access, "purchasing");
 }
 
-/** May change data in Purchasing (everyone who can view it except accountants). */
-export function canWritePurchasing(role: string): boolean {
-  return canViewPurchasing(role) && role !== "accountant";
+/** May change data in Purchasing (everyone who can view it by role except accountants, or anyone given "work"). */
+export function canWritePurchasing(role: string, access?: Access): boolean {
+  return (rolePurchasing(role) && role !== "accountant") || works(access, "purchasing");
 }
 
-/** May open the Receiving department (every role can look, except Customer Service; Purchasing roles and accountants are view-only there). */
-export function canViewReceiving(role: string): boolean {
-  return (ROLES as readonly string[]).includes(role) && role !== "customer_service";
+/** May open the Receiving department (every role can look, except Customer Service and Custom access; Purchasing roles and accountants are view-only there). */
+export function canViewReceiving(role: string, access?: Access): boolean {
+  return roleLooksAtReceiving(role) || sees(access, "receiving");
 }
 
 /**
  * May open the files Receiving stores for an order (photos, the payment receipt, the adjustment quotation PDF).
  * Customer Service needs these to check what is attached to the customer's email, without opening Receiving itself.
  */
-export function canOpenReceivingFiles(role: string): boolean {
-  return canViewReceiving(role) || role === "customer_service";
+export function canOpenReceivingFiles(role: string, access?: Access): boolean {
+  return canViewReceiving(role, access) || role === "customer_service" || sees(access, "customer-service");
 }
 
-/** May change data in Receiving: the Receiver role, Admin and the Owner. */
-export function canWriteReceiving(role: string): boolean {
-  return role === "receiver" || isAdmin(role);
+/** May change data in Receiving: the Receiver role, Admin and the Owner, or anyone given "work" there. */
+export function canWriteReceiving(role: string, access?: Access): boolean {
+  return role === "receiver" || isAdmin(role) || works(access, "receiving");
 }
 
 /** May change the Accounts part of a shipment (decision, status, payment proof): everyone who can write in Receiving, plus the accountant. */
-export function canWriteAccounts(role: string): boolean {
-  return canWriteReceiving(role) || role === "accountant";
+export function canWriteAccounts(role: string, access?: Access): boolean {
+  return canWriteReceiving(role, access) || role === "accountant" || works(access, "accounts");
 }
 
 /**
  * May change the payment part of a shipment -- Step 10 "Accounts" (Accounts Status, Paid date, payment confirmation
- * photo) and moving an order into or out of Paid. Receiving staff can't: only the accountant, Admin and Owner.
+ * photo) and moving an order into or out of Paid. Receiving staff can't: only the accountant, Admin and Owner
+ * (or anyone given "work" in Accounts).
  */
-export function canWritePayment(role: string): boolean {
-  return role === "accountant" || isAdmin(role);
+export function canWritePayment(role: string, access?: Access): boolean {
+  return role === "accountant" || isAdmin(role) || works(access, "accounts");
 }
 
-/** May open the Accounts department (the orders waiting to be paid and the Paid Orders database): the accountant, Admin and the Owner. */
-export function canViewAccounts(role: string): boolean {
-  return canWritePayment(role);
+/** May open the Accounts department (the orders waiting to be paid and the Paid Orders database): the accountant, Admin and the Owner, or anyone given Accounts. */
+export function canViewAccounts(role: string, access?: Access): boolean {
+  return role === "accountant" || isAdmin(role) || sees(access, "accounts");
 }
 
-/** May open the Customer Service department (the paid orders waiting for their email, and the Emailed database): Customer Service, Admin and the Owner. */
-export function canViewCustomerService(role: string): boolean {
-  return role === "customer_service" || isAdmin(role);
+/** May open the Customer Service department (the paid orders waiting for their email, and the Emailed database): Customer Service, Admin and the Owner, or anyone given it. */
+export function canViewCustomerService(role: string, access?: Access): boolean {
+  return role === "customer_service" || isAdmin(role) || sees(access, "customer-service");
 }
 
 /** May send the customer emails. Same people who can open the department. */
-export function canSendCustomerEmails(role: string): boolean {
-  return canViewCustomerService(role);
+export function canSendCustomerEmails(role: string, access?: Access): boolean {
+  return role === "customer_service" || isAdmin(role) || works(access, "customer-service");
 }
 
-/** May open the Inventory department (live stock): everyone except Customer Service. */
-export function canViewInventory(role: string): boolean {
-  return (ROLES as readonly string[]).includes(role) && role !== "customer_service";
+/** May open the Inventory department (live stock): everyone except Customer Service and Custom access, or anyone given it. */
+export function canViewInventory(role: string, access?: Access): boolean {
+  return roleLooksAtReceiving(role) || sees(access, "inventory");
 }
 
-/** May change Inventory (manual adds, estimated prices): Purchasing managers, Admin and the Owner. Everyone else looks. */
-export function canWriteInventory(role: string): boolean {
-  return isPurchasingManager(role);
+/** May change Inventory (manual adds, estimated prices): Purchasing managers, Admin and the Owner, or anyone given "work". Everyone else looks. */
+export function canWriteInventory(role: string, access?: Access): boolean {
+  return isPurchasingManager(role) || works(access, "inventory");
 }
 
-/** May open the Sales department (quotations, invoices, buyers, price comparison): the Purchasing roles, the accountant (look only), Admin and the Owner. */
-export function canViewSales(role: string): boolean {
-  return canViewPurchasing(role);
+/** May open the Sales department (quotations, invoices, buyers, price comparison): the Purchasing roles, the accountant (look only), Admin and the Owner, or anyone given Sales. */
+export function canViewSales(role: string, access?: Access): boolean {
+  return rolePurchasing(role) || sees(access, "sales");
 }
 
-/** May create and send quotations and invoices, and keep the buyers and their price sheets: everyone who can view Sales except the accountant. */
-export function canWriteSales(role: string): boolean {
-  return canWritePurchasing(role);
+/** May create and send quotations and invoices, and keep the buyers and their price sheets: everyone who can view Sales by role except the accountant, or anyone given "work". */
+export function canWriteSales(role: string, access?: Access): boolean {
+  return (rolePurchasing(role) && role !== "accountant") || works(access, "sales");
 }
 
 /** May change the company profile invoices come from and its numbering: Purchasing managers, Admin and the Owner. */
@@ -149,9 +231,9 @@ export function canViewHr(role: string): boolean {
   return isAdmin(role);
 }
 
-/** May open Marketing (contacts, email and text campaigns) and send campaigns: Admin, the Owner and Purchasing managers. */
-export function canViewMarketing(role: string): boolean {
-  return isAdmin(role) || isPurchasingManager(role);
+/** May open Marketing (contacts, email and text campaigns) and send campaigns: Admin, the Owner and Purchasing managers, or anyone given it. */
+export function canViewMarketing(role: string, access?: Access): boolean {
+  return isAdmin(role) || isPurchasingManager(role) || sees(access, "marketing");
 }
 
 /** May press "Refresh now" on the Home screen's industry news: Admin, the Owner and Purchasing managers. Everyone signed in can read it. */
@@ -164,18 +246,45 @@ export function canViewCompanyPerformance(role: string): boolean {
   return isAdmin(role);
 }
 
-/** Which departments a role can open, for the menu and the home redirect. */
-export function departmentsFor(role: string): string[] {
+/** Which departments a person can open, for the menu, the chat rooms and the home redirect. */
+export function departmentsFor(role: string, access?: Access): string[] {
   const out: string[] = [];
-  if (canViewPurchasing(role)) out.push("purchasing");
-  if (canViewReceiving(role)) out.push("receiving");
-  if (canViewAccounts(role)) out.push("accounts");
-  if (canViewCustomerService(role)) out.push("customer-service");
-  if (canViewInventory(role)) out.push("inventory");
-  if (canViewSales(role)) out.push("sales");
+  if (canViewPurchasing(role, access)) out.push("purchasing");
+  if (canViewReceiving(role, access)) out.push("receiving");
+  if (canViewAccounts(role, access)) out.push("accounts");
+  if (canViewCustomerService(role, access)) out.push("customer-service");
+  if (canViewInventory(role, access)) out.push("inventory");
+  if (canViewSales(role, access)) out.push("sales");
   if (canViewHr(role)) out.push("hr");
-  if (canViewMarketing(role)) out.push("marketing");
+  if (canViewMarketing(role, access)) out.push("marketing");
   return out;
+}
+
+/** What a role gives on its own in a department, before any hand-picked extras: nothing, look only, or work. */
+export function roleBaseLevel(role: string, dept: GrantableDept): "none" | DeptLevel {
+  switch (dept) {
+    case "purchasing":
+      return canWritePurchasing(role) ? "work" : canViewPurchasing(role) ? "view" : "none";
+    case "receiving":
+      return canWriteReceiving(role) ? "work" : canViewReceiving(role) ? "view" : "none";
+    case "accounts":
+      return canWritePayment(role) ? "work" : canViewAccounts(role) ? "view" : "none";
+    case "customer-service":
+      return canSendCustomerEmails(role) ? "work" : canViewCustomerService(role) ? "view" : "none";
+    case "inventory":
+      return canWriteInventory(role) ? "work" : canViewInventory(role) ? "view" : "none";
+    case "sales":
+      return canWriteSales(role) ? "work" : canViewSales(role) ? "view" : "none";
+    case "marketing":
+      return canViewMarketing(role) ? "work" : "none";
+  }
+}
+
+/** Short plain-language summary of the hand-picked extras, e.g. "Receiving (view), Sales (work)". Empty when there are none. */
+export function describeAccess(access: Access): string {
+  return GRANTABLE_DEPTS.filter((d) => access[d])
+    .map((d) => `${GRANTABLE_DEPT_LABELS[d]} (${USE_ONLY_DEPTS.includes(d) ? "use" : access[d]})`)
+    .join(", ");
 }
 
 /** Only the person who owns the company may close it. */

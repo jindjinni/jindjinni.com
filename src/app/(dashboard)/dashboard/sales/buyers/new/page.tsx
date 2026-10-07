@@ -6,7 +6,7 @@ import { BuyerForm, EMPTY_BUYER } from "../buyer-form";
 
 export default async function NewBuyerPage() {
   const org = await requireOrg();
-  if (!canWriteSales(org.role)) notFound();
+  if (!canWriteSales(org.role, org.access)) notFound();
   return (
     <div className="max-w-3xl">
       <Link href="/dashboard/sales/buyers" className="text-sm text-slate-600 underline dark:text-slate-400">← All buyers</Link>

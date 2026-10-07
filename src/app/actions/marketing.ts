@@ -30,7 +30,7 @@ export type MarketingResult = { ok: true; message?: string; id?: string } | { ok
 
 async function writer(): Promise<{ error: string } | { org: { organizationId: string; userId: string } }> {
   const org = await requireOrg();
-  if (!canViewMarketing(org.role)) return { error: "Only an Admin, the Owner or a Purchasing Manager can use Marketing." };
+  if (!canViewMarketing(org.role, org.access)) return { error: "Only an Admin, the Owner or a Purchasing Manager can use Marketing." };
   return { org: { organizationId: org.organizationId, userId: org.userId } };
 }
 

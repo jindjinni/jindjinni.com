@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { db } from "@/db/client";
@@ -22,7 +23,7 @@ export default async function DashboardLayout({
 
   // Everyone agrees to the current Terms once (people who joined before they
   // existed, or when they change, are asked here).
-  const [me] = await db.select({ termsVersion: users.termsVersion }).from(users).where(eq(users.id, org.userId)).limit(1);
+  const [me] = await db.select({ termsVersion: users.termsVersion, mustChangePassword: users.mustChangePassword }).from(users).where(eq(users.id, org.userId)).limit(1);
   if (me?.termsVersion !== TERMS_VERSION) redirect("/accept-terms");
 
   const [orgRow] = await db.select({ departmentThemes: organizations.departmentThemes }).from(organizations).where(eq(organizations.id, org.organizationId)).limit(1);
@@ -31,13 +32,13 @@ export default async function DashboardLayout({
   const clock = await getMyClock({ organizationId: org.organizationId, userId: org.userId }, nowIso);
   const navItems: NavItem[] = [
     { href: "/dashboard", label: "Home" },
-    ...(canViewPurchasing(org.role) ? [{ href: "/dashboard/purchasing", label: "Purchasing" }] : []),
-    ...(canViewReceiving(org.role) ? [{ href: "/dashboard/receiving", label: "Receiving" }] : []),
-    ...(canViewAccounts(org.role) ? [{ href: "/dashboard/accounts", label: "Accounts" }] : []),
-    ...(canViewCustomerService(org.role) ? [{ href: "/dashboard/customer-service", label: "Customer Service" }] : []),
-    ...(canViewInventory(org.role) ? [{ href: "/dashboard/inventory", label: "Inventory" }] : []),
-    ...(canViewSales(org.role) ? [{ href: "/dashboard/sales", label: "Sales" }] : []),
-    ...(canViewMarketing(org.role) ? [{ href: "/dashboard/marketing", label: "Marketing" }] : []),
+    ...(canViewPurchasing(org.role, org.access) ? [{ href: "/dashboard/purchasing", label: "Purchasing" }] : []),
+    ...(canViewReceiving(org.role, org.access) ? [{ href: "/dashboard/receiving", label: "Receiving" }] : []),
+    ...(canViewAccounts(org.role, org.access) ? [{ href: "/dashboard/accounts", label: "Accounts" }] : []),
+    ...(canViewCustomerService(org.role, org.access) ? [{ href: "/dashboard/customer-service", label: "Customer Service" }] : []),
+    ...(canViewInventory(org.role, org.access) ? [{ href: "/dashboard/inventory", label: "Inventory" }] : []),
+    ...(canViewSales(org.role, org.access) ? [{ href: "/dashboard/sales", label: "Sales" }] : []),
+    ...(canViewMarketing(org.role, org.access) ? [{ href: "/dashboard/marketing", label: "Marketing" }] : []),
     ...(canViewHr(org.role) ? [{ href: "/dashboard/hr", label: "HR" }] : []),
     { href: "/dashboard/chat", label: "Chat" },
     { href: "/dashboard/settings", label: "Settings" },
@@ -65,6 +66,15 @@ export default async function DashboardLayout({
           </form>
         </div>
       </header>
+      {me?.mustChangePassword && (
+        <p className="border-b border-amber-200 bg-amber-50 px-6 py-2 text-sm text-amber-900 print:hidden dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+          Your admin gave you a temporary password.{" "}
+          <Link href="/dashboard/settings/account" className="font-semibold underline">
+            Choose your own password
+          </Link>{" "}
+          so only you know it.
+        </p>
+      )}
       <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-8 print:max-w-none print:p-0">{children}</main>
     </ThemeScope>
   );

@@ -166,8 +166,21 @@ export const users = sqliteTable("users", {
   // Which version of the Terms/Privacy this person agreed to, and when.
   termsAcceptedAt: text("terms_accepted_at"),
   termsVersion: text("terms_version"),
+  // Staff logins an admin creates (username + generated password, no email): the
+  // username is "<name>_<company-slug>" so it is unique across the platform and
+  // already says which company it belongs to. managedByOrgId is the one company
+  // whose admins may reset this person's password. All nullable on purpose --
+  // never NOT NULL on a table that already has rows (see scripts/safe-push.ts).
+  username: text("username"),
+  managedByOrgId: text("managed_by_org_id"),
+  // Set while the password is still the one an admin generated; the dashboard
+  // asks the person to choose their own, and changing it clears the flag.
+  mustChangePassword: integer("must_change_password", { mode: "boolean" }),
+  // Sign-in throttle: too many wrong passwords in a row pauses sign-in for a while.
+  failedLogins: integer("failed_logins"),
+  lockedUntil: text("locked_until"),
   ...timestamps,
-});
+}, (t) => [uniqueIndex("users_username_unique").on(t.username)]);
 
 /** One row per successful sign-in -- powers Settings -> Security & activity. No IP address or device data is stored. */
 export const signInEvents = sqliteTable(
@@ -220,10 +233,13 @@ export const memberships = sqliteTable(
     // See src/lib/permissions.ts for what each role can do. "staff" is the
     // legacy pre-Admin-panel role and behaves like purchasing_agent.
     role: text("role", {
-      enum: ["owner", "admin", "purchasing_manager", "purchasing_agent", "receiver", "accountant", "customer_service", "staff"],
+      enum: ["owner", "admin", "purchasing_manager", "purchasing_agent", "receiver", "accountant", "customer_service", "custom", "staff"],
     })
       .notNull()
       .default("staff"),
+    // Extra, hand-picked department access on top of the role, as JSON like
+    // {"purchasing":"view","receiving":"work"}. See parseAccess in permissions.ts. Null = just the role.
+    deptAccess: text("dept_access"),
     // Set when an admin removes someone's access; the row (and their history) stays.
     deactivatedAt: text("deactivated_at"),
     ...timestamps,
@@ -246,8 +262,10 @@ export const teamInvitations = sqliteTable(
       .references(() => organizations.id, { onDelete: "cascade" }),
     email: text("email").notNull(),
     role: text("role", {
-      enum: ["admin", "purchasing_manager", "purchasing_agent", "receiver", "accountant", "customer_service"],
+      enum: ["admin", "purchasing_manager", "purchasing_agent", "receiver", "accountant", "customer_service", "custom"],
     }).notNull(),
+    // Hand-picked department access chosen when inviting (copied to the membership on accept).
+    deptAccess: text("dept_access"),
     tokenHash: text("token_hash").notNull().unique(),
     invitedByUserId: text("invited_by_user_id").references(() => users.id),
     expiresAt: text("expires_at").notNull(),

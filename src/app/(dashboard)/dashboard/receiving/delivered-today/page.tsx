@@ -13,5 +13,5 @@ export default async function DeliveredTodayPage() {
   const org = await requireOrg();
   const { timeZone } = await getPaymentTerms(org.organizationId);
   const rows = await getDeliveredPackages(org.organizationId, timeZone);
-  return <DeliveredList rows={rows} today={todayIn(timeZone)} canOpenQuotation={canViewPurchasing(org.role)} />;
+  return <DeliveredList rows={rows} today={todayIn(timeZone)} canOpenQuotation={canViewPurchasing(org.role, org.access)} />;
 }

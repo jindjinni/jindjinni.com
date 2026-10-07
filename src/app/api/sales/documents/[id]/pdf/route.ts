@@ -11,7 +11,7 @@ export const maxDuration = 30;
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const org = await requireOrgApi();
   if (!org) return new NextResponse("Sign in first.", { status: 401 });
-  if (!canViewSales(org.role)) return new NextResponse("Your role can't open Sales documents.", { status: 403 });
+  if (!canViewSales(org.role, org.access)) return new NextResponse("Your role can't open Sales documents.", { status: 403 });
   const { id } = await params;
   const pdf = await renderPdf(org.organizationId, id);
   if (!pdf) return new NextResponse("Document not found.", { status: 404 });

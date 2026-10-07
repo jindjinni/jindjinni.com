@@ -38,7 +38,7 @@ export async function changeMyPassword(_prev: AccountActionState, formData: Form
   if (!user?.passwordHash || !(await bcrypt.compare(current, user.passwordHash))) {
     return { error: "Your current password isn't right." };
   }
-  await db.update(users).set({ passwordHash: await bcrypt.hash(next, 10) }).where(eq(users.id, org.userId));
+  await db.update(users).set({ passwordHash: await bcrypt.hash(next, 10), mustChangePassword: false }).where(eq(users.id, org.userId));
   return { message: "Password changed. Use the new one next time you sign in." };
 }
 

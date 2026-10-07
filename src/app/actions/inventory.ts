@@ -13,7 +13,7 @@ export type InventoryActionState = { ok?: boolean; error?: string; message?: str
 /** Manual Add: one or more product lines (brand and product, condition, quantity, expiration, cost, estimated price range). */
 export async function addStockAction(input: { lines: ManualLineInput[]; note: string }): Promise<InventoryActionState> {
   const org = await requireOrg();
-  if (!canWriteInventory(org.role)) return { error: "Only a Purchasing Manager, Admin or the Owner can add stock by hand." };
+  if (!canWriteInventory(org.role, org.access)) return { error: "Only a Purchasing Manager, Admin or the Owner can add stock by hand." };
   const lines = Array.isArray(input?.lines) ? input.lines.map((l) => ({ ...l, quantity: Number(l.quantity) })) : [];
   const res = await addManualStock(org, lines, String(input?.note ?? "").slice(0, 300), [...MANUAL_CONDITIONS]);
   if (!res.ok) return { error: res.error };
@@ -25,7 +25,7 @@ export async function addStockAction(input: { lines: ManualLineInput[]; note: st
 /** Estimated Prices: the low and high selling price of one product in one condition (blank clears it). */
 export async function saveEstimatesAction(rows: { productKey: string; condition: string; low: string; high: string }[]): Promise<InventoryActionState> {
   const org = await requireOrg();
-  if (!canWriteInventory(org.role)) return { error: "Only a Purchasing Manager, Admin or the Owner can change estimated prices." };
+  if (!canWriteInventory(org.role, org.access)) return { error: "Only a Purchasing Manager, Admin or the Owner can change estimated prices." };
   if (!Array.isArray(rows) || rows.length > 2000) return { error: "Nothing to save." };
   const parsed: { productKey: string; condKey: string; low: number | null; high: number | null }[] = [];
   for (const r of rows) {

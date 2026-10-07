@@ -33,8 +33,8 @@ function LoginScreen() {
 
           <form action={action} className="mt-8 flex flex-col gap-5">
             <input type="hidden" name="next" value={next} />
-            <AuthField label="Email">
-              <input name="email" type="email" required autoComplete="email" placeholder="you@company.com" />
+            <AuthField label="Email or username">
+              <input name="email" type="text" required autoComplete="username" autoCapitalize="none" spellCheck={false} placeholder="you@company.com, or name_yourcompany" />
             </AuthField>
             <AuthField label="Password">
               <input name="password" type="password" required autoComplete="current-password" placeholder="Your password" />

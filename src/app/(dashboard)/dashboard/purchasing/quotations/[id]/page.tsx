@@ -164,7 +164,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
               receipt={receiptState.receipt}
               stamp={receiptState.stamp}
               isImage={receiptState.isImage}
-              canWrite={canWritePurchasing(org.role)}
+              canWrite={canWritePurchasing(org.role, org.access)}
             />
           </div>
           <Link

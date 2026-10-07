@@ -8,7 +8,7 @@ export type ChatActionResult = { ok: true; message: ChatMessageDto } | { ok: fal
 
 async function me(): Promise<chat.Ctx> {
   const org = await requireOrg();
-  return { organizationId: org.organizationId, userId: org.userId, role: org.role };
+  return { organizationId: org.organizationId, userId: org.userId, role: org.role, access: org.access };
 }
 
 /** Sends a message (with an optional photo or file) to a room. The server checks the person may use that room. */

@@ -12,7 +12,7 @@ export type TrackingActionState = { ok?: boolean; error?: string };
 /** Asks Shippo for the latest on every box of a quotation. Anyone who can open the quotation can press it. */
 export async function refreshQuotationTracking(quotationId: string, force = false): Promise<TrackingActionState> {
   const org = await requireOrg();
-  if (!canViewPurchasing(org.role)) return { error: "You can't refresh tracking." };
+  if (!canViewPurchasing(org.role, org.access)) return { error: "You can't refresh tracking." };
   const data = await getPurchasingQuotationWithItems(org.organizationId, quotationId);
   if (!data) return { error: "That quotation wasn't found." };
   await syncQuotationTracking(org.organizationId, quotationId, { force });

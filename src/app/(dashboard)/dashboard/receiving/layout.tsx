@@ -10,8 +10,8 @@ import { DepartmentSidebar } from "@/components/department-sidebar";
 // changed by an Administrator (Edit menu); see lib/sidebar-menu.ts.
 export default async function ReceivingLayout({ children }: { children: React.ReactNode }) {
   const org = await requireOrg();
-  if (!canViewReceiving(org.role)) notFound();
-  const showStorageNote = canWriteReceiving(org.role) && !storage.configured();
+  if (!canViewReceiving(org.role, org.access)) notFound();
+  const showStorageNote = canWriteReceiving(org.role, org.access) && !storage.configured();
   const menu = resolveMenu("receiving", await getSavedSidebarMenus(org.organizationId));
 
   return (

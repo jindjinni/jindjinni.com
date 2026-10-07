@@ -32,7 +32,7 @@ export default async function BuyersPage() {
       unmatched: items.filter((p) => !p.productKey).length,
     };
   });
-  const canWrite = canWriteSales(org.role);
+  const canWrite = canWriteSales(org.role, org.access);
   return (
     <div className="max-w-5xl">
       <div className="flex flex-wrap items-start justify-between gap-3">
