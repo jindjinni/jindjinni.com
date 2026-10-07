@@ -1858,3 +1858,63 @@ export const platformCatalogTemplates = sqliteTable("platform_catalog_templates"
     .notNull()
     .default(sql`(current_timestamp)`),
 });
+
+// ---------------------------------------------------------------------------
+// Inventory department. Stock that comes from Receiving is NOT copied here: it is read live from Receiving's accepted
+// units (receiving_intake_lines), so a correction in Receiving is reflected at once. This table holds only what
+// Receiving does not know about: stock added by hand (opening stock, corrections), units taken out by Sales, and
+// manual adjustments. One signed row per change, never edited (a mistake is fixed with a new row).
+// ---------------------------------------------------------------------------
+
+export const INVENTORY_MOVEMENT_KINDS = ["MANUAL_ADD", "SALE", "ADJUSTMENT"] as const;
+
+export const inventoryMovements = sqliteTable(
+  "inventory_movements",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: INVENTORY_MOVEMENT_KINDS }).notNull(),
+    // Plain columns, no FK: the product name and brand are kept as they were when the row was made.
+    productId: text("product_id"),
+    productKey: text("product_key").notNull(),
+    productName: text("product_name").notNull(),
+    brand: text("brand"),
+    condition: text("condition").notNull(),
+    expirationDate: text("expiration_date"), // YYYY-MM-DD, null = no expiration date
+    lotNumber: text("lot_number"),
+    /** Signed: positive adds stock, negative takes it out. */
+    quantity: integer("quantity").notNull(),
+    /** What one unit cost (dollars). Null when unknown. */
+    unitCost: real("unit_cost"),
+    note: text("note"),
+    /** What caused it, e.g. an invoice id for a sale. */
+    refType: text("ref_type"),
+    refId: text("ref_id"),
+    createdByUserId: text("created_by_user_id"),
+    ...timestamps,
+  },
+  (t) => [
+    index("inventory_movements_org_idx").on(t.organizationId),
+    index("inventory_movements_product_idx").on(t.organizationId, t.productKey),
+  ],
+);
+
+/** The estimated selling price range of one product in one condition (per unit). */
+export const inventoryEstimates = sqliteTable(
+  "inventory_estimates",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    productKey: text("product_key").notNull(),
+    conditionKey: text("condition_key").notNull(),
+    priceLow: real("price_low"),
+    priceHigh: real("price_high"),
+    updatedByUserId: text("updated_by_user_id"),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex("inventory_estimates_unique").on(t.organizationId, t.productKey, t.conditionKey)],
+);

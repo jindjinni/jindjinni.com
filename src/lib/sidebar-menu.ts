@@ -5,7 +5,7 @@
 // To give a new department this sidebar: add it to DEPARTMENT_MENUS below, then render <DepartmentSidebar> in
 // that department's layout (see receiving/layout.tsx). Renaming and re-ordering then work there with no more code.
 
-export type MenuDept = "purchasing" | "receiving" | "accounts" | "customer-service";
+export type MenuDept = "purchasing" | "receiving" | "accounts" | "customer-service" | "inventory";
 
 export type MenuItemDef = {
   /** Never changes, even when the tab is renamed: it is how a saved name or position finds its tab. */
@@ -26,6 +26,7 @@ const P = "/dashboard/purchasing";
 const R = "/dashboard/receiving";
 const A = "/dashboard/accounts";
 const C = "/dashboard/customer-service";
+const I = "/dashboard/inventory";
 
 export const DEPARTMENT_MENUS: Record<MenuDept, DepartmentMenu> = {
   purchasing: {
@@ -77,6 +78,16 @@ export const DEPARTMENT_MENUS: Record<MenuDept, DepartmentMenu> = {
       { id: "to-be-emailed", href: C, label: "To Be Emailed", icon: "✉️", exact: true },
       { id: "emailed", href: `${C}/emailed`, label: "Emailed", icon: "📨" },
       { id: "email-settings", href: `${C}/email-settings`, label: "Email Settings", setup: true },
+    ],
+  },
+  inventory: {
+    title: "Inventory Department",
+    setupLabel: "Settings",
+    items: [
+      { id: "stock", href: I, label: "Live Stock", icon: "📦", exact: true },
+      { id: "manual-add", href: `${I}/manual-add`, label: "Manual Add", icon: "➕" },
+      { id: "movements", href: `${I}/movements`, label: "Stock History", icon: "🕘" },
+      { id: "estimated-prices", href: `${I}/estimated-prices`, label: "Estimated Prices", setup: true },
     ],
   },
 };

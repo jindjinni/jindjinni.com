@@ -119,6 +119,16 @@ export function canSendCustomerEmails(role: string): boolean {
   return canViewCustomerService(role);
 }
 
+/** May open the Inventory department (live stock): everyone except Customer Service. */
+export function canViewInventory(role: string): boolean {
+  return (ROLES as readonly string[]).includes(role) && role !== "customer_service";
+}
+
+/** May change Inventory (manual adds, estimated prices): Purchasing managers, Admin and the Owner. Everyone else looks. */
+export function canWriteInventory(role: string): boolean {
+  return isPurchasingManager(role);
+}
+
 /** Which departments a role can open, for the menu and the home redirect. */
 export function departmentsFor(role: string): string[] {
   const out: string[] = [];
@@ -126,6 +136,7 @@ export function departmentsFor(role: string): string[] {
   if (canViewReceiving(role)) out.push("receiving");
   if (canViewAccounts(role)) out.push("accounts");
   if (canViewCustomerService(role)) out.push("customer-service");
+  if (canViewInventory(role)) out.push("inventory");
   return out;
 }
 
