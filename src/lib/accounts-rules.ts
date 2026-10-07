@@ -162,3 +162,15 @@ export function dueWording(dueDay: string, today: string): DueWording {
       return { state, lead: "Pay by", chip: `Pay by ${shortDayName(dueDay)}`, sentence: `Need to be paid by ${full}.`, late };
   }
 }
+
+/** "Delivered Thu, Oct 1" (or "Received ..." when no delivered day is on file) for the day the payment clock started. */
+export function startLabel(startDay: string | null | undefined, basis: "DELIVERED" | "RECEIVED" | null | undefined): string {
+  if (!startDay) return "";
+  return `${basis === "DELIVERED" ? "Delivered" : "Received"} ${shortDayName(startDay)}`;
+}
+
+/** The same, with the full date, for the order page: "Delivered Thursday, Oct 1, 2026". */
+export function startSentence(startDay: string | null | undefined, basis: "DELIVERED" | "RECEIVED" | null | undefined): string {
+  if (!startDay) return "";
+  return `${basis === "DELIVERED" ? "Delivered" : "Received (no delivered date on file)"} ${dayHeading(startDay)}`;
+}

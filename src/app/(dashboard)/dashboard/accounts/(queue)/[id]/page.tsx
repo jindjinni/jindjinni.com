@@ -2,7 +2,7 @@ import Link from "next/link";
 import { requireOrg } from "@/lib/tenant";
 import { getPaymentTerms, getToBePaid } from "@/lib/accounts-queries";
 import { todayIn } from "@/lib/payment-due";
-import { dueWording } from "@/lib/accounts-rules";
+import { dueWording, startSentence } from "@/lib/accounts-rules";
 import { IntakeFormFor } from "../../../receiving/intake/[id]/intake-loader";
 
 export const dynamic = "force-dynamic";
@@ -27,14 +27,10 @@ export default async function AccountsOrderPage({ params }: { params: Promise<{ 
     <div>
       <Link href="/dashboard/accounts" className="text-sm text-emerald-800 underline dark:text-emerald-300">‹ To Be Paid</Link>
       {due && order && (
-        <p data-testid="due-banner" data-state={due.state} className={`mt-3 rounded-lg border px-4 py-3 text-sm font-semibold ${BANNER[due.state]}`}>
-          {due.sentence}
-          {order.dueStartDay && (
-            <span className="ml-2 font-normal opacity-80">
-              ({order.dueBasis === "DELIVERED" ? "Delivered" : "Received"} {new Date(`${order.dueStartDay}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })})
-            </span>
-          )}
-        </p>
+        <div data-testid="due-banner" data-state={due.state} className={`mt-3 space-y-1 rounded-lg border px-4 py-3 text-sm ${BANNER[due.state]}`}>
+          {order.dueStartDay && <p data-testid="due-delivered" className="font-semibold">{startSentence(order.dueStartDay, order.dueBasis)}.</p>}
+          <p data-testid="due-sentence" className="font-semibold">{due.sentence}</p>
+        </div>
       )}
       <div className="mt-3">
         <IntakeFormFor id={id} focus="accounts" />

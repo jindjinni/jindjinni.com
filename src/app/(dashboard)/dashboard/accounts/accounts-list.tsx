@@ -3,14 +3,19 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
-import { dayHeading, dueWording, groupByDay, orderMatches, sumAmounts, type AccountsOrder } from "@/lib/accounts-rules";
+import { dayHeading, dueWording, shortDayName, startLabel, groupByDay, orderMatches, sumAmounts, type AccountsOrder } from "@/lib/accounts-rules";
 import { chipClass, MONEY } from "@/lib/receiving-ui";
 import { dueState, type DueState } from "@/lib/payment-due";
 
-const shortDay = (day: string) => {
-  const [y, m, d] = day.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
-};
+/** "Delivered Thu, Sep 10" for the heading: the day(s) the packages in this group were delivered (or received, when no delivered day is on file). */
+function deliveredNote(orders: AccountsOrder[]): string {
+  const parts: string[] = [];
+  for (const kind of ["DELIVERED", "RECEIVED"] as const) {
+    const days = [...new Set(orders.filter((o) => o.dueStartDay && o.dueBasis === kind).map((o) => o.dueStartDay as string))].sort();
+    if (days.length) parts.push(`${kind === "DELIVERED" ? "Delivered" : "Received"} ${days.map(shortDayName).join(" and ")}`);
+  }
+  return parts.join(" · ");
+}
 
 const DUE_CHIP: Record<DueState, string> = {
   OVERDUE: "bg-red-600 text-white dark:bg-red-500",
@@ -96,6 +101,9 @@ export function AccountsList({ orders, today }: { orders: AccountsOrder[]; today
                 <span className="text-xs text-slate-600 dark:text-slate-300">
                   <strong className="tabular-nums">{d.orders.length}</strong> · <strong className="tabular-nums">{MONEY.format(d.total)}</strong>
                 </span>
+                {d.day && deliveredNote(d.orders) && (
+                  <span data-testid="tbp-day-delivered" className="basis-full pl-[22px] text-xs text-slate-600 dark:text-slate-300">{deliveredNote(d.orders)}</span>
+                )}
               </summary>
               <ul>
                 {d.orders.map((o) => {
@@ -125,17 +133,22 @@ export function AccountsList({ orders, today }: { orders: AccountsOrder[]; today
                         <div className="min-w-0 flex-1 space-y-1">
                           <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-50">{o.customerName} — {o.quotationNumber}</p>
                           <p className="truncate text-xs text-slate-600 dark:text-slate-400">{o.trackingNumber || "No tracking #"}</p>
+                          {(o.dueStartDay || o.dueDay) && (
+                            <div className="flex flex-wrap items-center gap-1.5" data-testid="tbp-when">
+                              {o.dueStartDay && (
+                                <span data-testid="tbp-basis" className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-800 dark:bg-slate-800 dark:text-slate-100">
+                                  {startLabel(o.dueStartDay, o.dueBasis)}
+                                </span>
+                              )}
+                              {o.dueStartDay && o.dueDay && <span aria-hidden="true" className="text-[11px] text-slate-500">→</span>}
+                              {o.dueDay && (
+                                <span data-testid="tbp-due" className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${DUE_CHIP[dueState(o.dueDay, today)]}`}>{dueWording(o.dueDay, today).chip}</span>
+                              )}
+                            </div>
+                          )}
                           <div className="flex flex-wrap gap-1.5">
                             <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${chipClass(o.customerName)}`}>{o.customerName}</span>
                             <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-medium tabular-nums text-blue-900 dark:bg-blue-900/40 dark:text-blue-100">{MONEY.format(o.amount)}</span>
-                            {o.dueDay && (
-                              <span data-testid="tbp-due" className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${DUE_CHIP[dueState(o.dueDay, today)]}`}>{dueWording(o.dueDay, today).chip}</span>
-                            )}
-                            {o.dueStartDay && (
-                              <span data-testid="tbp-basis" className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-800 dark:bg-slate-800 dark:text-slate-100">
-                                {o.dueBasis === "DELIVERED" ? `Delivered ${shortDay(o.dueStartDay)}` : `Received ${shortDay(o.dueStartDay)}`}
-                              </span>
-                            )}
                             {o.adjusted && <span className="rounded-full bg-orange-100 px-2 py-0.5 text-[11px] font-medium text-orange-900 dark:bg-orange-900/40 dark:text-orange-100">Adjusted</span>}
                             <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${o.receipts > 0 ? "bg-green-100 text-green-900 dark:bg-green-900/40 dark:text-green-100" : "bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-100"}`}>
                               {o.receipts > 0 ? "Receipt attached" : "Needs receipt"}
