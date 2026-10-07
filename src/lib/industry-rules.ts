@@ -1,7 +1,7 @@
 // Rules for the Home screen's industry watch: how a headline or an FDA recall is sorted (kind and how serious), how the
 // two feeds are read, and how the stories are grouped by brand for display. Pure; reads nothing and fetches nothing.
 
-import { mentionsBrand, type BrandProfile } from "@/lib/industry-brands";
+import { fitsBrand, isFromMaker, isPressRelease, mentionsBrand, type BrandProfile } from "@/lib/industry-brands";
 
 export type NewsKind = "recall" | "safety" | "business" | "product" | "other";
 export type Severity = "urgent" | "important" | "info";
@@ -101,7 +101,7 @@ export type Story = {
   fingerprint: string;
 };
 
-export type RawHeadline = { title: string; url: string; source: string; publishedAt: string; snippet: string };
+export type RawHeadline = { title: string; url: string; source: string; sourceHost: string | null; publishedAt: string; snippet: string };
 
 const tag = (xml: string, name: string) => {
   const m = xml.match(new RegExp(`<${name}(?:\\s[^>]*)?>([\\s\\S]*?)</${name}>`, "i"));
@@ -117,6 +117,13 @@ export function parseNewsRss(xml: string): RawHeadline[] {
     const url = safeUrl(stripTags(tag(item, "link")));
     const publishedAt = toIso(stripTags(tag(item, "pubDate")));
     let source = stripTags(tag(item, "source"));
+    const hostRaw = (item.match(/<source\b[^>]*\burl="([^"]*)"/i) ?? [])[1] ?? "";
+    let sourceHost: string | null = null;
+    try {
+      sourceHost = hostRaw ? new URL(decodeEntities(hostRaw)).hostname.toLowerCase().replace(/^www\./, "") : null;
+    } catch {
+      sourceHost = null;
+    }
     if (!title || !url || !publishedAt) continue;
     if (source && title.toLowerCase().endsWith(` - ${source.toLowerCase()}`)) title = title.slice(0, title.length - source.length - 3).trim();
     else if (!source) {
@@ -126,7 +133,7 @@ export function parseNewsRss(xml: string): RawHeadline[] {
         title = title.slice(0, i).trim();
       }
     }
-    out.push({ title, url, source, publishedAt, snippet: "" });
+    out.push({ title, url, source, sourceHost, publishedAt, snippet: "" });
   }
   return out;
 }
@@ -148,7 +155,9 @@ export function parseFdaRecalls(json: unknown, profile: BrandProfile): Story[] {
     const firm = stripTags(str(r.recalling_firm));
     const text = `${product} ${firm} ${reason}`;
     const firmMatch = profile.firms.some((f) => firm.toLowerCase().includes(f.toLowerCase().split(" ")[0]));
-    if (!(profile.broadMaker ? mentionsBrand(text, profile) : firmMatch || mentionsBrand(text, profile))) continue;
+    // FDA text is about devices only, so even the bare brand name ("FreeStyle", "Contour") is safe to match there.
+    const brandWord = text.toLowerCase().includes(profile.brand.toLowerCase());
+    if (!(profile.broadMaker ? mentionsBrand(text, profile) || brandWord : firmMatch || mentionsBrand(text, profile) || brandWord)) continue;
     const id = str(r.res_event_number) || str(r.cfres_id) || str(r.product_res_number);
     if (!id || seen.has(id)) continue;
     seen.add(id);
@@ -172,7 +181,18 @@ export function parseFdaRecalls(json: unknown, profile: BrandProfile): Story[] {
 
 // ---------------------------------------------------------------- display
 
-export type ShownStory = Story & { id: string; brand: string };
+/** Where a story comes from: the maker itself, an official FDA record, or ordinary news coverage (null). */
+export type Origin = "maker" | "fda" | null;
+export type ShownStory = Story & { id: string; brand: string; origin: Origin };
+
+/** "maker" for a story from the maker's own site or a press-release wire naming the brand, "fda" for an FDA record. */
+export function originOf(fingerprint: string, sourceHost: string | null | undefined, profile: BrandProfile): Origin {
+  if (fingerprint.startsWith("fda:")) return "fda";
+  return isFromMaker(sourceHost, profile) || isPressRelease(sourceHost) ? "maker" : null;
+}
+
+/** True when a stored story still fits its brand under today's rules (FDA records always do). */
+export const storyFits = (s: { fingerprint: string; title: string; summary: string | null }, profile: BrandProfile) => s.fingerprint.startsWith("fda:") || fitsBrand(`${s.title} ${s.summary ?? ""}`, profile);
 
 export const ageDays = (iso: string, now: Date) => Math.max(0, Math.floor((now.getTime() - new Date(iso).getTime()) / 86_400_000));
 
@@ -180,6 +200,7 @@ export const ageDays = (iso: string, now: Date) => Math.max(0, Math.floor((now.g
 export function compareStories(a: Pick<Story, "severity" | "publishedAt">, b: Pick<Story, "severity" | "publishedAt">): number {
   return SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] || b.publishedAt.localeCompare(a.publishedAt);
 }
+export const ORIGIN_LABEL: Record<"maker" | "fda", string> = { maker: "From the maker", fda: "Official FDA record" };
 
 export type BrandNews = { brand: string; owner: string; urgent: number; important: number; total: number; stories: ShownStory[] };
 

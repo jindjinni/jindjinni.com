@@ -2409,6 +2409,8 @@ export const industryNews = sqliteTable(
     /** When it was published (ISO date or date-time). */
     publishedAt: text("published_at").notNull(),
     fingerprint: text("fingerprint").notNull(),
+    /** The website the story came from (its own site, a news site or a press-release wire); empty for FDA records. */
+    sourceHost: text("source_host"),
     /** False when the AI check decided it is not about this brand; kept so it is not looked at again. */
     relevant: integer("relevant", { mode: "boolean" }).notNull().default(true),
     aiChecked: integer("ai_checked", { mode: "boolean" }).notNull().default(false),
@@ -2455,6 +2457,8 @@ export const industryBrandMakers = sqliteTable(
     /** Words headlines use for the brand, separated by " | ". */
     terms: text("terms").notNull().default(""),
     broadMaker: integer("broad_maker", { mode: "boolean" }).notNull().default(false),
+    /** True when the bare brand name is also an everyday word, so only the product words count. */
+    ambiguous: integer("ambiguous", { mode: "boolean" }).notNull().default(false),
     ...timestamps,
   },
   (t) => [uniqueIndex("industry_brand_makers_unique").on(t.organizationId, t.brand)],
