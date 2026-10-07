@@ -44,6 +44,11 @@ To go back to it if something breaks badly: `git checkout foundation-v1` (or bra
 - Step 7 Adjustments: "Adjustment Quotation" shows right inside the adjustment screen with the reason, and refreshes itself after save, regenerate and finalize.
 - Test-lock so test shipments cannot mix with real ones.
 
+**Jin, the built-in assistant** (genie-lamp button, bottom right of every signed-in page)
+- A guide and a read-only analyst. It explains how to use the platform from `src/lib/jin-guide.ts` (built from the real menus, only the departments and Settings pages that person may open), and answers questions about the company's own data through read-only tools (`src/lib/jin-tools.ts`: overview, quotations, customers, receiving shipments, unpaid orders, stock, industry news). A tool exists for a person only if `canView*` for that department is true, and always runs for the signed-in person's own company (the id comes from the session, never from the question). Jin cannot change anything: for "do it for me" it gives exact steps and a link. A later phase can add write actions with a Confirm button.
+- Key and limits (`src/lib/jin-service.ts`, `jin-rules.ts`): the company's own connected Claude key when it has one (billed to the company, 400 questions per person per day as an abuse guard); otherwise the platform's key for every company, 40 questions per person and 300 per company per day. Only counts are stored (`jin_usage`), never the questions or answers. Model: `JIN_MODEL` env, default Haiku. Needs `ANTHROPIC_API_KEY` in Vercel.
+- Safety: tool results, news and notes are treated as data, not instructions; answers can link only to `/dashboard/...` pages (anything else is shown as plain text, `parseInline`); input is length-capped and history is cleaned. Terms/Privacy describe Jin; `TERMS_VERSION` bumped to 2026-10-07.3.
+
 ## The standards we keep (the "style" of the system)
 
 1. **Plain language for people.** Screens, messages and PDFs say what happened and what to do next. No internal terms.

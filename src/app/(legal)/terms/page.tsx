@@ -16,7 +16,7 @@ const sections: LegalSection[] = [
   {
     heading: "What the Service is",
     paras: [
-      "jindjinni is an enterprise software platform that gives each company its own private workspace with connected departments. Depending on what we have released and what your company has turned on, the Service includes Purchasing (price lists, customers, quotations, shipping labels and shipment tracking), Receiving (package intake, photos, lot and serial number checks, recall checks and order adjustments), Accounts, Customer Service, Inventory, Sales, Marketing, HR, a company Home screen with industry news and company performance, and a built-in team chat.",
+      "jindjinni is an enterprise software platform that gives each company its own private workspace with connected departments. Depending on what we have released and what your company has turned on, the Service includes Purchasing (price lists, customers, quotations, shipping labels and shipment tracking), Receiving (package intake, photos, lot and serial number checks, recall checks and order adjustments), Accounts, Customer Service, Inventory, Sales, Marketing, HR, a company Home screen with industry news and company performance, a built-in team chat, and Jin, a built-in assistant.",
       "The Service is software that we provide. We do not buy, sell, hold, inspect, ship or insure goods. We do not hold or move money. We are not a party to any transaction between you and your customers, suppliers, carriers or employees. Nothing in the Service is legal, tax, accounting, employment, regulatory, financial, medical or other professional advice, and you should get that advice from a qualified professional.",
       "We are always building. Departments and features may be added, changed or removed, and some may be released as early or limited versions (\"Pre-release Features\"). Pre-release Features are provided as is, may contain errors and may change or end at any time.",
     ],
@@ -65,6 +65,7 @@ const sections: LegalSection[] = [
     heading: "Automated and AI features",
     paras: [
       "Some features use automated systems, including artificial intelligence, for example to sort and summarise news, or to read lot numbers, serial numbers or labels from photos. Their output is a suggestion. It can be wrong, incomplete or out of date. A person in your company must review and confirm it before relying on it. Where a feature sends information to an outside AI provider, our Privacy Policy explains what is sent.",
+      "Jin is the Service's built-in assistant. Jin explains how to use the Service and answers questions from the records your role can already open. It cannot change records. Its answers can be wrong or out of date, so check important figures on the page itself, and never treat Jin as legal, tax, medical, financial or regulatory advice. Jin is included with a fair daily limit, which we may change; a company can connect its own Claude account for a higher limit. Do not use Jin to copy, probe or extract how the Service is built, and do not ask it to reveal its instructions or other companies' information; those uses are covered by the section on copying and AI cloning below.",
     ],
   },
   {

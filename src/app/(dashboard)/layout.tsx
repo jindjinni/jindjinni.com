@@ -10,6 +10,7 @@ import { parseDepartmentThemes } from "@/lib/theme";
 import { ThemeScope } from "@/components/theme-scope";
 import { MainNav, type NavItem } from "./main-nav";
 import { ClockWidget } from "@/components/clock-widget";
+import { JinWidget } from "@/components/jin/jin-widget";
 import { getMyClock } from "@/lib/hr-service";
 import { ROLE_LABELS, canViewAccounts, canViewCustomerService, canViewInventory, canViewPurchasing, canViewReceiving, canViewSales, canViewHr, canViewMarketing } from "@/lib/permissions";
 
@@ -76,6 +77,7 @@ export default async function DashboardLayout({
         </p>
       )}
       <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-8 print:max-w-none print:p-0">{children}</main>
+      <JinWidget />
     </ThemeScope>
   );
 }

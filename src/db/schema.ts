@@ -1229,6 +1229,25 @@ export const aiConnections = sqliteTable(
   (t) => [uniqueIndex("ai_connections_org_idx").on(t.organizationId)],
 );
 
+// How many questions each person has asked Jin (the built-in assistant) on a given day, so a fair daily limit can be kept
+// per person and per company. Only counts are stored here, never what was asked or answered.
+export const jinUsage = sqliteTable(
+  "jin_usage",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    // The UTC day, "YYYY-MM-DD".
+    day: text("day").notNull(),
+    count: integer("count").notNull().default(0),
+  },
+  (t) => [uniqueIndex("jin_usage_org_user_day_idx").on(t.organizationId, t.userId, t.day)],
+);
+
 // Industry news is a built-in courtesy for every company, paid for by the platform. To keep that cheap, Claude checks each
 // headline once per BRAND, not once per company: the verdict is kept here and reused by every company that buys that brand.
 // Nothing in these two tables belongs to a company; it is public information about a brand and its news.
