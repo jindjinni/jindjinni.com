@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireOrg } from "@/lib/tenant";
 import { canManageSalesSettings, canViewSales, isAdmin } from "@/lib/permissions";
-import { resolveMenu } from "@/lib/sidebar-menu";
+import { menuIdsFor, resolveMenu } from "@/lib/sidebar-menu";
 import { getSavedSidebarMenus } from "@/lib/sidebar-menu-store";
 import { DepartmentSidebar } from "@/components/department-sidebar";
 
@@ -11,8 +11,8 @@ import { DepartmentSidebar } from "@/components/department-sidebar";
 export default async function SalesLayout({ children }: { children: React.ReactNode }) {
   const org = await requireOrg();
   if (!canViewSales(org.role, org.access)) notFound();
-  const all = ["quotations", "invoices", "buyers", "price-comparison", "company-profile"];
-  const allowed = canManageSalesSettings(org.role) ? undefined : all.filter((id) => id !== "company-profile");
+  const everyday = ["quotations", "invoices", "buyers", "price-comparison"];
+  const allowed = menuIdsFor("sales", { connectors: isAdmin(org.role), base: canManageSalesSettings(org.role) ? undefined : everyday });
   const menu = resolveMenu("sales", await getSavedSidebarMenus(org.organizationId), allowed);
 
   return (

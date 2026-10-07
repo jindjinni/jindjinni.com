@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { requireOrg } from "@/lib/tenant";
 import { canViewPurchasing, canWritePurchasing, isAdmin, isPurchasingManager } from "@/lib/permissions";
-import { DEPARTMENT_MENUS, resolveMenu } from "@/lib/sidebar-menu";
+import { DEPARTMENT_MENUS, menuIdsFor, resolveMenu } from "@/lib/sidebar-menu";
 import { getSavedSidebarMenus } from "@/lib/sidebar-menu-store";
 import { DepartmentSidebar } from "@/components/department-sidebar";
 import { PurchasingContent } from "./purchasing-content";
@@ -17,7 +17,7 @@ export default async function PurchasingLayout({ children }: { children: React.R
 
   // Everyone sees the four everyday tabs. Managers also see the Setup tabs. (Archive, Audit log and Database are under Settings.)
   const everyday = DEPARTMENT_MENUS.purchasing.items.filter((i) => !i.setup).map((i) => i.id);
-  const allowed = isManager ? DEPARTMENT_MENUS.purchasing.items.map((i) => i.id) : everyday;
+  const allowed = menuIdsFor("purchasing", { connectors: isAdmin(org.role), base: isManager ? undefined : everyday });
   const menu = resolveMenu("purchasing", await getSavedSidebarMenus(org.organizationId), allowed);
 
   return (

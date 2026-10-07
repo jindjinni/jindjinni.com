@@ -1,9 +1,12 @@
 // Reads the lot / serial number off a photo of a product label with the Anthropic API (a vision model).
-// Switched on by ANTHROPIC_API_KEY. The model only returns what is printed; the app then checks those numbers itself.
+// Switched on per company by its own Claude key (Settings -> Connectors). The model only returns what is printed; the app then checks those numbers itself.
+
+import { aiKeyFor, anthropicBase, noteAiRefused, resolveAi } from "@/lib/ai-connection";
 
 export const PHOTO_MAX_BYTES = 4 * 1024 * 1024;
 
-export const photoReadingOn = () => !!process.env.ANTHROPIC_API_KEY;
+/** Is photo reading on for this company? Only with its own Claude key (or the platform's, for companies the platform runs). */
+export const photoReadingOn = async (organizationId: string) => !!(await aiKeyFor(organizationId));
 
 export type LabelRead = { lot: string; serial: string; expiry: string; barcodeText: string };
 
@@ -18,13 +21,14 @@ function clean(v: unknown, max = 80): string {
   return typeof v === "string" ? v.replace(/[\u0000-\u001f]/g, " ").trim().slice(0, max) : "";
 }
 
-export async function readLabelPhoto(bytes: Uint8Array, mime: string): Promise<{ error: string } | LabelRead> {
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) return { error: "Photo reading isn't switched on yet. An admin needs to add the ANTHROPIC_API_KEY setting." };
+export async function readLabelPhoto(bytes: Uint8Array, mime: string, organizationId: string): Promise<{ error: string } | LabelRead> {
+  const access = await resolveAi(organizationId);
+  if (!access.ok) return { error: `Photo reading isn't switched on. ${access.message}` };
+  const key = access.ai.key;
   const model = process.env.RECALL_PHOTO_MODEL || "claude-haiku-4-5-20251001";
   let res: Response;
   try {
-    res = await fetch("https://api.anthropic.com/v1/messages", {
+    res = await fetch(`${anthropicBase()}/v1/messages`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
@@ -45,7 +49,10 @@ export async function readLabelPhoto(bytes: Uint8Array, mime: string): Promise<{
   } catch {
     return { error: "The photo reader didn't answer in time. Try again, or type the number." };
   }
-  if (!res.ok) return { error: "The photo reader couldn't read that picture. Try again, or type the number." };
+  if (!res.ok) {
+    await noteAiRefused(organizationId, access.ai, res.status);
+    return { error: "The photo reader couldn't read that picture. Try again, or type the number." };
+  }
   const body = (await res.json().catch(() => null)) as { content?: { type: string; text?: string }[] } | null;
   const out = body?.content?.find((c) => c.type === "text")?.text ?? "";
   const m = out.match(/\{[\s\S]*\}/);

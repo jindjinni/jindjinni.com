@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { users } from "@/db/schema";
 import { requireOrg } from "@/lib/tenant";
-import { canRefreshIndustryNews, canViewCompanyPerformance, canViewReceiving } from "@/lib/permissions";
+import { canRefreshIndustryNews, canViewCompanyPerformance, canViewReceiving, isAdmin } from "@/lib/permissions";
 import { activeRecallChecks, aiSummariesOn, homeStories, isStale, lastRun, ownersOf, runIndustryWatch, watchedBrands } from "@/lib/industry-service";
 import { groupNews, needsAttention } from "@/lib/industry-rules";
 import { getCompanyPulse } from "@/lib/home-stats";
@@ -25,7 +25,7 @@ export default async function HomePage() {
   const org = await requireOrg();
   const showPerformance = canViewCompanyPerformance(org.role);
   const brands = await watchedBrands(org.organizationId);
-  const [stories, run, owners, checks, pulse, me, terms] = await Promise.all([
+  const [stories, run, owners, checks, pulse, me, terms, aiOn] = await Promise.all([
     homeStories(org.organizationId, brands),
     lastRun(org.organizationId),
     ownersOf(org.organizationId, brands),
@@ -33,6 +33,7 @@ export default async function HomePage() {
     showPerformance ? getCompanyPulse(org.organizationId) : Promise.resolve(null),
     db.select({ name: users.name }).from(users).where(eq(users.id, org.userId)).limit(1),
     getPaymentTerms(org.organizationId).catch(() => null),
+    aiSummariesOn(org.organizationId),
   ]);
 
   // The news is a few hours old (or has never been fetched): look again quietly after this page is sent.
@@ -114,7 +115,11 @@ export default async function HomePage() {
                   {run.problems.length > 3 ? ` (and ${run.problems.length - 3} more)` : ""} It will try again.
                 </p>
               )}
-              {!aiSummariesOn() && canRefresh && <p className="mt-1 text-xs text-slate-500">Headlines are sorted by keywords. Add the ANTHROPIC_API_KEY setting to have Claude check and summarise each one.</p>}
+              {!aiOn && canRefresh && (
+                <p className="mt-1 text-xs text-slate-500">
+                  Headlines are sorted by keywords. {isAdmin(org.role) ? <>Connect your company&apos;s Claude key in <Link href="/dashboard/settings/connectors" className="underline">Settings → Connectors</Link> to have Claude check and summarise each one.</> : "An owner or admin can connect Claude to have it check and summarise each one."}
+                </p>
+              )}
               <IndustryBoard groups={groups} attention={attention} nowIso={now.toISOString()} updating={updating} />
             </>
           )}

@@ -172,6 +172,7 @@ export async function disconnectEmail(): Promise<CsActionState> {
   if (!isAdmin(org.role)) return { error: "Only an owner or admin can change the connected email." };
   await removeConnection(org.organizationId);
   revalidatePath("/dashboard/customer-service", "layout");
+  revalidatePath("/dashboard/settings/connectors");
   return { ok: true };
 }
 
@@ -224,5 +225,6 @@ export async function connectSmtp(email: string, password: string, host: string,
   if (login) return { error: login };
   await saveConnection(org.organizationId, org.userId, "SMTP", e, JSON.stringify({ host: h, port: pt, user: e, pass: pw }));
   revalidatePath("/dashboard/customer-service", "layout");
+  revalidatePath("/dashboard/settings/connectors");
   return { ok: true, notice: "Connected. Customer emails will now be sent from this address." };
 }

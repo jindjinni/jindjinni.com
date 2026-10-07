@@ -76,7 +76,7 @@ export async function IntakeFormFor({ id, focus }: { id: string; focus?: "accoun
       recalls={recalls}
       recallChecks={recallChecks}
       serials={serials}
-      photoReading={photoReadingOn()}
+      photoReading={await photoReadingOn(org.organizationId)}
       started={data.started}
       catalog={catalog}
       saved={{

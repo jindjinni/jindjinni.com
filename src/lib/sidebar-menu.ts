@@ -48,6 +48,7 @@ export const DEPARTMENT_MENUS: Record<MenuDept, DepartmentMenu> = {
       { id: "quotation-profile", href: `${P}/quotation-profile`, label: "Quotation Profile", setup: true },
       { id: "receipt-layout", href: `${P}/receipt-layout`, label: "Quotation Receipt Layout", setup: true },
       { id: "shipment-tracking", href: `${P}/tracking`, label: "Shipment Tracking", setup: true },
+      { id: "connectors", href: `${P}/connectors`, label: "Connectors", setup: true },
     ],
   },
   receiving: {
@@ -62,6 +63,7 @@ export const DEPARTMENT_MENUS: Record<MenuDept, DepartmentMenu> = {
       { id: "tracker", href: `${R}/tracker`, label: "Lot & Serial Tracker", icon: "🔎" },
       { id: "products", href: `${R}/products`, label: "Products", icon: "🏷️" },
       { id: "adjustments", href: `${R}/adjustments`, label: "Order Adjustments", icon: "🧾" },
+      { id: "connectors", href: `${R}/connectors`, label: "Connectors", setup: true },
     ],
   },
   accounts: {
@@ -81,6 +83,7 @@ export const DEPARTMENT_MENUS: Record<MenuDept, DepartmentMenu> = {
       { id: "to-be-emailed", href: C, label: "To Be Emailed", icon: "✉️", exact: true },
       { id: "emailed", href: `${C}/emailed`, label: "Emailed", icon: "📨" },
       { id: "email-settings", href: `${C}/email-settings`, label: "Email Settings", setup: true },
+      { id: "connectors", href: `${C}/connectors`, label: "Connectors", setup: true },
     ],
   },
   inventory: {
@@ -102,6 +105,7 @@ export const DEPARTMENT_MENUS: Record<MenuDept, DepartmentMenu> = {
       { id: "buyers", href: `${S}/buyers`, label: "Buyers", icon: "👥" },
       { id: "price-comparison", href: `${S}/price-comparison`, label: "Price Comparison", icon: "⚖️" },
       { id: "company-profile", href: `${S}/company-profile`, label: "Company Profile", setup: true },
+      { id: "connectors", href: `${S}/connectors`, label: "Connectors", setup: true },
     ],
   },
   hr: {
@@ -122,9 +126,19 @@ export const DEPARTMENT_MENUS: Record<MenuDept, DepartmentMenu> = {
       { id: "text-campaigns", href: `${M}/text`, label: "Text Campaigns", icon: "💬" },
       { id: "email-settings", href: `${M}/email-settings`, label: "Email Settings", setup: true },
       { id: "text-settings", href: `${M}/text-settings`, label: "Text Settings", setup: true },
+      { id: "connectors", href: `${M}/connectors`, label: "Connectors", setup: true },
     ],
   },
 };
+
+/**
+ * The tab ids a person may see in a department. "Connectors" (where the company plugs in its own accounts) is for
+ * owners and admins only; `base` narrows the list further for roles that see fewer tabs.
+ */
+export function menuIdsFor(dept: MenuDept, opts: { connectors: boolean; base?: string[] }): string[] {
+  const ids = DEPARTMENT_MENUS[dept].items.map((i) => i.id);
+  return ids.filter((id) => (id !== "connectors" || opts.connectors) && (!opts.base || opts.base.includes(id)));
+}
 
 export const isMenuDept = (v: unknown): v is MenuDept => typeof v === "string" && Object.prototype.hasOwnProperty.call(DEPARTMENT_MENUS, v);
 

@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireOrg } from "@/lib/tenant";
 import { canViewMarketing, isAdmin } from "@/lib/permissions";
-import { resolveMenu } from "@/lib/sidebar-menu";
+import { menuIdsFor, resolveMenu } from "@/lib/sidebar-menu";
 import { getSavedSidebarMenus } from "@/lib/sidebar-menu-store";
 import { DepartmentSidebar } from "@/components/department-sidebar";
 
@@ -10,7 +10,7 @@ import { DepartmentSidebar } from "@/components/department-sidebar";
 export default async function MarketingLayout({ children }: { children: React.ReactNode }) {
   const org = await requireOrg();
   if (!canViewMarketing(org.role, org.access)) notFound();
-  const menu = resolveMenu("marketing", await getSavedSidebarMenus(org.organizationId));
+  const menu = resolveMenu("marketing", await getSavedSidebarMenus(org.organizationId), menuIdsFor("marketing", { connectors: isAdmin(org.role) }));
 
   return (
     <div className="-my-8 mx-[calc(50%-50vw)] flex min-h-[calc(100vh-3.4rem)] w-screen flex-col md:flex-row print:m-0 print:w-auto">

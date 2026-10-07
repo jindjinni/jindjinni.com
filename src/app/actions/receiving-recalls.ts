@@ -168,14 +168,14 @@ export async function removeRecallCheck(packageId: string, checkId: string): Pro
 
 /** Reads the lot / serial number off a photo of a label. The photo isn't stored. */
 export async function readRecallPhoto(formData: FormData): Promise<RecallActionState> {
-  await requireWriter();
+  const writer = await requireWriter();
   const file = formData.get("photo");
   if (!(file instanceof File) || file.size === 0) return { error: "Choose or take a photo first." };
   if (file.size > PHOTO_MAX_BYTES) return { error: "That photo is too big. Try again closer to the label." };
   const bytes = new Uint8Array(await file.arrayBuffer());
   const type = sniffReceiptType(bytes);
   if (!type || !type.isImage) return { error: "That file isn't a photo. Use a JPG or PNG picture." };
-  const r = await readLabelPhoto(bytes, type.mime);
+  const r = await readLabelPhoto(bytes, type.mime, writer.organizationId);
   if ("error" in r) return { error: r.error };
   return { ok: true, label: r };
 }

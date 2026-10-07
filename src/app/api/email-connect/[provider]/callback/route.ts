@@ -6,7 +6,7 @@ import { readState } from "@/lib/email-connector-crypto";
 
 export const dynamic = "force-dynamic";
 
-const SETTINGS = "/dashboard/customer-service/email-settings";
+const SETTINGS = "/dashboard/settings/connectors";
 
 // Step 2: the provider sends the admin back here with a one-time code. We check it is the same admin and company that
 // started the sign-in, trade the code for the mailbox's address and permission, save them, and return to Email Settings.

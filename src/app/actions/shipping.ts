@@ -1,6 +1,6 @@
 "use server";
 
-// Settings -> Shipping: an owner or admin connects the company's OWN Shippo account (paste its token), checks it, turns
+// Purchasing -> Settings -> Connectors: an owner or admin connects the company's OWN Shippo account (paste its token), checks it, turns
 // on live tracking or disconnects it. Re-checked here on the server; hiding the buttons is never the guard.
 
 import { headers } from "next/headers";
@@ -26,7 +26,7 @@ async function origin(): Promise<string> {
 }
 
 function refresh() {
-  revalidatePath("/dashboard/settings/shipping");
+  revalidatePath("/dashboard/purchasing/connectors");
   revalidatePath("/dashboard/purchasing/tracking");
 }
 

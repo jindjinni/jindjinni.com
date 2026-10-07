@@ -1,6 +1,6 @@
 // Each company's own Shippo account: where its token is kept, how it is checked, and which token a request may use.
 //
-//  - A company connects its own Shippo token (Settings -> Shipping). It is stored encrypted and only ever used for THAT
+//  - A company connects its own Shippo token (Purchasing -> Settings -> Connectors). It is stored encrypted and only ever used for THAT
 //    company's labels and tracking. Nothing is read from another company's row, ever.
 //  - The platform's own Shippo token (the SHIPPO_API_KEY setting on Vercel) is only used for the companies the platform
 //    itself runs (BUILT_IN_PLATFORM_SHIPPO_SLUGS, plus the optional SHIPPO_PLATFORM_ORG_SLUGS setting) and only when that
@@ -30,8 +30,8 @@ export function mayUsePlatformShippo(slug: string): boolean {
   return platformShippoSlugs().includes(slug.toLowerCase());
 }
 
-export const NOT_CONNECTED_MESSAGE = "Shipping labels aren't connected yet. An owner or admin can connect your Shippo account in Settings → Shipping.";
-export const NEEDS_ATTENTION_MESSAGE = "Shippo isn't accepting your saved token. An owner or admin needs to reconnect it in Settings → Shipping.";
+export const NOT_CONNECTED_MESSAGE = "Shipping labels aren't connected yet. An owner or admin can connect your Shippo account in Purchasing → Settings → Connectors.";
+export const NEEDS_ATTENTION_MESSAGE = "Shippo isn't accepting your saved token. An owner or admin needs to reconnect it in Purchasing → Settings → Connectors.";
 
 export type ShippoAccess =
   | { ok: true; client: ShippoClient; source: "company" | "platform"; isTest: boolean }

@@ -1176,7 +1176,7 @@ export const purchasingTracking = sqliteTable(
 );
 
 // A company's own Shippo account, so its labels are bought (and billed) there and its packages are tracked there.
-// An owner or admin pastes the Shippo token in Settings -> Shipping; we keep it encrypted (lib/email-connector-crypto.ts),
+// An owner or admin pastes the Shippo token in Purchasing -> Settings -> Connectors; we keep it encrypted (lib/email-connector-crypto.ts),
 // show only the last 4 characters afterwards, and never send it back to the browser. One per company.
 export const shippoConnections = sqliteTable(
   "shippo_connections",
@@ -1203,6 +1203,30 @@ export const shippoConnections = sqliteTable(
     lastCheckedAt: text("last_checked_at"),
   },
   (t) => [uniqueIndex("shippo_connections_org_idx").on(t.organizationId)],
+);
+
+// A company's own Claude (Anthropic) key, for the AI features that company uses (reading label photos, checking industry
+// news). Pasted by an owner or admin in Settings -> Connectors, checked with Anthropic first, kept encrypted, shown only as
+// the last 4 characters. One per company. Usage is billed to that company's own Anthropic account.
+export const aiConnections = sqliteTable(
+  "ai_connections",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    apiKeyEnc: text("api_key_enc").notNull(),
+    keyHint: text("key_hint").notNull(),
+    // ACTIVE, or NEEDS_ATTENTION when Anthropic stopped accepting the key or it can't be read any more.
+    status: text("status", { enum: ["ACTIVE", "NEEDS_ATTENTION"] }).notNull().default("ACTIVE"),
+    lastError: text("last_error"),
+    connectedByUserId: text("connected_by_user_id").references(() => users.id),
+    connectedAt: text("connected_at")
+      .notNull()
+      .default(sql`(current_timestamp)`),
+    lastCheckedAt: text("last_checked_at"),
+  },
+  (t) => [uniqueIndex("ai_connections_org_idx").on(t.organizationId)],
 );
 
 // The mailbox a company sends its customer emails from (an admin connects it with Google's sign-in, like Airtable's

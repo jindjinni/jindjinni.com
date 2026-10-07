@@ -35,7 +35,7 @@ export function SmtpConnectForm({ googleHref, microsoftHref, googleOn, microsoft
     startTransition(async () => {
       const r = await connectSmtp(email, password, host, Number(port));
       if (r.error) setError(r.error);
-      else { setPassword(""); router.push("/dashboard/customer-service/email-settings?connected=1"); router.refresh(); }
+      else { setPassword(""); router.push("/dashboard/settings/connectors?connected=1"); router.refresh(); }
     });
   }
 

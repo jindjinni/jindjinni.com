@@ -142,7 +142,7 @@ export async function refreshTracker(row: TrackingRow, client?: ShippoClient): P
   if (!shippo) {
     const access = await resolveShippo(row.organizationId);
     if (!access.ok) {
-      await markError(row, access.reason === "not_connected" ? "Live tracking isn't connected yet. An owner or admin can connect Shippo in Settings → Shipping." : access.message);
+      await markError(row, access.reason === "not_connected" ? "Live tracking isn't connected yet. An owner or admin can connect Shippo in Purchasing → Settings → Connectors." : access.message);
       return false;
     }
     shippo = access.client;

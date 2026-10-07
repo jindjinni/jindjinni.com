@@ -1,6 +1,6 @@
 // Thin wrapper around Shippo's REST API, called server-side with a company's OWN Shippo token.
 //
-// Every company connects its own Shippo account (Settings -> Shipping, see lib/shippo-connection.ts), so labels are
+// Every company connects its own Shippo account (Purchasing -> Settings -> Connectors, see lib/shippo-connection.ts), so labels are
 // bought from, billed to and tracked in that company's account. Nothing here reads a key from the environment: the
 // caller passes the key it resolved for the signed-in company, so one company's key can never be used for another.
 //

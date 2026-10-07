@@ -6,7 +6,7 @@ import { makeState, newNonce } from "@/lib/email-connector-crypto";
 
 export const dynamic = "force-dynamic";
 
-const SETTINGS = "/dashboard/customer-service/email-settings";
+const SETTINGS = "/dashboard/settings/connectors";
 
 // Step 1 of connecting a mailbox: an admin is sent to Google or Microsoft to sign in and approve "send email for me".
 export async function GET(req: NextRequest, { params }: { params: Promise<{ provider: string }> }) {

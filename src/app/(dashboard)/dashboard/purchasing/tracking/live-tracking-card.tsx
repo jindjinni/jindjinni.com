@@ -31,9 +31,9 @@ export function LiveTrackingCard({ configured, on, problem, canChange, isAdmin }
           <p className="mt-2 text-sm text-amber-900 dark:text-amber-200" data-testid="shippo-not-connected">
             Shippo isn&apos;t connected yet, so packages can&apos;t be tracked.{" "}
             {isAdmin ? (
-              <Link href="/dashboard/settings/shipping" className="font-semibold underline">Connect your Shippo account</Link>
+              <Link href="/dashboard/purchasing/connectors" className="font-semibold underline">Connect your Shippo account</Link>
             ) : (
-              "An owner or admin can connect your Shippo account in Settings → Shipping labels."
+              "An owner or admin can connect your Shippo account in Purchasing → Settings → Connectors labels."
             )}
           </p>
         )}

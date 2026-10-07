@@ -1746,7 +1746,7 @@ export async function updatePurchasingQuotationHeader(
  * that case this returns a clear error pointing to the customer record,
  * where the address can be filled in (or corrected) and the label
  * generated afterward. This is a real charge against the company's OWN
- * Shippo account once it has connected a live token (Settings -> Shipping,
+ * Shippo account once it has connected a live token (Purchasing -> Settings -> Connectors,
  * src/lib/shippo-connection.ts). A company that hasn't connected one gets a
  * friendly "not connected yet" error instead of calling Shippo.
  */
@@ -1790,7 +1790,7 @@ export async function generatePurchasingShippingLabel(
     return { error: message };
   }
 
-  // Labels are bought from THIS company's own Shippo account (Settings -> Shipping); never another company's.
+  // Labels are bought from THIS company's own Shippo account (Purchasing -> Settings -> Connectors); never another company's.
   const shippo = await resolveShippo(org.organizationId);
   if (!shippo.ok) return recordFailure(shippo.message);
 
