@@ -27,16 +27,36 @@ const blobDriver: StorageDriver = {
   },
 };
 
+// Test hook, like the *_TEST_BASE switches: STORAGE_TEST_MEMORY=1 keeps files in memory so end-to-end tests can send and open files without a
+// real store. Ignored on Vercel.
+const memoryFiles: Map<string, Uint8Array> = ((globalThis as { __memFiles?: Map<string, Uint8Array> }).__memFiles ??= new Map());
+const memoryDriver: StorageDriver = {
+  configured: () => true,
+  async save(pathname, bytes) {
+    memoryFiles.set(pathname, new Uint8Array(bytes));
+  },
+  async read(pathname) {
+    const b = memoryFiles.get(pathname);
+    if (!b) return null;
+    return { stream: new Blob([b as BlobPart]).stream() as ReadableStream<Uint8Array>, size: b.length };
+  },
+  async remove(pathname) {
+    memoryFiles.delete(pathname);
+  },
+};
+const testMemory = () => process.env.STORAGE_TEST_MEMORY === "1" && !process.env.VERCEL;
+
 let driver: StorageDriver = blobDriver;
 /** For tests only. */
 export function setStorageDriver(d: StorageDriver | null) {
   driver = d ?? blobDriver;
 }
+const active = () => (driver === blobDriver && testMemory() ? memoryDriver : driver);
 export const storage = {
-  configured: () => driver.configured(),
-  save: (p: string, b: Uint8Array, c: string) => driver.save(p, b, c),
-  read: (p: string) => driver.read(p),
-  remove: (p: string) => driver.remove(p),
+  configured: () => active().configured(),
+  save: (p: string, b: Uint8Array, c: string) => active().save(p, b, c),
+  read: (p: string) => active().read(p),
+  remove: (p: string) => active().remove(p),
 };
 
 export const STORAGE_NOT_CONNECTED =

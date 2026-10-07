@@ -222,7 +222,7 @@ export function AdjustmentEditor({ adjustment: a, canWrite, embedded = false, be
           <a href={`/api/receiving/packages/${a.packageId}/quotation-receipt`} target="_blank" rel="noreferrer" className="text-xs font-medium text-amber-800 underline dark:text-amber-300">Open the original quotation</a>
         </div>
         <p className="mt-1 text-xs text-slate-500">Each line starts from the original quotation and what was received. Change the quantity, price, or condition to what you are actually paying for.</p>
-        <div className="mt-3 overflow-x-auto">
+        <div className="relative mt-3 overflow-x-auto">
           <table className="w-full min-w-[64rem] text-sm">
             <thead>
               <tr>

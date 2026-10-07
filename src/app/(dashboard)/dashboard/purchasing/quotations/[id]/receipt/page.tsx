@@ -107,7 +107,8 @@ export default async function QuotationReceiptPage({ params }: { params: Promise
         <p className="mt-3 text-sm font-bold text-blue-700">QUOTATION FOR:</p>
         <p className="text-lg font-bold uppercase text-slate-900">{quotation.customerNameSnapshot}</p>
 
-        <table className="mt-4 w-full border-collapse text-sm">
+        <div className="relative mt-4 overflow-x-auto print:overflow-visible">
+        <table className="w-full border-collapse text-sm">
           <thead>
             <tr className="bg-blue-600 text-left text-white">
               <th className="px-2 py-2 font-semibold">#</th>
@@ -148,6 +149,7 @@ export default async function QuotationReceiptPage({ params }: { params: Promise
             })}
           </tbody>
         </table>
+        </div>
 
         <div className="mt-4 flex flex-col items-end gap-0.5 text-sm">
           <span>

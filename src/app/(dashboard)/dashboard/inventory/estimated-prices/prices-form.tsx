@@ -17,7 +17,7 @@ export function PricesForm({ rows: initial }: { rows: PriceRow[] }) {
 
   return (
     <div className="mt-5">
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+      <div className="relative overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
         <table className="w-full min-w-[620px] text-left text-sm" data-testid="ep-table">
           <thead>
             <tr className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">

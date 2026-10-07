@@ -88,12 +88,12 @@ export function AddQuotedItemForm({
       <QuickRecallCheck key={productId} recalls={recalls} productName={productName} idPrefix="qrc-line" />
     </div>
     <form action={formAction} className="mt-4 flex flex-wrap items-end gap-3 rounded-xl border border-dashed border-slate-300 p-4 dark:border-slate-700">
-      <label className="flex flex-col gap-1 text-sm">
+      <label className="flex min-w-0 max-w-full flex-col gap-1 text-sm">
         <span className="text-slate-600 dark:text-slate-400">Product</span>
         <select
           name="productId"
           required
-          className={`min-w-[12rem] ${inputClass}`}
+          className={`min-w-[12rem] max-w-full ${inputClass}`}
           value={productId}
           onChange={(e) => {
             setProductId(e.target.value);

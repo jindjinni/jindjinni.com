@@ -10,11 +10,12 @@ type Row = { rid: number; brand: string; productId: string; condition: string; q
 const field = "w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm dark:border-slate-700 dark:bg-slate-900";
 const card = "rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900";
 
-let counter = 0;
+// Rows added after the page loads count up from 1000; the first row is always 1, so the server's HTML and the browser agree on the field ids.
+let counter = 1000;
 const blank = (brand = ""): Row => ({ rid: ++counter, brand, productId: "", condition: "Mint", quantity: "", expiry: "", lot: "", unitCost: "", estLow: "", estHigh: "" });
 
 export function ManualAddForm({ brands, products, conditions }: { brands: string[]; products: Product[]; conditions: string[] }) {
-  const [rows, setRows] = useState<Row[]>([blank()]);
+  const [rows, setRows] = useState<Row[]>(() => [{ ...blank(), rid: 1 }]);
   const [note, setNote] = useState("Opening stock");
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);

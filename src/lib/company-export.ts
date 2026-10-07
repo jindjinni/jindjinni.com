@@ -9,6 +9,7 @@ import { db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { getTeamMembers } from "@/lib/team-queries";
 
+const CHAT_HOUSEKEEPING = new Set(["chatReads", "chatPresence"]);
 /** Columns that are secrets or bulky binary data -- never exported. */
 const SKIP_COLUMNS = new Set(["tokenHash", "logoData", "passwordHash", "codeHash"]);
 const CELL_LIMIT = 32000;
@@ -54,8 +55,12 @@ export async function buildCompanyWorkbook(organizationId: string, organizationN
   );
 
   for (const { key, table } of orgScopedTables()) {
+    // Who read what and who was online when is housekeeping, not company records.
+    if (CHAT_HOUSEKEEPING.has(key)) continue;
     const cols = getTableColumns(table) as Record<string, import("drizzle-orm").Column>;
-    const rows = (await db.select().from(table).where(eq(cols.organizationId, organizationId))) as Record<string, unknown>[];
+    let rows = (await db.select().from(table).where(eq(cols.organizationId, organizationId))) as Record<string, unknown>[];
+    // Private (one-to-one) chat messages belong to the two people in them, so the company download leaves them out, files included.
+    if (key === "chatMessages" || key === "chatAttachments") rows = rows.filter((r) => !String(r.roomKey ?? "").startsWith("dm:"));
     if (rows.length === 0) continue;
     addSheet(
       humanize(key),
@@ -66,7 +71,7 @@ export async function buildCompanyWorkbook(organizationId: string, organizationN
   const readme = [
     [`Data export for ${organizationName}`],
     [`Created ${new Date().toISOString()}`],
-    ["Logos and password information are not included. Each sheet below is one kind of record."],
+    ["Logos and password information are not included. Private one-to-one chat messages are not included either. Each sheet below is one kind of record."],
     [],
     ...contents,
   ];

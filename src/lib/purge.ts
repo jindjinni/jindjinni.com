@@ -8,7 +8,8 @@
 import { and, eq, inArray, isNotNull, lte, lt } from "drizzle-orm";
 import { getTableColumns } from "drizzle-orm";
 import { db } from "@/db/client";
-import { memberships, organizations, signInEvents, users } from "@/db/schema";
+import { chatAttachments, memberships, organizations, receivingPackagePhotos, signInEvents, users } from "@/db/schema";
+import { storage } from "@/lib/receiving-storage";
 import { orgScopedTables } from "@/lib/company-export";
 import { SIGN_IN_HISTORY_MONTHS } from "@/lib/legal";
 
@@ -24,6 +25,15 @@ export async function purgeClosedCompanies(now = new Date()): Promise<PurgeResul
   for (const { id } of due) {
     const memberRows = await db.select({ userId: memberships.userId }).from(memberships).where(eq(memberships.organizationId, id));
     const userIds = [...new Set(memberRows.map((m) => m.userId))];
+
+    // The uploaded files (receiving photos, chat files) live in file storage, not the database: remove them first, while their paths are still known.
+    if (storage.configured()) {
+      const paths = [
+        ...(await db.select({ p: receivingPackagePhotos.storagePath }).from(receivingPackagePhotos).where(eq(receivingPackagePhotos.organizationId, id))).map((r) => r.p),
+        ...(await db.select({ p: chatAttachments.storagePath }).from(chatAttachments).where(eq(chatAttachments.organizationId, id))).map((r) => r.p),
+      ];
+      for (const path of paths) await storage.remove(path).catch(() => {});
+    }
 
     // Children first (their rows reference the company), then the company itself.
     for (const { table } of orgScopedTables()) {

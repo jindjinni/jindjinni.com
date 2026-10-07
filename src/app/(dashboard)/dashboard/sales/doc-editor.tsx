@@ -32,7 +32,8 @@ export type EditorInitial = {
   lines: Omit<EditorLine, "rid">[];
 };
 
-let counter = 0;
+// Lines added after the page loads count up from 1000; the lines it opens with are numbered 1, 2, ... so the server's HTML and the browser agree on the field ids.
+let counter = 1000;
 const blankLine = (): EditorLine => ({ rid: ++counter, productKey: "", productId: null, productName: "", condition: "Mint", groupKey: null, groupLabel: null, quantity: "", unitPrice: "", note: "" });
 const num = (s: string) => (s.trim() === "" ? 0 : Number(s));
 const cleanNum = (s: string) => s.replace(/[^\d.]/g, "");
@@ -54,7 +55,7 @@ export function DocEditor(props: {
   const isInvoice = kind === "INVOICE";
   const router = useRouter();
   const [h, setH] = useState(props.initial);
-  const [lines, setLines] = useState<EditorLine[]>(() => (props.initial.lines.length ? props.initial.lines.map((l) => ({ ...l, rid: ++counter })) : [blankLine()]));
+  const [lines, setLines] = useState<EditorLine[]>(() => (props.initial.lines.length ? props.initial.lines.map((l, i) => ({ ...l, rid: i + 1 })) : [{ ...blankLine(), rid: 1 }]));
   const [dueTouched, setDueTouched] = useState(false);
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);

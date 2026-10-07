@@ -13,6 +13,8 @@ To go back to it if something breaks badly: `git checkout foundation-v1` (or bra
 - Multi-tenant: every company has its own login and data. Every table is scoped by `organizationId`; all server code gets the company from `src/lib/tenant.ts` (`requireOrg`), never from the browser.
 - Roles in one file, `src/lib/permissions.ts`: owner, admin, purchasing manager, purchasing agent, receiver, accountant (and legacy staff). No scattered role checks.
 - Sign-up with email verification, invitations, team management, Admin panel, company close/purge, data export, appearance (themes), terms acceptance, business profile.
+- Closing a company: the owner can download everything first ("Download my data": every department's records as one spreadsheet; private one-to-one chat messages and password information are left out). Thirty days after closing, the nightly purge deletes the company's records **and its uploaded files** (receiving photos, chat files) and any person who belonged only to it.
+- Testing switches (ignored on Vercel, like the `*_TEST_BASE` ones): `STORAGE_TEST_MEMORY=1` keeps uploaded files in memory so tests can send and open files without a real store; `SMTP_TEST_ALLOW_LOCAL=1` lets tests use a mail server on the same computer.
 - Hosting and services: GitHub, Vercel (with Blob storage and a nightly purge cron), Turso (libSQL), Next.js App Router, Drizzle, Auth.js, Shippo (labels), pdf-lib (PDFs). Resend email and the Anthropic label reader are optional.
 
 **Purchasing department**
