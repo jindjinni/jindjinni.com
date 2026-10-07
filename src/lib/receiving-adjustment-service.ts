@@ -16,7 +16,7 @@ import {
   RECEIVING_ADJUSTMENT_REASONS,
 } from "@/db/schema";
 import { newId } from "@/lib/ids";
-import { getBusinessProfile, getPurchasingReceiptSettings, renderReceiptCopy, resolveBusinessDocumentIdentity, resolvePurchasingReceiptSettings } from "@/lib/queries";
+import { getBusinessProfile, getQuotationProfile, getPurchasingReceiptSettings, renderReceiptCopy, resolveBusinessDocumentIdentity, resolvePurchasingReceiptSettings } from "@/lib/queries";
 import { storage } from "@/lib/receiving-storage";
 import { buildAdjustmentPdf } from "@/lib/receiving-adjustment-pdf";
 import {
@@ -439,8 +439,8 @@ export async function saveAdjustment(org: OrgRef, adjustmentId: string, input: A
 export async function renderAdjustmentPdf(organizationId: string, organizationName: string, adjustmentId: string): Promise<{ bytes: Uint8Array; filename: string } | null> {
   const a = await getAdjustmentById(organizationId, adjustmentId);
   if (!a) return null;
-  const [profile, settingsRow] = await Promise.all([getBusinessProfile(organizationId), getPurchasingReceiptSettings(organizationId)]);
-  const business = resolveBusinessDocumentIdentity(organizationName, profile);
+  const [profile, settingsRow, quotationProfile] = await Promise.all([getBusinessProfile(organizationId), getPurchasingReceiptSettings(organizationId), getQuotationProfile(organizationId)]);
+  const business = resolveBusinessDocumentIdentity(organizationName, profile, quotationProfile);
   const copy = renderReceiptCopy(resolvePurchasingReceiptSettings(settingsRow), business.displayName);
   const date = (a.finalizedAt ?? new Date().toISOString()).slice(0, 10);
   const bytes = await buildAdjustmentPdf({

@@ -1727,6 +1727,26 @@ export const purchasingReceiptSettings = sqliteTable(
   (t) => [index("purchasing_receipt_settings_org_idx").on(t.organizationId)],
 );
 
+/**
+ * The Quotation Profile: the company name and logo printed at the top of quotations (and the documents that go
+ * with them), set by Purchasing on its own. A company may buy under a different name or brand than its main
+ * business, so this is separate from the Business Profile. One row per Organization. A blank name or no logo
+ * falls back to the Business Profile's (see resolveBusinessDocumentIdentity). Quotations never print an address.
+ */
+export const purchasingQuotationProfiles = sqliteTable("purchasing_quotation_profiles", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id")
+    .notNull()
+    .unique()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  displayName: text("display_name"),
+  logoData: text("logo_data"), // base64, no data: prefix
+  logoContentType: text("logo_content_type"),
+  logoUpdatedAt: text("logo_updated_at"),
+  showLogo: integer("show_logo", { mode: "boolean" }).notNull().default(true),
+  ...timestamps,
+});
+
 /** Generic audit trail for Purchasing edits that matter: prices, quantities, totals, tracking numbers, customer info, product rules, multipliers. */
 export const purchasingAuditLog = sqliteTable(
   "purchasing_audit_log",

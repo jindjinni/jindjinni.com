@@ -30,7 +30,7 @@ const C = "/dashboard/customer-service";
 export const DEPARTMENT_MENUS: Record<MenuDept, DepartmentMenu> = {
   purchasing: {
     title: "Purchasing Department",
-    setupLabel: "Setup",
+    setupLabel: "Settings",
     items: [
       { id: "dashboard", href: P, label: "Dashboard", icon: "🏠", exact: true },
       { id: "quotations", href: `${P}/quotations`, label: "Quotations", icon: "🧾" },
@@ -41,13 +41,14 @@ export const DEPARTMENT_MENUS: Record<MenuDept, DepartmentMenu> = {
       { id: "month-range", href: `${P}/expiration-ranges`, label: "Month Range", setup: true },
       { id: "product-multipliers", href: `${P}/product-multipliers`, label: "Product Multipliers", setup: true },
       { id: "bonus-tiers", href: `${P}/bonus-tiers`, label: "Bonus tiers", setup: true },
+      { id: "quotation-profile", href: `${P}/quotation-profile`, label: "Quotation Profile", setup: true },
       { id: "receipt-layout", href: `${P}/receipt-layout`, label: "Quotation Receipt Layout", setup: true },
       { id: "shipment-tracking", href: `${P}/tracking`, label: "Shipment Tracking", setup: true },
     ],
   },
   receiving: {
     title: "Receiving Department",
-    setupLabel: "Setup",
+    setupLabel: "Settings",
     items: [
       { id: "all-shipments", href: R, label: "All Shipments", icon: "📦", exact: true },
       { id: "delivered-today", href: `${R}/delivered-today`, label: "Delivered Today", icon: "🚚" },
@@ -61,7 +62,7 @@ export const DEPARTMENT_MENUS: Record<MenuDept, DepartmentMenu> = {
   },
   accounts: {
     title: "Accounts Department",
-    setupLabel: "Setup",
+    setupLabel: "Settings",
     items: [
       { id: "to-be-paid", href: A, label: "To Be Paid", icon: "💵", exact: true },
       { id: "paid-orders", href: `${A}/paid`, label: "Paid Orders", icon: "✅" },
@@ -71,7 +72,7 @@ export const DEPARTMENT_MENUS: Record<MenuDept, DepartmentMenu> = {
   },
   "customer-service": {
     title: "Customer Service Department",
-    setupLabel: "Setup",
+    setupLabel: "Settings",
     items: [
       { id: "to-be-emailed", href: C, label: "To Be Emailed", icon: "✉️", exact: true },
       { id: "emailed", href: `${C}/emailed`, label: "Emailed", icon: "📨" },

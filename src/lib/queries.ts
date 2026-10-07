@@ -33,9 +33,22 @@ import {
   purchasingQuotationDocuments,
   purchasingReceiptSettings,
   businessProfiles,
+  purchasingQuotationProfiles,
 } from "@/db/schema";
 
 export type BusinessProfile = typeof businessProfiles.$inferSelect;
+
+export type QuotationProfile = typeof purchasingQuotationProfiles.$inferSelect;
+
+/** The Purchasing department's own name and logo for quotations (null until one is saved). */
+export async function getQuotationProfile(organizationId: string) {
+  const [row] = await db
+    .select()
+    .from(purchasingQuotationProfiles)
+    .where(eq(purchasingQuotationProfiles.organizationId, organizationId))
+    .limit(1);
+  return row ?? null;
+}
 
 export async function getBusinessProfile(organizationId: string) {
   const [row] = await db
@@ -82,6 +95,7 @@ export type BusinessDocumentIdentity = {
 export function resolveBusinessDocumentIdentity(
   organizationName: string,
   profile: BusinessProfile | null,
+  quotationProfile?: QuotationProfile | null,
 ): BusinessDocumentIdentity {
   const dba = profile?.dbaName?.trim() || null;
   const pref = profile?.nameDisplayPreference ?? "legal";
@@ -99,11 +113,15 @@ export function resolveBusinessDocumentIdentity(
     displayName = organizationName;
   }
 
+  // Purchasing's own Quotation Profile wins where it has something; otherwise the Business Profile shows through.
+  const ownName = quotationProfile?.displayName?.trim() || null;
+  const ownLogo = quotationProfile?.logoData && quotationProfile?.logoContentType ? `data:${quotationProfile.logoContentType};base64,${quotationProfile.logoData}` : null;
+  const mainLogo = profile?.logoData && profile?.logoContentType ? `data:${profile.logoContentType};base64,${profile.logoData}` : null;
+
   return {
-    displayName,
-    showLogo: profile?.docShowLogo ?? true,
-    logoDataUrl:
-      profile?.logoData && profile?.logoContentType ? `data:${profile.logoContentType};base64,${profile.logoData}` : null,
+    displayName: ownName ?? displayName,
+    showLogo: quotationProfile ? quotationProfile.showLogo : profile?.docShowLogo ?? true,
+    logoDataUrl: ownLogo ?? mainLogo,
     address: (profile?.docShowAddress ?? true) ? resolveBusinessDocumentAddress(profile) : null,
     phone: (profile?.docShowPhone ?? true) ? profile?.businessPhone ?? null : null,
     email: (profile?.docShowEmail ?? true) ? profile?.businessEmail ?? null : null,

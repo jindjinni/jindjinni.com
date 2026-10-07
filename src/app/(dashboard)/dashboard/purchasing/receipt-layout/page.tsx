@@ -4,6 +4,7 @@ import {
   getPurchasingReceiptSettings,
   resolvePurchasingReceiptSettings,
   getBusinessProfile,
+  getQuotationProfile,
   resolveBusinessDocumentIdentity,
 } from "@/lib/queries";
 import { ReceiptLayoutTabs } from "./receipt-layout-tabs";
@@ -12,11 +13,12 @@ export default async function ReceiptLayoutPage() {
   const org = await requireOrg();
   const canEdit = isPurchasingManager(org.role);
 
-  const [row, profile] = await Promise.all([
+  const [row, profile, quotationProfile] = await Promise.all([
     getPurchasingReceiptSettings(org.organizationId),
     getBusinessProfile(org.organizationId),
+    getQuotationProfile(org.organizationId),
   ]);
-  const business = resolveBusinessDocumentIdentity(org.organizationName, profile);
+  const business = resolveBusinessDocumentIdentity(org.organizationName, profile, quotationProfile);
   const current = resolvePurchasingReceiptSettings(row);
 
   return (

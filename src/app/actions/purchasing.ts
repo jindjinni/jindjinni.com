@@ -45,6 +45,7 @@ import {
   getPurchasingCustomer,
   computeAutomaticBonus,
   getBusinessProfile,
+  getQuotationProfile,
   resolveBusinessDocumentIdentity,
   getPurchasingReceiptSettings,
   getOrganization,
@@ -2040,8 +2041,8 @@ export async function saveReceiptVersion(
   // Freeze the business identity shown right now -- if the profile changes
   // later (new phone number, new logo), this saved version keeps showing
   // what was true when it was generated (see resolveBusinessDocumentIdentity).
-  const businessProfile = await getBusinessProfile(org.organizationId);
-  const business = resolveBusinessDocumentIdentity(org.organizationName, businessProfile);
+  const [businessProfile, quotationProfile] = await Promise.all([getBusinessProfile(org.organizationId), getQuotationProfile(org.organizationId)]);
+  const business = resolveBusinessDocumentIdentity(org.organizationName, businessProfile, quotationProfile);
 
   await db.insert(purchasingReceiptVersions).values({
     id: newId("preceipt"),

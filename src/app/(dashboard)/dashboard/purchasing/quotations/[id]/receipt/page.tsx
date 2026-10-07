@@ -6,6 +6,7 @@ import {
   getPurchasingExpirationRanges,
   getReceiptVersions,
   getBusinessProfile,
+  getQuotationProfile,
   resolveBusinessDocumentIdentity,
   getPurchasingReceiptSettings,
   resolvePurchasingReceiptSettings,
@@ -31,14 +32,16 @@ export default async function QuotationReceiptPage({ params }: { params: Promise
   const data = await getPurchasingQuotationWithItems(org.organizationId, id);
   if (!data) notFound();
   const { quotation, items } = data;
-  const [ranges, versions, profile, receiptSettingsRow] = await Promise.all([
+  const [ranges, versions, profile, receiptSettingsRow, quotationProfile] = await Promise.all([
+    // (quotationProfile: Purchasing's own name and logo for quotations)
     getPurchasingExpirationRanges(org.organizationId, { includeInactive: true }),
     getReceiptVersions(id),
     getBusinessProfile(org.organizationId),
     getPurchasingReceiptSettings(org.organizationId),
+    getQuotationProfile(org.organizationId),
   ]);
   const rangesById = new Map(ranges.map((r) => [r.id, r]));
-  const business = resolveBusinessDocumentIdentity(org.organizationName, profile);
+  const business = resolveBusinessDocumentIdentity(org.organizationName, profile, quotationProfile);
   const copy = renderReceiptCopy(resolvePurchasingReceiptSettings(receiptSettingsRow), business.displayName);
   const conditionBullets = copy.conditionBullets.split("\n").map((b) => b.trim()).filter(Boolean);
 

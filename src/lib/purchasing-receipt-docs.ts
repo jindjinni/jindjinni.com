@@ -11,6 +11,7 @@ import {
   getPurchasingQuotationWithItems,
   getPurchasingExpirationRanges,
   getBusinessProfile,
+  getQuotationProfile,
   resolveBusinessDocumentIdentity,
   getPurchasingReceiptSettings,
   resolvePurchasingReceiptSettings,
@@ -62,13 +63,14 @@ export async function buildQuotationReceiptPdf(
   const data = await getPurchasingQuotationWithItems(organizationId, quotationId);
   if (!data || data.items.length === 0) return null;
   const { quotation, items } = data;
-  const [ranges, profile, settingsRow] = await Promise.all([
+  const [ranges, profile, settingsRow, quotationProfile] = await Promise.all([
     getPurchasingExpirationRanges(organizationId, { includeInactive: true }),
     getBusinessProfile(organizationId),
     getPurchasingReceiptSettings(organizationId),
+    getQuotationProfile(organizationId),
   ]);
   const rangesById = new Map(ranges.map((r) => [r.id, r]));
-  const business = resolveBusinessDocumentIdentity(organizationName, profile);
+  const business = resolveBusinessDocumentIdentity(organizationName, profile, quotationProfile);
   const copy = renderReceiptCopy(resolvePurchasingReceiptSettings(settingsRow), business.displayName);
   const bytes = await buildReceiptPdf({
     businessName: business.displayName,
