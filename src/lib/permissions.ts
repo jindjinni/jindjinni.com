@@ -159,6 +159,11 @@ export function canRefreshIndustryNews(role: string): boolean {
   return isAdmin(role) || isPurchasingManager(role);
 }
 
+/** The Home screen's "Company performance" (quotes, receiving, money to pay) is for the owner and the admins only. */
+export function canViewCompanyPerformance(role: string): boolean {
+  return isAdmin(role);
+}
+
 /** Which departments a role can open, for the menu and the home redirect. */
 export function departmentsFor(role: string): string[] {
   const out: string[] = [];
