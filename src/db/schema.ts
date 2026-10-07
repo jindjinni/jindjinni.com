@@ -2284,3 +2284,100 @@ export const marketingSettings = sqliteTable(
   },
   (t) => [uniqueIndex("marketing_settings_org_unique").on(t.organizationId)],
 );
+
+// ---------------------------------------------------------------------------
+// Chat (the company's internal messaging)
+// ---------------------------------------------------------------------------
+
+/**
+ * One chat message. `roomKey` says where it was posted: "everyone", "dept:<department>" or "dm:<userA>:<userB>" (ids sorted).
+ * Rooms themselves aren't stored: who may read a room is worked out from the person's role (or, for a private message, who the two people are).
+ * `seq` only ever goes up, so the screen can ask "anything after number N?". Deleting keeps the row (deletedAt) so the conversation still reads in order.
+ */
+export const chatMessages = sqliteTable(
+  "chat_messages",
+  {
+    seq: integer("seq").primaryKey({ autoIncrement: true }),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    roomKey: text("room_key").notNull(),
+    senderUserId: text("sender_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    // The other person in a private message (null in group rooms) -- what the unread counts look at.
+    recipientUserId: text("recipient_user_id"),
+    body: text("body").notNull().default(""),
+    attachmentId: text("attachment_id"),
+    createdAt: text("created_at").notNull(),
+    // Moves whenever the message is created, edited or deleted, so the screen can pick up changes to older messages too.
+    changedAt: text("changed_at").notNull(),
+    editedAt: text("edited_at"),
+    deletedAt: text("deleted_at"),
+    deletedByUserId: text("deleted_by_user_id"),
+  },
+  (t) => [
+    index("chat_messages_room_idx").on(t.organizationId, t.roomKey, t.seq),
+    index("chat_messages_changed_idx").on(t.organizationId, t.roomKey, t.changedAt),
+    index("chat_messages_dm_idx").on(t.organizationId, t.recipientUserId, t.seq),
+  ],
+);
+
+/** A photo or file shared in a chat. The bytes live in the private file store; people open them through a signed-in, room-checked route. */
+export const chatAttachments = sqliteTable(
+  "chat_attachments",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    roomKey: text("room_key").notNull(),
+    uploadedByUserId: text("uploaded_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    filename: text("filename").notNull(),
+    contentType: text("content_type").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    storagePath: text("storage_path").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [index("chat_attachments_org_idx").on(t.organizationId, t.roomKey)],
+);
+
+/** How far each person has read in each room (the highest message number they have seen). Unread = newer messages from other people. */
+export const chatReads = sqliteTable(
+  "chat_reads",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    roomKey: text("room_key").notNull(),
+    lastReadSeq: integer("last_read_seq").notNull().default(0),
+  },
+  (t) => [uniqueIndex("chat_reads_unique").on(t.organizationId, t.userId, t.roomKey)],
+);
+
+export const CHAT_STATUSES = ["AVAILABLE", "BUSY", "LUNCH", "AWAY", "OUT_OF_OFFICE"] as const;
+
+/** What each person has set as their status, and when they were last seen in the app (the screens report in every few seconds). */
+export const chatPresence = sqliteTable(
+  "chat_presence",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    status: text("status", { enum: CHAT_STATUSES }).notNull().default("AVAILABLE"),
+    statusNote: text("status_note"),
+    statusSetAt: text("status_set_at"),
+    lastSeenAt: text("last_seen_at"),
+  },
+  (t) => [uniqueIndex("chat_presence_unique").on(t.organizationId, t.userId)],
+);

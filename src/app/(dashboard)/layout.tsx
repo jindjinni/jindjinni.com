@@ -38,6 +38,7 @@ export default async function DashboardLayout({
     ...(canViewSales(org.role) ? [{ href: "/dashboard/sales", label: "Sales" }] : []),
     ...(canViewMarketing(org.role) ? [{ href: "/dashboard/marketing", label: "Marketing" }] : []),
     ...(canViewHr(org.role) ? [{ href: "/dashboard/hr", label: "HR" }] : []),
+    { href: "/dashboard/chat", label: "Chat" },
     { href: "/dashboard/settings", label: "Settings" },
   ];
 
