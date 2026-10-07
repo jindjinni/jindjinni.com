@@ -22,7 +22,7 @@ export async function refreshQuotationTracking(quotationId: string, force = fals
   return { ok: true };
 }
 
-/** Registers the app's tracking webhook with Shippo, so updates arrive the moment a package moves. Owner or admin only. */
+/** Registers the company's tracking notification in its own Shippo account, so updates arrive the moment a package moves. Owner or admin only. */
 export async function enableLiveTracking(): Promise<TrackingActionState> {
   const org = await requireOrg();
   if (!isAdmin(org.role)) return { error: "Only an owner or admin can turn on live tracking." };
@@ -30,7 +30,7 @@ export async function enableLiveTracking(): Promise<TrackingActionState> {
   const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
   const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
   const origin = process.env.APP_ORIGIN || `${proto}://${host}`;
-  const res = await turnOnLiveTracking(origin);
+  const res = await turnOnLiveTracking(org.organizationId, origin);
   revalidatePath("/dashboard/purchasing/tracking");
   return res.ok ? { ok: true } : { error: res.error };
 }

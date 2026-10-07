@@ -5,27 +5,39 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { and, asc, eq, inArray, isNull, ne, notInArray, or, sql } from "drizzle-orm";
 import { db } from "@/db/client";
-import { purchasingQuotationLabels, purchasingQuotations, purchasingTracking } from "@/db/schema";
+import { purchasingQuotationLabels, purchasingQuotations, purchasingTracking, shippoConnections } from "@/db/schema";
 import { newId } from "@/lib/ids";
-import { createWebhook, getTrack, isShippoConfigured, isShippoTestKey, listWebhooks, registerTrack } from "@/lib/shippo";
+import { ShippoRequestError, type ShippoClient } from "@/lib/shippo";
+import { NOT_CONNECTED_MESSAGE, noteShippoFailure, resolveShippo } from "@/lib/shippo-connection";
 import { carrierOfLabel, isFinished, isStale, parseTrack, rollUp, shippoCarrier, type ParsedTrack } from "@/lib/tracking-rules";
 
 export type TrackingRow = typeof purchasingTracking.$inferSelect;
 
 const nowStamp = () => new Date().toISOString().slice(0, 19).replace("T", " ");
 
-/** The secret in the webhook address, so only Shippo (who we told the address) can post updates. */
-export function webhookToken(): string {
+/**
+ * The secret in a webhook address, so only Shippo (who we told the address) can post updates.
+ * Each company's address carries its own secret AND its company id, so a company's Shippo account can only ever
+ * update that company's packages. The platform's own address (no company) is kept for the platform's own companies.
+ */
+function webhookSecretFor(organizationId: string | null): string {
   const secret = process.env.SHIPPO_WEBHOOK_SECRET || process.env.AUTH_SECRET || "dev-only-secret";
-  return createHmac("sha256", secret).update("shippo-track-webhook").digest("hex").slice(0, 40);
+  return createHmac("sha256", secret).update(organizationId ? `shippo-track-webhook:${organizationId}` : "shippo-track-webhook").digest("hex").slice(0, 40);
 }
-export function webhookTokenOk(given: string | null): boolean {
+export const webhookToken = () => webhookSecretFor(null);
+/** True when the token matches the address's company (or the platform address when no company is given). */
+export function webhookTokenOk(given: string | null, organizationId: string | null = null): boolean {
   if (!given) return false;
   const a = Buffer.from(given);
-  const b = Buffer.from(webhookToken());
+  const b = Buffer.from(webhookSecretFor(organizationId));
   return a.length === b.length && timingSafeEqual(a, b);
 }
-export const webhookUrl = (origin: string) => `${origin.replace(/\/$/, "")}/api/shippo/webhook?token=${webhookToken()}`;
+const trimOrigin = (origin: string) => origin.replace(/\/$/, "");
+/** The platform's own webhook address (for the companies the platform runs on its own Shippo account). */
+export const webhookUrl = (origin: string) => `${trimOrigin(origin)}/api/shippo/webhook?token=${webhookToken()}`;
+/** A company's own webhook address, registered in that company's Shippo account. */
+export const webhookUrlFor = (origin: string, organizationId: string) =>
+  `${trimOrigin(origin)}/api/shippo/webhook?org=${encodeURIComponent(organizationId)}&token=${webhookSecretFor(organizationId)}`;
 
 type Wanted = { carrier: "UPS" | "USPS" | "FedEx" | "Other"; trackingNumber: string; labelId: string | null };
 
@@ -124,11 +136,16 @@ async function markError(row: TrackingRow, message: string): Promise<void> {
   await db.update(purchasingTracking).set({ lastError: message.slice(0, 300), lastCheckedAt: nowStamp(), updatedAt: sql`(current_timestamp)` }).where(eq(purchasingTracking.id, row.id));
 }
 
-/** Asks Shippo about one box now. Never throws: a problem is kept on the row and shown in the details. */
-export async function refreshTracker(row: TrackingRow): Promise<boolean> {
-  if (!isShippoConfigured()) {
-    await markError(row, "Live tracking isn't connected yet (no Shippo key is set).");
-    return false;
+/** Asks Shippo about one box now, with that company's own Shippo account. Never throws: a problem is kept on the row and shown in the details. */
+export async function refreshTracker(row: TrackingRow, client?: ShippoClient): Promise<boolean> {
+  let shippo = client;
+  if (!shippo) {
+    const access = await resolveShippo(row.organizationId);
+    if (!access.ok) {
+      await markError(row, access.reason === "not_connected" ? "Live tracking isn't connected yet. An owner or admin can connect Shippo in Settings → Shipping." : access.message);
+      return false;
+    }
+    shippo = access.client;
   }
   const carrier = shippoCarrier(row.carrier);
   if (!carrier) {
@@ -138,16 +155,19 @@ export async function refreshTracker(row: TrackingRow): Promise<boolean> {
   try {
     let body: unknown;
     try {
-      body = await getTrack(carrier, row.trackingNumber);
-    } catch {
+      body = await shippo.getTrack(carrier, row.trackingNumber);
+    } catch (e) {
+      // A refused token is not "package not followed yet" -- stop and say so.
+      if (e instanceof ShippoRequestError && (e.status === 401 || e.status === 403)) throw e;
       // Shippo hasn't been told to follow this package yet.
-      body = await registerTrack(carrier, row.trackingNumber);
+      body = await shippo.registerTrack(carrier, row.trackingNumber);
     }
     const parsed = parseTrack(body);
     if (!parsed) throw new Error("Shippo's answer wasn't readable.");
     await saveParsed(row, parsed);
     return true;
   } catch (e) {
+    await noteShippoFailure(row.organizationId, e);
     const m = e instanceof Error ? e.message.replace(/^Shippo request failed:\s*/, "") : "Tracking lookup failed.";
     await markError(row, `Shippo couldn't find this package yet (${m}).`);
     return false;
@@ -159,7 +179,8 @@ export async function syncQuotationTracking(organizationId: string, quotationId:
   let rows = await ensureTrackers(organizationId, quotationId);
   const due = rows.filter((r) => (opts.force ? !isFinished(r.status) || !r.lastCheckedAt : isStale(r))).slice(0, 8);
   if (due.length === 0) return rows;
-  await Promise.all(due.map((r) => refreshTracker(r)));
+  const access = await resolveShippo(organizationId);
+  await Promise.all(due.map((r) => refreshTracker(r, access.ok ? access.client : undefined)));
   rows = await db
     .select()
     .from(purchasingTracking)
@@ -177,20 +198,25 @@ export async function startTracking(organizationId: string, quotationId: string)
   }
 }
 
-/** A "track updated" message from Shippo. Matches by tracking number (unique across carriers in practice). */
-export async function applyWebhook(payload: unknown): Promise<{ updated: number }> {
+/**
+ * A "track updated" message from Shippo. Matches by tracking number (unique across carriers in practice).
+ * When the message arrived on a company's own address, only that company's packages can change.
+ */
+export async function applyWebhook(payload: unknown, organizationId: string | null = null): Promise<{ updated: number }> {
   const p = payload as { event?: string; data?: unknown } | null;
   if (!p || p.event !== "track_updated") return { updated: 0 };
   const parsed = parseTrack(p.data);
   if (!parsed) return { updated: 0 };
-  const rows = await db.select().from(purchasingTracking).where(eq(purchasingTracking.trackingNumber, parsed.trackingNumber));
+  const rows = await db
+    .select()
+    .from(purchasingTracking)
+    .where(organizationId ? and(eq(purchasingTracking.trackingNumber, parsed.trackingNumber), eq(purchasingTracking.organizationId, organizationId)) : eq(purchasingTracking.trackingNumber, parsed.trackingNumber));
   for (const r of rows) await saveParsed(r, parsed);
   return { updated: rows.length };
 }
 
 /** Nightly sweep: start tracking quotations that have a number but no rows, and refresh everything still moving. */
 export async function sweepTracking(limit = 150): Promise<{ added: number; refreshed: number }> {
-  if (!isShippoConfigured()) return { added: 0, refreshed: 0 };
   const untracked = await db
     .select({ id: purchasingQuotations.id, organizationId: purchasingQuotations.organizationId })
     .from(purchasingQuotations)
@@ -214,35 +240,55 @@ export async function sweepTracking(limit = 150): Promise<{ added: number; refre
     .where(notInArray(purchasingTracking.status, ["Delivered", "Returned"]))
     .orderBy(asc(purchasingTracking.lastCheckedAt))
     .limit(limit);
+  // Each company is followed through its own Shippo account; a company with none is skipped quietly.
+  const clients = new Map<string, ShippoClient | null>();
+  for (const orgId of new Set(active.map((r) => r.organizationId))) {
+    const access = await resolveShippo(orgId);
+    clients.set(orgId, access.ok ? access.client : null);
+  }
+  const usable = active.filter((r) => clients.get(r.organizationId));
   let refreshed = 0;
-  for (let i = 0; i < active.length; i += 5) {
-    const results = await Promise.all(active.slice(i, i + 5).map((r) => refreshTracker(r)));
+  for (let i = 0; i < usable.length; i += 5) {
+    const results = await Promise.all(usable.slice(i, i + 5).map((r) => refreshTracker(r, clients.get(r.organizationId)!)));
     refreshed += results.filter(Boolean).length;
   }
   return { added, refreshed };
 }
 
-/** Is our webhook registered with Shippo? (The platform's one Shippo account serves every company.) */
-export async function liveTrackingState(origin: string): Promise<{ configured: boolean; on: boolean; error?: string }> {
-  if (!isShippoConfigured()) return { configured: false, on: false };
+/** The address a company's tracking notifications go to: its own, or the platform's for companies on the platform's account. */
+function webhookAddress(origin: string, organizationId: string, source: "company" | "platform"): string {
+  return source === "platform" ? webhookUrl(origin) : webhookUrlFor(origin, organizationId);
+}
+
+/** Is our "package moved" notification registered in this company's Shippo account? */
+export async function liveTrackingState(organizationId: string, origin: string): Promise<{ configured: boolean; on: boolean; error?: string }> {
+  const access = await resolveShippo(organizationId);
+  if (!access.ok) return { configured: false, on: false };
   try {
-    const hooks = await listWebhooks();
-    const url = webhookUrl(origin);
+    const hooks = await access.client.listWebhooks();
+    const url = webhookAddress(origin, organizationId, access.source);
     return { configured: true, on: hooks.some((h) => h.event === "track_updated" && h.url === url && h.active !== false) };
   } catch (e) {
-    return { configured: true, on: false, error: e instanceof Error ? e.message : "Couldn't reach Shippo." };
+    await noteShippoFailure(organizationId, e);
+    return { configured: true, on: false, error: e instanceof Error ? e.message.replace(/^Shippo request failed:\s*/, "") : "Couldn't reach Shippo." };
   }
 }
 
-/** Registers our webhook with Shippo (once). */
-export async function turnOnLiveTracking(origin: string): Promise<{ ok: boolean; error?: string }> {
-  if (!isShippoConfigured()) return { ok: false, error: "Shippo isn't connected yet. Add the Shippo key to the app's settings first." };
+/** Registers our notification in this company's Shippo account (once). */
+export async function turnOnLiveTracking(organizationId: string, origin: string): Promise<{ ok: boolean; error?: string }> {
+  const access = await resolveShippo(organizationId);
+  if (!access.ok) return { ok: false, error: access.reason === "not_connected" ? NOT_CONNECTED_MESSAGE : access.message };
   try {
-    const url = webhookUrl(origin);
-    const hooks = await listWebhooks();
-    if (!hooks.some((h) => h.event === "track_updated" && h.url === url && h.active !== false)) await createWebhook(url, isShippoTestKey());
+    const url = webhookAddress(origin, organizationId, access.source);
+    const hooks = await access.client.listWebhooks();
+    let hook = hooks.find((h) => h.event === "track_updated" && h.url === url && h.active !== false);
+    if (!hook) hook = await access.client.createWebhook(url);
+    if (access.source === "company") {
+      await db.update(shippoConnections).set({ webhookId: hook.object_id }).where(eq(shippoConnections.organizationId, organizationId));
+    }
     return { ok: true };
   } catch (e) {
+    await noteShippoFailure(organizationId, e);
     return { ok: false, error: e instanceof Error ? e.message.replace(/^Shippo request failed:\s*/, "") : "Couldn't reach Shippo." };
   }
 }

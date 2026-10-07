@@ -63,13 +63,8 @@ import { extractNdc } from "@/lib/purchasing-ndc";
 import { refreshGeneratedReceipt } from "@/lib/purchasing-receipt-docs";
 import { CustomerDedupeIndex } from "@/lib/purchasing-customer-dedupe";
 import { customerValidationError, missingCustomerFields } from "@/lib/purchasing-customer-rules";
-import {
-  createShipment,
-  createTransaction,
-  pickLabelRate,
-  isShippoConfigured,
-  type ShippoAddress,
-} from "@/lib/shippo";
+import { pickLabelRate, type ShippoAddress } from "@/lib/shippo";
+import { noteShippoFailure, resolveShippo } from "@/lib/shippo-connection";
 import { buyLabels, failureMessage, parseCarrier, parseLabelCount, CARRIER_NAME } from "@/lib/shipping-labels";
 
 export type ActionState = { error?: string } | undefined;
@@ -1750,10 +1745,10 @@ export async function updatePurchasingQuotationHeader(
  * A quotation is often given before the customer's address is known -- in
  * that case this returns a clear error pointing to the customer record,
  * where the address can be filled in (or corrected) and the label
- * generated afterward. This is a real charge against the org's Shippo
- * account once SHIPPO_API_KEY is a live token -- see src/lib/shippo.ts.
- * Locally/in preview, where no key is set, this safely records a friendly
- * "not connected yet" error instead of calling Shippo.
+ * generated afterward. This is a real charge against the company's OWN
+ * Shippo account once it has connected a live token (Settings -> Shipping,
+ * src/lib/shippo-connection.ts). A company that hasn't connected one gets a
+ * friendly "not connected yet" error instead of calling Shippo.
  */
 export async function generatePurchasingShippingLabel(
   quotationId: string,
@@ -1795,11 +1790,9 @@ export async function generatePurchasingShippingLabel(
     return { error: message };
   }
 
-  if (!isShippoConfigured()) {
-    return recordFailure(
-      "Shipping labels aren't connected in this environment. This works once deployed with a live Shippo key.",
-    );
-  }
+  // Labels are bought from THIS company's own Shippo account (Settings -> Shipping); never another company's.
+  const shippo = await resolveShippo(org.organizationId);
+  if (!shippo.ok) return recordFailure(shippo.message);
 
   const orgRow = await getOrganization(org.organizationId);
   if (!hasShipFromAddress(orgRow)) {
@@ -1846,7 +1839,12 @@ export async function generatePurchasingShippingLabel(
   // Every label is its own Shippo shipment + purchase, so each box gets its
   // own label and its own tracking number.
   const { labels, errors } = await buyLabels(
-    { createShipment, pickRate: pickLabelRate, createTransaction },
+    {
+      // A token Shippo refuses is remembered, so the Shipping settings say why labels stopped.
+      createShipment: (params) => shippo.client.createShipment(params).catch(async (e) => (await noteShippoFailure(org.organizationId, e), Promise.reject(e))),
+      pickRate: pickLabelRate,
+      createTransaction: (rateId) => shippo.client.createTransaction(rateId).catch(async (e) => (await noteShippoFailure(org.organizationId, e), Promise.reject(e))),
+    },
     labelCarrier,
     labelCount,
     {

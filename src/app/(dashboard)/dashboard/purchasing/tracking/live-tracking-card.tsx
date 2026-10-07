@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { enableLiveTracking } from "@/app/actions/tracking";
 
 const card = "rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900";
 
-export function LiveTrackingCard({ configured, on, problem, canChange }: { configured: boolean; on: boolean; problem: string | null; canChange: boolean }) {
+export function LiveTrackingCard({ configured, on, problem, canChange, isAdmin }: { configured: boolean; on: boolean; problem: string | null; canChange: boolean; isAdmin: boolean }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
@@ -25,10 +26,15 @@ export function LiveTrackingCard({ configured, on, problem, canChange }: { confi
       <section className={card}>
         <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Shippo connection</h2>
         {configured ? (
-          <p className="mt-2 text-sm text-green-800 dark:text-green-300" data-testid="shippo-connected">Connected. Labels and tracking use your Shippo account.</p>
+          <p className="mt-2 text-sm text-green-800 dark:text-green-300" data-testid="shippo-connected">Connected. Labels and tracking use your company&apos;s Shippo account.</p>
         ) : (
           <p className="mt-2 text-sm text-amber-900 dark:text-amber-200" data-testid="shippo-not-connected">
-            Shippo isn&apos;t connected yet, so packages can&apos;t be tracked. Add your Shippo token as <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">SHIPPO_API_KEY</code> in the app&apos;s settings on Vercel.
+            Shippo isn&apos;t connected yet, so packages can&apos;t be tracked.{" "}
+            {isAdmin ? (
+              <Link href="/dashboard/settings/shipping" className="font-semibold underline">Connect your Shippo account</Link>
+            ) : (
+              "An owner or admin can connect your Shippo account in Settings → Shipping labels."
+            )}
           </p>
         )}
       </section>

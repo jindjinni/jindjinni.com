@@ -1,45 +1,35 @@
-// Thin wrapper around Shippo's REST API for the deployed app to call
-// directly, server-side, with its own API key.
+// Thin wrapper around Shippo's REST API, called server-side with a company's OWN Shippo token.
 //
-// Important distinction (learned the hard way with Turso/Vercel earlier in
-// this project): an MCP connector used in chat authenticates that chat
-// session only -- it is not reachable from the deployed Next.js app at
-// runtime. For "Generate shipping label" to work in production, the app
-// needs its own SHIPPO_API_KEY environment variable, set from a token
-// copied out of the Shippo dashboard (Settings -> API), the same way
-// DATABASE_URL/DATABASE_AUTH_TOKEN/AUTH_SECRET were wired up for Turso.
+// Every company connects its own Shippo account (Settings -> Shipping, see lib/shippo-connection.ts), so labels are
+// bought from, billed to and tracked in that company's account. Nothing here reads a key from the environment: the
+// caller passes the key it resolved for the signed-in company, so one company's key can never be used for another.
 //
-// Shippo issues both a Live Token and a Test Token. Using a Test Token here
-// makes every call below run in Shippo's test mode -- it returns fake rates
-// and a fake (non-billing, non-deliverable) label instead of a real one, so
-// local development/testing never spends real money. Set the Live Token
-// only in the production environment.
+// Shippo issues a Live Token ("shippo_live_...") and a Test Token ("shippo_test_..."). A test token makes every call
+// below run in Shippo's test mode: fake rates and a fake, non-billing label.
 
 // SHIPPO_API_BASE is only ever set by the automated tests (a local stand-in server), never in production.
 const SHIPPO_API_BASE = process.env.SHIPPO_API_BASE || "https://api.goshippo.com";
 
-export class ShippoNotConfiguredError extends Error {
-  constructor() {
-    super("SHIPPO_API_KEY is not set.");
-    this.name = "ShippoNotConfiguredError";
+/** Whether a pasted token looks like a Shippo token at all (so a typo is caught before we call Shippo). */
+export function looksLikeShippoToken(token: string): boolean {
+  return /^shippo_(live|test)_[A-Za-z0-9]{12,}$/.test(token.trim());
+}
+
+/** A test token only ever sees Shippo's test data; its webhooks must be test webhooks. */
+export const isShippoTestKey = (key: string) => /^shippo_test_/i.test(key);
+
+export class ShippoRequestError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(`Shippo request failed: ${message}`);
+    this.name = "ShippoRequestError";
   }
 }
 
-function apiKey(): string {
-  const key = process.env.SHIPPO_API_KEY;
-  if (!key) throw new ShippoNotConfiguredError();
-  return key;
-}
-
-export function isShippoConfigured() {
-  return !!process.env.SHIPPO_API_KEY;
-}
-
-async function shippoFetch(path: string, init: RequestInit) {
+async function shippoFetch(key: string, path: string, init: RequestInit) {
   const res = await fetch(`${SHIPPO_API_BASE}${path}`, {
     ...init,
     headers: {
-      Authorization: `ShippoToken ${apiKey()}`,
+      Authorization: `ShippoToken ${key}`,
       "Content-Type": "application/json",
       ...(init.headers ?? {}),
     },
@@ -50,7 +40,7 @@ async function shippoFetch(path: string, init: RequestInit) {
       body?.detail ||
       (Array.isArray(body?.messages) ? body.messages.map((m: { text?: string }) => m.text).join("; ") : null) ||
       res.statusText;
-    throw new Error(`Shippo request failed: ${message}`);
+    throw new ShippoRequestError(message, res.status);
   }
   return body;
 }
@@ -101,38 +91,91 @@ export type ShippoShipment = {
   messages?: { source?: string; text?: string }[];
 };
 
-/** Creates a shipment and returns it with rates computed synchronously. */
-export async function createShipment(params: {
+export type ShippoTransaction = {
+  object_id: string;
+  status: string;
+  label_url?: string;
+  tracking_number?: string;
+  tracking_url_provider?: string;
+  messages?: { source?: string; text?: string }[];
+};
+
+export type ShippoWebhook = { object_id: string; event: string; url: string; active?: boolean; is_test?: boolean };
+export type ShippoCarrierAccount = { object_id?: string; carrier: string; active?: boolean };
+
+export type CreateShipmentParams = {
   addressFrom: ShippoAddress;
   addressTo: ShippoAddress;
-  // Shippo defaults an undeliverable parcel's return address to
-  // addressFrom if this is left unset. Pass it explicitly wherever the
-  // caller wants to pin that down rather than rely on the default -- e.g.
-  // Purchasing always wants the customer (addressFrom there) to be the
-  // return address, regardless of which address Shippo treats as "from".
+  // Shippo defaults an undeliverable parcel's return address to addressFrom if this is left unset. Pass it explicitly
+  // wherever the caller wants to pin that down -- e.g. Purchasing always wants the customer (addressFrom there) to be
+  // the return address, regardless of which address Shippo treats as "from".
   addressReturn?: ShippoAddress;
   parcel: { lengthIn: number; widthIn: number; heightIn: number; weightLb: number };
-}): Promise<ShippoShipment> {
-  return shippoFetch("/shipments/", {
-    method: "POST",
-    body: JSON.stringify({
-      address_from: toShippoAddress(params.addressFrom),
-      address_to: toShippoAddress(params.addressTo),
-      ...(params.addressReturn ? { address_return: toShippoAddress(params.addressReturn) } : {}),
-      parcels: [
-        {
-          length: String(params.parcel.lengthIn),
-          width: String(params.parcel.widthIn),
-          height: String(params.parcel.heightIn),
-          distance_unit: "in",
-          weight: String(params.parcel.weightLb),
-          mass_unit: "lb",
-        },
-      ],
-      async: false,
-    }),
-  });
+};
+
+/** Every Shippo call, bound to one company's token. */
+export function shippoClient(key: string) {
+  return {
+    key,
+
+    /** Creates a shipment and returns it with rates computed synchronously. */
+    createShipment: (params: CreateShipmentParams): Promise<ShippoShipment> =>
+      shippoFetch(key, "/shipments/", {
+        method: "POST",
+        body: JSON.stringify({
+          address_from: toShippoAddress(params.addressFrom),
+          address_to: toShippoAddress(params.addressTo),
+          ...(params.addressReturn ? { address_return: toShippoAddress(params.addressReturn) } : {}),
+          parcels: [
+            {
+              length: String(params.parcel.lengthIn),
+              width: String(params.parcel.widthIn),
+              height: String(params.parcel.heightIn),
+              distance_unit: "in",
+              weight: String(params.parcel.weightLb),
+              mass_unit: "lb",
+            },
+          ],
+          async: false,
+        }),
+      }),
+
+    /** Purchases the label for a previously-quoted rate. This is a real charge against the company's Shippo account in live mode. */
+    createTransaction: (rateId: string): Promise<ShippoTransaction> =>
+      shippoFetch(key, "/transactions/", {
+        method: "POST",
+        body: JSON.stringify({ rate: rateId, label_file_type: "PDF", async: false }),
+      }),
+
+    /** Shippo's current tracking for one package (carrier is "ups", "usps" or "fedex"). Throws a "Shippo request failed" error when it isn't known yet. */
+    getTrack: (carrier: string, trackingNumber: string) =>
+      shippoFetch(key, `/tracks/${encodeURIComponent(carrier)}/${encodeURIComponent(trackingNumber)}`, { method: "GET" }),
+
+    /** Asks Shippo to start following a package (so it sends us updates) and returns its current tracking. */
+    registerTrack: (carrier: string, trackingNumber: string) =>
+      shippoFetch(key, "/tracks/", { method: "POST", body: JSON.stringify({ carrier, tracking_number: trackingNumber }) }),
+
+    listWebhooks: async (): Promise<ShippoWebhook[]> => {
+      const body = await shippoFetch(key, "/webhooks/", { method: "GET" });
+      return Array.isArray(body?.results) ? body.results : [];
+    },
+
+    createWebhook: (url: string): Promise<ShippoWebhook> =>
+      shippoFetch(key, "/webhooks/", { method: "POST", body: JSON.stringify({ event: "track_updated", url, is_test: isShippoTestKey(key) }) }),
+
+    deleteWebhook: async (webhookId: string): Promise<void> => {
+      await shippoFetch(key, `/webhooks/${encodeURIComponent(webhookId)}`, { method: "DELETE" });
+    },
+
+    /** The carriers on the account. Also the cheapest way to prove a token is genuine: a wrong one is refused with 401. */
+    listCarrierAccounts: async (): Promise<ShippoCarrierAccount[]> => {
+      const body = await shippoFetch(key, "/carrier_accounts/?results=100", { method: "GET" });
+      return Array.isArray(body?.results) ? body.results : [];
+    },
+  };
 }
+
+export type ShippoClient = ReturnType<typeof shippoClient>;
 
 /**
  * Finds the one service we ever buy among a shipment's quoted rates:
@@ -161,46 +204,3 @@ export function pickLabelRate(
     null
   );
 }
-
-export type ShippoTransaction = {
-  object_id: string;
-  status: string;
-  label_url?: string;
-  tracking_number?: string;
-  tracking_url_provider?: string;
-  messages?: { source?: string; text?: string }[];
-};
-
-/** Purchases the label for a previously-quoted rate. This is a real charge against the org's Shippo account in live mode. */
-export async function createTransaction(rateId: string): Promise<ShippoTransaction> {
-  return shippoFetch("/transactions/", {
-    method: "POST",
-    body: JSON.stringify({ rate: rateId, label_file_type: "PDF", async: false }),
-  });
-}
-
-// --- Package tracking ---------------------------------------------------------------------------------------------
-
-/** Shippo's current tracking for one package (carrier is "ups", "usps" or "fedex"). Throws a "Shippo request failed" error when it isn't known yet. */
-export async function getTrack(carrier: string, trackingNumber: string) {
-  return shippoFetch(`/tracks/${encodeURIComponent(carrier)}/${encodeURIComponent(trackingNumber)}`, { method: "GET" });
-}
-
-/** Asks Shippo to start following a package (so it sends us updates) and returns its current tracking. */
-export async function registerTrack(carrier: string, trackingNumber: string) {
-  return shippoFetch("/tracks/", { method: "POST", body: JSON.stringify({ carrier, tracking_number: trackingNumber }) });
-}
-
-export type ShippoWebhook = { object_id: string; event: string; url: string; active?: boolean; is_test?: boolean };
-
-export async function listWebhooks(): Promise<ShippoWebhook[]> {
-  const body = await shippoFetch("/webhooks/", { method: "GET" });
-  return Array.isArray(body?.results) ? body.results : [];
-}
-
-export async function createWebhook(url: string, isTest: boolean): Promise<ShippoWebhook> {
-  return shippoFetch("/webhooks/", { method: "POST", body: JSON.stringify({ event: "track_updated", url, is_test: isTest }) });
-}
-
-/** A test token only ever sees Shippo's test data; its webhooks must be test webhooks. */
-export const isShippoTestKey = () => /^shippo_test_/i.test(process.env.SHIPPO_API_KEY ?? "");

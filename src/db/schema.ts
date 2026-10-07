@@ -1175,6 +1175,36 @@ export const purchasingTracking = sqliteTable(
   ],
 );
 
+// A company's own Shippo account, so its labels are bought (and billed) there and its packages are tracked there.
+// An owner or admin pastes the Shippo token in Settings -> Shipping; we keep it encrypted (lib/email-connector-crypto.ts),
+// show only the last 4 characters afterwards, and never send it back to the browser. One per company.
+export const shippoConnections = sqliteTable(
+  "shippo_connections",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    apiKeyEnc: text("api_key_enc").notNull(),
+    keyHint: text("key_hint").notNull(),
+    // A "shippo_test_" token only makes practice labels; "shippo_live_" buys real ones.
+    isTest: integer("is_test", { mode: "boolean" }).notNull().default(false),
+    // The carriers switched on in their Shippo account when we last checked, e.g. "USPS,UPS".
+    carriers: text("carriers"),
+    // ACTIVE, or NEEDS_ATTENTION when Shippo stopped accepting the token or it can't be read any more.
+    status: text("status", { enum: ["ACTIVE", "NEEDS_ATTENTION"] }).notNull().default("ACTIVE"),
+    lastError: text("last_error"),
+    // The "package moved" notification we registered in their Shippo account (null = live tracking not on).
+    webhookId: text("webhook_id"),
+    connectedByUserId: text("connected_by_user_id").references(() => users.id),
+    connectedAt: text("connected_at")
+      .notNull()
+      .default(sql`(current_timestamp)`),
+    lastCheckedAt: text("last_checked_at"),
+  },
+  (t) => [uniqueIndex("shippo_connections_org_idx").on(t.organizationId)],
+);
+
 // The mailbox a company sends its customer emails from (an admin connects it with Google's sign-in, like Airtable's
 // "connect a Gmail account"). We keep only the long-lived refresh token, encrypted; the company's password is never seen.
 // One per company. With none, emails go from the platform's own sending address.
