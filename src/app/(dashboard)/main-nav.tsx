@@ -7,6 +7,7 @@ import { ChatNavLink } from "./chat-nav-link";
 export type NavItem = { href: string; label: string };
 
 const CHAT = "/dashboard/chat";
+const HOME = "/dashboard";
 
 /** Top-bar links. The department you are in is highlighted in the company's theme color. */
 export function MainNav({ items }: { items: NavItem[] }) {
@@ -14,7 +15,8 @@ export function MainNav({ items }: { items: NavItem[] }) {
   return (
     <nav className="flex flex-wrap gap-1 text-sm">
       {items.map((i) => {
-        const active = pathname === i.href || pathname.startsWith(i.href + "/");
+        // Home is the page itself only; every other link is also lit while you are anywhere inside it.
+        const active = i.href === HOME ? pathname === HOME : pathname === i.href || pathname.startsWith(i.href + "/");
         if (i.href === CHAT) return <ChatNavLink key={i.href} active={active} />;
         return (
           <Link

@@ -30,6 +30,7 @@ export default async function DashboardLayout({
   const nowIso = new Date().toISOString();
   const clock = await getMyClock({ organizationId: org.organizationId, userId: org.userId }, nowIso);
   const navItems: NavItem[] = [
+    { href: "/dashboard", label: "Home" },
     ...(canViewPurchasing(org.role) ? [{ href: "/dashboard/purchasing", label: "Purchasing" }] : []),
     ...(canViewReceiving(org.role) ? [{ href: "/dashboard/receiving", label: "Receiving" }] : []),
     ...(canViewAccounts(org.role) ? [{ href: "/dashboard/accounts", label: "Accounts" }] : []),

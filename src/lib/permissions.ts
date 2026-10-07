@@ -154,6 +154,11 @@ export function canViewMarketing(role: string): boolean {
   return isAdmin(role) || isPurchasingManager(role);
 }
 
+/** May press "Refresh now" on the Home screen's industry news: Admin, the Owner and Purchasing managers. Everyone signed in can read it. */
+export function canRefreshIndustryNews(role: string): boolean {
+  return isAdmin(role) || isPurchasingManager(role);
+}
+
 /** Which departments a role can open, for the menu and the home redirect. */
 export function departmentsFor(role: string): string[] {
   const out: string[] = [];

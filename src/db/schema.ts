@@ -2381,3 +2381,81 @@ export const chatPresence = sqliteTable(
   },
   (t) => [uniqueIndex("chat_presence_unique").on(t.organizationId, t.userId)],
 );
+
+/**
+ * One piece of industry news or one official recall about a brand the company buys (shown on the Home screen).
+ * Filled daily (and when someone opens Home after a few hours) from the FDA recall list and news headlines; see
+ * src/lib/industry-service.ts. `fingerprint` (the link, or the FDA recall number) keeps the same story from being added twice.
+ */
+export const industryNews = sqliteTable(
+  "industry_news",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    /** The company's own brand name (a Purchasing category such as "Dexcom"). */
+    brand: text("brand").notNull(),
+    /** recall | safety | business | product | other */
+    kind: text("kind").notNull().default("other"),
+    /** urgent | important | info */
+    severity: text("severity").notNull().default("info"),
+    title: text("title").notNull(),
+    /** One plain sentence about it (from the FDA record, or written by the AI summary when it is switched on). */
+    summary: text("summary"),
+    url: text("url").notNull(),
+    /** "FDA recall list", or the news site's name. */
+    source: text("source").notNull().default(""),
+    /** When it was published (ISO date or date-time). */
+    publishedAt: text("published_at").notNull(),
+    fingerprint: text("fingerprint").notNull(),
+    /** False when the AI check decided it is not about this brand; kept so it is not looked at again. */
+    relevant: integer("relevant", { mode: "boolean" }).notNull().default(true),
+    aiChecked: integer("ai_checked", { mode: "boolean" }).notNull().default(false),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("industry_news_unique").on(t.organizationId, t.brand, t.fingerprint),
+    index("industry_news_org_date_idx").on(t.organizationId, t.publishedAt),
+  ],
+);
+
+/** One refresh of the industry news for a company: when, what came of it, and any source that failed. */
+export const industryWatchRuns = sqliteTable(
+  "industry_watch_runs",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    startedAt: text("started_at").notNull(),
+    finishedAt: text("finished_at"),
+    added: integer("added").notNull().default(0),
+    brandsChecked: integer("brands_checked").notNull().default(0),
+    aiUsed: integer("ai_used", { mode: "boolean" }).notNull().default(false),
+    /** Plain-language problems ("The FDA list didn't answer"), one per line; empty when all went well. */
+    problems: text("problems").notNull().default(""),
+    trigger: text("trigger").notNull().default("auto"),
+  },
+  (t) => [index("industry_watch_runs_org_idx").on(t.organizationId, t.startedAt)],
+);
+
+/** Who owns a brand the built-in list does not know (worked out by Claude once, then kept): Home shows it next to the brand and uses it to find the FDA recalls. */
+export const industryBrandMakers = sqliteTable(
+  "industry_brand_makers",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    brand: text("brand").notNull(),
+    owner: text("owner").notNull().default(""),
+    /** Names the FDA recall list uses for the owner, separated by " | ". */
+    firms: text("firms").notNull().default(""),
+    /** Words headlines use for the brand, separated by " | ". */
+    terms: text("terms").notNull().default(""),
+    broadMaker: integer("broad_maker", { mode: "boolean" }).notNull().default(false),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex("industry_brand_makers_unique").on(t.organizationId, t.brand)],
+);
