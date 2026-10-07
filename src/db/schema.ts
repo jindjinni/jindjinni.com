@@ -2165,3 +2165,122 @@ export const hrActivity = sqliteTable(
   },
   (t) => [index("hr_activity_org_at_idx").on(t.organizationId, t.at), index("hr_activity_user_idx").on(t.userId, t.at)],
 );
+
+// ---------------------------------------------------------------------------
+// Marketing: contacts, opt-outs, email and text campaigns
+// ---------------------------------------------------------------------------
+
+/** Contacts people typed in or uploaded. Customers from Purchasing are NOT copied here: Marketing reads them live. */
+export const marketingContacts = sqliteTable(
+  "marketing_contacts",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    firstName: text("first_name").notNull(),
+    lastName: text("last_name"),
+    email: text("email"),
+    phone: text("phone"),
+    company: text("company"),
+    notes: text("notes"),
+    // MANUAL = typed in, UPLOAD = from a spreadsheet.
+    source: text("source", { enum: ["MANUAL", "UPLOAD"] }).notNull().default("MANUAL"),
+    createdByUserId: text("created_by_user_id"),
+    ...timestamps,
+  },
+  (t) => [index("marketing_contacts_org_idx").on(t.organizationId)],
+);
+
+/** Someone who asked not to be contacted by one channel. Keyed by the address itself, so it holds whether they are a customer, an uploaded contact or both. */
+export const marketingOptouts = sqliteTable(
+  "marketing_optouts",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    channel: text("channel", { enum: ["EMAIL", "TEXT"] }).notNull(),
+    // Lower-case email, or the phone as +1XXXXXXXXXX.
+    addressKey: text("address_key").notNull(),
+    // Who: "link" (they used the unsubscribe link), "staff" (someone marked it by hand), "reply" (replied STOP).
+    via: text("via").notNull().default("staff"),
+    note: text("note"),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(current_timestamp)`),
+  },
+  (t) => [uniqueIndex("marketing_optouts_unique").on(t.organizationId, t.channel, t.addressKey)],
+);
+
+export const MARKETING_AUDIENCES = ["ALL", "CUSTOMERS", "UPLOADED"] as const;
+
+export const marketingCampaigns = sqliteTable(
+  "marketing_campaigns",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    channel: text("channel", { enum: ["EMAIL", "TEXT"] }).notNull(),
+    name: text("name").notNull(),
+    subject: text("subject"),
+    body: text("body").notNull().default(""),
+    audience: text("audience", { enum: MARKETING_AUDIENCES }).notNull().default("ALL"),
+    // DRAFT -> SENDING (a batch at a time, can be resumed) -> SENT, or CANCELLED when stopped part-way.
+    status: text("status", { enum: ["DRAFT", "SENDING", "SENT", "CANCELLED"] }).notNull().default("DRAFT"),
+    startedAt: text("started_at"),
+    finishedAt: text("finished_at"),
+    createdByUserId: text("created_by_user_id"),
+    sentByUserId: text("sent_by_user_id"),
+    ...timestamps,
+  },
+  (t) => [index("marketing_campaigns_org_idx").on(t.organizationId, t.channel)],
+);
+
+/** One row per person a campaign goes to, fixed when sending starts, so a stopped send can be picked up where it stopped. */
+export const marketingMessages = sqliteTable(
+  "marketing_messages",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    campaignId: text("campaign_id")
+      .notNull()
+      .references(() => marketingCampaigns.id, { onDelete: "cascade" }),
+    channel: text("channel", { enum: ["EMAIL", "TEXT"] }).notNull(),
+    toAddress: text("to_address").notNull(),
+    firstName: text("first_name"),
+    lastName: text("last_name"),
+    // customer or contact, for the person's page; not a foreign key (either table).
+    source: text("source").notNull().default("CONTACT"),
+    status: text("status", { enum: ["PENDING", "SENT", "FAILED", "SKIPPED"] }).notNull().default("PENDING"),
+    error: text("error"),
+    sentAt: text("sent_at"),
+  },
+  (t) => [index("marketing_messages_campaign_idx").on(t.campaignId, t.status), index("marketing_messages_org_sent_idx").on(t.organizationId, t.sentAt)],
+);
+
+/** One row per company: who emails come from, the address that must be printed on them, and the (future) text settings. */
+export const marketingSettings = sqliteTable(
+  "marketing_settings",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    senderName: text("sender_name"),
+    replyTo: text("reply_to"),
+    // Email law (CAN-SPAM) requires a real mailing address on marketing email.
+    businessAddress: text("business_address"),
+    footerText: text("footer_text"),
+    dailyEmailLimit: integer("daily_email_limit").notNull().default(500),
+    // Text messaging: not connected yet. The provider and number are kept so the department is ready when it is.
+    textProvider: text("text_provider").notNull().default("NONE"),
+    textFromNumber: text("text_from_number"),
+    textOptOutLine: text("text_opt_out_line").notNull().default("Reply STOP to opt out."),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex("marketing_settings_org_unique").on(t.organizationId)],
+);

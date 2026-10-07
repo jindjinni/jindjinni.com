@@ -5,7 +5,7 @@
 // To give a new department this sidebar: add it to DEPARTMENT_MENUS below, then render <DepartmentSidebar> in
 // that department's layout (see receiving/layout.tsx). Renaming and re-ordering then work there with no more code.
 
-export type MenuDept = "purchasing" | "receiving" | "accounts" | "customer-service" | "inventory" | "sales" | "hr";
+export type MenuDept = "purchasing" | "receiving" | "accounts" | "customer-service" | "inventory" | "sales" | "hr" | "marketing";
 
 export type MenuItemDef = {
   /** Never changes, even when the tab is renamed: it is how a saved name or position finds its tab. */
@@ -29,6 +29,7 @@ const C = "/dashboard/customer-service";
 const I = "/dashboard/inventory";
 const S = "/dashboard/sales";
 const H = "/dashboard/hr";
+const M = "/dashboard/marketing";
 
 export const DEPARTMENT_MENUS: Record<MenuDept, DepartmentMenu> = {
   purchasing: {
@@ -110,6 +111,17 @@ export const DEPARTMENT_MENUS: Record<MenuDept, DepartmentMenu> = {
       { id: "staff", href: H, label: "Staff Today", icon: "👥", exact: true },
       { id: "activity", href: `${H}/activity`, label: "Activity Log", icon: "🕘" },
       { id: "time-sheets", href: `${H}/time-sheets`, label: "Time Sheets", icon: "⏱️" },
+    ],
+  },
+  marketing: {
+    title: "Marketing Department",
+    setupLabel: "Settings",
+    items: [
+      { id: "contacts", href: M, label: "Contacts", icon: "👥", exact: true },
+      { id: "email-campaigns", href: `${M}/email`, label: "Email Campaigns", icon: "✉️" },
+      { id: "text-campaigns", href: `${M}/text`, label: "Text Campaigns", icon: "💬" },
+      { id: "email-settings", href: `${M}/email-settings`, label: "Email Settings", setup: true },
+      { id: "text-settings", href: `${M}/text-settings`, label: "Text Settings", setup: true },
     ],
   },
 };

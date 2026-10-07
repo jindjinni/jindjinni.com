@@ -149,6 +149,11 @@ export function canViewHr(role: string): boolean {
   return isAdmin(role);
 }
 
+/** May open Marketing (contacts, email and text campaigns) and send campaigns: Admin, the Owner and Purchasing managers. */
+export function canViewMarketing(role: string): boolean {
+  return isAdmin(role) || isPurchasingManager(role);
+}
+
 /** Which departments a role can open, for the menu and the home redirect. */
 export function departmentsFor(role: string): string[] {
   const out: string[] = [];
@@ -159,6 +164,7 @@ export function departmentsFor(role: string): string[] {
   if (canViewInventory(role)) out.push("inventory");
   if (canViewSales(role)) out.push("sales");
   if (canViewHr(role)) out.push("hr");
+  if (canViewMarketing(role)) out.push("marketing");
   return out;
 }
 

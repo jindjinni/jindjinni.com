@@ -10,7 +10,7 @@ import { ThemeScope } from "@/components/theme-scope";
 import { MainNav, type NavItem } from "./main-nav";
 import { ClockWidget } from "@/components/clock-widget";
 import { getMyClock } from "@/lib/hr-service";
-import { ROLE_LABELS, canViewAccounts, canViewCustomerService, canViewInventory, canViewPurchasing, canViewReceiving, canViewSales, canViewHr } from "@/lib/permissions";
+import { ROLE_LABELS, canViewAccounts, canViewCustomerService, canViewInventory, canViewPurchasing, canViewReceiving, canViewSales, canViewHr, canViewMarketing } from "@/lib/permissions";
 
 export default async function DashboardLayout({
   children,
@@ -36,6 +36,7 @@ export default async function DashboardLayout({
     ...(canViewCustomerService(org.role) ? [{ href: "/dashboard/customer-service", label: "Customer Service" }] : []),
     ...(canViewInventory(org.role) ? [{ href: "/dashboard/inventory", label: "Inventory" }] : []),
     ...(canViewSales(org.role) ? [{ href: "/dashboard/sales", label: "Sales" }] : []),
+    ...(canViewMarketing(org.role) ? [{ href: "/dashboard/marketing", label: "Marketing" }] : []),
     ...(canViewHr(org.role) ? [{ href: "/dashboard/hr", label: "HR" }] : []),
     { href: "/dashboard/settings", label: "Settings" },
   ];
