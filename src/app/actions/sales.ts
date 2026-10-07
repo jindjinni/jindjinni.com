@@ -5,6 +5,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { salesPriceSheets, salesProfiles } from "@/db/schema";
 import { requireOrg, type CurrentOrg } from "@/lib/tenant";
+import { logActivity } from "@/lib/hr-service";
 import { canManageSalesSettings, canWriteSales } from "@/lib/permissions";
 import { encodeLogoFile } from "@/lib/logo-validation";
 import { sendOrgEmail } from "@/lib/email-connector";
@@ -18,6 +19,7 @@ import {
   deletePriceItem,
   duplicateDocument,
   ensureSalesProfile,
+  getDocument,
   importBuyers,
   matchPriceItem,
   recordPayment,
@@ -257,8 +259,13 @@ export async function sendDocumentAction(id: string, opts: { email: boolean; to?
   if ("error" in w) return { ok: false, error: w.error };
   const to = cleanText(opts?.to, 160);
   if (opts?.email && to && !looksLikeEmail(to)) return { ok: false, error: "That email address doesn't look right." };
+  const before = await getDocument(w.org.organizationId, id);
   const res = await sendDocument(w.org, id, { mailer: opts?.email ? mailer(w.org) : null, to: to || null, message: opts?.message ? String(opts.message).slice(0, 2000) : null });
   if (!res.ok) return res;
+  if (before) {
+    const isInvoice = before.doc.kind === "INVOICE";
+    await logActivity(w.org, isInvoice ? "INVOICE_SENT" : "QUOTE_SENT", `${isInvoice ? "Sent invoice" : "Sent quotation"} ${before.doc.number} to ${before.doc.buyerCompany ?? "a buyer"}`, { type: "sales_document", id });
+  }
   revalidatePath("/dashboard/inventory", "layout");
   refresh();
   const what = res.units ? ` ${res.units} ${res.units === 1 ? "unit" : "units"} came out of Inventory.` : "";
@@ -317,6 +324,8 @@ export async function recordPaymentAction(id: string, p: { amount: number; paidO
   if ("error" in w) return { ok: false, error: w.error };
   const res = await recordPayment(w.org, id, { amount: Number(p.amount), paidOn: String(p.paidOn ?? ""), method: p.method, note: p.note });
   if (!res.ok) return res;
+  const doc = await getDocument(w.org.organizationId, id);
+  await logActivity(w.org, "PAYMENT_RECORDED", `Recorded a $${Number(p.amount).toFixed(2)} payment on invoice ${doc?.doc.number ?? ""}`.trim(), { type: "sales_document", id });
   refresh();
   return { ok: true, message: res.status === "PAID" ? "Paid in full." : "Payment recorded." };
 }

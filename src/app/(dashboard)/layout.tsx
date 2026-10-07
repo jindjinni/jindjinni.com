@@ -8,7 +8,9 @@ import { logout } from "@/app/actions/auth";
 import { parseDepartmentThemes } from "@/lib/theme";
 import { ThemeScope } from "@/components/theme-scope";
 import { MainNav, type NavItem } from "./main-nav";
-import { ROLE_LABELS, canViewAccounts, canViewCustomerService, canViewInventory, canViewPurchasing, canViewReceiving, canViewSales } from "@/lib/permissions";
+import { ClockWidget } from "@/components/clock-widget";
+import { getMyClock } from "@/lib/hr-service";
+import { ROLE_LABELS, canViewAccounts, canViewCustomerService, canViewInventory, canViewPurchasing, canViewReceiving, canViewSales, canViewHr } from "@/lib/permissions";
 
 export default async function DashboardLayout({
   children,
@@ -25,6 +27,8 @@ export default async function DashboardLayout({
 
   const [orgRow] = await db.select({ departmentThemes: organizations.departmentThemes }).from(organizations).where(eq(organizations.id, org.organizationId)).limit(1);
 
+  const nowIso = new Date().toISOString();
+  const clock = await getMyClock({ organizationId: org.organizationId, userId: org.userId }, nowIso);
   const navItems: NavItem[] = [
     ...(canViewPurchasing(org.role) ? [{ href: "/dashboard/purchasing", label: "Purchasing" }] : []),
     ...(canViewReceiving(org.role) ? [{ href: "/dashboard/receiving", label: "Receiving" }] : []),
@@ -32,6 +36,7 @@ export default async function DashboardLayout({
     ...(canViewCustomerService(org.role) ? [{ href: "/dashboard/customer-service", label: "Customer Service" }] : []),
     ...(canViewInventory(org.role) ? [{ href: "/dashboard/inventory", label: "Inventory" }] : []),
     ...(canViewSales(org.role) ? [{ href: "/dashboard/sales", label: "Sales" }] : []),
+    ...(canViewHr(org.role) ? [{ href: "/dashboard/hr", label: "HR" }] : []),
     { href: "/dashboard/settings", label: "Settings" },
   ];
 
@@ -47,7 +52,8 @@ export default async function DashboardLayout({
           </span>
           <MainNav items={navItems} />
         </div>
-        <div className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
+        <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
+          <ClockWidget {...clock} nowIso={nowIso} />
           <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
             {ROLE_LABELS[org.role] ?? org.role}
           </span>

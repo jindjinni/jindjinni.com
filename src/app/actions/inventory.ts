@@ -6,6 +6,7 @@ import { canWriteInventory } from "@/lib/permissions";
 import { MANUAL_CONDITIONS } from "@/lib/inventory-conditions";
 import { addManualStock, saveEstimate, type ManualLineInput } from "@/lib/inventory-service";
 import { normKey } from "@/lib/inventory-rules";
+import { logActivity } from "@/lib/hr-service";
 
 export type InventoryActionState = { ok?: boolean; error?: string; message?: string };
 
@@ -16,6 +17,7 @@ export async function addStockAction(input: { lines: ManualLineInput[]; note: st
   const lines = Array.isArray(input?.lines) ? input.lines.map((l) => ({ ...l, quantity: Number(l.quantity) })) : [];
   const res = await addManualStock(org, lines, String(input?.note ?? "").slice(0, 300), [...MANUAL_CONDITIONS]);
   if (!res.ok) return { error: res.error };
+  await logActivity(org, "STOCK_CHANGE", `Added ${res.units} ${res.units === 1 ? "unit" : "units"} to stock by hand${input?.note ? ` (${String(input.note).slice(0, 80)})` : ""}`, null);
   revalidatePath("/dashboard/inventory", "layout");
   return { ok: true, message: `Added ${res.units} ${res.units === 1 ? "unit" : "units"} on ${res.added} ${res.added === 1 ? "line" : "lines"}.` };
 }

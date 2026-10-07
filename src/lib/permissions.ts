@@ -144,6 +144,11 @@ export function canManageSalesSettings(role: string): boolean {
   return isPurchasingManager(role);
 }
 
+/** May open the HR department (staff list, activity log, time sheets): Admin and the Owner only. */
+export function canViewHr(role: string): boolean {
+  return isAdmin(role);
+}
+
 /** Which departments a role can open, for the menu and the home redirect. */
 export function departmentsFor(role: string): string[] {
   const out: string[] = [];
@@ -153,6 +158,7 @@ export function departmentsFor(role: string): string[] {
   if (canViewCustomerService(role)) out.push("customer-service");
   if (canViewInventory(role)) out.push("inventory");
   if (canViewSales(role)) out.push("sales");
+  if (canViewHr(role)) out.push("hr");
   return out;
 }
 

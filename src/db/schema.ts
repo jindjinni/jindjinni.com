@@ -2118,3 +2118,50 @@ export const salesPayments = sqliteTable(
   },
   (t) => [index("sales_payments_doc_idx").on(t.documentId)],
 );
+
+// ---------------------------------------------------------------------------
+// HR: the time clock and the activity log
+// ---------------------------------------------------------------------------
+
+export const HR_CLOCK_KINDS = ["CLOCK_IN", "BREAK_START", "BREAK_END", "CLOCK_OUT"] as const;
+
+/** One press of a time-clock button by a staff member. `at` is the server's UTC time; never edited, only added to. */
+export const hrTimeEvents = sqliteTable(
+  "hr_time_events",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: HR_CLOCK_KINDS }).notNull(),
+    at: text("at").notNull(),
+    // Set when an admin corrected the clock for someone (who did it); null for the person's own presses.
+    enteredByUserId: text("entered_by_user_id"),
+    note: text("note"),
+  },
+  (t) => [index("hr_time_events_org_user_idx").on(t.organizationId, t.userId, t.at)],
+);
+
+/**
+ * Work that isn't already stamped with a person elsewhere (shipping labels, invoices sent, payments, stock adds...).
+ * Quotations created, packages received and emails sent are read from their own tables, so they are never written here.
+ */
+export const hrActivity = sqliteTable(
+  "hr_activity",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
+    kind: text("kind").notNull(),
+    label: text("label").notNull(),
+    refType: text("ref_type"),
+    refId: text("ref_id"),
+    at: text("at").notNull(),
+  },
+  (t) => [index("hr_activity_org_at_idx").on(t.organizationId, t.at), index("hr_activity_user_idx").on(t.userId, t.at)],
+);

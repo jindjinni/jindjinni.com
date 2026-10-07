@@ -12,6 +12,7 @@
 // quantities, totals, tracking numbers, customer info, product rules,
 // multipliers) records a row to purchasing_audit_log via logAudit() below.
 
+import { logActivity } from "@/lib/hr-service";
 import { getPaymentTerms } from "@/lib/accounts-queries";
 import { isDay, todayIn } from "@/lib/payment-due";
 import { startTracking } from "@/lib/tracking-service";
@@ -1935,6 +1936,7 @@ export async function generatePurchasingShippingLabel(
       null,
       `${labels.length} ${CARRIER_NAME[labelCarrier]} shipping label${labels.length === 1 ? "" : "s"} generated via Shippo`,
     );
+    await logActivity(org, "LABEL_SENT", `Sent order ${quotation.quotationNumber} to ${quotation.customerNameSnapshot}: ${labels.length} shipping label${labels.length === 1 ? "" : "s"}`, { type: "quotation", id: quotationId });
     // Start following the new packages right away (best effort: the label is already bought and saved).
     await startTracking(org.organizationId, quotationId);
   }
