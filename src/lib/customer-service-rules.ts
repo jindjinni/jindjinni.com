@@ -6,6 +6,8 @@ import { localDayOfUtc, sumAmounts } from "@/lib/accounts-rules";
 /** The facts about one paid order that decide whether its email can be sent. */
 export type ReadinessInput = {
   emailsEnabled: boolean;
+  /** Every email tells customers where to submit new orders, so the website link must be set. */
+  hasWebsiteLink: boolean;
   /** The customer's email address on the order. */
   toEmail: string | null;
   status: "IN_PROGRESS" | string;
@@ -34,6 +36,7 @@ export const isEmailAddress = (v: string | null | undefined) => !!v && EMAIL_RE.
 export function emailReadiness(i: ReadinessInput): Readiness {
   const blockers: string[] = [];
   if (!i.emailsEnabled) blockers.push("Customer emails are turned off. An Admin can turn them on in Email Settings.");
+  if (!i.hasWebsiteLink) blockers.push("The website link isn't set. An Admin adds it in Email Settings (every email tells customers where to submit new orders).");
   if (i.status === "IN_PROGRESS") blockers.push("Receiving hasn't submitted this order yet.");
   if (i.accountsStatus !== "PAID") blockers.push("This order isn't marked Paid yet.");
   if (!isEmailAddress(i.toEmail)) blockers.push("This customer has no valid email address on the order.");

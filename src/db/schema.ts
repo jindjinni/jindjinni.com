@@ -13,6 +13,7 @@ import {
   integer,
   real,
   uniqueIndex,
+  primaryKey,
   index,
 } from "drizzle-orm/sqlite-core";
 
@@ -1114,6 +1115,26 @@ export const purchasingQuotationLabels = sqliteTable(
     index("purchasing_quotation_labels_org_idx").on(t.organizationId),
     index("purchasing_quotation_labels_quotation_idx").on(t.quotationId),
   ],
+);
+
+// A company's edited wording for one customer email (subject and text, with {placeholders}). A template with no row
+// here uses the original wording built into lib/email-templates.ts.
+export const receivingEmailTemplates = sqliteTable(
+  "receiving_email_templates",
+  {
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    // STANDARD | STANDARD_PACKAGING_NOTICE | ADJUSTMENT_ONLY | ADJUSTMENT_PACKAGING | PACKAGING_WARNING
+    templateKey: text("template_key").notNull(),
+    subject: text("subject").notNull(),
+    body: text("body").notNull(),
+    updatedByUserId: text("updated_by_user_id").references(() => users.id),
+    updatedAt: text("updated_at")
+      .notNull()
+      .default(sql`(current_timestamp)`),
+  },
+  (t) => [primaryKey({ columns: [t.organizationId, t.templateKey] })],
 );
 
 // Every customer email the Customer Service department sends (the "package received & processed" emails and the

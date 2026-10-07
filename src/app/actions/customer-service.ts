@@ -6,12 +6,13 @@
 import { revalidatePath } from "next/cache";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db/client";
-import { receivingPackages, receivingSettings } from "@/db/schema";
+import { receivingEmailTemplates, receivingPackages, receivingSettings } from "@/db/schema";
 import { requireOrg, type CurrentOrg } from "@/lib/tenant";
 import { canSendCustomerEmails, isAdmin } from "@/lib/permissions";
 import { deliverCustomerEmail, auditReceiving } from "@/lib/receiving-service";
 import { getEmailDraft } from "@/lib/customer-service-queries";
 import { isEmailAddress } from "@/lib/customer-service-rules";
+import { isTemplateKey, validateTemplate } from "@/lib/email-templates";
 
 export type CsActionState = { ok?: boolean; error?: string; notice?: string };
 
@@ -111,9 +112,11 @@ export async function saveEmailSettings(formData: FormData): Promise<CsActionSta
   const quote = url(formData.get("quoteLinkUrl"));
   const guide = url(formData.get("packagingGuideUrl"));
   if (quote === "bad" || guide === "bad") return { error: "Links must start with https://" };
+  const emailsEnabled = formData.get("emailsEnabled") === "on" || formData.get("emailsEnabled") === "true";
+  if (emailsEnabled && !quote) return { error: "Add your website link before turning emails on. Every email tells customers where to submit new orders." };
 
   const values = {
-    emailsEnabled: formData.get("emailsEnabled") === "on" || formData.get("emailsEnabled") === "true",
+    emailsEnabled,
     fromName: t(formData.get("fromName"), 80),
     replyTo,
     bccEmails: bccList.length ? bccList.join(", ") : null,
@@ -126,5 +129,35 @@ export async function saveEmailSettings(formData: FormData): Promise<CsActionSta
     .onConflictDoUpdate({ target: receivingSettings.organizationId, set: { ...values, updatedAt: sql`(current_timestamp)` } });
   revalidatePath("/dashboard/customer-service", "layout");
   revalidatePath("/dashboard/receiving", "layout");
+  return { ok: true };
+}
+
+/** Saves the edited wording of one email template (admin only). The same checks run here as in the editor. */
+export async function saveEmailTemplate(key: string, subject: string, body: string): Promise<CsActionState> {
+  const org = await requireOrg();
+  if (!isAdmin(org.role)) return { error: "Only an owner or admin can edit the email templates." };
+  if (!isTemplateKey(key)) return { error: "Unknown template." };
+  const text = { subject: String(subject ?? ""), body: String(body ?? "").replace(/\r\n/g, "\n") };
+  const errors = validateTemplate(key, text);
+  if (errors.length) return { error: errors[0] };
+  const values = { subject: text.subject.trim(), body: text.body.trim() };
+  await db
+    .insert(receivingEmailTemplates)
+    .values({ organizationId: org.organizationId, templateKey: key, ...values, updatedByUserId: org.userId })
+    .onConflictDoUpdate({
+      target: [receivingEmailTemplates.organizationId, receivingEmailTemplates.templateKey],
+      set: { ...values, updatedByUserId: org.userId, updatedAt: sql`(current_timestamp)` },
+    });
+  revalidatePath("/dashboard/customer-service", "layout");
+  return { ok: true };
+}
+
+/** Puts one template back to the original wording (admin only). */
+export async function resetEmailTemplate(key: string): Promise<CsActionState> {
+  const org = await requireOrg();
+  if (!isAdmin(org.role)) return { error: "Only an owner or admin can edit the email templates." };
+  if (!isTemplateKey(key)) return { error: "Unknown template." };
+  await db.delete(receivingEmailTemplates).where(and(eq(receivingEmailTemplates.organizationId, org.organizationId), eq(receivingEmailTemplates.templateKey, key)));
+  revalidatePath("/dashboard/customer-service", "layout");
   return { ok: true };
 }

@@ -5,6 +5,7 @@
 
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db/client";
+import type { TemplateKey, TemplateText } from "@/lib/email-templates";
 import {
   purchasingAuditLog,
   purchasingCategories,
@@ -18,7 +19,7 @@ import {
 } from "@/db/schema";
 import { newId } from "@/lib/ids";
 import { sendCustomerEmail, type EmailAttachment } from "@/lib/email";
-import { getReceivingPackage } from "@/lib/receiving-queries";
+import { getEmailTemplates, getReceivingPackage } from "@/lib/receiving-queries";
 import { buildCustomerEmail, buildPackagingWarning } from "@/lib/receiving-emails";
 import { isRecalledResult, rowRecallState } from "@/lib/receiving-recall";
 import { buildDbLines, finalPayout, pickEmailTemplate, weekOf } from "@/lib/receiving-rules";
@@ -165,13 +166,13 @@ export type EmailPlan = {
  * Nothing is read from storage and nothing is sent, so the Customer Service screen can show exactly what the
  * customer will get, and deliverCustomerEmail sends the very same thing.
  */
-export function planCustomerEmail(orgName: string, data: PackageData, kind: "STATUS" | "WARNING"): EmailPlan {
+export function planCustomerEmail(orgName: string, data: PackageData, kind: "STATUS" | "WARNING", templates: Partial<Record<TemplateKey, TemplateText>> = {}): EmailPlan {
   const { pkg, brief, settings } = data;
   const companyName = settings.fromName.trim() || orgName;
   const orderLabel = [brief.quotationNumber, pkg.trackingNumber ?? brief.trackingNumber].filter(Boolean).join(" — ");
   const to = brief.email?.trim() || null;
   if (kind === "WARNING") {
-    const built = buildPackagingWarning({ companyName, customerName: brief.customerName, orderLabel, packagingGuideUrl: settings.packagingGuideUrl || null });
+    const built = buildPackagingWarning({ companyName, customerName: brief.customerName, orderLabel, packagingGuideUrl: settings.packagingGuideUrl || null, quoteLinkUrl: settings.quoteLinkUrl || null }, templates.PACKAGING_WARNING);
     return { template: "PACKAGING_WARNING", built, to, isAdjustment: false, wanted: [] };
   }
   const template = pickEmailTemplate(pkg);
@@ -186,7 +187,7 @@ export function planCustomerEmail(orgName: string, data: PackageData, kind: "STA
     adjustmentDetails: pkg.adjustmentDetails,
     quoteLinkUrl: settings.quoteLinkUrl || null,
     packagingGuideUrl: settings.packagingGuideUrl || null,
-  });
+  }, templates[template]);
   // Adjustment emails also carry the inspection photos (damage / discrepancy / packaging issue) the email refers to.
   const isAdjustment = template === "ADJUSTMENT_ONLY" || template === "ADJUSTMENT_PACKAGING";
   const wanted = data.photos
@@ -206,7 +207,8 @@ export async function deliverCustomerEmail(org: OrgRef, packageId: string, kind:
   if (!data) return { ok: false, error: "That shipment wasn't found." };
   if (!data.settings.emailsEnabled) return { ok: false, error: "Customer emails are turned off. An admin can turn them on under Email Settings." };
   const { pkg, settings } = data;
-  const plan = planCustomerEmail(org.organizationName, data, kind);
+  if (!settings.quoteLinkUrl.trim()) return { ok: false, error: "Add your website link in Email Settings first. Every email tells customers where to submit new orders." };
+  const plan = planCustomerEmail(org.organizationName, data, kind, await getEmailTemplates(org.organizationId));
   const to = plan.to;
   if (!to || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) return { ok: false, error: "This customer has no valid email address on the order." };
   if (kind === "STATUS") {

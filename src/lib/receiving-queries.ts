@@ -5,6 +5,7 @@
 
 import { and, desc, eq, inArray, isNull, like, ne, or, sql } from "drizzle-orm";
 import { db } from "@/db/client";
+import { isTemplateKey, type TemplateKey, type TemplateText } from "@/lib/email-templates";
 import {
   receivingPackages,
   receivingPackagePhotos,
@@ -18,6 +19,7 @@ import {
   receivingIntakeLogs,
   receivingExpirationLots,
   receivingSettings,
+  receivingEmailTemplates,
   receivingAdjustments,
   memberships,
   users,
@@ -268,6 +270,14 @@ export type QuotedLine = {
   lineTotal: number;
   notes: string | null;
 };
+
+/** The wording a company has edited, by template. A template that isn't here uses the original wording. */
+export async function getEmailTemplates(organizationId: string): Promise<Partial<Record<TemplateKey, TemplateText>>> {
+  const rows = await db.select().from(receivingEmailTemplates).where(eq(receivingEmailTemplates.organizationId, organizationId));
+  const out: Partial<Record<TemplateKey, TemplateText>> = {};
+  for (const r of rows) if (isTemplateKey(r.templateKey)) out[r.templateKey] = { subject: r.subject, body: r.body };
+  return out;
+}
 
 export async function getReceivingSettings(organizationId: string) {
   const [row] = await db.select().from(receivingSettings).where(eq(receivingSettings.organizationId, organizationId)).limit(1);

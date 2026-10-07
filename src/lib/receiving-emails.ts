@@ -3,6 +3,7 @@
 // old Airtable automations; company-specific bits (name, links) come in via ctx.
 
 import { formatMoney, type EmailTemplateKey } from "@/lib/receiving-rules";
+import { renderTemplate, TEMPLATE_BY_KEY, type TemplateText } from "@/lib/email-templates";
 
 export type EmailContext = {
   companyName: string;
@@ -45,54 +46,42 @@ export function adjustmentAmountFor(ctx: Pick<EmailContext, "orderTotal" | "adju
   return null;
 }
 
-export function buildCustomerEmail(key: EmailTemplateKey, ctx: EmailContext): BuiltEmail {
-  const company = ctx.companyName;
-  const COMPANY = company.toUpperCase();
-  const final = formatMoney(ctx.adjustedOrderTotal ?? ctx.orderTotal);
-  const quote = ctx.quoteLinkUrl ? `\n\nReady to send more supplies? [Get a quote anytime on our website](${ctx.quoteLinkUrl}).` : "";
-  const note = ctx.customerNote?.trim() ? `\n\nAdditional Note: ${ctx.customerNote.trim()}` : "";
-  const why = ctx.customerNote?.trim() || ctx.adjustmentDetails?.trim() || "";
+export function buildCustomerEmail(key: EmailTemplateKey, ctx: EmailContext, override?: TemplateText | null): BuiltEmail {
+  const def = TEMPLATE_BY_KEY[key];
   const adj = adjustmentAmountFor(ctx);
-  const adjLine = adj == null ? "No dollar change" : formatMoney(adj);
-  const funds = "You should see the funds reflected in your account within 1 to 3 business days, depending on your bank's processing schedule.";
-
-  let subject: string;
-  let body: string;
-  let attachKinds: BuiltEmail["attachKinds"];
-
-  switch (key) {
-    case "STANDARD":
-      subject = `${company} – Order Received & Processed | Order #: ${ctx.orderLabel}`;
-      body = `Good day,\n\nYour package has been received, inspected, and processed successfully. Everything was received as expected, and no adjustments were necessary.\n\nFinal Payment Amount: ${final}\nPayment Status: Paid\n\n${funds}\n\nPlease see your payment confirmation attached or provided above.\n\nThank you again for choosing ${COMPANY}. We appreciate your business!${quote}${note}\n\nBest regards,\nReceiving & Accounts Team\n${COMPANY}`;
-      attachKinds = ["PAYMENT_CONFIRMATION", "CUSTOMER_NOTE"];
-      break;
-    case "STANDARD_PACKAGING_NOTICE":
-      subject = `${company} – Order Received & Processed: Packaging Notice | Order #: ${ctx.orderLabel}`;
-      body = `Good day,\n\nYour package has been received and processed, and your supplies were accepted with no product adjustments required.\n\nFinal Payment Amount: ${final}\nPayment Status: Paid\n\n${funds}\n\nPlease see your payment confirmation attached to this email for your records.\n\nHowever, your shipment did not meet our packaging requirements.\n\nPlease remember that all supplies should be properly bubble wrapped, double boxed, secured, and shipped using sturdy boxes.\n\nFortunately, your supplies arrived in acceptable condition this time. However, supplies that arrive damaged due to improper packaging may be subject to up to a 50% deduction.\n\nPlease follow all packaging instructions on future shipments.\n\nThank you!${quote}${note}\n\nBest regards,\nReceiving Team\n${COMPANY}`;
-      attachKinds = ["PAYMENT_CONFIRMATION", "CUSTOMER_NOTE"];
-      break;
-    case "ADJUSTMENT_PACKAGING":
-      subject = `${company} – Order Received & Processed: Packaging & Adjustment Notice | Order #: ${ctx.orderLabel}`;
-      body = `Good day,\n\nYour package has been received and processed.\n\nDuring inspection, we found that your shipment did not meet our packaging requirements, and some of the supplies were also received with damage or condition issues.\n\nBecause the supplies were not received in the condition originally quoted, an adjustment was required.\n\nAdjustment Details: ${why}\n\nOriginal Quotation: ${formatMoney(ctx.orderTotal)}\nAdjustment: ${adjLine}\nFinal Payment Amount: ${final}\n\n${funds}\n\nPlease see the updated quotation, inspection details, and adjustment photos, along with your payment confirmation, attached to this email.\n\nMoving forward, please properly bubble wrap and double box your supplies using sturdy boxes. Also, please disclose any dents, dings, stains, tears, or other damage before shipping so we can price your supplies correctly.\n\nDamaged supplies may be subject to up to a 50% deduction.\n\nThank you for your understanding.${quote}\n\nBest regards,\nReceiving & Accounts Team\n${COMPANY}`;
-      attachKinds = ["PAYMENT_CONFIRMATION", "REVISED_INVOICE", "CUSTOMER_NOTE"];
-      break;
-    case "ADJUSTMENT_ONLY":
-      subject = `${company} – Order Received & Processed: Adjustment Notice | Order #: ${ctx.orderLabel}`;
-      body = `Good day,\n\nYour package has been received and processed. Your packaging was acceptable; however, during inspection, we found a difference between the original quotation and the supplies actually received.\n\nAdjustment Details: ${why}\n\nPlease see the updated quotation reflecting the supplies and condition actually received, along with your payment confirmation and adjustment photos, attached to this email.\n\nOriginal Quotation: ${formatMoney(ctx.orderTotal)}\nAdjustment: ${adjLine}\nFinal Payment Amount: ${final}\n\n${funds}\n\nFor future shipments, please make sure the quantity, product information, and condition entered during quotation accurately match what you are sending.\n\nThank you again!${quote}\n\nBest regards,\nReceiving & Accounts Team\n${COMPANY}`;
-      attachKinds = ["PAYMENT_CONFIRMATION", "REVISED_INVOICE", "CUSTOMER_NOTE"];
-      break;
-  }
-  return { subject, text: plain(body), html: textToHtml(body), attachKinds };
+  const why = ctx.customerNote?.trim() || ctx.adjustmentDetails?.trim() || "";
+  const { subject, text } = renderTemplate(override ?? { subject: def.defaultSubject, body: def.defaultBody }, {
+    customerName: ctx.customerName,
+    company: ctx.companyName,
+    order: ctx.orderLabel,
+    originalAmount: formatMoney(ctx.orderTotal),
+    adjustment: adj == null ? "No dollar change" : formatMoney(adj),
+    finalAmount: formatMoney(ctx.adjustedOrderTotal ?? ctx.orderTotal),
+    adjustmentDetails: why,
+    note: ctx.customerNote?.trim() ?? "",
+    websiteUrl: ctx.quoteLinkUrl,
+    packagingGuideUrl: ctx.packagingGuideUrl,
+  });
+  return { subject, text: plain(text), html: textToHtml(text), attachKinds: def.attachKinds };
 }
 
 /** The manual "packaging requirements" warning (sent on its own, e.g. before payment). */
-export function buildPackagingWarning(ctx: Pick<EmailContext, "companyName" | "customerName" | "orderLabel" | "packagingGuideUrl">): BuiltEmail {
-  const guide = ctx.packagingGuideUrl ? `\n\nYou can review our packaging guidance anytime on [our website](${ctx.packagingGuideUrl}).` : "";
-  const body = `Good day ${ctx.customerName},\n\nYour package for order ${ctx.orderLabel} was received and processed. However, we noticed it was not packaged according to our requirements.\n\nDouble boxing, bubble wrap, and a sturdy outer box are **mandatory** when shipping supplies to us. Any future shipments that arrive damaged due to improper packaging may be subject to a deduction of **up to 50% of the quoted value** for the damaged items.\n\nPlease make sure future shipments are properly bubble wrapped, double boxed, and shipped in sturdy boxes to prevent damage in transit. If you're unable to meet these packaging requirements, we may not be the right fit for your shipping needs.${guide}\n\nThank you for your understanding.\n\n— ${ctx.companyName} Team`;
-  return {
-    subject: `Important: Packaging Requirements — Order ${ctx.orderLabel} — ${ctx.companyName}`,
-    text: plain(body),
-    html: textToHtml(body),
-    attachKinds: [],
-  };
+export function buildPackagingWarning(
+  ctx: Pick<EmailContext, "companyName" | "customerName" | "orderLabel" | "packagingGuideUrl"> & { quoteLinkUrl?: string | null },
+  override?: TemplateText | null,
+): BuiltEmail {
+  const def = TEMPLATE_BY_KEY.PACKAGING_WARNING;
+  const { subject, text } = renderTemplate(override ?? { subject: def.defaultSubject, body: def.defaultBody }, {
+    customerName: ctx.customerName,
+    company: ctx.companyName,
+    order: ctx.orderLabel,
+    originalAmount: "",
+    adjustment: "",
+    finalAmount: "",
+    adjustmentDetails: "",
+    note: "",
+    websiteUrl: ctx.quoteLinkUrl ?? null,
+    packagingGuideUrl: ctx.packagingGuideUrl,
+  });
+  return { subject, text: plain(text), html: textToHtml(text), attachKinds: [] };
 }

@@ -59,8 +59,9 @@ export function EmailSettingsForm({ initial, companyName }: { initial: Initial; 
         <p className="mt-1 text-xs text-slate-500">Up to 5 addresses, separated by commas. They get a copy of every customer email.</p>
       </div>
       <div>
-        <label htmlFor="quoteLinkUrl" className="mb-1 block text-sm font-medium">Link to request a new quote</label>
+        <label htmlFor="quoteLinkUrl" className="mb-1 block text-sm font-medium">Your website link (where customers submit new orders)</label>
         <input id="quoteLinkUrl" className={field} maxLength={500} placeholder="https://" value={v.quoteLinkUrl} onChange={(e) => set("quoteLinkUrl", e.target.value)} />
+        <p className="mt-1 text-xs text-slate-500">Required. Every email tells customers they can go here to submit a new order.</p>
       </div>
       <div>
         <label htmlFor="packagingGuideUrl" className="mb-1 block text-sm font-medium">Link to your packaging guide</label>

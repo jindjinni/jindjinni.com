@@ -10,7 +10,7 @@ import {
   users,
 } from "@/db/schema";
 import { finalPayout, pickEmailTemplate } from "@/lib/receiving-rules";
-import { getReceivingPackage, getReceivingSettings } from "@/lib/receiving-queries";
+import { getEmailTemplates, getReceivingPackage, getReceivingSettings } from "@/lib/receiving-queries";
 import { planCustomerEmail } from "@/lib/receiving-service";
 import { emailReadiness, type CsOrder } from "@/lib/customer-service-rules";
 
@@ -97,10 +97,11 @@ async function finalAdjustments(organizationId: string, packageIds: string[]) {
   return out;
 }
 
-function toOrder(r: Row, o: { emailsEnabled: boolean; photos: Map<string, { receipt: number; revised: number }>; finals: Set<string>; emailedAt: string | null; count: number }): CsOrder {
+function toOrder(r: Row, o: { emailsEnabled: boolean; hasWebsiteLink: boolean; photos: Map<string, { receipt: number; revised: number }>; finals: Set<string>; emailedAt: string | null; count: number }): CsOrder {
   const p = o.photos.get(r.id);
   const readiness = emailReadiness({
     emailsEnabled: o.emailsEnabled,
+    hasWebsiteLink: o.hasWebsiteLink,
     toEmail: customerEmail(r),
     status: r.status,
     accountsStatus: r.accountsStatus,
@@ -146,7 +147,7 @@ export async function getToBeEmailed(organizationId: string): Promise<CsOrder[]>
     .limit(CS_LIMIT);
   const ids = rows.map((r) => r.id);
   const [settings, photos, finals] = await Promise.all([getReceivingSettings(organizationId), photoKindCounts(organizationId, ids), finalAdjustments(organizationId, ids)]);
-  return rows.map((r) => toOrder(r, { emailsEnabled: settings.emailsEnabled, photos, finals, emailedAt: null, count: 0 }));
+  return rows.map((r) => toOrder(r, { emailsEnabled: settings.emailsEnabled, hasWebsiteLink: !!settings.quoteLinkUrl.trim(), photos, finals, emailedAt: null, count: 0 }));
 }
 
 /** Orders the customer was emailed about (the payment email), the most recently emailed first. */
@@ -170,7 +171,7 @@ export async function getEmailed(organizationId: string): Promise<CsOrder[]> {
     .leftJoin(purchasingCustomers, eq(purchasingCustomers.id, purchasingQuotations.customerId))
     .where(and(eq(receivingPackages.organizationId, organizationId), inArray(receivingPackages.id, sent.map((s) => s.packageId))));
   const by = new Map(rows.map((r) => [r.id, r]));
-  const empty = { emailsEnabled: true, photos: new Map<string, { receipt: number; revised: number }>(), finals: new Set<string>() };
+  const empty = { emailsEnabled: true, hasWebsiteLink: true, photos: new Map<string, { receipt: number; revised: number }>(), finals: new Set<string>() };
   const out: CsOrder[] = [];
   for (const s of sent) {
     const r = by.get(s.packageId);
@@ -260,11 +261,12 @@ export async function getEmailDraft(org: { organizationId: string; organizationN
   const data = await getReceivingPackage(org.organizationId, packageId);
   if (!data) return null;
   const { pkg, brief, settings } = data;
-  const plan = planCustomerEmail(org.organizationName, data, "STATUS");
+  const plan = planCustomerEmail(org.organizationName, data, "STATUS", await getEmailTemplates(org.organizationId));
   const receipts = data.photos.filter((p) => !p.itemId && p.kind === "PAYMENT_CONFIRMATION");
   const adjFinal = data.adjustment?.status === "FINAL" ? data.adjustment : null;
   const readiness = emailReadiness({
     emailsEnabled: settings.emailsEnabled,
+    hasWebsiteLink: !!settings.quoteLinkUrl.trim(),
     toEmail: plan.to,
     status: pkg.status,
     accountsStatus: pkg.accountsStatus,
