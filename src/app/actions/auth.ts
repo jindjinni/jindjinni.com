@@ -22,6 +22,7 @@ import { setupNewOrgCatalog } from "@/lib/catalog-template";
 import { extractBusinessProfileIdentityFields } from "@/lib/business-profile-form";
 import { encodeLogoFile } from "@/lib/logo-validation";
 import { consumeSignupVerificationCode } from "@/lib/signup-verification";
+import { signupNeedsEmailVerification } from "@/lib/signup-settings";
 import { TERMS_VERSION } from "@/lib/legal";
 
 export type ActionState = { error?: string } | undefined;
@@ -87,15 +88,18 @@ export async function signUpOrganization(
     return { error: "Fill in your email and a password of at least 8 characters." };
   }
 
-  // Proves the account email is real and reachable -- this is the actual
-  // security boundary, independent of whatever the signup page's UI already
-  // showed the person had entered correctly. See lib/signup-verification.ts.
-  const verificationCode = String(formData.get("verificationCode") ?? "").trim();
-  if (!verificationCode) {
-    return { error: "Enter the verification code we emailed you." };
+  // Proves the account email is real and reachable -- this is the actual security boundary, independent of whatever the signup
+  // page's UI showed. It is ON HOLD while our sending email is not active (see lib/signup-settings.ts); the server decides, so a
+  // form that skips the code field is only accepted while the hold is on.
+  const needsVerification = signupNeedsEmailVerification();
+  if (needsVerification) {
+    const verificationCode = String(formData.get("verificationCode") ?? "").trim();
+    if (!verificationCode) {
+      return { error: "Enter the verification code we emailed you." };
+    }
+    const verification = await consumeSignupVerificationCode(email, verificationCode);
+    if (!verification.ok) return { error: verification.error };
   }
-  const verification = await consumeSignupVerificationCode(email, verificationCode);
-  if (!verification.ok) return { error: verification.error };
 
   const logoFile = formData.get("logo");
   if (!(logoFile instanceof File) || logoFile.size === 0) {
@@ -147,7 +151,8 @@ export async function signUpOrganization(
     email,
     name,
     passwordHash,
-    emailVerified: new Date().toISOString(),
+    // Only stamped when the address was really proven by a code; while the check is on hold it stays empty (not verified yet).
+    emailVerified: needsVerification ? new Date().toISOString() : null,
     termsAcceptedAt: new Date().toISOString(),
     termsVersion: TERMS_VERSION,
   });
@@ -178,5 +183,5 @@ export async function signUpOrganization(
     return { error: "Account created, but signing you in failed -- try logging in." };
   }
 
-  redirect("/dashboard/purchasing");
+  redirect("/dashboard");
 }
