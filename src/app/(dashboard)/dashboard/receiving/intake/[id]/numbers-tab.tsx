@@ -591,7 +591,7 @@ export function NumbersTab({
         <CameraCapture
           title="Group photo of the lot and serial numbers"
           multiple
-          highRes
+          fitToUpload={false}
           onClose={() => setLiveShot(false)}
           onCapture={(file) => {
             addPhoto(file);

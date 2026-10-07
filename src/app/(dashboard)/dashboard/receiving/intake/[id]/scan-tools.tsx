@@ -195,6 +195,7 @@ export function ScanTools({
         <CameraCapture
           title="Photo of the label"
           multiple={false}
+          fitToUpload={false}
           onClose={() => setLiveShot(false)}
           onCapture={(file) => {
             setLiveShot(false);
