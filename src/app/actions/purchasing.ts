@@ -14,6 +14,7 @@
 
 import { getPaymentTerms } from "@/lib/accounts-queries";
 import { isDay, todayIn } from "@/lib/payment-due";
+import { startTracking } from "@/lib/tracking-service";
 import { priceBreakdown, roundCents } from "@/lib/purchasing-price";
 import { canWritePurchasing, isPurchasingManager } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
@@ -1726,6 +1727,8 @@ export async function updatePurchasingQuotationHeader(
       notes: trimmed(formData, "notes"),
     })
     .where(eq(purchasingQuotations.id, quotationId));
+  // A new or changed tracking number starts (or stops) being followed.
+  if (newTracking !== quotation.trackingNumber || carrier !== quotation.carrier) await startTracking(org.organizationId, quotationId);
 
   revalidatePath(`/dashboard/purchasing/quotations/${quotationId}`);
   revalidatePath("/dashboard/purchasing/quotations");
@@ -1931,6 +1934,8 @@ export async function generatePurchasingShippingLabel(
       null,
       `${labels.length} ${CARRIER_NAME[labelCarrier]} shipping label${labels.length === 1 ? "" : "s"} generated via Shippo`,
     );
+    // Start following the new packages right away (best effort: the label is already bought and saved).
+    await startTracking(org.organizationId, quotationId);
   }
 
   revalidatePath(`/dashboard/purchasing/quotations/${quotationId}`);

@@ -6,6 +6,9 @@ import Link from "next/link";
 import { requireOrg } from "@/lib/tenant";
 import { getPaymentTerms } from "@/lib/accounts-queries";
 import { dayInZone } from "@/lib/payment-due";
+import { trackingForQuotations } from "@/lib/tracking-service";
+import { isStale, parseHistory, rollUp } from "@/lib/tracking-rules";
+import { TrackingPanel, type TrackerView } from "./tracking-panel";
 import {
   getPurchasingQuotationWithItems,
   getPurchasingProducts,
@@ -63,6 +66,32 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
           trackingNumber: l.trackingNumber,
           trackingUrl: l.trackingUrl,
         }));
+
+  // Live tracking: what Shippo last told us about each box, and whether the news is old enough to ask again.
+  const trackRows = await trackingForQuotations(org.organizationId, [quotation.id]);
+  const labelName = new Map(labels.map((l) => [l.trackingNumber ?? "", labels.length > 1 ? `Label ${l.labelNumber}` : null]));
+  const labelLink = new Map(labels.filter((l) => l.trackingNumber).map((l) => [l.trackingNumber as string, l.trackingUrl]));
+  const trackers: TrackerView[] = trackRows.map((r) => ({
+    id: r.id,
+    carrier: r.carrier,
+    trackingNumber: r.trackingNumber,
+    status: r.status,
+    statusDetails: r.statusDetails,
+    location: r.location,
+    eta: r.eta,
+    statusAt: r.statusAt,
+    deliveredAt: r.deliveredAt,
+    lastCheckedAt: r.lastCheckedAt,
+    lastError: r.lastError,
+    history: parseHistory(r.history),
+    trackingUrl: labelLink.get(r.trackingNumber) ?? null,
+    labelName: labelName.get(r.trackingNumber) ?? null,
+  }));
+  const checked = trackRows.filter((r) => r.lastCheckedAt);
+  const roll = rollUp(checked);
+  const trackingSummary = roll && roll.status !== "Unknown" ? { status: roll.status, delivered: roll.delivered, total: roll.total } : null;
+  const hasTrackingNumber = !!(quotation.trackingNumber || quotation.labelTrackingNumber || labels.some((l) => l.trackingNumber));
+  const needsTrackingRefresh = hasTrackingNumber && (trackRows.length === 0 || trackRows.some((r) => isStale(r)));
 
   const [products, conditions, ranges, productConditionsMap, orgRow, multiplierRows, recalls] = await Promise.all([
     getPurchasingProducts(org.organizationId),
@@ -122,7 +151,9 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
             packageStatus={quotation.packageStatus}
             deliveredDay={dayInZone(quotation.deliveredAt, (await getPaymentTerms(org.organizationId)).timeZone)}
             notes={quotation.notes}
-          />
+          >
+            <TrackingPanel quotationId={quotation.id} trackers={trackers} summary={trackingSummary} hasNumber={hasTrackingNumber} needsRefresh={needsTrackingRefresh} />
+          </QuotationHeaderForm>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2">
           <div className="flex items-center gap-2">
@@ -272,6 +303,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
           parcelHeightIn={quotation.parcelHeightIn}
           parcelWeightLb={quotation.parcelWeightLb}
           labels={labels}
+          trackingStatuses={Object.fromEntries(trackRows.filter((r) => r.lastCheckedAt && r.status !== "Unknown").map((r) => [r.trackingNumber, r.status]))}
           labelStatus={quotation.labelStatus}
           labelError={quotation.labelError}
           hasOrgAddress={hasShipFromAddress(orgRow)}

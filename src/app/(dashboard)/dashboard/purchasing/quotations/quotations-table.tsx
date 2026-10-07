@@ -8,6 +8,7 @@ import { STATUS_LABELS } from "@/lib/receiving-rules";
 import { STATUS_PILL, chipClass } from "@/lib/receiving-ui";
 import { PILL_BASE, QUOTATION_STATUS_LABELS, QUOTATION_STATUS_PILL, totalPillClass } from "@/lib/purchasing-ui";
 import { ReceiptCell, type ReceiptState } from "./receipt-cell";
+import { pillClass } from "@/lib/tracking-rules";
 
 export type QuotationSummaryRow = {
   id: string;
@@ -16,6 +17,8 @@ export type QuotationSummaryRow = {
   status: string;
   grandTotal: number;
   trackingNumber: string | null;
+  /** Where the package is, kept up to date from Shippo (see lib/tracking-service.ts). */
+  packageStatus?: string;
   labelStatus: "NOT_GENERATED" | "GENERATED" | "ERROR";
   labelCount?: number;
   archivedAt: string | null;
@@ -311,6 +314,11 @@ export function QuotationsTable({ quotations, canImport = false }: { quotations:
                 <td className="min-w-[14rem] px-4 py-3.5 text-slate-700 dark:text-slate-300">{row.itemsSummary}</td>
                 <td className="whitespace-nowrap px-4 py-3.5 text-slate-700 dark:text-slate-300">
                   {row.trackingNumber ?? (row.labelStatus === "GENERATED" ? "Generated" : "—")}
+                  {row.trackingNumber && row.packageStatus && (
+                    <span data-testid="row-package-status" className={`ml-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${pillClass(row.packageStatus)}`}>
+                      {row.packageStatus}
+                    </span>
+                  )}
                   {(row.labelCount ?? 0) > 1 && (
                     <span className="ml-1.5 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                       +{(row.labelCount ?? 1) - 1} more

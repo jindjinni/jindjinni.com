@@ -1117,6 +1117,46 @@ export const purchasingQuotationLabels = sqliteTable(
   ],
 );
 
+/**
+ * Live tracking for one package (one tracking number) of a quotation, kept up to date from Shippo. A quotation with
+ * several boxes has one row per tracking number. The quotation's own package status, last-update time and delivered
+ * time are rolled up from these rows (see lib/tracking-service.ts).
+ */
+export const purchasingTracking = sqliteTable(
+  "purchasing_tracking",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    quotationId: text("quotation_id")
+      .notNull()
+      .references(() => purchasingQuotations.id, { onDelete: "cascade" }),
+    // The label this number came from (null when someone typed the number in). No FK on purpose.
+    labelId: text("label_id"),
+    carrier: text("carrier", { enum: ["UPS", "USPS", "FedEx", "Other"] }).notNull(),
+    trackingNumber: text("tracking_number").notNull(),
+    // Same words as the quotation's package status: Pre-Transit, In Transit, Out for Delivery, Delivered, Exception, Returned, Unknown.
+    status: text("status").notNull().default("Unknown"),
+    statusDetails: text("status_details"),
+    location: text("location"),
+    eta: text("eta"),
+    // "YYYY-MM-DD HH:MM:SS" UTC: when the carrier reported the latest status, and (when delivered) when it was delivered.
+    statusAt: text("status_at"),
+    deliveredAt: text("delivered_at"),
+    // The carrier's scan history as JSON, newest first.
+    history: text("history"),
+    lastCheckedAt: text("last_checked_at"),
+    lastError: text("last_error"),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("purchasing_tracking_number_idx").on(t.organizationId, t.quotationId, t.trackingNumber),
+    index("purchasing_tracking_org_status_idx").on(t.organizationId, t.status),
+    index("purchasing_tracking_number_lookup_idx").on(t.trackingNumber),
+  ],
+);
+
 // The mailbox a company sends its customer emails from (an admin connects it with Google's sign-in, like Airtable's
 // "connect a Gmail account"). We keep only the long-lived refresh token, encrypted; the company's password is never seen.
 // One per company. With none, emails go from the platform's own sending address.

@@ -2,6 +2,7 @@
 
 import { startTransition, useActionState, useState } from "react";
 import Link from "next/link";
+import { pillClass } from "@/lib/tracking-rules";
 import { generatePurchasingShippingLabel } from "@/app/actions/purchasing";
 import { CARRIER_NAME, MAX_LABELS_PER_ORDER, trackingMessage, type LabelCarrier, type StoredLabelCarrier } from "@/lib/shipping-labels";
 
@@ -54,6 +55,7 @@ export function ShippingLabelSection({
   labelError,
   hasOrgAddress,
   hasCustomerAddr,
+  trackingStatuses = {},
 }: {
   quotationId: string;
   customerId: string;
@@ -66,6 +68,8 @@ export function ShippingLabelSection({
   labelError: string | null;
   hasOrgAddress: boolean;
   hasCustomerAddr: boolean;
+  /** Where each box is, by tracking number (live from Shippo). */
+  trackingStatuses?: Record<string, string>;
 }) {
   // The service and the number of labels are kept in state (not left to the
   // form) because a form clears itself after it is sent -- the service must
@@ -141,6 +145,9 @@ export function ShippingLabelSection({
                   </a>
                   {l.trackingNumber && (
                     <span className="text-slate-700 dark:text-slate-300">Tracking: {l.trackingNumber}</span>
+                  )}
+                  {l.trackingNumber && trackingStatuses[l.trackingNumber] && (
+                    <span data-testid="label-status" className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${pillClass(trackingStatuses[l.trackingNumber])}`}>{trackingStatuses[l.trackingNumber]}</span>
                   )}
                 </div>
                 {l.trackingUrl && (

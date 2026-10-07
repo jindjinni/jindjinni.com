@@ -42,6 +42,7 @@ export const DEPARTMENT_MENUS: Record<MenuDept, DepartmentMenu> = {
       { id: "product-multipliers", href: `${P}/product-multipliers`, label: "Product Multipliers", setup: true },
       { id: "bonus-tiers", href: `${P}/bonus-tiers`, label: "Bonus tiers", setup: true },
       { id: "receipt-layout", href: `${P}/receipt-layout`, label: "Quotation Receipt Layout", setup: true },
+      { id: "shipment-tracking", href: `${P}/tracking`, label: "Shipment Tracking", setup: true },
     ],
   },
   receiving: {
@@ -49,6 +50,7 @@ export const DEPARTMENT_MENUS: Record<MenuDept, DepartmentMenu> = {
     setupLabel: "Setup",
     items: [
       { id: "all-shipments", href: R, label: "All Shipments", icon: "📦", exact: true },
+      { id: "delivered-today", href: `${R}/delivered-today`, label: "Delivered Today", icon: "🚚" },
       { id: "intake", href: `${R}/intake`, label: "Receiving Intake Form", icon: "📝" },
       { id: "received-items", href: `${R}/received-items`, label: "Received Items", icon: "📋" },
       { id: "daily", href: `${R}/daily`, label: "Daily Receiving", icon: "🗓️" },

@@ -178,3 +178,29 @@ export async function createTransaction(rateId: string): Promise<ShippoTransacti
     body: JSON.stringify({ rate: rateId, label_file_type: "PDF", async: false }),
   });
 }
+
+// --- Package tracking ---------------------------------------------------------------------------------------------
+
+/** Shippo's current tracking for one package (carrier is "ups", "usps" or "fedex"). Throws a "Shippo request failed" error when it isn't known yet. */
+export async function getTrack(carrier: string, trackingNumber: string) {
+  return shippoFetch(`/tracks/${encodeURIComponent(carrier)}/${encodeURIComponent(trackingNumber)}`, { method: "GET" });
+}
+
+/** Asks Shippo to start following a package (so it sends us updates) and returns its current tracking. */
+export async function registerTrack(carrier: string, trackingNumber: string) {
+  return shippoFetch("/tracks/", { method: "POST", body: JSON.stringify({ carrier, tracking_number: trackingNumber }) });
+}
+
+export type ShippoWebhook = { object_id: string; event: string; url: string; active?: boolean; is_test?: boolean };
+
+export async function listWebhooks(): Promise<ShippoWebhook[]> {
+  const body = await shippoFetch("/webhooks/", { method: "GET" });
+  return Array.isArray(body?.results) ? body.results : [];
+}
+
+export async function createWebhook(url: string, isTest: boolean): Promise<ShippoWebhook> {
+  return shippoFetch("/webhooks/", { method: "POST", body: JSON.stringify({ event: "track_updated", url, is_test: isTest }) });
+}
+
+/** A test token only ever sees Shippo's test data; its webhooks must be test webhooks. */
+export const isShippoTestKey = () => /^shippo_test_/i.test(process.env.SHIPPO_API_KEY ?? "");

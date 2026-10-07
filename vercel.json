@@ -1,3 +1,6 @@
 {
-  "crons": [{ "path": "/api/cron/purge-closed", "schedule": "17 3 * * *" }]
+  "crons": [
+    { "path": "/api/cron/purge-closed", "schedule": "17 3 * * *" },
+    { "path": "/api/cron/refresh-tracking", "schedule": "41 4 * * *" }
+  ]
 }
