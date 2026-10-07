@@ -64,9 +64,10 @@ export function SignupForm({ needsVerification }: { needsVerification: boolean }
         </p>
         <h1 className="mt-4 text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">Create your account</h1>
         <p className="mt-3 max-w-2xl text-base text-muted">
-          Sets up your own organization -- your data stays completely separate from every other company on here.
-          We&rsquo;ll also set up your Business Profile now, since it&rsquo;s reused throughout the system (quotation
-          receipts and more) -- most of it is required, a few fields are optional.
+          Set up your own company on jindjinni enterprise software. You become the Owner, your data stays separate from
+          every other company, and you get a ready-made starting layout for every department. We&rsquo;ll also set up
+          your Business Profile now, since it appears on your quotations, receipts and reports. Most of it is required,
+          and a few fields are optional.
         </p>
 
         <form ref={formRef} onSubmit={handleCreateAccount} className="mt-8 flex flex-col gap-6">

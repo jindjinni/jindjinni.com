@@ -8,118 +8,184 @@ const sections: LegalSection[] = [
   {
     heading: "Who these terms are between",
     paras: [
-      `These Terms of Service (the "Terms") are an agreement between you and ${OPERATOR_NAME}, a business located in ${OPERATOR_STATE}, United States, which owns and operates jindjinni ("jindjinni", "we", "us"). They cover your use of the jindjinni website and the business workspace we provide through it (the "Service").`,
-      "jindjinni is for businesses. If you create an account or accept an invitation on behalf of a company, you confirm you have the authority to bind that company to these Terms, and \"you\" includes the company. You must be at least 18 years old to use the Service.",
+      `These Terms of Service (the "Terms") are a binding agreement between you and ${OPERATOR_NAME}, a business located in ${OPERATOR_STATE}, United States, which owns and operates jindjinni ("jindjinni", "we", "us", "our"). They cover your use of the jindjinni website and the business software we provide through it (the "Service").`,
+      "jindjinni is business software for companies and organizations. It is not for consumers or personal use. If you create an account or accept an invitation on behalf of a company, you confirm that you have the authority to bind that company to these Terms, and \"you\" includes both you and that company. You must be at least 18 years old to use the Service.",
+      "By creating an account, accepting an invitation, checking the agreement box or using the Service, you agree to these Terms, our Privacy Policy and our Acceptable Use Policy. If you do not agree, do not use the Service.",
     ],
   },
   {
     heading: "What the Service is",
     paras: [
-      "jindjinni is a multi-company workspace for running a supply business: a purchasing department (product price lists, customer records, quotations, receipts and shipping labels), with receiving, inventory and invoicing being added over time. Each company's workspace is kept separate from every other company's.",
-      "The Service is provided as software. We do not buy or sell goods, we are not a party to any transaction between you and your customers or suppliers, and nothing in the Service is legal, tax, accounting or regulatory advice.",
+      "jindjinni is an enterprise software platform that gives each company its own private workspace with connected departments. Depending on what we have released and what your company has turned on, the Service includes Purchasing (price lists, customers, quotations, shipping labels and shipment tracking), Receiving (package intake, photos, lot and serial number checks, recall checks and order adjustments), Accounts, Customer Service, Inventory, Sales, Marketing, HR, a company Home screen with industry news and company performance, and a built-in team chat.",
+      "The Service is software that we provide. We do not buy, sell, hold, inspect, ship or insure goods. We do not hold or move money. We are not a party to any transaction between you and your customers, suppliers, carriers or employees. Nothing in the Service is legal, tax, accounting, employment, regulatory, financial, medical or other professional advice, and you should get that advice from a qualified professional.",
+      "We are always building. Departments and features may be added, changed or removed, and some may be released as early or limited versions (\"Pre-release Features\"). Pre-release Features are provided as is, may contain errors and may change or end at any time.",
     ],
   },
   {
     heading: "Accounts, owners and team members",
     items: [
       "The person who creates a company workspace is its Owner. The Owner is responsible for the workspace, for who is invited to it, and for everything done in it by the people they invite.",
-      "The Owner and Admins can invite people by email, give each person a role (such as Purchasing Manager, Purchasing Agent, Receiver or Accountant), change roles and turn someone's access off. Roles decide what a person can see and change. Give people only the access they need.",
-      "Each company has a limit on the number of team members, counting pending invitations. We set a default and may adjust it for a company.",
-      "Keep your password private and use a password you don't use anywhere else. Don't share a login between people. You are responsible for activity under your login, and you must tell us promptly if you think someone else has used it.",
-      "Provide accurate information about yourself and your company, and keep your Business Profile up to date.",
+      "The Owner and Admins can invite people by email, give each person a role, choose which departments they can open, change roles and turn access off. Give people only the access they need. We are not responsible for what a person does with access you give them.",
+      "Each company has a limit on the number of team members, counting pending invitations. We set a default and may change it for a company. The Service is designed for organizations of every size, including very large ones of up to 100,000 staff members. That is a design goal. It is not a promise of capacity, speed, availability or fitness for any particular company or number of users.",
+      "Keep your password private and use one you don't use anywhere else. Don't share a login between people. You are responsible for all activity under your logins, and you must tell us promptly if you think someone else has used one.",
+      "Give us accurate information about yourself and your company, and keep your Business Profile up to date. We may rely on the contact details you give us.",
     ],
   },
   {
     heading: "Your data",
     paras: [
-      "Everything you and your team enter into the Service, including customer records, prices, quotations, receipts, uploaded files and your company profile (\"Your Data\"), belongs to you. We do not claim ownership of it.",
-      "You give us permission to store, process, display and transmit Your Data only as needed to provide and secure the Service, to prevent misuse, to comply with the law and as described in our Privacy Policy. We do not sell Your Data and we do not use it to advertise to you or your customers.",
-      "Your Data often includes personal information about your customers, such as names, addresses, phone numbers and email addresses. You are responsible for having the right to collect and use that information, for keeping it accurate, and for responding to your customers' requests about it. In privacy terms, you decide why and how that information is used and we process it on your behalf.",
-      "The Service is not designed to hold protected health information (such as patient records or prescriptions) or payment card numbers. Do not enter them. See the Acceptable Use Policy.",
-      "You can download a copy of Your Data at any time from Settings, under Close company.",
+      "Everything you and your team enter into or upload to the Service, including customer records, prices, quotations, receiving records and photos, accounting entries, inventory, sales documents, contact lists, campaign content, chat messages, time records, uploaded files and your company profile (\"Your Data\"), belongs to you. We do not claim ownership of it.",
+      "You give us a worldwide, non-exclusive licence to host, store, copy, process, display and transmit Your Data only as needed to provide, secure, support and improve the Service, to prevent misuse, to comply with the law and as described in our Privacy Policy. We do not sell Your Data and we do not use it to advertise to you or your customers.",
+      "Your Data often includes personal information about other people, such as your customers, contacts and employees. You are responsible for having the legal right to collect, use and share that information, for giving any required notices, for getting any required consents, for keeping it accurate, and for answering requests from those people. In privacy terms, you decide why and how that information is used and we process it on your behalf.",
+      "You are responsible for backing up anything you cannot afford to lose. You can download a copy of Your Data at any time from Settings, under Close company.",
+      "We may create and use anonymous, combined information about how the Service is used (for example, how many shipments are received per day across all companies) to run and improve the Service. It does not identify you or your customers.",
+    ],
+  },
+  {
+    heading: "Information you must not enter",
+    paras: [
+      "The Service is not designed or approved to hold protected health information (such as patient records, diagnoses or prescriptions), payment card numbers, bank login details, full government ID numbers or other highly sensitive data. Do not enter them. You are solely responsible for any such information you choose to put in the Service, and we make no promise that the Service meets the rules that apply to it (for example HIPAA or PCI requirements).",
     ],
   },
   {
     heading: "Acceptable use",
     paras: [
-      "You agree to follow our Acceptable Use Policy, which is part of these Terms. In short: use the Service lawfully and honestly, don't misuse other people's data, and don't try to break or overload it.",
+      "You agree to follow our Acceptable Use Policy, which is part of these Terms. In short: use the Service lawfully and honestly, don't misuse other people's data, don't send unwanted messages, and don't try to break or overload it.",
     ],
   },
   {
-    heading: "Prices, quotations and calculations",
+    heading: "Products, recalls and your compliance duties",
     paras: [
-      "The Service helps you set product prices, apply condition and expiration adjustments and bonus tiers, and produce quotations and receipts. The prices, rules and offers are yours, and you are responsible for them.",
-      "We work to make the calculations correct, but you should review each quotation and receipt before relying on it or sending it to a customer. Rounding, edited rules and manual overrides can all change a total. We are not responsible for offers you make or honour based on figures you did not check.",
+      "Many jindjinni customers buy and sell regulated products, including medical supplies. You alone are responsible for your business and for following every law and rule that applies to it, including licensing, product sourcing, labelling, storage, expiry and dating rules, record-keeping, recall handling, import and export, tax, consumer protection, and employment law. The Service does not make your business compliant.",
+      "The Service includes tools that help you spot problems, such as recall lists and automatic recall checks, lot and serial number checks, repeat and pattern flags, expiry checks, photo reading, the Home screen's industry news and FDA recall information, and summaries. These tools are aids only. They can be incomplete, late, wrong or unable to read a label or photo, and they depend on information from you and from others. A clean result, a missing flag or an \"OK\" never proves that a product is genuine, safe, unexpired, legal to sell or free from a recall, and a flag is not a finding that a product is unsafe. You must review the results, confirm them yourself and make your own decisions. We are not responsible for products you buy, accept, reject, sell, ship or destroy.",
+      "News, recall notices, regulatory records and links shown in the Service come from third parties such as government databases and news sources. We do not control or verify them, we may not show everything that exists, and they may be delayed or inaccurate. Always check the original source.",
+    ],
+  },
+  {
+    heading: "Automated and AI features",
+    paras: [
+      "Some features use automated systems, including artificial intelligence, for example to sort and summarise news, or to read lot numbers, serial numbers or labels from photos. Their output is a suggestion. It can be wrong, incomplete or out of date. A person in your company must review and confirm it before relying on it. Where a feature sends information to an outside AI provider, our Privacy Policy explains what is sent.",
+    ],
+  },
+  {
+    heading: "Prices, quotations, accounts and calculations",
+    paras: [
+      "The Service helps you set product prices, apply condition, expiration and bonus rules, and produce quotations, receipts, adjustments, invoices and reports. The prices, rules, offers, amounts owed and payments are yours, and you are responsible for them. The Service records and organizes this information. It does not pay anyone, collect money, hold funds or act as a bank, escrow, payment processor or accountant.",
+      "We work to make calculations correct, but you must review every quotation, adjustment, invoice, payment record and report before relying on it or sending it to anyone. Rounding, edited rules, manual overrides and entry mistakes can all change a total. We are not responsible for offers you make or honour, payments you make or refuse, or decisions you take based on figures you did not check.",
+    ],
+  },
+  {
+    heading: "Email, text messages and marketing",
+    paras: [
+      "When you send emails or text messages through or with the help of the Service, including customer notices and marketing campaigns, you are the sender. You are solely responsible for the content, for having permission to contact each person, for honouring opt-outs, and for following all laws and carrier rules that apply, such as the CAN-SPAM Act, the Telephone Consumer Protection Act and state laws. The Service's opt-out and suppression tools are aids and do not make a campaign lawful.",
+      "Emails sent from your own email account are sent under that account's provider's terms, and you may be limited or suspended by that provider. We do not guarantee that any message will be delivered, read or kept out of a spam folder.",
+    ],
+  },
+  {
+    heading: "Team chat, time records and workplace features",
+    paras: [
+      "Chat, HR and time-tracking features are tools for your organization. The company, through its Owner and Admins, is responsible for how they are used, for telling its people how the tools work and what is recorded, and for following employment, privacy, monitoring and recordkeeping laws. Chat messages and files, time records and activity logs belong to the company's workspace. We may access them where needed to provide support, keep the Service secure, enforce these Terms or meet legal duties.",
+      "Do not use chat or any other part of the Service for emergencies. We do not monitor it for them.",
     ],
   },
   {
     heading: "Third-party services",
     paras: [
-      "Some features rely on other companies' services, for example our hosting and database providers, email delivery, address lookup and the shipping provider used to buy labels. When you use those features, information needed to do the job (such as the addresses on a shipping label) is sent to the provider. Our Privacy Policy lists the kinds of providers we use.",
-      "Shipping labels are bought through a shipping provider using the account and payment arrangements set up for your company or for the Service. Label charges, delivery problems and refunds follow that provider's terms. We are not the carrier and do not guarantee delivery.",
+      "The Service relies on other companies' services, for example hosting, database and file storage providers, email delivery and sign-in providers, address lookup, shipping and tracking providers, and AI providers. When you use a feature that depends on them, the information needed to do the job (such as the addresses on a shipping label) is sent to them. Their terms and privacy practices apply to what they do, and we are not responsible for their acts, failures or outages.",
+      "Shipping labels are bought through a shipping provider using the account and payment arrangements set up for your company or for the Service. Label charges, tracking information, delivery problems, lost or damaged goods and refunds follow that provider's and the carrier's terms. We are not a carrier and do not guarantee delivery, delivery times or the accuracy of tracking information.",
     ],
   },
   {
-    heading: "Plans and fees",
+    heading: "Plans, fees and taxes",
     paras: [
-      "At the time of these Terms the Service is offered without charge while it is being built. If we introduce fees, we will tell the Owner by email before anything is charged, and you can close your company instead of accepting them. Fees you have agreed to are non-refundable except where the law requires otherwise or we say so in writing.",
+      "At the time of these Terms the Service is offered without charge while it is being built. We may introduce or change plans and fees. We will tell the Owner by email or in the Service before anything is charged, and you can close your company instead of accepting them. Fees you have agreed to are non-refundable except where the law requires otherwise or we say so in writing, and you are responsible for any taxes that apply.",
+    ],
+  },
+  {
+    heading: "Our rights and what you may not do",
+    paras: [
+      "We and our licensors own the Service, including its software, design, text, graphics, the jindjinni name and logo, and everything we make for it, except Your Data. We give you a limited, non-exclusive, non-transferable, revocable right to use the Service for your own internal business during these Terms. You may not copy, resell, sublicense, white-label, reverse engineer or build a competing product from the Service, or remove notices from it.",
+      "If you send us ideas or feedback, you give us the right to use them freely without payment or credit.",
     ],
   },
   {
     heading: "Closing your company and what happens to your data",
     paras: [
-      `The Owner can close the company at any time from Settings. Closing locks every team member out immediately and cancels pending invitations. We keep Your Data for ${CLOSE_GRACE_DAYS} days so the Owner can change their mind and reopen the company with everything as it was. After ${CLOSE_GRACE_DAYS} days Your Data is permanently deleted and cannot be recovered by you or by us.`,
+      `The Owner can close the company at any time from Settings. Closing locks every team member out immediately and cancels pending invitations. We keep Your Data for ${CLOSE_GRACE_DAYS} days so the Owner can change their mind and reopen the company with everything as it was. After ${CLOSE_GRACE_DAYS} days Your Data, including uploaded files and photos, is permanently deleted and cannot be recovered by you or by us.`,
       "Download a copy of Your Data before closing. Individual team members can be removed at any time by turning their access off, which keeps the company's records but ends that person's access.",
-      "Copies of data in routine backups held by our hosting providers are removed on those providers' normal schedules. We may keep limited records we are legally required to keep, and records needed to resolve a dispute or enforce these Terms.",
+      "Copies in routine backups held by our hosting providers are removed on those providers' normal schedules. We may keep limited records we are legally required to keep, and records needed to resolve a dispute or enforce these Terms.",
     ],
   },
   {
     heading: "Suspension and ending by us",
     paras: [
-      "We may suspend or end access, for a person or a whole company, if we reasonably believe these Terms or the Acceptable Use Policy have been broken, if it is needed to protect the Service or other users, or if the law requires it. Where it is reasonable and safe to do so we will give notice and a chance to fix the problem first. If we end a company's access for reasons other than a serious breach, we will give the Owner a reasonable opportunity to download Your Data.",
+      "We may suspend or end access, for a person or a whole company, immediately and without notice if we reasonably believe that these Terms or the Acceptable Use Policy have been broken, that an account is being used unlawfully or in a way that could harm others or the Service, that fees are unpaid, or that the law requires it. Where it is reasonable and safe to do so we will give notice and a chance to fix the problem first. If we end a company's access for reasons other than a serious breach, we will give the Owner a reasonable opportunity to download Your Data. We may also stop offering the Service, or any part of it, with reasonable notice.",
     ],
   },
   {
-    heading: "Availability and changes to the Service",
+    heading: "Availability, support and security",
     paras: [
-      "We aim to keep the Service available, but it may be interrupted for maintenance, updates or reasons outside our control, and we do not promise it will be uninterrupted or error-free. We are continuing to build new departments and features and may change or remove features. If we remove something important, we will try to give notice.",
+      "We aim to keep the Service available, but it may be interrupted for maintenance, updates, provider outages, attacks or other reasons outside our control, and we do not promise it will be uninterrupted, timely, secure or error-free. We do not offer a service-level commitment unless we agree one with you in writing.",
+      "We use reasonable measures to protect the Service, described on our Security page. No system is perfectly secure. If we learn of a breach of security that affects Your Data we will tell the Owner as the law requires.",
     ],
   },
   {
     heading: "Disclaimers",
     paras: [
-      "The Service is provided \"as is\" and \"as available\". To the fullest extent the law allows, we disclaim all warranties, whether express or implied, including warranties of merchantability, fitness for a particular purpose and non-infringement. We do not warrant that the Service will meet your particular needs or that results from it, including prices and totals, will be accurate for your situation.",
+      "THE SERVICE, AND EVERYTHING IN OR PROVIDED THROUGH IT, IS PROVIDED \"AS IS\" AND \"AS AVAILABLE\". TO THE FULLEST EXTENT THE LAW ALLOWS, WE DISCLAIM ALL WARRANTIES AND CONDITIONS, WHETHER EXPRESS, IMPLIED OR STATUTORY, INCLUDING WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE, ACCURACY, AND NON-INFRINGEMENT. WE DO NOT WARRANT THAT THE SERVICE WILL MEET YOUR NEEDS OR REGULATORY OBLIGATIONS, THAT IT WILL BE UNINTERRUPTED OR ERROR-FREE, THAT DEFECTS WILL BE CORRECTED, THAT DATA WILL NEVER BE LOST, OR THAT PRICES, TOTALS, RECALL AND SERIAL CHECKS, SUMMARIES, NEWS, TRACKING OR OTHER RESULTS WILL BE ACCURATE, COMPLETE OR CURRENT.",
     ],
   },
   {
     heading: "Limit on our liability",
     paras: [
-      "To the fullest extent the law allows, jindjinni will not be liable for any indirect, incidental, special, consequential or punitive damages, or for lost profits, lost revenue, lost data or business interruption, arising from your use of the Service, even if we were told it could happen.",
-      "Our total liability to you for any claim related to the Service is limited to the greater of the amount you paid us for the Service in the 12 months before the claim and one hundred US dollars. Some places do not allow certain limits, so parts of this section may not apply to you.",
+      "TO THE FULLEST EXTENT THE LAW ALLOWS, JINDJINNI, ITS OWNERS, OFFICERS, EMPLOYEES, CONTRACTORS, AFFILIATES AND LICENSORS WILL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, EXEMPLARY OR PUNITIVE DAMAGES, OR FOR LOST PROFITS, LOST REVENUE, LOST SAVINGS, LOST OR CORRUPTED DATA, LOSS OF GOODWILL, THE COST OF REPLACEMENT GOODS, RECALLED, COUNTERFEIT OR UNSAFE PRODUCTS, REGULATORY FINES, OR BUSINESS INTERRUPTION, ARISING FROM OR RELATED TO THE SERVICE OR THESE TERMS, UNDER ANY LEGAL THEORY (INCLUDING NEGLIGENCE), EVEN IF WE WERE TOLD THEY WERE POSSIBLE.",
+      "OUR TOTAL LIABILITY FOR ALL CLAIMS RELATED TO THE SERVICE OR THESE TERMS IS LIMITED TO THE GREATER OF (A) THE AMOUNT YOU PAID US FOR THE SERVICE IN THE 12 MONTHS BEFORE THE EVENT THAT GAVE RISE TO THE CLAIM AND (B) ONE HUNDRED US DOLLARS. THESE LIMITS APPLY EVEN IF A REMEDY FAILS OF ITS ESSENTIAL PURPOSE, AND THEY ARE A FAIR PART OF THE BARGAIN, WITHOUT WHICH THE SERVICE WOULD NOT BE OFFERED ON THESE TERMS. Some places do not allow certain limits, so parts of this section may not apply to you, and in that case our liability is limited as far as the law allows.",
     ],
   },
   {
     heading: "Your responsibility for claims",
     paras: [
-      "You agree to defend and reimburse jindjinni against claims, losses and costs brought by a third party that arise from Your Data, from your use of the Service in breach of these Terms or the Acceptable Use Policy, or from goods you buy, sell or ship using the Service.",
+      "You agree to defend, indemnify and hold harmless jindjinni, its owners, officers, employees, contractors and affiliates from and against any claims, demands, investigations, losses, liabilities, damages, fines, settlements and costs (including reasonable lawyers' fees) brought or imposed by a third party or authority that arise from or relate to: Your Data; goods you buy, sell, accept, reject, ship, store or destroy; messages you send; your employees and the way you use the workplace features; your use of the Service in breach of these Terms or the Acceptable Use Policy or in breach of any law; or the acts of people you give access to. We may take over the defence of a claim at our own cost, and you will cooperate.",
+    ],
+  },
+  {
+    heading: "Disputes: informal resolution, arbitration and no class actions",
+    paras: [
+      `Informal first. Before starting any formal proceeding, each side agrees to contact the other in writing (to ${CONTACT_EMAIL} for us) and try in good faith to resolve the matter for 30 days.`,
+      `Binding arbitration. If a dispute is not resolved informally, you and we agree that it will be decided only by final and binding arbitration, not in court, before a single arbitrator under the commercial arbitration rules of the American Arbitration Association then in effect. The arbitration will be held in ${OPERATOR_STATE} (or by video if both sides agree), in English, and a court that has jurisdiction may enter judgment on the award. This applies to every claim between you and us related to the Service or these Terms, except that either side may (a) bring an individual claim in small-claims court if it qualifies and (b) ask a court for an injunction to stop misuse of intellectual property or confidential information.`,
+      "Individual claims only. To the fullest extent the law allows, all claims must be brought in your or our individual capacity, and not as a plaintiff or member of any class, collective, consolidated or representative action. The arbitrator may not combine claims or award relief to anyone but the parties.",
+      "No jury. To the fullest extent the law allows, each side gives up the right to a jury trial and to take part in a class action.",
+      "Time limit. Any claim related to the Service or these Terms must be filed within one year after it arose, or it is permanently barred, to the extent the law allows.",
+    ],
+  },
+  {
+    heading: "Governing law",
+    paras: [
+      `These Terms and any dispute are governed by the laws of the State of ${OPERATOR_STATE} and the United States, without regard to conflict-of-law rules. For anything that is not sent to arbitration, the state and federal courts located in ${OPERATOR_STATE} have exclusive jurisdiction, and both sides agree to them.`,
+    ],
+  },
+  {
+    heading: "Notices and electronic communications",
+    paras: [
+      "You agree that we may give you notices by email to the address on your account, by a message in the Service, or by posting on our website, and that they count as written notice. Keep your email address current. You consent to doing business electronically, and electronic signatures, clicks and records have the same effect as paper ones.",
+    ],
+  },
+  {
+    heading: "Export and sanctions",
+    paras: [
+      "You may not use the Service if you are barred from receiving US services, or in or for any country, person or organization under US trade or economic sanctions, and you may not use it to break export or import laws.",
     ],
   },
   {
     heading: "Changes to these Terms",
     paras: [
-      "We may update these Terms. When the changes are material, we will tell the Owner by email or in the Service and ask people to agree again. Continuing to use the Service after a change takes effect means you accept it. The date at the top shows when the Terms last changed.",
-    ],
-  },
-  {
-    heading: "Governing law and disputes",
-    paras: [
-      `These Terms are governed by the laws of the State of ${OPERATOR_STATE} and the United States, without regard to conflict-of-law rules. Before starting any formal claim, each side agrees to try to resolve the matter informally by contacting the other and allowing 30 days. Claims that are not resolved that way must be brought in the state or federal courts located in ${OPERATOR_STATE}, and both sides agree to those courts' jurisdiction.`,
+      "We may update these Terms. When a change is material, we will tell the Owner by email or in the Service and ask people to agree again before they continue. Using the Service after a change takes effect means you accept it. The date at the top shows when the Terms last changed.",
     ],
   },
   {
     heading: "General",
     paras: [
-      "If any part of these Terms cannot be enforced, the rest still applies. Our not enforcing something right away does not waive it. You may not transfer your rights under these Terms without our consent. These Terms, together with the Privacy Policy and Acceptable Use Policy, are the whole agreement between you and us about the Service.",
+      "If any part of these Terms cannot be enforced, that part is limited as far as needed and the rest still applies. Our not enforcing something right away does not waive it. You may not transfer your rights under these Terms without our written consent, and we may transfer ours in a merger, sale or reorganization. Neither side is responsible for a delay or failure caused by events beyond its reasonable control, such as outages of internet, hosting or carrier services, natural disasters, war, labour disputes or government action. Nothing in these Terms creates a partnership, agency, employment or fiduciary relationship, and there are no third-party beneficiaries other than the people we protect in these Terms. The sections that by their nature should continue after these Terms end (including data, disclaimers, liability limits, indemnity and disputes) do. These Terms, together with the Privacy Policy and Acceptable Use Policy, are the whole agreement between you and us about the Service and replace any earlier discussion.",
     ],
   },
   {
@@ -132,7 +198,7 @@ export default function TermsPage() {
   return (
     <LegalPage
       title="Terms of Service"
-      intro="Please read these terms carefully. By creating an account, accepting an invitation or using jindjinni, you agree to them."
+      intro="Please read these terms carefully. They are a legal agreement. By creating an account, accepting an invitation or using jindjinni, you agree to them."
       sections={sections}
     />
   );

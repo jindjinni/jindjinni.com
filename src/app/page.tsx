@@ -2,6 +2,8 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { BrandLogo, Icon, LogoMark, Sparkle, type IconName } from "@/components/landing/icons";
 import {
+  ChatMock,
+  CommandCenterMock,
   HeroDashboard,
   InventoryInvoiceMock,
   ProfileMock,
@@ -17,74 +19,111 @@ const departments: { icon: IconName; title: string; body: string }[] = [
   {
     icon: "purchasing",
     title: "Purchasing",
-    body: "Manage customers, products, pricing, quotations, shipping information, and tracking.",
+    body: "Price lists, customers, automatic quotations, shipping labels and live shipment tracking, with every price change on the record.",
   },
   {
     icon: "receiving",
     title: "Receiving",
-    body: "Connect incoming packages directly to the original purchase order and quotation.",
-  },
-  {
-    icon: "inventory",
-    title: "Inventory Tracking",
-    body: "Know what products you have, quantities available, what was received, and how inventory moves through your business.",
-  },
-  {
-    icon: "invoicing",
-    title: "Invoicing",
-    body: "Create and manage professional invoices directly from your business data and inventory.",
-  },
-  {
-    icon: "distribution",
-    title: "Distribution",
-    body: "Manage products, outgoing orders, fulfillment, and distribution activity.",
+    body: "Check every incoming package against its quotation, with photos, lot and serial number checks, recall checks and order adjustments.",
   },
   {
     icon: "accounts",
     title: "Accounts",
-    body: "Keep transaction, adjustment, invoice, and payment information organized.",
+    body: "See exactly which orders are ready to pay, what is due or overdue, and keep paid orders and monthly reports organized.",
   },
   {
     icon: "support",
     title: "Customer Service",
-    body: "Give your team access to the order and customer information they need.",
+    body: "Send customers clear payment and adjustment emails from one controlled place, with a record of everything sent.",
   },
   {
-    icon: "team",
-    title: "Team Management",
-    body: "Invite your team and choose which departments each person can use.",
+    icon: "inventory",
+    title: "Inventory",
+    body: "Live stock by product, condition and expiration, with a full history of every item that came in or went out.",
+  },
+  {
+    icon: "tag",
+    title: "Sales",
+    body: "Quote and invoice your own buyers, compare prices and keep your selling side connected to the stock you actually hold.",
+  },
+  {
+    icon: "megaphone",
+    title: "Marketing",
+    body: "Build contact lists and run email and text campaigns with opt-outs respected automatically.",
+  },
+  {
+    icon: "clock",
+    title: "HR",
+    body: "Clock in and out, see who is working today and keep time sheets and an activity log for the whole team.",
+  },
+  {
+    icon: "chat",
+    title: "Company Chat",
+    body: "A built-in chat room for everyone, one for each department, and private messages, with file sharing and live status.",
   },
 ];
 
 const flow: { icon: IconName; title: string; note: string }[] = [
-  { icon: "purchasing", title: "Purchasing", note: "Quote is accepted" },
-  { icon: "receiving", title: "Receiving", note: "Package arrives" },
+  { icon: "purchasing", title: "Purchasing", note: "Quote is accepted and shipped" },
+  { icon: "receiving", title: "Receiving", note: "Package arrives and is verified" },
+  { icon: "accounts", title: "Accounts", note: "Payment is approved" },
+  { icon: "support", title: "Customer Service", note: "Customer is notified" },
   { icon: "inventory", title: "Inventory", note: "Stock updates" },
-  { icon: "invoicing", title: "Invoicing", note: "Invoice is created" },
-  { icon: "distribution", title: "Distribution", note: "Order ships" },
-  { icon: "accounts", title: "Accounts", note: "Payment is recorded" },
+  { icon: "tag", title: "Sales", note: "Invoice goes out" },
+];
+
+const stats: { value: string; label: string }[] = [
+  { value: "9", label: "connected departments" },
+  { value: "1", label: "shared record for every order" },
+  { value: "100,000", label: "staff members: the size we built for" },
+  { value: "Private", label: "workspace for every company" },
+];
+
+const commandPoints = [
+  "A welcome screen for every person, every day",
+  "Recalls, safety notices and new-product news straight from the makers of the brands you buy",
+  "Company performance for owners and admins: quotations given, shipments received, orders to be paid",
+  "Switch between Today, This week and This month",
+  "Jump straight into any department",
+];
+
+const receivingPoints = [
+  "Full-screen camera for package and product photos, taken right inside the intake form",
+  "Lot and serial numbers read from photos, then confirmed by the receiver",
+  "Repeated, made-up or wrong-shaped serial numbers flagged automatically",
+  "Recall lists checked against every received item",
+  "Order adjustments written up and sent as a clear PDF",
+  "A permanent record of who checked what, and when",
 ];
 
 const inventoryPoints = [
-  "Track inventory quantities",
-  "Monitor available products",
-  "Record incoming products",
-  "Track outgoing products",
-  "Create invoices",
-  "Manage invoice history",
-  "Connect invoices to customers and inventory",
-  "Keep transaction records organized",
+  "Live stock by product, condition and expiration date",
+  "Items post to stock as they are received",
+  "Sales and returns update stock automatically",
+  "A full stock history of every movement",
+  "Estimated prices for what you hold",
+  "Quotations and invoices from the same data",
+  "Buyer records and price comparison",
+  "No second spreadsheet to keep in sync",
 ];
 
 const teamPoints = [
-  "Invite employees by email",
-  "Assign department access",
-  "Control permissions",
-  "Give managers broader access",
-  "Restrict sensitive areas",
+  "Invite people by email, one at a time or a whole department",
+  "Choose which departments each person can open",
+  "Roles for owners, admins, managers, agents, receivers and accountants",
+  "Sensitive areas locked to the people who need them",
+  "Turn anyone's access off the moment they leave",
+  "Built to scale from your first hire to 100,000 staff members",
 ];
 
-const stack = ["Purchasing", "Receiving", "Inventory", "Invoicing", "Distribution", "Accounts", "Customer Service"];
+const trustPoints = [
+  { icon: "lock" as IconName, title: "Every company is walled off", body: "Each company's records belong to that company alone. Every request is checked against the signed-in person's own company on our servers." },
+  { icon: "team" as IconName, title: "Role-based access", body: "People see only the departments their role allows, and the limits are enforced by the server, not just hidden buttons." },
+  { icon: "shield" as IconName, title: "An audit trail", body: "Price changes, adjustments and team changes are recorded with who made them and when." },
+  { icon: "building" as IconName, title: "Your data, your exit", body: "Download everything as one spreadsheet at any time. You stay in control of your records." },
+];
+
+const stack = ["Purchasing", "Receiving", "Accounts", "Customer Service", "Inventory", "Sales", "Marketing", "HR", "Chat"];
 
 function Eyebrow({ children }: { children: ReactNode }) {
   return (
@@ -116,11 +155,12 @@ export default function Home() {
           <Link href="/" className="flex items-center" aria-label="jindjinni home">
             <BrandLogo markClass="h-12 w-auto" wordClass="h-5 w-auto sm:h-7" priority />
           </Link>
-          <nav className="hidden items-center gap-8 text-sm font-semibold text-muted md:flex" aria-label="Sections">
-            <a href="#platform" className="hover:text-ink">Platform</a>
-            <a href="#workflow" className="hover:text-ink">Workflow</a>
-            <a href="#inventory" className="hover:text-ink">Inventory + Invoicing</a>
-            <a href="#team" className="hover:text-ink">Team</a>
+          <nav className="hidden items-center gap-7 text-sm font-semibold text-muted md:flex" aria-label="Sections">
+            <a href="#platform" className="hover:text-ink">Departments</a>
+            <a href="#command" className="hover:text-ink">Command center</a>
+            <a href="#receiving" className="hover:text-ink">Receiving</a>
+            <a href="#team" className="hover:text-ink">Team + Chat</a>
+            <a href="#security" className="hover:text-ink">Security</a>
           </nav>
           <div className="flex items-center gap-2 sm:gap-3">
             <Link href="/login" className="whitespace-nowrap rounded-full px-3 py-2 text-sm font-bold text-ink hover:bg-slate-100">
@@ -143,19 +183,21 @@ export default function Home() {
             <div>
               <p className="inline-flex items-center gap-2 rounded-full bg-mint px-3.5 py-1.5 text-xs font-bold text-brand-deep ring-1 ring-inset ring-mint-line">
                 <span className="h-1.5 w-1.5 rounded-full bg-brand" />
-                Built for purchasing &amp; distribution businesses
+                Premium enterprise software
               </p>
               <h1 className="relative mt-6 text-balance text-5xl font-extrabold leading-[1.02] tracking-tight sm:text-6xl lg:text-[4.25rem]">
-                Run Your Business From{" "}
-                <span className="rounded-2xl bg-brand px-3 [box-decoration-break:clone]">One Place</span>
+                Your Entire Business,{" "}
+                <span className="rounded-2xl bg-brand px-3 [box-decoration-break:clone]">One Platform</span>
                 <Sparkle className="absolute -right-2 -top-6 hidden h-8 w-8 sm:block" />
                 <Sparkle className="absolute right-10 top-0 hidden h-4 w-4 sm:block" />
               </h1>
               <p className="mt-6 text-lg font-bold text-ink sm:text-xl">
-                Purchasing. Receiving. Inventory. Invoicing. Distribution. Accounts. Customer Service.
+                Purchasing. Receiving. Accounts. Customer Service. Inventory. Sales. Marketing. HR. Chat.
               </p>
               <p className="mt-4 max-w-xl text-lg text-muted">
-                One connected platform built to help your business stay organized and keep operations moving.
+                jindjinni is enterprise software that puts every department of your company on one connected record,
+                with a team chat built right in. Enter information once, and every department sees it. Built to
+                scale from your first employee to 100,000 staff members.
               </p>
               <div className="mt-9 flex flex-wrap gap-3">
                 <Link href="/signup" className={btnPrimary}>
@@ -171,21 +213,33 @@ export default function Home() {
           </div>
         </section>
 
-        {/* ---------- Everything under one roof ---------- */}
-        <section id="platform" className="scroll-mt-20 border-t border-line bg-white py-20 sm:py-28">
+        {/* ---------- Numbers ---------- */}
+        <section className="border-y border-line bg-slate-50">
+          <dl className="mx-auto grid max-w-6xl grid-cols-2 gap-y-8 px-4 py-10 sm:px-6 lg:grid-cols-4">
+            {stats.map((x) => (
+              <div key={x.label} className="text-center">
+                <dt className="text-3xl font-extrabold tracking-tight text-ink tabular-nums sm:text-4xl">{x.value}</dt>
+                <dd className="mt-1 px-2 text-sm font-semibold text-muted">{x.label}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+
+        {/* ---------- Every department ---------- */}
+        <section id="platform" className="scroll-mt-20 bg-white py-20 sm:py-28">
           <div className="mx-auto max-w-6xl px-4 sm:px-6">
             <div className="max-w-3xl">
-              <Eyebrow>Everything under one roof</Eyebrow>
+              <Eyebrow>Every department, built in</Eyebrow>
               <h2 className="mt-3 text-balance text-4xl font-extrabold tracking-tight sm:text-5xl">
-                Stop using multiple disconnected systems to operate your business.
+                Stop stitching together separate tools to run your company.
               </h2>
               <p className="mt-5 text-lg text-muted">
-                jindjinni connects your departments, customers, orders, inventory, invoices, and team in one
-                easy-to-use platform.
+                Each department has its own workspace, its own color and its own sidebar, and all of them share the
+                same customers, products, orders and people. Your team opens only what their job needs.
               </p>
             </div>
 
-            <div className="mt-14 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="mt-14 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {departments.map((d) => (
                 <article
                   key={d.title}
@@ -202,6 +256,24 @@ export default function Home() {
           </div>
         </section>
 
+        {/* ---------- Command center ---------- */}
+        <section id="command" className="scroll-mt-20 bg-slate-50 py-20 sm:py-28">
+          <div className="mx-auto grid max-w-6xl items-center gap-14 px-4 sm:px-6 lg:grid-cols-2 lg:gap-16">
+            <div>
+              <Eyebrow>Your command center</Eyebrow>
+              <h2 className="mt-3 text-balance text-4xl font-extrabold tracking-tight sm:text-5xl">
+                Sign in to the whole picture.
+              </h2>
+              <p className="mt-5 text-lg text-muted">
+                The Home screen belongs to no single department. It greets your people, keeps you ahead of what is
+                happening in your industry, and gives owners and admins a snapshot of how the company is doing.
+              </p>
+              <CheckList items={commandPoints} />
+            </div>
+            <CommandCenterMock />
+          </div>
+        </section>
+
         {/* ---------- One connected workflow ---------- */}
         <section id="workflow" className="scroll-mt-20 bg-mint py-20 sm:py-28">
           <div className="mx-auto max-w-6xl px-4 sm:px-6">
@@ -211,7 +283,8 @@ export default function Home() {
                 Enter It Once. Use It Everywhere.
               </h2>
               <p className="mt-5 text-lg text-muted">
-                Information should move with the transaction instead of being entered over and over again.
+                An order moves from department to department as one shared record, so nobody retypes it and nothing
+                gets lost in a handoff.
               </p>
             </div>
 
@@ -243,67 +316,147 @@ export default function Home() {
               <p>One order.</p>
               <p>One shared record.</p>
               <p>
-                <span className="rounded-2xl bg-brand px-3 [box-decoration-break:clone]">One connected operation.</span>
+                <span className="rounded-2xl bg-brand px-3 [box-decoration-break:clone]">One connected company.</span>
               </p>
             </div>
           </div>
         </section>
 
-        {/* ---------- Inventory + invoicing ---------- */}
-        <section id="inventory" className="scroll-mt-20 bg-white py-20 sm:py-28">
+        {/* ---------- Receiving ---------- */}
+        <section id="receiving" className="scroll-mt-20 bg-white py-20 sm:py-28">
+          <div className="mx-auto max-w-6xl px-4 sm:px-6">
+            <div className="mx-auto max-w-3xl text-center">
+              <Eyebrow>Receiving you can rely on</Eyebrow>
+              <h2 className="mt-3 text-balance text-4xl font-extrabold tracking-tight sm:text-5xl">
+                Know exactly what came through your door.
+              </h2>
+              <p className="mt-5 text-lg text-muted">
+                Every shipment is opened against its quotation and documented step by step, so problems are caught
+                at the dock, not after the money is paid. The system flags what looks wrong, and your people make the
+                final call.
+              </p>
+            </div>
+            <div className="mt-12 grid gap-4 md:grid-cols-2">
+              {receivingPoints.map((t) => (
+                <div key={t} className="flex items-start gap-4 rounded-3xl border border-line bg-white p-5">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-mint text-brand-deep">
+                    <Icon name={t.startsWith("Full-screen") ? "camera" : t.startsWith("Recall") ? "bell" : "check"} className="h-5 w-5" />
+                  </span>
+                  <p className="text-base font-semibold leading-snug text-ink">{t}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ---------- Inventory + sales ---------- */}
+        <section id="inventory" className="scroll-mt-20 bg-slate-50 py-20 sm:py-28">
           <div className="mx-auto grid max-w-6xl items-center gap-14 px-4 sm:px-6 lg:grid-cols-2 lg:gap-16">
             <div>
-              <Eyebrow>Inventory + Invoicing</Eyebrow>
+              <Eyebrow>Inventory + Sales</Eyebrow>
               <h2 className="mt-3 text-balance text-4xl font-extrabold tracking-tight sm:text-5xl">
                 Know What You Have. Know What You Sold.
               </h2>
               <p className="mt-5 text-lg text-muted">
-                Track your inventory as products enter and leave your operation. Use the same system to:
+                What you buy, what you hold and what you sell live in one system, so your stock is always the
+                latest number and never a guess.
               </p>
               <CheckList items={inventoryPoints} columns />
-              <p className="mt-8 rounded-2xl bg-mint px-5 py-4 text-base font-bold text-brand-deep ring-1 ring-inset ring-mint-line">
-                No separate inventory tracker or invoicing software required.
-              </p>
             </div>
             <InventoryInvoiceMock />
           </div>
         </section>
 
-        {/* ---------- Team access ---------- */}
-        <section id="team" className="scroll-mt-20 bg-slate-50 py-20 sm:py-28">
-          <div className="mx-auto grid max-w-6xl items-center gap-14 px-4 sm:px-6 lg:grid-cols-2 lg:gap-16">
-            <div className="order-2 lg:order-1">
-              <TeamMock />
+        {/* ---------- Team + chat ---------- */}
+        <section id="team" className="scroll-mt-20 bg-white py-20 sm:py-28">
+          <div className="mx-auto max-w-6xl px-4 sm:px-6">
+            <div className="grid items-center gap-14 lg:grid-cols-2 lg:gap-16">
+              <div className="order-2 lg:order-1">
+                <TeamMock />
+              </div>
+              <div className="order-1 lg:order-2">
+                <Eyebrow>Team access</Eyebrow>
+                <h2 className="mt-3 text-balance text-4xl font-extrabold tracking-tight sm:text-5xl">
+                  Your Team. Their Access. Your Control.
+                </h2>
+                <p className="mt-5 text-lg text-muted">
+                  Whether you run a team of five or an organization of 100,000 staff members, you decide who can see
+                  and change what.
+                </p>
+                <CheckList items={teamPoints} />
+              </div>
             </div>
-            <div className="order-1 lg:order-2">
-              <Eyebrow>Team access</Eyebrow>
-              <h2 className="mt-3 text-balance text-4xl font-extrabold tracking-tight sm:text-5xl">
-                Your Team. Their Access. Your Control.
-              </h2>
-              <p className="mt-5 text-lg text-muted">Business owners can:</p>
-              <CheckList items={teamPoints} />
-              <p className="mt-8 text-lg font-bold">
-                Each employee sees the tools they need for their job.
-              </p>
+
+            <div className="mt-24 grid items-center gap-14 lg:grid-cols-2 lg:gap-16">
+              <div>
+                <Eyebrow>Built-in company chat</Eyebrow>
+                <h2 className="mt-3 text-balance text-4xl font-extrabold tracking-tight sm:text-5xl">
+                  Talk to your whole organization, right where the work is.
+                </h2>
+                <p className="mt-5 text-lg text-muted">
+                  No separate messaging app to buy, secure or keep in sync. Chat uses the same people, roles and
+                  departments as the rest of jindjinni, so the right conversation is always one click away.
+                </p>
+                <CheckList
+                  items={[
+                    "An Everyone room for the whole company",
+                    "A room for each department, shown only to the people who work in it",
+                    "Private one-to-one messages with live status: online, busy, at lunch, away",
+                    "Share photos and files, with unread counts in the top menu",
+                  ]}
+                />
+              </div>
+              <ChatMock />
             </div>
           </div>
         </section>
 
         {/* ---------- Business profile ---------- */}
-        <section id="profile" className="scroll-mt-20 bg-white py-20 sm:py-28">
+        <section id="profile" className="scroll-mt-20 bg-slate-50 py-20 sm:py-28">
           <div className="mx-auto max-w-6xl px-4 sm:px-6">
             <div className="mx-auto max-w-3xl text-center">
-              <Eyebrow>Business profile</Eyebrow>
+              <Eyebrow>Set up in minutes</Eyebrow>
               <h2 className="mt-3 text-balance text-4xl font-extrabold tracking-tight sm:text-5xl">
-                Set up your business once. See it on every document.
+                Set up your company once. See it on every document.
               </h2>
               <p className="mt-5 text-lg text-muted">
-                Create one business profile and your information can automatically appear on quotations,
-                invoices, receipts, and reports.
+                Create your company profile and a ready-made starting layout: brands, products, conditions and
+                receipt wording. Then make it yours. Your logo and details appear automatically on quotations,
+                receipts and reports.
               </p>
             </div>
             <div className="mt-14">
               <ProfileMock />
+            </div>
+          </div>
+        </section>
+
+        {/* ---------- Security ---------- */}
+        <section id="security" className="scroll-mt-20 bg-white py-20 sm:py-28">
+          <div className="mx-auto max-w-6xl px-4 sm:px-6">
+            <div className="max-w-3xl">
+              <Eyebrow>Enterprise-grade by design</Eyebrow>
+              <h2 className="mt-3 text-balance text-4xl font-extrabold tracking-tight sm:text-5xl">
+                Built so your company can trust it.
+              </h2>
+              <p className="mt-5 text-lg text-muted">
+                Security and control are part of how jindjinni is built, not an add-on.{" "}
+                <Link href="/security" className="font-bold text-ink underline decoration-brand decoration-2 underline-offset-4">
+                  Read how we protect your data
+                </Link>
+                .
+              </p>
+            </div>
+            <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {trustPoints.map((t) => (
+                <article key={t.title} className="rounded-3xl border border-line bg-white p-6">
+                  <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-mint text-brand-deep">
+                    <Icon name={t.icon} className="h-6 w-6" />
+                  </span>
+                  <h3 className="mt-5 text-lg font-extrabold tracking-tight">{t.title}</h3>
+                  <p className="mt-2 text-[15px] leading-relaxed text-muted">{t.body}</p>
+                </article>
+              ))}
             </div>
           </div>
         </section>
@@ -334,7 +487,7 @@ export default function Home() {
                 ))}
               </ul>
               <p className="mx-auto mt-6 max-w-xl text-lg font-semibold text-ink/80">
-                Everything your operation needs — connected with jindjinni.
+                Every department of your company, connected with jindjinni.
               </p>
               <p className="mt-2 flex items-center justify-center gap-2 text-base font-bold text-ink">
                 <Sparkle className="h-4 w-4" />
@@ -367,15 +520,16 @@ export default function Home() {
           <Link href="/" aria-label="jindjinni home">
             <BrandLogo markClass="h-11 w-auto" wordClass="h-6 w-auto" />
           </Link>
-          <p className="text-center">
+          <p className="max-w-md text-center">
             Your business wishes, our command.
-            <span className="block text-xs">© 2026 jindjinni. All rights reserved.</span>
+            <span className="block text-xs">© 2026 jindjinni. All rights reserved. jindjinni is business software. It does not provide legal, tax, accounting or medical advice.</span>
           </p>
           <div className="flex flex-wrap justify-center gap-x-5 gap-y-2 font-semibold">
             <Link href="/login" className="hover:text-ink">Sign In</Link>
             <Link href="/signup" className="hover:text-ink">Get Started</Link>
             <Link href="/terms" className="hover:text-ink">Terms</Link>
             <Link href="/privacy" className="hover:text-ink">Privacy</Link>
+            <Link href="/acceptable-use" className="hover:text-ink">Acceptable Use</Link>
             <Link href="/security" className="hover:text-ink">Security</Link>
           </div>
         </div>

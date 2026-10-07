@@ -9,9 +9,9 @@ import "./globals.css";
 // SPEC.md.
 
 export const metadata: Metadata = {
-  title: "jindjinni | Run your business from one place",
+  title: "jindjinni | Enterprise software for your entire business",
   description:
-    "jindjinni is one connected platform for purchasing, receiving, inventory, invoicing, distribution, accounts, and customer service.",
+    "jindjinni is premium enterprise software that connects purchasing, receiving, accounts, customer service, inventory, sales, marketing, HR and team chat on one platform, built for teams of any size up to 100,000 staff.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

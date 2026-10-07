@@ -24,20 +24,23 @@ function Pill({ tone, children }: { tone: "green" | "amber" | "slate" | "ink"; c
 /* ------------------------------------------------------------------ */
 
 const sidebar: { icon: IconName; label: string }[] = [
+  { icon: "home", label: "Home" },
   { icon: "purchasing", label: "Purchasing" },
   { icon: "receiving", label: "Receiving" },
-  { icon: "inventory", label: "Inventory" },
-  { icon: "invoicing", label: "Invoicing" },
-  { icon: "distribution", label: "Distribution" },
   { icon: "accounts", label: "Accounts" },
   { icon: "support", label: "Customer Service" },
+  { icon: "inventory", label: "Inventory" },
+  { icon: "tag", label: "Sales" },
+  { icon: "megaphone", label: "Marketing" },
+  { icon: "clock", label: "HR" },
+  { icon: "chat", label: "Chat" },
 ];
 
 const activity = [
   { ref: "REF-261004-1", who: "Maria A.", item: "Glucose sensors ×10", stage: "Received", tone: "green" },
   { ref: "REF-261004-2", who: "Hartley Pharmacy", item: "Test strips 50 ct ×24", stage: "In transit", tone: "amber" },
   { ref: "REF-261003-4", who: "D. Okafor", item: "Pen needles 5 mm ×40", stage: "Quoted", tone: "slate" },
-  { ref: "REF-261003-1", who: "Lakeside Supply", item: "Lancets 100 ct ×60", stage: "Invoiced", tone: "ink" },
+  { ref: "REF-261003-1", who: "Lakeside Supply", item: "Lancets 100 ct ×60", stage: "Paid", tone: "ink" },
 ] as const;
 
 export function HeroDashboard() {
@@ -79,15 +82,15 @@ export function HeroDashboard() {
           {/* main */}
           <div className="min-w-0 flex-1 p-4 sm:p-5">
             <div className="flex items-center justify-between">
-              <p className="text-sm font-bold text-ink">Today at a glance</p>
+              <p className="text-sm font-bold text-ink">Welcome to Northfield Supply</p>
               <span className="rounded-full bg-brand px-3 py-1 text-[11px] font-bold text-ink">+ New quotation</span>
             </div>
 
             <div className="mt-4 grid grid-cols-3 gap-2.5">
               {[
-                ["Open quotations", "24", "+3 today"],
-                ["Packages received", "38", "this week"],
-                ["Unpaid invoices", "$12,480", "6 open"],
+                ["Quotations given", "24", "this week"],
+                ["Shipments received", "38", "this week"],
+                ["Orders to be paid", "$12,480", "6 open"],
               ].map(([label, value, note]) => (
                 <div key={label} className="rounded-2xl border border-line bg-white p-3">
                   <p className="text-[10px] font-medium text-muted sm:text-[11px]">{label}</p>
@@ -124,7 +127,7 @@ export function HeroDashboard() {
       </div>
 
       {/* floating notifications */}
-      <div className="absolute -left-6 bottom-10 hidden items-center gap-3 rounded-2xl border border-line bg-white p-3 pr-5 shadow-xl sm:flex">
+      <div className="absolute -bottom-5 right-8 hidden items-center gap-3 rounded-2xl border border-line bg-white p-3 pr-5 shadow-xl sm:flex">
         <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-mint text-brand-deep">
           <Icon name="receiving" className="h-5 w-5" />
         </span>
@@ -239,10 +242,10 @@ export function InventoryInvoiceMock() {
 /* ------------------------------------------------------------------ */
 
 const team: { name: string; role: string; tone: "ink" | "green" | "slate"; access: string[] }[] = [
-  { name: "Priya N.", role: "Manager", tone: "ink", access: ["All departments"] },
+  { name: "Priya N.", role: "Admin", tone: "ink", access: ["All departments"] },
   { name: "Marcus T.", role: "Purchasing", tone: "green", access: ["Purchasing", "Customer Service"] },
   { name: "Dana R.", role: "Receiving", tone: "green", access: ["Receiving", "Inventory"] },
-  { name: "Lee K.", role: "Accounts", tone: "slate", access: ["Invoicing", "Accounts"] },
+  { name: "Lee K.", role: "Accounts", tone: "slate", access: ["Accounts", "Sales"] },
 ];
 
 export function TeamMock() {
@@ -375,6 +378,113 @@ export function ProfileMock() {
             </div>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+
+/* ------------------------------------------------------------------ */
+/* Home: the owner's command center                                    */
+/* ------------------------------------------------------------------ */
+
+export function CommandCenterMock() {
+  const cards: { title: string; icon: IconName; rows: [string, string][] }[] = [
+    { title: "Purchasing", icon: "purchasing", rows: [["Quotations given", "24"], ["Confirmed", "18"], ["On the way", "9"]] },
+    { title: "Receiving", icon: "receiving", rows: [["Shipments received", "38"], ["With a problem found", "2"], ["Waiting for a decision", "1"]] },
+    { title: "Accounts", icon: "accounts", rows: [["Orders paid", "31"], ["To be paid", "6"], ["Overdue", "0"]] },
+  ];
+  return (
+    <div className="overflow-hidden rounded-3xl border border-line bg-white shadow-[0_30px_80px_-30px_rgba(11,19,14,0.35)]" aria-hidden="true">
+      <div className="bg-gradient-to-br from-brand-deep to-emerald-800 px-5 py-4 text-white">
+        <p className="text-[11px] font-medium text-emerald-100">Good morning, Priya · Wednesday, October 7</p>
+        <p className="mt-0.5 text-lg font-extrabold">Welcome to Northfield Supply</p>
+      </div>
+      <div className="space-y-3 p-4">
+        <div className="rounded-2xl border border-line p-3">
+          <div className="flex items-center justify-between">
+            <p className="flex items-center gap-2 text-xs font-bold text-ink">
+              <Icon name="bell" className="h-4 w-4 text-brand-deep" /> Industry news
+            </p>
+            <Pill tone="amber">2 need attention</Pill>
+          </div>
+          <p className="mt-2 truncate text-[11px] text-muted">FDA recall notice for a pump pod, posted today</p>
+          <p className="truncate text-[11px] text-muted">Manufacturer announces a new sensor, shipping next quarter</p>
+        </div>
+        <div className="rounded-2xl border border-line p-3">
+          <div className="flex items-center justify-between">
+            <p className="flex items-center gap-2 text-xs font-bold text-ink">
+              <Icon name="chart" className="h-4 w-4 text-brand-deep" /> Company performance
+            </p>
+            <span className="inline-flex rounded-full bg-slate-100 p-0.5 text-[10px] font-semibold text-muted">
+              <span className="rounded-full px-2 py-0.5">Today</span>
+              <span className="rounded-full bg-brand px-2 py-0.5 text-ink">This week</span>
+              <span className="rounded-full px-2 py-0.5">This month</span>
+            </span>
+          </div>
+          <div className="mt-3 grid gap-2 sm:grid-cols-3">
+            {cards.map((c) => (
+              <div key={c.title} className="rounded-xl bg-slate-50 p-2.5">
+                <p className="flex items-center gap-1.5 text-[11px] font-bold text-ink">
+                  <Icon name={c.icon} className="h-3.5 w-3.5 text-brand-deep" /> {c.title}
+                </p>
+                {c.rows.map(([k, v]) => (
+                  <p key={k} className="mt-1 flex justify-between gap-2 text-[10px] text-muted">
+                    <span className="truncate">{k}</span>
+                    <span className="font-bold tabular-nums text-ink">{v}</span>
+                  </p>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Company chat                                                        */
+/* ------------------------------------------------------------------ */
+
+export function ChatMock() {
+  const rooms: [string, string][] = [["Everyone", "3"], ["Purchasing", ""], ["Receiving", "1"], ["Accounts", ""], ["Customer Service", ""]];
+  const msgs: { who: string; role: string; text: string; me?: boolean }[] = [
+    { who: "Dana R.", role: "Receiving", text: "Box for REF-261004-1 is open, photos are in. One pod has a lot number to check." },
+    { who: "Marcus T.", role: "Purchasing", text: "Thanks. Flagging the quote so Accounts sees it." },
+    { who: "You", role: "Accounts", text: "Got it. I will review it before payment.", me: true },
+  ];
+  return (
+    <div className="overflow-hidden rounded-3xl border border-line bg-white shadow-[0_30px_80px_-30px_rgba(11,19,14,0.35)]" aria-hidden="true">
+      <div className="flex">
+        <div className="hidden w-40 shrink-0 border-r border-line bg-slate-50 p-3 sm:block">
+          <p className="px-2 pb-2 text-[10px] font-bold uppercase tracking-wide text-muted">Rooms</p>
+          <ul className="space-y-0.5">
+            {rooms.map(([r, n], i) => (
+              <li key={r} className={`flex items-center justify-between rounded-lg px-2 py-1.5 text-xs font-medium ${i === 0 ? "bg-white text-ink ring-1 ring-line" : "text-muted"}`}>
+                <span># {r}</span>
+                {n && <span className="rounded-full bg-brand px-1.5 text-[10px] font-bold text-ink">{n}</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div className="min-w-0 flex-1 p-4">
+          <p className="flex items-center gap-2 text-xs font-bold text-ink">
+            <Icon name="chat" className="h-4 w-4 text-brand-deep" /> # Everyone
+          </p>
+          <div className="mt-3 space-y-2.5">
+            {msgs.map((m) => (
+              <div key={m.text} className={`flex ${m.me ? "justify-end" : ""}`}>
+                <div className={`max-w-[88%] rounded-2xl px-3 py-2 text-[11px] leading-snug ${m.me ? "bg-brand text-ink" : "bg-slate-100 text-ink"}`}>
+                  <p className="mb-0.5 text-[10px] font-bold opacity-70">
+                    {m.who} · {m.role}
+                  </p>
+                  {m.text}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );
