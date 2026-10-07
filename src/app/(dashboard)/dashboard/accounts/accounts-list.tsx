@@ -3,13 +3,20 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
-import { dayHeading, groupByDay, orderMatches, sumAmounts, type AccountsOrder } from "@/lib/accounts-rules";
+import { dayHeading, dueWording, groupByDay, orderMatches, sumAmounts, type AccountsOrder } from "@/lib/accounts-rules";
 import { chipClass, MONEY } from "@/lib/receiving-ui";
 import { dueState, type DueState } from "@/lib/payment-due";
 
 const shortDay = (day: string) => {
   const [y, m, d] = day.split("-").map(Number);
   return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+};
+
+const DUE_CHIP: Record<DueState, string> = {
+  OVERDUE: "bg-red-600 text-white dark:bg-red-500",
+  TODAY: "bg-amber-500 text-amber-950",
+  TOMORROW: "bg-sky-100 text-sky-900 dark:bg-sky-900/40 dark:text-sky-100",
+  LATER: "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-100",
 };
 
 const DUE_BADGE: Record<DueState, { text: string; cls: string } | null> = {
@@ -27,9 +34,13 @@ const DUE_BADGE: Record<DueState, { text: string; cls: string } | null> = {
 export function AccountsList({ orders, today }: { orders: AccountsOrder[]; today: string }) {
   const path = usePathname();
   const [q, setQ] = useState("");
-  const shown = useMemo(() => orders.filter((o) => orderMatches(o, q)), [orders, q]);
+  const [onlyLate, setOnlyLate] = useState(false);
+  const shown = useMemo(
+    () => orders.filter((o) => orderMatches(o, q) && (!onlyLate || (o.dueDay && dueState(o.dueDay, today) !== "LATER" && dueState(o.dueDay, today) !== "TOMORROW"))),
+    [orders, q, onlyLate, today],
+  );
   const days = useMemo(() => groupByDay(shown, (o) => o.dueDay ?? "", false), [shown]);
-  const searching = q.trim() !== "";
+  const searching = q.trim() !== "" || onlyLate;
   const overdue = shown.filter((o) => o.dueDay && dueState(o.dueDay, today) === "OVERDUE").length;
   const dueToday = shown.filter((o) => o.dueDay && dueState(o.dueDay, today) === "TODAY").length;
 
@@ -56,6 +67,10 @@ export function AccountsList({ orders, today }: { orders: AccountsOrder[]; today
           placeholder="Search a customer, order # or tracking #"
           className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
         />
+        <label className="mt-2 flex items-center gap-2 text-xs text-slate-700 dark:text-slate-200">
+          <input id="tbp-late" data-testid="tbp-only-late" type="checkbox" className="h-4 w-4 accent-red-600" checked={onlyLate} onChange={(e) => setOnlyLate(e.target.checked)} />
+          Only overdue or due today
+        </label>
       </div>
 
       {shown.length === 0 && (
@@ -71,9 +86,12 @@ export function AccountsList({ orders, today }: { orders: AccountsOrder[]; today
             <details key={d.day || "none"} open={searching || hasActive} data-testid="tbp-day" className="group">
               <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-3 gap-y-0.5 px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/60">
                 <span aria-hidden className="text-[10px] text-slate-400 transition group-open:rotate-90">▶</span>
+                {d.day && <span className="text-sm text-slate-600 dark:text-slate-300" data-testid="tbp-day-lead">{dueWording(d.day, today).lead}</span>}
                 <span className="text-sm font-semibold text-slate-900 dark:text-slate-50" data-testid="tbp-day-title">{d.day ? dayHeading(d.day) : "No date to count from"}</span>
                 {d.day && DUE_BADGE[dueState(d.day, today)] && (
-                  <span data-testid="tbp-day-badge" className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${DUE_BADGE[dueState(d.day, today)]!.cls}`}>{DUE_BADGE[dueState(d.day, today)]!.text}</span>
+                  <span data-testid="tbp-day-badge" className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${DUE_BADGE[dueState(d.day, today)]!.cls}`}>
+                    {dueWording(d.day, today).late ? `Overdue · ${dueWording(d.day, today).late}` : DUE_BADGE[dueState(d.day, today)]!.text}
+                  </span>
                 )}
                 <span className="text-xs text-slate-600 dark:text-slate-300">
                   <strong className="tabular-nums">{d.orders.length}</strong> · <strong className="tabular-nums">{MONEY.format(d.total)}</strong>
@@ -110,6 +128,9 @@ export function AccountsList({ orders, today }: { orders: AccountsOrder[]; today
                           <div className="flex flex-wrap gap-1.5">
                             <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${chipClass(o.customerName)}`}>{o.customerName}</span>
                             <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-medium tabular-nums text-blue-900 dark:bg-blue-900/40 dark:text-blue-100">{MONEY.format(o.amount)}</span>
+                            {o.dueDay && (
+                              <span data-testid="tbp-due" className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${DUE_CHIP[dueState(o.dueDay, today)]}`}>{dueWording(o.dueDay, today).chip}</span>
+                            )}
                             {o.dueStartDay && (
                               <span data-testid="tbp-basis" className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-800 dark:bg-slate-800 dark:text-slate-100">
                                 {o.dueBasis === "DELIVERED" ? `Delivered ${shortDay(o.dueStartDay)}` : `Received ${shortDay(o.dueStartDay)}`}

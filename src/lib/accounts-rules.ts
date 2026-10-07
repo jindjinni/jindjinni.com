@@ -1,3 +1,5 @@
+import { dueState, daysBetween, type DueState } from "@/lib/payment-due";
+
 // Pure helpers for the Accounts department (no database): who is waiting to be paid, how orders are grouped under
 // their day, and the totals shown on each group. Safe to import from the browser.
 
@@ -118,4 +120,45 @@ export function monthWindowUtc(month: string): { start: string; end: string } {
   const [y, m] = month.split("-").map(Number);
   const fmt = (d: Date) => d.toISOString().slice(0, 19).replace("T", " ");
   return { start: fmt(new Date(Date.UTC(y, m - 1, 0))), end: fmt(new Date(Date.UTC(y, m, 2))) };
+}
+
+/** How many days late a payment is (0 when it isn't). */
+export const daysLate = (dueDay: string, today: string) => Math.max(0, daysBetween(dueDay, today));
+
+const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
+
+/** "Mon, Oct 5" for a YYYY-MM-DD day (read as written). */
+export function shortDayName(day: string): string {
+  const [y, m, d] = day.split("-").map(Number);
+  if (!y || !m || !d) return "";
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
+}
+
+export type DueWording = {
+  state: DueState;
+  /** The words in front of the date on a group heading: "Pay by", "Pay today", "Overdue, was due". */
+  lead: string;
+  /** The short chip on a card. */
+  chip: string;
+  /** One plain sentence, for the order page. */
+  sentence: string;
+  /** "2 days late" when overdue, otherwise "". */
+  late: string;
+};
+
+/** The plain-language way to say when a payment is due, as of `today` (both "YYYY-MM-DD" days on the company's own calendar). */
+export function dueWording(dueDay: string, today: string): DueWording {
+  const state = dueState(dueDay, today);
+  const late = state === "OVERDUE" ? `${plural(daysLate(dueDay, today), "day")} late` : "";
+  const full = dayHeading(dueDay);
+  switch (state) {
+    case "OVERDUE":
+      return { state, lead: "Overdue, was due", chip: `Overdue · was due ${shortDayName(dueDay)} · ${late}`, sentence: `Overdue: this should have been paid by ${full} (${late}).`, late };
+    case "TODAY":
+      return { state, lead: "Pay today,", chip: "Pay today", sentence: `Need to be paid today, ${full}.`, late };
+    case "TOMORROW":
+      return { state, lead: "Pay by tomorrow,", chip: `Pay by tomorrow · ${shortDayName(dueDay)}`, sentence: `Need to be paid by tomorrow, ${full}.`, late };
+    default:
+      return { state, lead: "Pay by", chip: `Pay by ${shortDayName(dueDay)}`, sentence: `Need to be paid by ${full}.`, late };
+  }
 }
