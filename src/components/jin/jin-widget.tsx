@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { GenieLamp } from "@/components/jin/genie-lamp";
 import { parseAnswer, plainText, remainingText, type Inline, type JinMessage } from "@/lib/jin-rules";
+import { offeredVoices, pickVoice, speechChunks, VOICE_PITCH, VOICE_RATE } from "@/lib/jin-voice";
 
 type Shown = JinMessage & { error?: boolean };
 
@@ -25,6 +26,61 @@ const recognitionCtor = (): RecognitionCtor | null => {
 };
 
 const noopSubscribe = () => () => {};
+
+// Lets the person choose which of their device's voices Jin uses, and hear it. Shown only while reading aloud is on.
+function deviceVoices(): SpeechSynthesisVoice[] {
+  try {
+    return "speechSynthesis" in window && typeof window.speechSynthesis.getVoices === "function" ? window.speechSynthesis.getVoices() : [];
+  } catch {
+    return [];
+  }
+}
+function subscribeVoices(cb: () => void) {
+  const synth = "speechSynthesis" in window ? window.speechSynthesis : null;
+  if (!synth || typeof synth.addEventListener !== "function") return () => {};
+  synth.addEventListener("voiceschanged", cb);
+  return () => synth.removeEventListener("voiceschanged", cb);
+}
+const voiceNames = () => deviceVoices().map((v) => `${v.name}|${v.lang}`).join("\n");
+
+function VoicePicker({ onHear }: { onHear: () => void }) {
+  const names = useSyncExternalStore(subscribeVoices, voiceNames, () => "");
+  const lang = typeof navigator !== "undefined" ? navigator.language || "en-US" : "en-US";
+  const voices = names ? offeredVoices(deviceVoices(), lang) : [];
+  const [chosen, setChosen] = useState(() => {
+    try {
+      return localStorage.getItem("jin-voice") ?? "";
+    } catch {
+      return "";
+    }
+  });
+  if (voices.length < 2) return null;
+  const auto = pickVoice(voices, lang)?.name ?? "";
+  return (
+    <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-2 text-xs text-slate-600 dark:border-slate-800 dark:text-slate-300" data-testid="jin-voice-picker">
+      <label htmlFor="jin-voice-select" className="shrink-0 font-medium">Voice</label>
+      <select
+        id="jin-voice-select"
+        value={chosen || auto}
+        onChange={(e) => {
+          setChosen(e.target.value);
+          try {
+            localStorage.setItem("jin-voice", e.target.value);
+          } catch {
+            /* storage blocked: the choice lasts until the page is closed */
+          }
+          setTimeout(onHear, 0);
+        }}
+        className="min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-950"
+      >
+        {voices.map((v) => (
+          <option key={v.name} value={v.name}>{v.name}</option>
+        ))}
+      </select>
+      <button type="button" onClick={onHear} className="shrink-0 rounded-md border border-slate-300 px-2 py-1 hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800" data-testid="jin-voice-hear">Hear it</button>
+    </div>
+  );
+}
 
 const MicIcon = ({ className = "h-5 w-5" }: { className?: string }) => (
   <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -144,10 +200,25 @@ export function JinWidget() {
     // Reading aloud is a nicety: if the browser refuses, the written answer still stands.
     try {
       if (!("speechSynthesis" in window)) return;
-      window.speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(plainText(answer));
-      u.lang = navigator.language || "en-US";
-      window.speechSynthesis.speak(u);
+      const synth = window.speechSynthesis;
+      synth.cancel();
+      const lang = navigator.language || "en-US";
+      let preferred: string | null = null;
+      try {
+        preferred = localStorage.getItem("jin-voice");
+      } catch {
+        /* storage blocked: use the automatic pick */
+      }
+      const voice = pickVoice(deviceVoices(), lang, preferred);
+      // One sentence at a time: natural pauses, and long answers are never cut off part way.
+      for (const piece of speechChunks(plainText(answer))) {
+        const u = new SpeechSynthesisUtterance(piece);
+        u.lang = voice?.lang || lang;
+        if (voice) u.voice = voice;
+        u.rate = VOICE_RATE;
+        u.pitch = VOICE_PITCH;
+        synth.speak(u);
+      }
     } catch {
       /* ignore */
     }
@@ -279,6 +350,7 @@ export function JinWidget() {
               </button>
             </span>
           </header>
+          {canSpeak && speakOn && <VoicePicker onHear={() => speak("Hi, I'm Jin. This is how I sound.")} />}
           <div className="flex-1 space-y-3 overflow-y-auto px-4 py-3 text-sm text-slate-800 dark:text-slate-100" data-testid="jin-messages" aria-live="polite">
             {msgs.length === 0 && (
               <div className="space-y-3">

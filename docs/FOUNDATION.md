@@ -57,6 +57,10 @@ To go back to it if something breaks badly: `git checkout foundation-v1` (or bra
 - Voice: the mic button (dictation) and the read-aloud switch use the browser's own speech tools (no server, no extra AI; hidden when unsupported). Dictation fills the box for checking and is never auto-sent, because lot and serial numbers are easily misheard.
 - Safety: tool results, news and notes are treated as data, not instructions; answers can link only to `/dashboard/...` pages (anything else is shown as plain text, `parseInline`); input is length-capped and history is cleaned. Terms/Privacy describe Jin; `TERMS_VERSION` bumped to 2026-10-07.3.
 
+## Jin's reading voice
+
+Reading answers aloud uses the browser's own voices (free, nothing leaves the device). `src/lib/jin-voice.ts` picks the most natural voice the device has (Apple Enhanced/Premium, Google, Microsoft Natural), skips novelty voices and other languages, reads one sentence at a time at a calm pace, and the widget lets the person pick another voice (remembered as `jin-voice`). A paid human-like voice (OpenAI/ElevenLabs text-to-speech) is a possible later switch; who pays for it (platform with daily limits, or each company's own connector) is not decided yet, so do not add one without that decision.
+
 ## Business verification and approval (who we let in)
 
 We only work with real, registered businesses. Sign-up (and the safety-net onboarding page) now requires, on top of the Business Profile: EIN (format and IRS-prefix checked, stored `XX-XXXXXXX`, one per non-rejected company), state of registration, business structure, state file number, year formed, kind of business, a short description, and one proof document (PDF/PNG/JPG up to 4MB, checked by its real bytes). All of it is read and checked in `src/lib/business-verification.ts`; the form is `components/business-verification-fields.tsx`; the choices live in `business-verification-options.ts` (browser-safe).
