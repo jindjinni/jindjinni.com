@@ -46,6 +46,7 @@ export async function requireOrg(): Promise<CurrentOrg> {
       organizationName: organizations.name,
       role: memberships.role,
       deptAccess: memberships.deptAccess,
+      approvalStatus: organizations.approvalStatus,
     })
     .from(memberships)
     .innerJoin(organizations, eq(memberships.organizationId, organizations.id))
@@ -82,6 +83,9 @@ export async function requireOrg(): Promise<CurrentOrg> {
     redirect(anyMembership ? "/no-access" : "/onboarding");
   }
 
+  // A new company is locked until the platform owner approves it (and again if they later suspend it).
+  if (isHeldBack(row!.approvalStatus)) redirect("/under-review");
+
   return {
     userId: userId!,
     organizationId: row!.organizationId,
@@ -106,12 +110,13 @@ export async function requireOrgApi(): Promise<CurrentOrg | null> {
       organizationName: organizations.name,
       role: memberships.role,
       deptAccess: memberships.deptAccess,
+      approvalStatus: organizations.approvalStatus,
     })
     .from(memberships)
     .innerJoin(organizations, eq(memberships.organizationId, organizations.id))
     .where(and(eq(memberships.userId, userId), isNull(memberships.deactivatedAt), isNull(organizations.closedAt)))
     .limit(1);
-  if (!row) return null;
+  if (!row || isHeldBack(row.approvalStatus)) return null;
   return {
     userId,
     organizationId: row.organizationId,
@@ -119,6 +124,11 @@ export async function requireOrgApi(): Promise<CurrentOrg | null> {
     role: row.role as CurrentOrg["role"],
     access: parseAccess(row.deptAccess),
   };
+}
+
+/** null = approved (every company from before approvals existed); "pending" and "rejected" are locked out. */
+export function isHeldBack(status: string | null): boolean {
+  return status === "pending" || status === "rejected";
 }
 
 export type ClosedCompany = {
@@ -148,6 +158,36 @@ export async function getClosedCompanyForUser(userId: string): Promise<ClosedCom
   if (!row || !row.closedAt) return null;
   const expired = !!row.purgeAfter && new Date(row.purgeAfter).getTime() <= Date.now();
   return { ...row, role: row.role as Role, closedAt: row.closedAt, expired };
+}
+
+export type HeldCompany = {
+  organizationId: string;
+  organizationName: string;
+  role: Role;
+  status: "pending" | "rejected";
+  reason: string | null;
+  decidedAt: string | null;
+  createdAt: string;
+};
+
+/** The signed-in user's company that is waiting for approval (or was turned down), for the /under-review page, or null. */
+export async function getHeldCompanyForUser(userId: string): Promise<HeldCompany | null> {
+  const [row] = await db
+    .select({
+      organizationId: organizations.id,
+      organizationName: organizations.name,
+      role: memberships.role,
+      status: organizations.approvalStatus,
+      reason: organizations.approvalReason,
+      decidedAt: organizations.approvalDecidedAt,
+      createdAt: organizations.createdAt,
+    })
+    .from(memberships)
+    .innerJoin(organizations, eq(memberships.organizationId, organizations.id))
+    .where(and(eq(memberships.userId, userId), isNull(memberships.deactivatedAt), isNull(organizations.closedAt)))
+    .limit(1);
+  if (!row || !isHeldBack(row.status)) return null;
+  return { ...row, role: row.role as Role, status: row.status as "pending" | "rejected" };
 }
 
 /** Current signed-in user id (no redirect), for pages that must work while the company is closed. */

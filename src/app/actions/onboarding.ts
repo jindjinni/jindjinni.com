@@ -18,6 +18,7 @@ import {
 import { setupNewOrgCatalog } from "@/lib/catalog-template";
 import { extractBusinessProfileIdentityFields } from "@/lib/business-profile-form";
 import { encodeLogoFile } from "@/lib/logo-validation";
+import { readVerification, einInUse, saveVerification, EIN_IN_USE_MESSAGE } from "@/lib/business-verification";
 
 export type ActionState = { error?: string } | undefined;
 
@@ -48,6 +49,10 @@ export async function createOrganization(
     return { error: encodedLogo.error };
   }
 
+  const verification = await readVerification(formData);
+  if ("error" in verification) return { error: verification.error };
+  if (await einInUse(verification.data.ein)) return { error: EIN_IN_USE_MESSAGE };
+
   const profile = extractBusinessProfileIdentityFields(formData);
   if (!profile.businessAddressStreet1 || !profile.businessAddressCity || !profile.businessAddressState || !profile.businessAddressZip) {
     return { error: "Business Address (street, city, state, and ZIP) is required." };
@@ -73,7 +78,7 @@ export async function createOrganization(
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/(^-|-$)/g, "") || newId("org");
 
-  await db.insert(organizations).values({ id: orgId, name: companyName, slug });
+  await db.insert(organizations).values({ id: orgId, name: companyName, slug, approvalStatus: "pending" });
   await db.insert(memberships).values({
     id: newId("mem"),
     userId: userId!,
@@ -89,10 +94,13 @@ export async function createOrganization(
     id: newId("bizprofile"),
     organizationId: orgId,
     ...profile,
+    taxId: verification.data.ein,
+    businessRegistrationNumber: verification.data.stateFileNumber,
     logoData: encodedLogo.data,
     logoContentType: encodedLogo.contentType,
     logoUpdatedAt: new Date().toISOString(),
   });
+  await saveVerification(orgId, verification.data);
 
-  redirect("/dashboard/purchasing");
+  redirect("/under-review");
 }

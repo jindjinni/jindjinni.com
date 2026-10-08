@@ -76,6 +76,12 @@ export const organizations = sqliteTable("organizations", {
   // received (see platformCatalogTemplates). null = never. Plain nullable
   // integer on purpose -- same drizzle-kit rule as seatLimit above.
   catalogTemplateVersion: integer("catalog_template_version"),
+  // Platform approval of a NEW company (see lib/business-verification.ts). null = approved (every company that existed before
+  // approval was introduced); "pending" = signed up, waiting for the platform owner; "rejected" = turned down or suspended.
+  // Plain nullable text on purpose -- same drizzle-kit rule as seatLimit above.
+  approvalStatus: text("approval_status"),
+  approvalReason: text("approval_reason"),
+  approvalDecidedAt: text("approval_decided_at"),
   ...timestamps,
 });
 
@@ -1273,6 +1279,29 @@ export const jinKnowledge = sqliteTable(
   },
   (t) => [index("jin_knowledge_status_idx").on(t.status)],
 );
+
+// The proof of who a company is, collected at sign-up and read only by the platform owner when approving it. One row per
+// company. The proof document is kept as bytes (base64) like the logo; it is never shown to the company's own team again.
+export const businessVerifications = sqliteTable("business_verifications", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id")
+    .notNull()
+    .unique()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  ein: text("ein").notNull(), // stored as XX-XXXXXXX
+  registeredState: text("registered_state").notNull(), // 2-letter US state the business is registered in
+  entityType: text("entity_type").notNull(),
+  stateFileNumber: text("state_file_number").notNull(),
+  yearFormed: integer("year_formed").notNull(),
+  businessType: text("business_type").notNull(),
+  businessDescription: text("business_description").notNull(),
+  proofType: text("proof_type").notNull(),
+  proofFileName: text("proof_file_name").notNull(),
+  proofContentType: text("proof_content_type").notNull(),
+  proofData: text("proof_data").notNull(), // base64, no data: prefix
+  submittedAt: text("submitted_at").notNull().default(sql`(current_timestamp)`),
+  ...timestamps,
+});
 
 // What people say about Jin's answers. Only saved when a person presses "Helpful" or "Not right"; the platform owner reads
 // these to improve the library. A company's name is kept so the owner knows where a note came from.

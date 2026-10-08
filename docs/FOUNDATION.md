@@ -57,6 +57,16 @@ To go back to it if something breaks badly: `git checkout foundation-v1` (or bra
 - Voice: the mic button (dictation) and the read-aloud switch use the browser's own speech tools (no server, no extra AI; hidden when unsupported). Dictation fills the box for checking and is never auto-sent, because lot and serial numbers are easily misheard.
 - Safety: tool results, news and notes are treated as data, not instructions; answers can link only to `/dashboard/...` pages (anything else is shown as plain text, `parseInline`); input is length-capped and history is cleaned. Terms/Privacy describe Jin; `TERMS_VERSION` bumped to 2026-10-07.3.
 
+## Business verification and approval (who we let in)
+
+We only work with real, registered businesses. Sign-up (and the safety-net onboarding page) now requires, on top of the Business Profile: EIN (format and IRS-prefix checked, stored `XX-XXXXXXX`, one per non-rejected company), state of registration, business structure, state file number, year formed, kind of business, a short description, and one proof document (PDF/PNG/JPG up to 4MB, checked by its real bytes). All of it is read and checked in `src/lib/business-verification.ts`; the form is `components/business-verification-fields.tsx`; the choices live in `business-verification-options.ts` (browser-safe).
+
+- A new company is saved with `organizations.approval_status = "pending"` and its proof in `business_verifications` (one row per company; the proof is base64 like the logo). `null` means approved: every company that existed before approvals were introduced stays untouched.
+- `requireOrg()` redirects, and `requireOrgApi()` refuses, anyone in a `pending` or `rejected` company (`isHeldBack` in `tenant.ts`); they land on `/under-review`. A rejected company's owner sees the platform owner's note and can fix and resubmit (`actions/verification.ts`).
+- The platform owner (`isPlatformAdmin`) reviews at Settings -> Approvals (`settings/approvals`): details, a proof link (`/api/approvals/[orgId]/proof`, platform owner only, never cached), Approve, Reject or Suspend with a required note (`actions/approvals.ts`, which re-checks the owner on every call and never lets a company change its own status).
+- Signup copies the EIN and file number into the Business Profile's Tax ID / registration number. The Terms (Accounts section) say we may approve, refuse or suspend any workspace and that false details breach them.
+- There is no automatic lookup against the IRS or a state registry (that needs a paid service); the platform owner compares the proof with what was typed. Emailing the owner about new sign-ups waits on our sending email being active.
+
 ## The standards we keep (the "style" of the system)
 
 1. **Plain language for people.** Screens, messages and PDFs say what happened and what to do next. No internal terms.

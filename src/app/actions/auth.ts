@@ -24,6 +24,7 @@ import { encodeLogoFile } from "@/lib/logo-validation";
 import { consumeSignupVerificationCode } from "@/lib/signup-verification";
 import { signupNeedsEmailVerification } from "@/lib/signup-settings";
 import { TERMS_VERSION } from "@/lib/legal";
+import { readVerification, einInUse, saveVerification, EIN_IN_USE_MESSAGE } from "@/lib/business-verification";
 import { lockMinutesLeft, lockedMessage } from "@/lib/login-throttle";
 import { looksLikeUsername } from "@/lib/staff-login";
 
@@ -101,19 +102,6 @@ export async function signUpOrganization(
     return { error: "Fill in your email and a password of at least 8 characters." };
   }
 
-  // Proves the account email is real and reachable -- this is the actual security boundary, independent of whatever the signup
-  // page's UI showed. It is ON HOLD while our sending email is not active (see lib/signup-settings.ts); the server decides, so a
-  // form that skips the code field is only accepted while the hold is on.
-  const needsVerification = signupNeedsEmailVerification();
-  if (needsVerification) {
-    const verificationCode = String(formData.get("verificationCode") ?? "").trim();
-    if (!verificationCode) {
-      return { error: "Enter the verification code we emailed you." };
-    }
-    const verification = await consumeSignupVerificationCode(email, verificationCode);
-    if (!verification.ok) return { error: verification.error };
-  }
-
   const logoFile = formData.get("logo");
   if (!(logoFile instanceof File) || logoFile.size === 0) {
     return { error: "A company logo is required to sign up." };
@@ -122,6 +110,10 @@ export async function signUpOrganization(
   if ("error" in encodedLogo) {
     return { error: encodedLogo.error };
   }
+
+  const verification = await readVerification(formData);
+  if ("error" in verification) return { error: verification.error };
+  if (await einInUse(verification.data.ein)) return { error: EIN_IN_USE_MESSAGE };
 
   const profile = extractBusinessProfileIdentityFields(formData);
   if (!profile.businessAddressStreet1 || !profile.businessAddressCity || !profile.businessAddressState || !profile.businessAddressZip) {
@@ -140,6 +132,20 @@ export async function signUpOrganization(
   }
   if (!profile.primaryContactEmail) return { error: "Primary Contact email is required." };
   if (!profile.primaryContactPhone) return { error: "Primary Contact phone number is required." };
+
+  // (Checked last, after every other field, so a typo elsewhere on the form never uses up the emailed code.)
+  // Proves the account email is real and reachable -- this is the actual security boundary, independent of whatever the signup
+  // page's UI showed. It is ON HOLD while our sending email is not active (see lib/signup-settings.ts); the server decides, so a
+  // form that skips the code field is only accepted while the hold is on.
+  const needsVerification = signupNeedsEmailVerification();
+  if (needsVerification) {
+    const verificationCode = String(formData.get("verificationCode") ?? "").trim();
+    if (!verificationCode) {
+      return { error: "Enter the verification code we emailed you." };
+    }
+    const codeCheck = await consumeSignupVerificationCode(email, verificationCode);
+    if (!codeCheck.ok) return { error: codeCheck.error };
+  }
 
   const [existing] = await db
     .select({ id: users.id })
@@ -169,7 +175,7 @@ export async function signUpOrganization(
     termsAcceptedAt: new Date().toISOString(),
     termsVersion: TERMS_VERSION,
   });
-  await db.insert(organizations).values({ id: orgId, name: companyName, slug });
+  await db.insert(organizations).values({ id: orgId, name: companyName, slug, approvalStatus: "pending" });
   await db.insert(memberships).values({
     id: newId("mem"),
     userId,
@@ -185,10 +191,13 @@ export async function signUpOrganization(
     id: newId("bizprofile"),
     organizationId: orgId,
     ...profile,
+    taxId: verification.data.ein,
+    businessRegistrationNumber: verification.data.stateFileNumber,
     logoData: encodedLogo.data,
     logoContentType: encodedLogo.contentType,
     logoUpdatedAt: new Date().toISOString(),
   });
+  await saveVerification(orgId, verification.data);
 
   try {
     await signIn("credentials", { email, password, redirect: false });
@@ -196,5 +205,6 @@ export async function signUpOrganization(
     return { error: "Account created, but signing you in failed -- try logging in." };
   }
 
-  redirect("/dashboard");
+  // A new company waits for the platform owner to approve it; /dashboard would only send them to the same place.
+  redirect("/under-review");
 }

@@ -75,7 +75,7 @@ const flow: { icon: IconName; title: string; note: string }[] = [
 const stats: { value: string; label: string }[] = [
   { value: "9", label: "connected departments" },
   { value: "1", label: "shared record for every order" },
-  { value: "100,000", label: "staff members: the size we built for" },
+  { value: "100", label: "team members per company, built for growing businesses" },
   { value: "Private", label: "workspace for every company" },
 ];
 
@@ -113,7 +113,7 @@ const teamPoints = [
   "Roles for owners, admins, managers, agents, receivers and accountants",
   "Sensitive areas locked to the people who need them",
   "Turn anyone's access off the moment they leave",
-  "Built to scale from your first hire to 100,000 staff members",
+  "Built to grow with you, from your first hire to a team of up to 100 people",
 ];
 
 const trustPoints = [
@@ -197,7 +197,7 @@ export default function Home() {
               <p className="mt-4 max-w-xl text-lg text-muted">
                 jindjinni is enterprise software that puts every department of your company on one connected record,
                 with a team chat built right in. Enter information once, and every department sees it. Built to
-                scale from your first employee to 100,000 staff members.
+                grow with you, from your first employee to a team of up to 100 people.
               </p>
               <div className="mt-9 flex flex-wrap gap-3">
                 <Link href="/signup" className={btnPrimary}>
@@ -380,7 +380,7 @@ export default function Home() {
                   Your Team. Their Access. Your Control.
                 </h2>
                 <p className="mt-5 text-lg text-muted">
-                  Whether you run a team of five or an organization of 100,000 staff members, you decide who can see
+                  Whether you run a team of five or a growing company of up to 100 people, you decide who can see
                   and change what.
                 </p>
                 <CheckList items={teamPoints} />

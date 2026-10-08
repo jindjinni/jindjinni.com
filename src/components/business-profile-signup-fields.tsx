@@ -3,14 +3,15 @@
 import { useRef, useState } from "react";
 import { AuthField as Field, AuthSection as Section } from "@/components/auth/auth-ui";
 import { AddressAutocompleteFields } from "@/components/address-autocomplete-fields";
+import { BusinessVerificationFields } from "@/components/business-verification-fields";
 
 // Field styling comes from the .auth-theme scope in globals.css.
 const inputClass = "";
 
 /**
  * The Business Profile, collected up front when a new company signs up
- * (per how this was asked: most of it mandatory -- logo, addresses,
- * contact details -- with a few fields, like Tax ID/EIN, left optional).
+ * (mandatory: logo, addresses, contact details, and the business verification
+ * -- EIN, state, file number, proof document -- reviewed before approval).
  * Shared between the signup page and the rare safety-net onboarding page
  * (a signed-in user with no organization yet) so both create a complete
  * profile, not a half-empty one.
@@ -188,14 +189,7 @@ export function BusinessProfileSignupFields({
         </Field>
       </Section>
 
-      <Section title="Optional Business Information" description="Not required -- add only if applicable.">
-        <Field label="Tax ID / EIN">
-          <input name="taxId" className={inputClass} />
-        </Field>
-        <Field label="Business Registration Number">
-          <input name="businessRegistrationNumber" className={inputClass} />
-        </Field>
-      </Section>
+      <BusinessVerificationFields />
     </>
   );
 }
