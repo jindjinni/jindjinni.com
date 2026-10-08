@@ -17,6 +17,12 @@ export function BusinessVerificationFields() {
       title="Verify Your Business"
       description="We only work with real, registered businesses. Everything here is required, and a person reviews it before your account is switched on. Only the platform owner can see it."
     >
+      <div className="rounded-xl border border-mint-line bg-mint p-4 text-sm text-ink" data-testid="match-notice">
+        <p className="font-bold">Everything must match your official records.</p>
+        <p className="mt-1">
+          The business name, address, EIN, state file number and business structure (LLC, corporation and so on) must be exactly what is on your IRS letter and your state registration. We check them against your proof document and the state&rsquo;s records. The person signing up must be the owner or managing owner named on those records. Details that don&rsquo;t match will be turned down.
+        </p>
+      </div>
       <Field label="EIN (Employer Identification Number)" hint="9 digits from your IRS letter, like 12-3456789.">
         <input name="ein" required inputMode="numeric" autoComplete="off" placeholder="12-3456789" pattern="\s*\d{2}-?\d{7}\s*" title="9 digits, like 12-3456789" className={inputClass} />
       </Field>
