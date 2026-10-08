@@ -16,7 +16,7 @@ export const dynamic = "force-dynamic";
 
 /**
  * Settings -> Connectors: the accounts the whole company runs on, each one the company's own. The mailbox customers hear
- * from and the Claude key are plugged in here; department-specific ones (Shippo) are in that department's own
+ * from and the AI key (Claude or ChatGPT) are plugged in here; department-specific ones (Shippo) are in that department's own
  * Settings -> Connectors tab and are listed below with their state. Owner and Admin only.
  */
 export default async function CompanyConnectorsPage({ searchParams }: { searchParams: Promise<{ connected?: string; connect_error?: string }> }) {
@@ -63,7 +63,7 @@ export default async function CompanyConnectorsPage({ searchParams }: { searchPa
             </p>
           )}
         </div>
-        <AiConnector source={ai.source} status={ai.status} keyHint={ai.keyHint} lastError={ai.lastError} companyName={org.organizationName} />
+        <AiConnector source={ai.source} provider={ai.provider} status={ai.status} keyHint={ai.keyHint} lastError={ai.lastError} companyName={org.organizationName} />
         <ConnectorSummaryCard status={statuses.text} canManage />
       </section>
 

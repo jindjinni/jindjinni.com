@@ -3,8 +3,8 @@
 // people should re-accept; anyone whose recorded version is older is asked
 // to agree again (see /accept-terms).
 
-export const TERMS_VERSION = "2026-10-07.4";
-export const LEGAL_UPDATED = "October 7, 2026";
+export const TERMS_VERSION = "2026-10-08.1";
+export const LEGAL_UPDATED = "October 8, 2026";
 export const SERVICE_NAME = "jindjinni";
 /** The business that owns and runs the service (the party to the Terms). */
 export const OPERATOR_NAME = "Plantarz Property Solutions LLC";

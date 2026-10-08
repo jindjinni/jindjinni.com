@@ -1,7 +1,8 @@
-// Reads the lot / serial number off a photo of a product label with the Anthropic API (a vision model).
-// Switched on per company by its own Claude key (Settings -> Connectors). The model only returns what is printed; the app then checks those numbers itself.
+// Reads the lot / serial number off a photo of a product label with the company's own AI (Claude or ChatGPT, a vision model).
+// Switched on per company by its own AI key (Settings -> Connectors). The model only returns what is printed; the app then checks those numbers itself.
 
-import { aiKeyFor, anthropicBase, noteAiRefused, resolveAi } from "@/lib/ai-connection";
+import { aiKeyFor, noteAiRefused, resolveAi } from "@/lib/ai-connection";
+import { chat, textOf } from "@/lib/ai-provider";
 
 export const PHOTO_MAX_BYTES = 4 * 1024 * 1024;
 
@@ -24,37 +25,18 @@ function clean(v: unknown, max = 80): string {
 export async function readLabelPhoto(bytes: Uint8Array, mime: string, organizationId: string): Promise<{ error: string } | LabelRead> {
   const access = await resolveAi(organizationId);
   if (!access.ok) return { error: `Photo reading isn't switched on. ${access.message}` };
-  const key = access.ai.key;
-  const model = process.env.RECALL_PHOTO_MODEL || "claude-haiku-4-5-20251001";
-  let res: Response;
-  try {
-    res = await fetch(`${anthropicBase()}/v1/messages`, {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({
-        model,
-        max_tokens: 300,
-        messages: [
-          {
-            role: "user",
-            content: [
-              { type: "image", source: { type: "base64", media_type: mime, data: Buffer.from(bytes).toString("base64") } },
-              { type: "text", text: PROMPT },
-            ],
-          },
-        ],
-      }),
-      signal: AbortSignal.timeout(25_000),
-    });
-  } catch {
-    return { error: "The photo reader didn't answer in time. Try again, or type the number." };
-  }
-  if (!res.ok) {
-    await noteAiRefused(organizationId, access.ai, res.status);
+  const r = await chat(access.ai, {
+    purpose: "photo",
+    messages: [{ role: "user", content: [{ type: "image", mediaType: mime, data: Buffer.from(bytes).toString("base64") }, { type: "text", text: PROMPT }] }],
+    maxTokens: 300,
+    timeoutMs: 25_000,
+  });
+  if (!r.ok && r.status === 0) return { error: "The photo reader didn't answer in time. Try again, or type the number." };
+  if (!r.ok) {
+    await noteAiRefused(organizationId, access.ai, r.status);
     return { error: "The photo reader couldn't read that picture. Try again, or type the number." };
   }
-  const body = (await res.json().catch(() => null)) as { content?: { type: string; text?: string }[] } | null;
-  const out = body?.content?.find((c) => c.type === "text")?.text ?? "";
+  const out = textOf(r.content);
   const m = out.match(/\{[\s\S]*\}/);
   if (!m) return { error: "Couldn't find a lot or serial number in that photo. Try a closer, sharper picture, or type it." };
   try {

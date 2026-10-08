@@ -7,9 +7,12 @@ const baseHeaders = [
   { key: "X-Frame-Options", value: "SAMEORIGIN" },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-  { key: "Permissions-Policy", value: "camera=(self), microphone=(), geolocation=(), payment=()" },
+  { key: "Permissions-Policy", value: "camera=(self), microphone=(self), geolocation=(), payment=()" },
   { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
   { key: "X-Robots-Tag", value: "noai, noimageai" },
+  // A notice to any person or tool that reads the responses (the full wording is in src/lib/ip-notice.ts).
+  { key: "X-Legal-Notice", value: "Proprietary software. Copying, scraping, reverse engineering or AI cloning is prohibited. See /terms and /ai-policy.txt" },
+  { key: "X-AI-Policy", value: "/ai-policy.txt" },
 ];
 const appHeaders = [{ key: "X-Robots-Tag", value: "noindex, nofollow, noarchive, nosnippet, noimageindex, noai, noimageai" }];
 
@@ -24,6 +27,10 @@ const nextConfig: NextConfig = {
     ];
   },
   // Archive, Audit log and Database moved under Settings; old bookmarks still land in the right place.
+  // The AI policy is also published at the conventional /.well-known/ location.
+  async rewrites() {
+    return [{ source: "/.well-known/ai-policy.txt", destination: "/ai-policy.txt" }];
+  },
   async redirects() {
     return [
       { source: "/dashboard/purchasing/archive", destination: "/dashboard/settings/archive", permanent: false },

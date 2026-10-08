@@ -30,7 +30,7 @@ const WHAT: Record<MenuDept, Record<string, string>> = {
     tracker: "Search any lot or serial number and see where it came from, with recall warnings.",
     products: "The product list as Receiving sees it.",
     adjustments: "Orders whose price needs to be adjusted after the package was checked.",
-    connectors: "Your company mailbox and Claude key status (owner or admin only).",
+    connectors: "Your company mailbox and AI key status (owner or admin only).",
   },
   accounts: {
     "to-be-paid": "Orders Receiving sent to Accounts that still need to be paid, soonest due first.",
@@ -78,7 +78,7 @@ const GENERAL = [
   "Chat (/dashboard/chat): the company's internal messaging. Rooms follow the departments a person works in.",
   "The clock at the top: people clock in and out there; the hours show in HR → Time Sheets.",
   "Settings (/dashboard/settings): My account (name and password), Business profile, Appearance (color theme) for everyone; more for admins.",
-  "Anything that costs money or carries the company's identity (shipping labels, the company mailbox, Claude, texts) is connected by the company itself under Connectors, never the platform's.",
+  "Anything that costs money or carries the company's identity (shipping labels, the company mailbox, an AI such as Claude or ChatGPT, texts) is connected by the company itself under Connectors, never the platform's.",
 ];
 
 /** The guide for one signed-in person, as plain text for Jin's instructions. */

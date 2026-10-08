@@ -8,7 +8,7 @@ export const JIN_LIMITS = {
   userPerDay: 40,
   /** Questions one whole company may ask per day on the platform's key. */
   companyPerDay: 300,
-  /** Questions one person may ask per day when the company connected its own Claude key (abuse guard only). */
+  /** Questions one person may ask per day when the company connected its own AI key (abuse guard only). */
   ownKeyUserPerDay: 400,
   /** Longest question, in characters. */
   maxInput: 1500,

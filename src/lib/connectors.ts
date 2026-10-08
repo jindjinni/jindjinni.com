@@ -9,6 +9,7 @@
 // status in connectorStatuses(), and build its card on the page named by `manageHref`.
 
 import { aiConnectionView } from "@/lib/ai-connection";
+import { PROVIDER_LABEL } from "@/lib/ai-provider";
 import { getConnection } from "@/lib/email-connector";
 import { shippoConnectionView } from "@/lib/shippo-connection";
 import type { MenuDept } from "@/lib/sidebar-menu";
@@ -47,8 +48,8 @@ export const CONNECTORS: Record<ConnectorKey, ConnectorInfo> = {
   },
   ai: {
     key: "ai",
-    title: "Claude (AI)",
-    what: "Reads lot and serial numbers from label photos in Receiving, and gives Jin, the built-in helper, a much higher daily limit. Usage is billed to your own Anthropic account. (Jin and the industry news on Home work without it, with a fair daily limit.)",
+    title: "AI assistant (Claude or ChatGPT)",
+    what: "Reads lot and serial numbers from label photos in Receiving, and gives Jin, the built-in helper, a much higher daily limit. Connect Claude or ChatGPT; usage is billed to your own account with that company. (Jin and the industry news on Home work without it, with a fair daily limit.)",
     scope: "company",
     manageHref: "/dashboard/settings/connectors",
     manageWhere: "Settings → Connectors",
@@ -113,8 +114,8 @@ export async function connectorStatuses(organizationId: string): Promise<Record<
   const aiStatus: ConnectorStatus =
     ai.source === "company"
       ? ai.status === "ACTIVE"
-        ? { key: "ai", state: "connected", detail: `Key ending ${ai.keyHint}.` }
-        : { key: "ai", state: "attention", detail: ai.lastError ?? "Anthropic isn't accepting the saved key." }
+        ? { key: "ai", state: "connected", detail: `${PROVIDER_LABEL[ai.provider]}, key ending ${ai.keyHint}.` }
+        : { key: "ai", state: "attention", detail: ai.lastError ?? "The AI provider isn't accepting the saved key." }
       : ai.source === "platform"
         ? { key: "ai", state: "platform", detail: "Label-photo reading and Jin use the platform's own Claude account." }
         : { key: "ai", state: "not_connected", detail: "Label-photo reading is off. Jin (with a daily limit) and the industry news on Home work without it." };

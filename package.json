@@ -2,6 +2,7 @@
   "name": "web",
   "version": "0.1.0",
   "private": true,
+  "license": "UNLICENSED",
   "scripts": {
     "dev": "node scripts/copy-ocr-assets.mjs && next dev",
     "build": "node scripts/copy-ocr-assets.mjs && tsx scripts/safe-push.ts && next build",

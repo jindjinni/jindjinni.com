@@ -309,7 +309,7 @@ export function settingsSectionsFor(role: string): SettingsSection[] {
   if (isAdmin(role)) {
     out.push({ href: "/dashboard/settings/business", label: "Shipping & labels", blurb: "The return address printed on labels." });
     out.push({ href: "/dashboard/settings/team", label: "Team & access", blurb: "Invite people and choose their role." });
-    out.push({ href: "/dashboard/settings/connectors", label: "Connectors", blurb: "The accounts your whole company runs on: your mailbox, Claude and more." });
+    out.push({ href: "/dashboard/settings/connectors", label: "Connectors", blurb: "The accounts your whole company runs on: your mailbox, your AI and more." });
     out.push({ href: "/dashboard/settings/billing", label: "Plan & billing", blurb: "Your plan and team size." });
   }
   out.push({ href: "/dashboard/settings/activity", label: "Security & activity", blurb: "Sign-ins and changes." });

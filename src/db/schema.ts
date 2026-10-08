@@ -1215,9 +1215,11 @@ export const aiConnections = sqliteTable(
     organizationId: text("organization_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
+    // Which AI the company connected: "anthropic" (Claude) or "openai" (ChatGPT).
+    provider: text("provider").notNull().default("anthropic"),
     apiKeyEnc: text("api_key_enc").notNull(),
     keyHint: text("key_hint").notNull(),
-    // ACTIVE, or NEEDS_ATTENTION when Anthropic stopped accepting the key or it can't be read any more.
+    // ACTIVE, or NEEDS_ATTENTION when the provider stopped accepting the key or it can't be read any more.
     status: text("status", { enum: ["ACTIVE", "NEEDS_ATTENTION"] }).notNull().default("ACTIVE"),
     lastError: text("last_error"),
     connectedByUserId: text("connected_by_user_id").references(() => users.id),
