@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { GenieLamp } from "@/components/jin/genie-lamp";
 import { parseAnswer, plainText, remainingText, type Inline, type JinMessage } from "@/lib/jin-rules";
-import { offeredVoices, pickVoice, speechChunks, VOICE_PITCH, VOICE_RATE } from "@/lib/jin-voice";
+import { offeredVoices, pickVoice, speechChunks, spokenText, VOICE_PITCH, VOICE_RATE } from "@/lib/jin-voice";
 
 type Shown = JinMessage & { error?: boolean };
 
@@ -162,9 +162,10 @@ export function JinWidget() {
   const [listening, setListening] = useState(false);
   const [speakOn, setSpeakOn] = useState(() => {
     try {
-      return typeof window !== "undefined" && localStorage.getItem("jin-speak") === "1";
+      // Reading aloud is ON for everyone until they turn it off themselves (their choice is remembered).
+      return typeof window === "undefined" || localStorage.getItem("jin-speak") !== "0";
     } catch {
-      return false; // storage can be blocked; reading aloud then just starts off
+      return true; // storage can be blocked; reading aloud then simply starts on
     }
   });
   const [voiceMsg, setVoiceMsg] = useState("");
@@ -211,7 +212,7 @@ export function JinWidget() {
       }
       const voice = pickVoice(deviceVoices(), lang, preferred);
       // One sentence at a time: natural pauses, and long answers are never cut off part way.
-      for (const piece of speechChunks(plainText(answer))) {
+      for (const piece of speechChunks(spokenText(plainText(answer)))) {
         const u = new SpeechSynthesisUtterance(piece);
         u.lang = voice?.lang || lang;
         if (voice) u.voice = voice;

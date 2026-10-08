@@ -66,6 +66,30 @@ export function offeredVoices<T extends VoiceLike>(voices: readonly T[], lang: s
     .map((x) => x.v);
 }
 
+/**
+ * What Jin actually says, made from the text on screen. Pictures (emoji, check marks, arrows) are never spoken or named, and
+ * symbols are turned into the words a person would say, so it sounds like talking, not like reading the screen aloud.
+ */
+export function spokenText(text: string): string {
+  return text
+    .replace(/https?:\/\/\S+/g, " ")
+    .replace(/\s*(?:->|=>|→|⇒)\s*/g, ", then ")
+    // emoji and pictures, including skin tones, flags, keycaps and joined families
+    .replace(/[0-9#*]\ufe0f?\u20e3/g, " ")
+    .replace(/[\p{Extended_Pictographic}\u{1F3FB}-\u{1F3FF}\u{1F1E6}-\u{1F1FF}\u{E0020}-\u{E007F}\u200d\ufe0e\ufe0f\u20e3]/gu, " ")
+    .replace(/[\u2190-\u21ff\u2300-\u23ff\u25a0-\u25ff\u2600-\u27bf\u2900-\u297f\u2b00-\u2bff]/g, " ")
+    .replace(/[•·▪●○◦‣]/g, ". ")
+    .replace(/\s*[—–]\s*/g, ", ")
+    .replace(/\s&\s/g, " and ")
+    .replace(/(\d)\s*%/g, "$1 percent")
+    .replace(/[*_`~#|^<>]+/g, " ")
+    .replace(/\s*\/\s*/g, " or ")
+    .replace(/\s+([.,!?;:])/g, "$1")
+    .replace(/([.,!?;:])(?:\s*[.,;:])+/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 /** Splits text into sentence-sized pieces (at most `max` characters) so each is read with a natural pause and none is cut off. */
 export function speechChunks(text: string, max = 180): string[] {
   const clean = text.replace(/\s+/g, " ").trim();
