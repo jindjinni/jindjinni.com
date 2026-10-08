@@ -29,6 +29,7 @@ import { signupNeedsEmailVerification } from "@/lib/signup-settings";
 import { TERMS_VERSION } from "@/lib/legal";
 import { readVerification, einInUse, saveVerification, EIN_IN_USE_MESSAGE } from "@/lib/business-verification";
 import { lockMinutesLeft, lockedMessage } from "@/lib/login-throttle";
+import { guardLogin, guardPublicForm, noteFailedLogin } from "@/lib/human-check";
 import { looksLikeUsername } from "@/lib/staff-login";
 
 export type ActionState = { error?: string } | undefined;
@@ -38,6 +39,9 @@ export async function login(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  // Bots first: the trap field, the human check and a limit on wrong passwords from one network address.
+  const guard = await guardLogin(formData);
+  if (guard.error) return { error: guard.error };
   const email = String(formData.get("email") ?? "").toLowerCase().trim();
   const password = String(formData.get("password") ?? "");
   // Checked by default on the login form -- stays signed in for 90 days
@@ -59,6 +63,7 @@ export async function login(
   try {
     await signIn("credentials", { email, password, rememberMe, redirect: false });
   } catch {
+    await noteFailedLogin(guard.ip);
     return { error: "That email or username and password don't match an account." };
   }
 
@@ -92,6 +97,9 @@ export async function signUpOrganization(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  // Bots first: the trap field, the human check and a limit on sign-up tries from one network address.
+  const blocked = await guardPublicForm(formData, { scope: "signup", max: 15, windowSec: 3600 });
+  if (blocked) return { error: blocked };
   const companyName = String(formData.get("companyName") ?? "").trim();
   const name = String(formData.get("name") ?? "").trim();
   const email = String(formData.get("email") ?? "").toLowerCase().trim();

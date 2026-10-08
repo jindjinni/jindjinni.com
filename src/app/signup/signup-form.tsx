@@ -7,6 +7,7 @@ import { sendSignupVerificationCode, type SendCodeState } from "@/app/actions/em
 import { AuthCard, AuthError, AuthField as Field, AuthSection as Section, AuthShell, authBtnPrimary, authBtnSecondary } from "@/components/auth/auth-ui";
 import { Icon } from "@/components/landing/icons";
 import { BusinessProfileSignupFields } from "@/components/business-profile-signup-fields";
+import { HumanCheck } from "@/components/human-check";
 import { BillingSection } from "@/components/billing-section";
 import { TermsCheckbox } from "@/components/legal/terms-checkbox";
 
@@ -140,6 +141,8 @@ export function SignupForm({ needsVerification }: { needsVerification: boolean }
           <BillingSection />
 
           <TermsCheckbox />
+
+          <HumanCheck />
 
           {state?.error && <AuthError>{state.error}</AuthError>}
 

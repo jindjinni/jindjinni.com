@@ -6,6 +6,7 @@ import Link from "next/link";
 import { login } from "@/app/actions/auth";
 import { AuthCard, AuthError, AuthField, AuthShell, BrandPanel, authBtnPrimary } from "@/components/auth/auth-ui";
 import { Icon } from "@/components/landing/icons";
+import { HumanCheck } from "@/components/human-check";
 
 export default function LoginPage() {
   return (
@@ -44,6 +45,8 @@ function LoginScreen() {
               <input name="rememberMe" type="checkbox" defaultChecked />
               Remember me
             </label>
+
+            <HumanCheck />
 
             {state?.error && <AuthError>{state.error}</AuthError>}
 

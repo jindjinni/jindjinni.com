@@ -4,6 +4,7 @@
 // action here re-checks on the SERVER that the caller is an owner/admin of
 // the company the record belongs to -- hiding a button is never the guard.
 
+import { guardPublicForm } from "@/lib/human-check";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { and, eq, isNull, ne } from "drizzle-orm";
@@ -407,6 +408,9 @@ export async function resetStaffPassword(membershipId: string, _prev: TeamAction
  * account for the address it was sent to.
  */
 export async function acceptInvitation(token: string, _prev: TeamActionState, formData: FormData): Promise<TeamActionState> {
+  // Bots first: the trap field, the human check and a limit on tries from one network address.
+  const blocked = await guardPublicForm(formData, { scope: "invite", max: 30, windowSec: 3600 });
+  if (blocked) return { error: blocked };
   const found = await lookupInvitation(token);
   if (found.status === "invalid") return { error: "This invitation link isn't valid." };
   if (found.status === "used") return { error: "This invitation was already used. Try signing in." };

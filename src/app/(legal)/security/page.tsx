@@ -59,7 +59,7 @@ const sections: LegalSection[] = [
   {
     heading: "Protecting the Service itself",
     paras: [
-      "How jindjinni is built is protected too. Our source code is kept in a private repository and runs on our servers, so it is never sent to your browser. Signed-in pages are marked so that search engines and AI crawlers are told not to collect them, and the Service cannot be shown inside another website. We log activity, watch for automated or bulk access, and may block or suspend accounts that copy or scrape the Service. Our Terms of Service and Acceptable Use Policy forbid copying, reverse engineering and using AI tools to clone the Service, and we will enforce them.",
+      "How jindjinni is built is protected too. Our source code is kept in a private repository and runs on our servers, so it is never sent to your browser. Signed-in pages are marked so that search engines and AI crawlers are told not to collect them, and the Service cannot be shown inside another website. Sign-in, sign-up and invitation pages use a human check and a hidden trap for automated programs, and slow down repeated wrong tries from one network address. We log activity, watch for automated or bulk access, and may block or suspend accounts that copy or scrape the Service. Our Terms of Service and Acceptable Use Policy forbid copying, reverse engineering and using AI tools to clone the Service, and we will enforce them.",
     ],
   },
   {

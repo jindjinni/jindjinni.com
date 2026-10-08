@@ -1309,6 +1309,14 @@ export const businessVerifications = sqliteTable("business_verifications", {
   ...timestamps,
 }, (t) => [index("business_verifications_ein_idx").on(t.ein)]);
 
+// Counters that slow down abuse of public forms (sign-in, sign-up, codes): one row per key and time window. Keys are hashes,
+// so no email address or IP is stored in the clear. See lib/rate-limit.ts.
+export const rateLimits = sqliteTable("rate_limits", {
+  key: text("key").primaryKey(),
+  windowStart: integer("window_start").notNull(),
+  count: integer("count").notNull(),
+});
+
 // Every decision the platform owner makes about a company, and when a company sends its details again. Plain text ids on
 // purpose (no foreign keys): the history must outlive the people and companies it is about.
 export const companyDecisions = sqliteTable(

@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { acceptInvitation } from "@/app/actions/team";
 import { AuthError, AuthField, authBtnPrimary } from "@/components/auth/auth-ui";
+import { HumanCheck } from "@/components/human-check";
 import { TermsCheckbox } from "@/components/legal/terms-checkbox";
 
 export function AcceptForm({ token, mode }: { token: string; mode: "create" | "join" }) {
@@ -20,6 +21,7 @@ export function AcceptForm({ token, mode }: { token: string; mode: "create" | "j
           <TermsCheckbox />
         </>
       )}
+      <HumanCheck />
       {state?.error && <AuthError>{state.error}</AuthError>}
       <button type="submit" disabled={pending} className={authBtnPrimary}>
         {pending ? "Joining..." : mode === "create" ? "Create account & join" : "Join workspace"}

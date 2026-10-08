@@ -1,5 +1,6 @@
 "use server";
 
+import { guardPublicForm } from "@/lib/human-check";
 import { eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { users } from "@/db/schema";
@@ -19,6 +20,9 @@ export async function sendSignupVerificationCode(
   _prevState: SendCodeState,
   formData: FormData,
 ): Promise<SendCodeState> {
+  // Only a limit here (the sign-up form itself carries the human check): emailed codes must not be a way to spam someone.
+  const blocked = await guardPublicForm(formData, { scope: "signup-code", max: 10, windowSec: 3600, skipHuman: true });
+  if (blocked) return { error: blocked };
   const email = String(formData.get("email") ?? "").toLowerCase().trim();
 
   if (!email || !EMAIL_PATTERN.test(email)) {
