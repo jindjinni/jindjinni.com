@@ -95,6 +95,7 @@ export type CompanyRow = {
   reason: string | null;
   decidedAt: string | null;
   createdAt: string;
+  billingPlan: string | null;
   ein: string | null;
   registeredState: string | null;
   entityType: string | null;
@@ -149,6 +150,7 @@ export async function listCompanies(opts: { q?: string; filter?: CompanyFilter; 
       reason: organizations.approvalReason,
       decidedAt: organizations.approvalDecidedAt,
       createdAt: organizations.createdAt,
+      billingPlan: organizations.billingPlan,
       ein: businessVerifications.ein,
       registeredState: businessVerifications.registeredState,
       entityType: businessVerifications.entityType,
@@ -226,6 +228,7 @@ export async function listCompanies(opts: { q?: string; filter?: CompanyFilter; 
     reason: b.reason,
     decidedAt: b.decidedAt,
     createdAt: b.createdAt,
+    billingPlan: b.billingPlan,
     ein: b.ein,
     registeredState: b.registeredState,
     entityType: b.entityType,

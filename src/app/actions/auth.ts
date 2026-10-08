@@ -1,6 +1,7 @@
 "use server";
 
 import { after } from "next/server";
+import { parseBillingPlan } from "@/lib/billing-config";
 import { runRegistryCheck } from "@/lib/state-registry";
 import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
@@ -177,7 +178,7 @@ export async function signUpOrganization(
     termsAcceptedAt: new Date().toISOString(),
     termsVersion: TERMS_VERSION,
   });
-  await db.insert(organizations).values({ id: orgId, name: companyName, slug, approvalStatus: "pending" });
+  await db.insert(organizations).values({ id: orgId, name: companyName, slug, approvalStatus: "pending", billingPlan: parseBillingPlan(formData.get("billingPlan")) });
   await db.insert(memberships).values({
     id: newId("mem"),
     userId,

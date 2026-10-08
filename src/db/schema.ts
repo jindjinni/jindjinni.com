@@ -82,6 +82,8 @@ export const organizations = sqliteTable("organizations", {
   approvalStatus: text("approval_status"),
   approvalReason: text("approval_reason"),
   approvalDecidedAt: text("approval_decided_at"),
+  // The plan picked at sign-up ("monthly" or "yearly"); billing is not live yet, so nothing is charged. Empty = none chosen.
+  billingPlan: text("billing_plan"),
   ...timestamps,
 }, (t) => [index("organizations_approval_idx").on(t.approvalStatus, t.createdAt)]);
 

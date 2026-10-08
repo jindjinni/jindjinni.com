@@ -163,6 +163,7 @@ export default async function CompaniesPage({ searchParams }: { searchParams: Pr
                       </dd>
                     </>
                   )}
+                  <dt className={dt}>Plan chosen</dt><dd data-testid="plan-chosen">{c.billingPlan === "monthly" ? "Monthly" : c.billingPlan === "yearly" ? "Yearly" : "None yet"} <span className="text-xs text-slate-500">(billing isn&apos;t live)</span></dd>
                   <dt className={dt}>People</dt><dd>{c.teamSize} active</dd>
                   <dt className={dt}>Last sign-in</dt><dd>{c.lastSignIn ? day(c.lastSignIn) : "Never"}</dd>
                   {(c.status === "rejected" || c.status === "suspended") && c.reason && (
