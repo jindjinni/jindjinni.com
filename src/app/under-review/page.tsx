@@ -12,7 +12,7 @@ function day(iso: string) {
   return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 }
 
-/** Where a new (or suspended) company lands until the platform owner approves it. */
+/** Where a company lands while it is waiting for approval, was turned down, or has been suspended or banned. */
 export default async function UnderReviewPage() {
   const userId = await getSessionUserId();
   if (!userId) redirect("/login");
@@ -38,6 +38,32 @@ export default async function UnderReviewPage() {
             {!owner && (
               <p className="mt-3 text-sm text-muted">You can see this because your company&rsquo;s owner invited you. You&rsquo;ll get access once the company is approved.</p>
             )}
+          </div>
+        ) : held.status === "suspended" ? (
+          <div data-testid="under-review-suspended">
+            <p className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-extrabold uppercase tracking-wider text-amber-900">
+              Account suspended
+            </p>
+            <h1 className="mt-4 text-3xl font-extrabold tracking-tight text-ink">{held.organizationName} is suspended</h1>
+            <p className="mt-3 text-base text-muted">
+              We suspended this account{held.decidedAt ? ` on ${day(held.decidedAt)}` : ""} because it broke our Terms and Conditions. Your data is kept safe, but nobody at your company can sign in until the suspension is lifted.
+            </p>
+            {held.reason && (
+              <p className="mt-4 rounded-lg border border-line bg-white p-4 text-sm text-ink" data-testid="suspension-reason">
+                <strong>Why:</strong> {held.reason}
+              </p>
+            )}
+            <p className="mt-4 text-base text-muted">If you think this is a mistake, contact support and we will take another look.</p>
+          </div>
+        ) : held.status === "banned" ? (
+          <div data-testid="under-review-banned">
+            <p className="inline-flex rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-extrabold uppercase tracking-wider text-red-800">
+              Account closed
+            </p>
+            <h1 className="mt-4 text-3xl font-extrabold tracking-tight text-ink">{held.organizationName} has been removed</h1>
+            <p className="mt-3 text-base text-muted">
+              This account was permanently closed{held.decidedAt ? ` on ${day(held.decidedAt)}` : ""} for breaking our Terms and Conditions. It can&rsquo;t be reopened and can&rsquo;t sign up again. If you think this is a mistake, contact support.
+            </p>
           </div>
         ) : (
           <div data-testid="under-review-rejected">

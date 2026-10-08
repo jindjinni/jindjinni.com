@@ -2,17 +2,15 @@ import { requireOrg } from "@/lib/tenant";
 import { settingsSectionsFor } from "@/lib/permissions";
 import { isPlatformAdmin } from "@/lib/platform-admin";
 import { SettingsNav } from "./settings-nav";
-import { db } from "@/db/client";
-import { organizations } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { waitingCount } from "@/lib/company-admin";
 
 export default async function SettingsLayout({ children }: { children: React.ReactNode }) {
   const org = await requireOrg();
   const sections = settingsSectionsFor(org.role);
   // Only the platform owner sees Jin's library.
   if (await isPlatformAdmin(org)) {
-    const waiting = (await db.select({ id: organizations.id }).from(organizations).where(eq(organizations.approvalStatus, "pending"))).length;
-    sections.push({ href: "/dashboard/settings/approvals", label: waiting ? `Approvals (${waiting})` : "Approvals", blurb: "New companies waiting for your OK." });
+    const waiting = await waitingCount();
+    sections.push({ href: "/dashboard/settings/companies", label: waiting ? `Companies (${waiting})` : "Companies", blurb: "Every company on the platform: approve, suspend or ban." });
     sections.push({ href: "/dashboard/settings/jin-library", label: "Jin library", blurb: "What Jin knows about the industry." });
   }
   return (

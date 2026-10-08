@@ -83,7 +83,7 @@ export const organizations = sqliteTable("organizations", {
   approvalReason: text("approval_reason"),
   approvalDecidedAt: text("approval_decided_at"),
   ...timestamps,
-});
+}, (t) => [index("organizations_approval_idx").on(t.approvalStatus, t.createdAt)]);
 
 /**
  * "Who the company is" -- one row per Organization, separate from the
@@ -1301,7 +1301,23 @@ export const businessVerifications = sqliteTable("business_verifications", {
   proofData: text("proof_data").notNull(), // base64, no data: prefix
   submittedAt: text("submitted_at").notNull().default(sql`(current_timestamp)`),
   ...timestamps,
-});
+}, (t) => [index("business_verifications_ein_idx").on(t.ein)]);
+
+// Every decision the platform owner makes about a company, and when a company sends its details again. Plain text ids on
+// purpose (no foreign keys): the history must outlive the people and companies it is about.
+export const companyDecisions = sqliteTable(
+  "company_decisions",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id").notNull(),
+    // "submitted" | "resubmitted" | "approved" | "turned_down" | "suspended" | "banned" | "reinstated"
+    decision: text("decision").notNull(),
+    reason: text("reason"),
+    decidedByUserId: text("decided_by_user_id"),
+    createdAt: text("created_at").notNull().default(sql`(current_timestamp)`),
+  },
+  (t) => [index("company_decisions_org_idx").on(t.organizationId, t.createdAt)],
+);
 
 // What people say about Jin's answers. Only saved when a person presses "Helpful" or "Not right"; the platform owner reads
 // these to improve the library. A company's name is kept so the owner knows where a note came from.

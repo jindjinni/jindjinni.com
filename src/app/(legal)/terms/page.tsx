@@ -148,7 +148,7 @@ const sections: LegalSection[] = [
   {
     heading: "Suspension and ending by us",
     paras: [
-      "We may suspend or end access, for a person or a whole company, immediately and without notice if we reasonably believe that these Terms or the Acceptable Use Policy have been broken, that an account is being used unlawfully or in a way that could harm others or the Service, that fees are unpaid, or that the law requires it. Where it is reasonable and safe to do so we will give notice and a chance to fix the problem first. If we end a company's access for reasons other than a serious breach, we will give the Owner a reasonable opportunity to download Your Data. We may also stop offering the Service, or any part of it, with reasonable notice.",
+      "We may suspend or end access, for a person or a whole company, immediately and without notice if we reasonably believe that these Terms or the Acceptable Use Policy have been broken, that an account is being used unlawfully or in a way that could harm others or the Service, that fees are unpaid, or that the law requires it. Where it is reasonable and safe to do so we will give notice and a chance to fix the problem first. If a company seriously or repeatedly breaks these Terms, we may ban it permanently, which means its workspace is closed and its EIN, and the people behind it, may not open another workspace. If we end a company's access for reasons other than a serious breach, we will give the Owner a reasonable opportunity to download Your Data. We may also stop offering the Service, or any part of it, with reasonable notice.",
     ],
   },
   {

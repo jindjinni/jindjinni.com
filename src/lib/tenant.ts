@@ -126,9 +126,13 @@ export async function requireOrgApi(): Promise<CurrentOrg | null> {
   };
 }
 
-/** null = approved (every company from before approvals existed); "pending" and "rejected" are locked out. */
+/**
+ * null = approved (every company from before approvals existed). Locked out: "pending" (waiting for the platform owner),
+ * "rejected" (turned down, can send details again), "suspended" (switched off for breaking the Terms, data kept) and
+ * "banned" (permanently removed, its EIN can never sign up again).
+ */
 export function isHeldBack(status: string | null): boolean {
-  return status === "pending" || status === "rejected";
+  return status === "pending" || status === "rejected" || status === "suspended" || status === "banned";
 }
 
 export type ClosedCompany = {
@@ -164,7 +168,7 @@ export type HeldCompany = {
   organizationId: string;
   organizationName: string;
   role: Role;
-  status: "pending" | "rejected";
+  status: "pending" | "rejected" | "suspended" | "banned";
   reason: string | null;
   decidedAt: string | null;
   createdAt: string;
@@ -187,7 +191,7 @@ export async function getHeldCompanyForUser(userId: string): Promise<HeldCompany
     .where(and(eq(memberships.userId, userId), isNull(memberships.deactivatedAt), isNull(organizations.closedAt)))
     .limit(1);
   if (!row || !isHeldBack(row.status)) return null;
-  return { ...row, role: row.role as Role, status: row.status as "pending" | "rejected" };
+  return { ...row, role: row.role as Role, status: row.status as HeldCompany["status"] };
 }
 
 /** Current signed-in user id (no redirect), for pages that must work while the company is closed. */

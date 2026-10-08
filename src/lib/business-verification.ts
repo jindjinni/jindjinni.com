@@ -6,6 +6,7 @@ import { and, eq, ne } from "drizzle-orm";
 import { db } from "@/db/client";
 import { businessVerifications, organizations } from "@/db/schema";
 import { newId } from "@/lib/ids";
+import { logDecision } from "@/lib/company-admin";
 
 export { US_STATES, ENTITY_TYPES, BUSINESS_TYPES, PROOF_TYPES, MAX_PROOF_BYTES, MIN_DESCRIPTION } from "@/lib/business-verification-options";
 import { US_STATES, ENTITY_TYPES, BUSINESS_TYPES, PROOF_TYPES, MAX_PROOF_BYTES, MIN_DESCRIPTION } from "@/lib/business-verification-options";
@@ -109,7 +110,7 @@ export async function readVerification(fd: FormData): Promise<{ data: Verificati
   };
 }
 
-/** Another company (other than this one) already uses this EIN and has not been turned down. */
+/** Another company (other than this one) already uses this EIN and has not been turned down. Suspended and banned companies still count, so a banned EIN can never sign up again. */
 export async function einInUse(ein: string, exceptOrgId?: string): Promise<boolean> {
   const rows = await db
     .select({ orgId: businessVerifications.organizationId, status: organizations.approvalStatus })
@@ -127,8 +128,10 @@ export async function saveVerification(organizationId: string, v: VerificationIn
   const [existing] = await db.select({ id: businessVerifications.id }).from(businessVerifications).where(eq(businessVerifications.organizationId, organizationId)).limit(1);
   if (existing) {
     await db.update(businessVerifications).set({ ...v, submittedAt: now, updatedAt: now }).where(eq(businessVerifications.id, existing.id));
+    await logDecision(organizationId, "resubmitted", null, null);
   } else {
     await db.insert(businessVerifications).values({ id: newId("bverif"), organizationId, ...v, submittedAt: now });
+    await logDecision(organizationId, "submitted", null, null);
   }
 }
 
