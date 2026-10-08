@@ -4,7 +4,9 @@ import { requireOrg } from "@/lib/tenant";
 import { isPlatformAdmin } from "@/lib/platform-admin";
 import { stateName } from "@/lib/business-verification";
 import { DECISION_LABELS, FILTERS, companyCounts, listCompanies, parseFilter, type CompanyFilter, type CompanyStatus } from "@/lib/company-admin";
+import { canCheckAutomatically, registryLink } from "@/lib/state-registry";
 import { DecisionForm } from "./decision-form";
+import { RegistryRecheck } from "./registry-check";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +18,14 @@ const BADGE: Record<CompanyStatus, { label: string; cls: string }> = {
   rejected: { label: "Turned down", cls: "bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-200" },
   suspended: { label: "Suspended", cls: "bg-orange-100 text-orange-900 dark:bg-orange-950 dark:text-orange-200" },
   banned: { label: "Banned", cls: "bg-red-100 text-red-900 dark:bg-red-950 dark:text-red-200" },
+};
+
+const REGISTRY_BADGE: Record<string, { label: string; cls: string }> = {
+  matched: { label: "State record matches", cls: "bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200" },
+  check: { label: "State record: look closer", cls: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200" },
+  not_found: { label: "Not in state records", cls: "bg-red-100 text-red-900 dark:bg-red-950 dark:text-red-200" },
+  not_checked: { label: "Check by hand", cls: "bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-200" },
+  error: { label: "State check failed", cls: "bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-200" },
 };
 
 function href(params: { q?: string; filter?: CompanyFilter; page?: number }) {
@@ -117,6 +127,7 @@ export default async function CompaniesPage({ searchParams }: { searchParams: Pr
               <summary className="flex cursor-pointer flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 text-sm text-slate-800 dark:text-slate-100">
                 <strong className="min-w-0 break-words">{c.name}</strong>
                 <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${b.cls}`} data-testid="company-status">{b.label}</span>
+                {c.ein && (() => { const rb = REGISTRY_BADGE[c.registryStatus ?? ""]; return rb ? <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${rb.cls}`} data-testid="registry-badge">{rb.label}</span> : <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300" data-testid="registry-badge">Not checked yet</span>; })()}
                 <span className="text-xs text-slate-500">
                   {c.ein ? `EIN ${c.ein}` : "Set up before approvals"}
                   {c.registeredState ? ` · ${stateName(c.registeredState)}` : ""} · signed up {day(c.createdAt)}
@@ -132,6 +143,17 @@ export default async function CompaniesPage({ searchParams }: { searchParams: Pr
                     <>
                       <dt className={dt}>Structure</dt><dd>{c.entityType}, formed {c.yearFormed}</dd>
                       <dt className={dt}>State file number</dt><dd>{c.stateFileNumber}</dd>
+                      <dt className={dt}>State records</dt>
+                      <dd data-testid="registry-detail">
+                        {c.registryDetail ?? "Not checked yet."}{" "}
+                        {c.registryCheckedAt && <span className="text-xs text-slate-500">({day(c.registryCheckedAt)})</span>}
+                        <span className="mt-1 flex flex-wrap items-center gap-3">
+                          {c.registeredState && (
+                            <a href={registryLink(c.registeredState)} target="_blank" rel="noreferrer" className="text-sm font-medium text-emerald-700 underline dark:text-emerald-300" data-testid="registry-link">Look it up on {stateName(c.registeredState)}&apos;s site</a>
+                          )}
+                          <RegistryRecheck orgId={c.id} canCheck={!!c.registeredState && canCheckAutomatically(c.registeredState)} />
+                        </span>
+                      </dd>
                       <dt className={dt}>Kind of business</dt><dd>{c.businessType}</dd>
                       <dt className={dt}>What they do</dt><dd>{c.businessDescription}</dd>
                       <dt className={dt}>Proof</dt>

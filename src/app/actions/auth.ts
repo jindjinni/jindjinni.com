@@ -1,5 +1,7 @@
 "use server";
 
+import { after } from "next/server";
+import { runRegistryCheck } from "@/lib/state-registry";
 import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
@@ -198,6 +200,8 @@ export async function signUpOrganization(
     logoUpdatedAt: new Date().toISOString(),
   });
   await saveVerification(orgId, verification.data);
+  // Compare the file number with the state's public records once the response is sent; the owner sees the result in Settings -> Companies.
+  after(() => runRegistryCheck(orgId));
 
   try {
     await signIn("credentials", { email, password, redirect: false });

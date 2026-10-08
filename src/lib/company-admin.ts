@@ -105,6 +105,9 @@ export type CompanyRow = {
   proofType: string | null;
   proofFileName: string | null;
   submittedAt: string | null;
+  registryStatus: string | null;
+  registryDetail: string | null;
+  registryCheckedAt: string | null;
   businessEmail: string | null;
   website: string | null;
   contactName: string;
@@ -156,6 +159,9 @@ export async function listCompanies(opts: { q?: string; filter?: CompanyFilter; 
       proofType: businessVerifications.proofType,
       proofFileName: businessVerifications.proofFileName,
       submittedAt: businessVerifications.submittedAt,
+      registryStatus: businessVerifications.registryStatus,
+      registryDetail: businessVerifications.registryDetail,
+      registryCheckedAt: businessVerifications.registryCheckedAt,
       businessEmail: businessProfiles.businessEmail,
       website: businessProfiles.website,
       contactFirst: businessProfiles.primaryContactFirstName,
@@ -230,6 +236,9 @@ export async function listCompanies(opts: { q?: string; filter?: CompanyFilter; 
     proofType: b.proofType,
     proofFileName: b.proofFileName,
     submittedAt: b.submittedAt,
+    registryStatus: b.registryStatus,
+    registryDetail: b.registryDetail,
+    registryCheckedAt: b.registryCheckedAt,
     businessEmail: b.businessEmail,
     website: b.website,
     contactName: [b.contactFirst, b.contactLast].filter(Boolean).join(" "),

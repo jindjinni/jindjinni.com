@@ -1300,6 +1300,10 @@ export const businessVerifications = sqliteTable("business_verifications", {
   proofContentType: text("proof_content_type").notNull(),
   proofData: text("proof_data").notNull(), // base64, no data: prefix
   submittedAt: text("submitted_at").notNull().default(sql`(current_timestamp)`),
+  // Result of checking the file number against the state's public records (see lib/state-registry.ts). Empty = not checked yet.
+  registryStatus: text("registry_status"),
+  registryDetail: text("registry_detail"),
+  registryCheckedAt: text("registry_checked_at"),
   ...timestamps,
 }, (t) => [index("business_verifications_ein_idx").on(t.ein)]);
 

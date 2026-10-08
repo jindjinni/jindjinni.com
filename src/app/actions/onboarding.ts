@@ -1,5 +1,7 @@
 "use server";
 
+import { after } from "next/server";
+import { runRegistryCheck } from "@/lib/state-registry";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/db/client";
@@ -101,6 +103,8 @@ export async function createOrganization(
     logoUpdatedAt: new Date().toISOString(),
   });
   await saveVerification(orgId, verification.data);
+  // Compare the file number with the state's public records once the response is sent; the owner sees the result in Settings -> Companies.
+  after(() => runRegistryCheck(orgId));
 
   redirect("/under-review");
 }

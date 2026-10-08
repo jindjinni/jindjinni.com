@@ -11,6 +11,7 @@ import { db } from "@/db/client";
 import { organizations } from "@/db/schema";
 import { requireOrg } from "@/lib/tenant";
 import { isPlatformAdmin } from "@/lib/platform-admin";
+import { runRegistryCheck } from "@/lib/state-registry";
 import { logDecision, normalizeStatus, type CompanyStatus } from "@/lib/company-admin";
 
 export type ApprovalState = { error?: string; message?: string } | undefined;
@@ -73,4 +74,15 @@ export async function decideApprovalAction(_prev: ApprovalState, fd: FormData): 
 
   revalidatePath("/dashboard/settings/companies");
   return { message: DONE[decision] };
+}
+
+/** Runs the state-records check again for one company (the platform owner presses "Check again"). */
+export async function recheckRegistryAction(_prev: ApprovalState, fd: FormData): Promise<ApprovalState> {
+  const org = await requireOrg();
+  if (!(await isPlatformAdmin(org))) return { error: "Only the platform owner can do this." };
+  const orgId = String(fd.get("orgId") ?? "").slice(0, 80);
+  if (!orgId) return { error: "Choose a company." };
+  await runRegistryCheck(orgId);
+  revalidatePath("/dashboard/settings/companies");
+  return { message: "Checked again." };
 }

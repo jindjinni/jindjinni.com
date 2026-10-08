@@ -127,7 +127,7 @@ export async function saveVerification(organizationId: string, v: VerificationIn
   const now = new Date().toISOString();
   const [existing] = await db.select({ id: businessVerifications.id }).from(businessVerifications).where(eq(businessVerifications.organizationId, organizationId)).limit(1);
   if (existing) {
-    await db.update(businessVerifications).set({ ...v, submittedAt: now, updatedAt: now }).where(eq(businessVerifications.id, existing.id));
+    await db.update(businessVerifications).set({ ...v, submittedAt: now, updatedAt: now, registryStatus: null, registryDetail: null, registryCheckedAt: null }).where(eq(businessVerifications.id, existing.id));
     await logDecision(organizationId, "resubmitted", null, null);
   } else {
     await db.insert(businessVerifications).values({ id: newId("bverif"), organizationId, ...v, submittedAt: now });
