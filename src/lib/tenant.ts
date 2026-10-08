@@ -6,6 +6,9 @@
 // param or a client-supplied value. That's the whole multi-tenant
 // guarantee, in one place.
 
+import { billingDateOf } from "@/lib/billing-schedule";
+import { serviceHasEnded } from "@/lib/cancellation";
+import { endPlanIfDue } from "@/lib/plan-end";
 import { redirect } from "next/navigation";
 import { and, eq, isNotNull, isNull } from "drizzle-orm";
 import { auth } from "@/lib/auth";
@@ -47,6 +50,7 @@ export async function requireOrg(): Promise<CurrentOrg> {
       role: memberships.role,
       deptAccess: memberships.deptAccess,
       approvalStatus: organizations.approvalStatus,
+      serviceEndsOn: organizations.serviceEndsOn,
     })
     .from(memberships)
     .innerJoin(organizations, eq(memberships.organizationId, organizations.id))
@@ -85,6 +89,11 @@ export async function requireOrg(): Promise<CurrentOrg> {
 
   // A new company is locked until the platform owner approves it (and again if they later suspend it).
   if (isHeldBack(row!.approvalStatus)) redirect("/under-review");
+  // A cancelled plan keeps working through its last day, then the company is switched off (data kept).
+  if (row!.serviceEndsOn && serviceHasEnded(row!.serviceEndsOn, billingDateOf())) {
+    await endPlanIfDue(row!.organizationId);
+    redirect("/under-review");
+  }
 
   return {
     userId: userId!,
@@ -111,12 +120,17 @@ export async function requireOrgApi(): Promise<CurrentOrg | null> {
       role: memberships.role,
       deptAccess: memberships.deptAccess,
       approvalStatus: organizations.approvalStatus,
+      serviceEndsOn: organizations.serviceEndsOn,
     })
     .from(memberships)
     .innerJoin(organizations, eq(memberships.organizationId, organizations.id))
     .where(and(eq(memberships.userId, userId), isNull(memberships.deactivatedAt), isNull(organizations.closedAt)))
     .limit(1);
   if (!row || isHeldBack(row.approvalStatus)) return null;
+  if (row.serviceEndsOn && serviceHasEnded(row.serviceEndsOn, billingDateOf())) {
+    await endPlanIfDue(row.organizationId);
+    return null;
+  }
   return {
     userId,
     organizationId: row.organizationId,
@@ -173,6 +187,9 @@ export type HeldCompany = {
   decidedAt: string | null;
   createdAt: string;
   paymentStatus: string | null;
+  cancelRequestedOn: string | null;
+  serviceEndsOn: string | null;
+  cancelRefundCents: number | null;
 };
 
 /** The signed-in user's company that is waiting for approval (or was turned down), for the /under-review page, or null. */
@@ -187,6 +204,9 @@ export async function getHeldCompanyForUser(userId: string): Promise<HeldCompany
       decidedAt: organizations.approvalDecidedAt,
       createdAt: organizations.createdAt,
       paymentStatus: organizations.paymentStatus,
+      cancelRequestedOn: organizations.cancelRequestedOn,
+      serviceEndsOn: organizations.serviceEndsOn,
+      cancelRefundCents: organizations.cancelRefundCents,
     })
     .from(memberships)
     .innerJoin(organizations, eq(memberships.organizationId, organizations.id))

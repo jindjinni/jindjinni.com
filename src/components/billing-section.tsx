@@ -1,4 +1,5 @@
 import { AuthSection as Section } from "@/components/auth/auth-ui";
+import { BillingTrialNotice } from "@/components/billing-trial-notice";
 import { BILLING_LIVE, MONTHLY_CENTS, YEARLY_CENTS, YEARLY_REGULAR_CENTS, YEARLY_SAVINGS_CENTS, usd } from "@/lib/billing-config";
 
 const card =
@@ -31,6 +32,8 @@ export function BillingSection() {
         </label>
       </fieldset>
 
+      <BillingTrialNotice />
+
       <div className="rounded-xl border border-mint-line bg-white p-4 text-sm text-ink sm:col-span-2" data-testid="autopay-notice">
         <p className="font-bold">Auto-pay only.</p>
         <p className="mt-1 text-muted">
@@ -46,7 +49,7 @@ export function BillingSection() {
         <div className="rounded-xl border border-dashed border-mint-line bg-white p-4 text-sm text-ink sm:col-span-2" data-testid="billing-not-live">
           <p className="inline-flex rounded-full border border-mint-line bg-mint px-3 py-1 text-xs font-extrabold uppercase tracking-wider text-brand-deep">Payment method: coming soon</p>
           <p className="mt-3 font-bold">Nothing is charged when you sign up.</p>
-          <p className="mt-1 text-muted">Billing isn&rsquo;t switched on yet, so there are no card or bank details to enter. Your choice above is saved with your company.</p>
+          <p className="mt-1 text-muted">Billing isn&rsquo;t switched on yet, so there are no card or bank details to enter. Your choice above is saved with your company, and we&rsquo;ll email the owner before any charge begins.</p>
         </div>
       )}
     </Section>

@@ -1,5 +1,8 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { MONTHLY_CENTS, YEARLY_CENTS, YEARLY_REGULAR_CENTS, YEARLY_SAVINGS_CENTS, usd } from "@/lib/billing-config";
+import { TRIAL_DAYS } from "@/lib/billing-schedule";
+import { CANCEL_COMEBACK_TEXT, CANCEL_MONTHLY_TEXT, CANCEL_TRIAL_TEXT, CANCEL_YEARLY_TEXT } from "@/lib/cancellation-copy";
 import { BrandLogo, Icon, LogoMark, Sparkle, type IconName } from "@/components/landing/icons";
 import {
   ChatMock,
@@ -161,6 +164,7 @@ export default function Home() {
             <a href="#receiving" className="hover:text-ink">Receiving</a>
             <a href="#team" className="hover:text-ink">Team + Chat</a>
             <a href="#security" className="hover:text-ink">Security</a>
+            <a href="#pricing" className="hover:text-ink">Pricing</a>
           </nav>
           <div className="flex items-center gap-2 sm:gap-3">
             <Link href="/login" className="whitespace-nowrap rounded-full px-3 py-2 text-sm font-bold text-ink hover:bg-slate-100">
@@ -461,6 +465,60 @@ export default function Home() {
                 </article>
               ))}
             </div>
+          </div>
+        </section>
+
+        {/* ---------- Pricing, free trial, cancellation ---------- */}
+        <section id="pricing" className="scroll-mt-20 bg-slate-50 py-20 sm:py-28" data-testid="pricing">
+          <div className="mx-auto max-w-6xl px-4 sm:px-6">
+            <div className="max-w-3xl">
+              <Eyebrow>Pricing</Eyebrow>
+              <h2 className="mt-3 text-balance text-4xl font-extrabold tracking-tight sm:text-5xl">
+                {TRIAL_DAYS} days free. Then one simple price.
+              </h2>
+              <p className="mt-5 text-lg text-muted" data-testid="home-trial">
+                Every new company gets a {TRIAL_DAYS}-day free trial that starts the day we approve it. Nothing is charged during the trial, and you can cancel before it ends.
+              </p>
+            </div>
+            <div className="mt-10 grid gap-4 sm:grid-cols-2">
+              <article className="rounded-3xl border border-line bg-white p-7" data-testid="price-monthly">
+                <h3 className="text-sm font-extrabold uppercase tracking-wider text-muted">Monthly</h3>
+                <p className="mt-3 text-4xl font-extrabold tracking-tight">{usd(MONTHLY_CENTS)}<span className="text-lg font-bold">/month</span></p>
+                <p className="mt-1 text-sm font-semibold text-muted">Billed monthly</p>
+              </article>
+              <article className="rounded-3xl border-2 border-brand bg-white p-7" data-testid="price-yearly">
+                <h3 className="flex items-center gap-2 text-sm font-extrabold uppercase tracking-wider text-muted">
+                  Yearly <span className="rounded-full bg-brand px-2.5 py-0.5 text-xs font-extrabold normal-case tracking-normal text-ink">Best Value</span>
+                </h3>
+                <p className="mt-3 text-sm font-semibold text-muted line-through">{usd(YEARLY_REGULAR_CENTS)}/year</p>
+                <p className="text-4xl font-extrabold tracking-tight">{usd(YEARLY_CENTS)}<span className="text-lg font-bold">/year</span></p>
+                <p className="mt-1 text-sm font-bold text-brand-deep">Save {usd(YEARLY_SAVINGS_CENTS)} per year</p>
+              </article>
+            </div>
+            <div className="mt-8 grid gap-4 lg:grid-cols-2">
+              <div className="rounded-3xl border border-line bg-white p-7">
+                <h3 className="text-lg font-extrabold tracking-tight">How billing works</h3>
+                <ul className="mt-3 list-disc space-y-2 pl-5 text-[15px] leading-relaxed text-muted">
+                  <li>Auto-pay only: credit card, debit card or ACH bank account.</li>
+                  <li data-testid="home-proration">Monthly plans are billed on the 1st of every month, in advance. The first day after your free trial we charge only for the days left in that month (a prorated charge), then the full {usd(MONTHLY_CENTS)} on the 1st of every month after that.</li>
+                  <li>Yearly plans are charged once, the first day after your trial, and again on the same date every year. No proration.</li>
+                  <li>If a payment doesn&rsquo;t go through you have a 3-day grace period to fix it. After that the account is suspended until it does.</li>
+                </ul>
+              </div>
+              <div className="rounded-3xl border border-line bg-white p-7" data-testid="home-cancel">
+                <h3 className="text-lg font-extrabold tracking-tight">Cancel any time</h3>
+                <ul className="mt-3 list-disc space-y-2 pl-5 text-[15px] leading-relaxed text-muted">
+                  <li data-testid="home-cancel-trial">{CANCEL_TRIAL_TEXT}</li>
+                  <li data-testid="home-cancel-monthly">{CANCEL_MONTHLY_TEXT}</li>
+                  <li data-testid="home-cancel-yearly">{CANCEL_YEARLY_TEXT}</li>
+                  <li>{CANCEL_COMEBACK_TEXT}</li>
+                </ul>
+              </div>
+            </div>
+            <p className="mt-6 text-sm font-semibold text-muted">
+              Billing opens soon; nothing is charged today. Full details are in our{" "}
+              <Link href="/terms" className="font-bold text-ink underline decoration-brand decoration-2 underline-offset-4">Terms and Conditions</Link>.
+            </p>
           </div>
         </section>
 

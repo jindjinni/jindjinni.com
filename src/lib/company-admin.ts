@@ -97,6 +97,11 @@ export type CompanyRow = {
   createdAt: string;
   billingPlan: string | null;
   paymentStatus: string | null;
+  trialStartsOn: string | null;
+  firstBillableOn: string | null;
+  cancelRequestedOn: string | null;
+  serviceEndsOn: string | null;
+  cancelRefundCents: number | null;
   paymentGraceEndsAt: string | null;
   lastPaymentAt: string | null;
   ein: string | null;
@@ -155,6 +160,11 @@ export async function listCompanies(opts: { q?: string; filter?: CompanyFilter; 
       createdAt: organizations.createdAt,
       billingPlan: organizations.billingPlan,
       paymentStatus: organizations.paymentStatus,
+      trialStartsOn: organizations.trialStartsOn,
+      firstBillableOn: organizations.firstBillableOn,
+      cancelRequestedOn: organizations.cancelRequestedOn,
+      serviceEndsOn: organizations.serviceEndsOn,
+      cancelRefundCents: organizations.cancelRefundCents,
       paymentGraceEndsAt: organizations.paymentGraceEndsAt,
       lastPaymentAt: organizations.lastPaymentAt,
       ein: businessVerifications.ein,
@@ -236,6 +246,11 @@ export async function listCompanies(opts: { q?: string; filter?: CompanyFilter; 
     createdAt: b.createdAt,
     billingPlan: b.billingPlan,
     paymentStatus: b.paymentStatus,
+    trialStartsOn: b.trialStartsOn,
+    firstBillableOn: b.firstBillableOn,
+    cancelRequestedOn: b.cancelRequestedOn,
+    serviceEndsOn: b.serviceEndsOn,
+    cancelRefundCents: b.cancelRefundCents,
     paymentGraceEndsAt: b.paymentGraceEndsAt,
     lastPaymentAt: b.lastPaymentAt,
     ein: b.ein,
@@ -281,5 +296,8 @@ export const DECISION_LABELS: Record<string, string> = {
   banned: "Banned",
   reinstated: "Reinstated",
   details_updated: "Updated details",
+  plan_cancelled: "Cancelled plan",
+  cancellation_undone: "Kept plan",
+  plan_ended: "Plan ended",
   ban_lifted: "Ban lifted",
 };

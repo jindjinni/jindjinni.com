@@ -24,6 +24,8 @@ export default async function CompanyProfilePage() {
       status: organizations.approvalStatus,
       createdAt: organizations.createdAt,
       plan: organizations.billingPlan,
+      trialStartsOn: organizations.trialStartsOn,
+      firstBillableOn: organizations.firstBillableOn,
       paymentStatus: organizations.paymentStatus,
       paymentGraceEndsAt: organizations.paymentGraceEndsAt,
       lastPaymentAt: organizations.lastPaymentAt,
@@ -48,7 +50,7 @@ export default async function CompanyProfilePage() {
     .limit(1);
 
   const account = accountStatusText(o?.status ?? null);
-  const payment = paymentStatusText({ paymentStatus: o?.paymentStatus ?? null, paymentGraceEndsAt: o?.paymentGraceEndsAt ?? null, lastPaymentAt: o?.lastPaymentAt ?? null });
+  const payment = paymentStatusText({ billingPlan: o?.plan ?? null, trialStartsOn: o?.trialStartsOn ?? null, firstBillableOn: o?.firstBillableOn ?? null, paymentStatus: o?.paymentStatus ?? null, paymentGraceEndsAt: o?.paymentGraceEndsAt ?? null, lastPaymentAt: o?.lastPaymentAt ?? null });
   const sec = "rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900";
   const dl = "grid grid-cols-[9rem_1fr] gap-x-3 gap-y-2 text-sm";
   const dt = "text-slate-500 dark:text-slate-400";

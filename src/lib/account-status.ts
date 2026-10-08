@@ -1,7 +1,8 @@
 // Plain-language account and payment standing for a company, shared by the company's own Company profile page and the platform
 // owner's Companies panel, so both always say the same thing.
 
-import { BILLING_LIVE } from "@/lib/billing-config";
+import { BILLING_LIVE, usd, type BillingPlan, parseBillingPlan } from "@/lib/billing-config";
+import { billingDateOf, chargeSchedule, longDay, rangeText, trialState, type Charge } from "@/lib/billing-schedule";
 
 export type Tone = "good" | "warn" | "bad" | "neutral";
 
@@ -22,12 +23,50 @@ const dayOf = (iso: string | null) => {
   return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 };
 
-/** Payment standing. Billing is not live yet, so every company reads "Not started" until it is. */
-export function paymentStatusText(o: { paymentStatus: string | null; paymentGraceEndsAt: string | null; lastPaymentAt: string | null }): { label: string; tone: Tone; text: string } {
+export type PaymentInput = {
+  paymentStatus: string | null;
+  paymentGraceEndsAt: string | null;
+  lastPaymentAt: string | null;
+  billingPlan?: string | null;
+  trialStartsOn?: string | null;
+  firstBillableOn?: string | null;
+};
+
+/** One charge in words: "October 15: $535.77 (17 days, October 15 to 31)". */
+export function chargeLine(c: Charge): string {
+  const what = c.kind === "prorated" ? `${c.days} of ${c.daysInMonth} days, ${rangeText(c.coversFrom, c.coversTo)}` : c.kind === "yearly" ? "1 year" : "full month";
+  return `${longDay(c.date)}: ${usd(c.amountCents)} (${what})`;
+}
+
+/** The free trial and the next charges for a company, in words, or null if its trial hasn't started (not approved yet). */
+export function billingCalendar(o: { billingPlan?: string | null; trialStartsOn?: string | null; firstBillableOn?: string | null }, today: string = billingDateOf()):
+  { trial: ReturnType<typeof trialState>; plan: BillingPlan | null; charges: Charge[] } | null {
+  if (!o.trialStartsOn || !o.firstBillableOn) return null;
+  const plan = parseBillingPlan(o.billingPlan);
+  return { trial: trialState({ startsOn: o.trialStartsOn, firstBillableOn: o.firstBillableOn }, today), plan, charges: plan ? chargeSchedule(plan, o.firstBillableOn, 3) : [] };
+}
+
+/** Payment standing. Billing is not live yet, so a company is either in its free trial or "Not started" until it is. */
+export function paymentStatusText(o: PaymentInput, today: string = billingDateOf()): { label: string; tone: Tone; text: string } {
   if (!o.paymentStatus) {
+    const cal = billingCalendar(o, today);
+    if (!cal) {
+      return BILLING_LIVE
+        ? { label: "No payment yet", tone: "warn", text: "No payment on file yet." }
+        : { label: "Not started", tone: "neutral", text: "The 7-day free trial starts the day the company is approved. Billing isn't switched on yet, so nothing is due." };
+    }
+    if (cal.trial.state === "in_trial") {
+      const left = cal.trial.daysLeft;
+      const first = cal.charges[0];
+      return {
+        label: "Free trial",
+        tone: "good",
+        text: `${left} day${left === 1 ? "" : "s"} left (free through ${longDay(cal.trial.lastFreeDay)}). ${BILLING_LIVE ? (first ? `First charge: ${chargeLine(first)}.` : "") : "Billing isn't switched on yet, so nothing will be charged."}`.trim(),
+      };
+    }
     return BILLING_LIVE
-      ? { label: "No payment yet", tone: "warn", text: "No payment on file yet." }
-      : { label: "Not started", tone: "neutral", text: "Billing isn't switched on yet, so nothing is due." };
+      ? { label: "No payment yet", tone: "warn", text: `The free trial ended ${longDay(cal.trial.state === "ended" ? cal.trial.firstBillableOn : today)}. No payment on file yet.` }
+      : { label: "Not started", tone: "neutral", text: "The free trial is over. Billing isn't switched on yet, so nothing is due." };
   }
   if (o.paymentStatus === "current") {
     return { label: "Paid up", tone: "good", text: o.lastPaymentAt ? `Last payment went through on ${dayOf(o.lastPaymentAt)}.` : "Payments are up to date." };

@@ -86,6 +86,15 @@ export const organizations = sqliteTable("organizations", {
   billingPlan: text("billing_plan"),
   // Payment standing, set by billing once it is live: "current", "grace" (a failed payment, with a 3-day grace period) or "past_due"
   // (suspended until paid). Empty = billing has not started for this company.
+  // The 7-day free trial, as billing-calendar days ("YYYY-MM-DD", see lib/billing-schedule.ts). It starts the day the company is
+  // approved; firstBillableOn is the first paid day (the first charge happens that day once billing is live). Empty = not approved yet.
+  trialStartsOn: text("trial_starts_on"),
+  firstBillableOn: text("first_billable_on"),
+  // Plan cancellation (see lib/cancellation.ts): the day the owner cancelled, the last day of service, and the refund the policy
+  // works out (whole cents; the money itself is paid out by billing once it is live). All empty = not cancelled.
+  cancelRequestedOn: text("cancel_requested_on"),
+  serviceEndsOn: text("service_ends_on"),
+  cancelRefundCents: integer("cancel_refund_cents"),
   paymentStatus: text("payment_status"),
   paymentGraceEndsAt: text("payment_grace_ends_at"),
   lastPaymentAt: text("last_payment_at"),

@@ -3,7 +3,9 @@ import { logout } from "@/app/actions/auth";
 import { getHeldCompanyForUser, getSessionUserId } from "@/lib/tenant";
 import { isAdmin, isOwner } from "@/lib/permissions";
 import { AuthCard, AuthShell, authBtnSecondary } from "@/components/auth/auth-ui";
-import { BILLING_LIVE } from "@/lib/billing-config";
+import { BILLING_LIVE, usd } from "@/lib/billing-config";
+import { CANCEL_COMEBACK_TEXT } from "@/lib/cancellation-copy";
+import { longDay } from "@/lib/billing-schedule";
 import { ResubmitForm } from "./resubmit-form";
 
 export const dynamic = "force-dynamic";
@@ -40,6 +42,30 @@ export default async function UnderReviewPage() {
             </p>
             {!owner && (
               <p className="mt-3 text-sm text-muted">You can see this because your company&rsquo;s owner invited you. You&rsquo;ll get access once the company is approved.</p>
+            )}
+          </div>
+        ) : held.status === "suspended" && held.cancelRequestedOn ? (
+          <div data-testid="under-review-cancelled">
+            <p className="inline-flex rounded-full border border-slate-300 bg-slate-50 px-3 py-1 text-xs font-extrabold uppercase tracking-wider text-slate-700">
+              Plan cancelled
+            </p>
+            <h1 className="mt-4 text-3xl font-extrabold tracking-tight text-ink">{held.organizationName}&rsquo;s plan has ended</h1>
+            {sees ? (
+              <>
+                <p className="mt-3 text-base text-muted">
+                  The plan was cancelled{held.cancelRequestedOn ? ` on ${longDay(held.cancelRequestedOn)}` : ""} and the service ended{held.serviceEndsOn ? ` on ${longDay(held.serviceEndsOn)}` : ""}. Nobody at your company can sign in right now. {CANCEL_COMEBACK_TEXT}
+                </p>
+                {(held.cancelRefundCents ?? 0) > 0 && (
+                  <p className="mt-4 rounded-lg border border-line bg-white p-4 text-sm text-ink" data-testid="cancel-refund">
+                    <strong>Refund:</strong> {usd(held.cancelRefundCents ?? 0)} for the unused part of your year goes back to your original payment method.
+                  </p>
+                )}
+                <p className="mt-4 text-base text-muted">To come back and pick up where you left off, contact support.</p>
+              </>
+            ) : (
+              <p className="mt-3 text-base text-muted" data-testid="cancelled-member-notice">
+                This company&rsquo;s plan has ended. Please contact your company&rsquo;s admin, or support, for more information.
+              </p>
             )}
           </div>
         ) : held.status === "suspended" ? (
