@@ -12,8 +12,8 @@ type Asking = null | "reject" | "suspend" | "ban";
 
 const ASK: Record<Exclude<Asking, null>, { label: string; confirm: string; help: string }> = {
   reject: { label: "Turn down…", confirm: "Confirm turn down", help: "What should they fix? They will read this." },
-  suspend: { label: "Suspend…", confirm: "Confirm suspend", help: "Which part of our Terms and Conditions did they break? They will read this." },
-  ban: { label: "Ban…", confirm: "Confirm ban", help: "Which part of our Terms and Conditions did they break? Only you will see this." },
+  suspend: { label: "Suspend…", confirm: "Confirm suspend", help: "Why? For example: which part of our Terms and Conditions they broke, that the business is no longer active with the state, or a payment that did not go through. Owners and admins will read this." },
+  ban: { label: "Ban…", confirm: "Confirm ban", help: "Which part of our Terms and Conditions did they break? The company's owner and admins will read this. Members only see a contact-support message." },
 };
 
 /** The buttons that fit this company's current state. Every one is re-checked on the server. */

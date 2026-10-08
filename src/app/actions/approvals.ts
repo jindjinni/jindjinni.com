@@ -57,15 +57,15 @@ export async function decideApprovalAction(_prev: ApprovalState, fd: FormData): 
   if (!to) return { error: "That isn't possible for this company right now. Reload the page to see where it stands." };
 
   if (decision === "reject" && reason.length < 5) return { error: "Say what's wrong so they can fix it (at least a few words)." };
-  if (decision === "suspend" && reason.length < 5) return { error: "Say which part of our Terms and Conditions they broke (at least a few words). They will read it." };
+  if (decision === "suspend" && reason.length < 5) return { error: "Say why (for example a Terms and Conditions breach, or the business is not active with the state), in at least a few words. They will read it." };
   if (decision === "ban") {
-    if (reason.length < 5) return { error: "Say which part of our Terms and Conditions they broke (at least a few words). This is kept in your records." };
+    if (reason.length < 5) return { error: "Say which part of our Terms and Conditions they broke (at least a few words). The company's owner and admins will read it, and it is kept in your records." };
     if (fd.get("confirm") !== "yes") return { error: "Tick the box to confirm. A ban is permanent and blocks their EIN." };
   }
 
   const now = new Date().toISOString();
   // What the company itself will read: the note for a turn-down or suspension; nothing after approval or a ban.
-  const shown = decision === "reject" || decision === "suspend" ? reason : null;
+  const shown = decision === "reject" || decision === "suspend" || decision === "ban" ? reason : null;
   await db
     .update(organizations)
     .set({ approvalStatus: to, approvalReason: shown, approvalDecidedAt: now, updatedAt: now })

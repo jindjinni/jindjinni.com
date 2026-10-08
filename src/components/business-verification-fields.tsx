@@ -22,6 +22,9 @@ export function BusinessVerificationFields() {
         <p className="mt-1">
           The business name, address, EIN, state file number and business structure (LLC, corporation and so on) must be exactly what is on your IRS letter and your state registration. We check them against your proof document and the state&rsquo;s records. The person signing up must be the owner or managing owner named on those records. Details that don&rsquo;t match will be turned down.
         </p>
+        <p className="mt-2" data-testid="active-notice">
+          <strong>We only work with active companies.</strong> Your business must be active and in good standing with your state&rsquo;s Secretary of State. We check it, and if we find your company is inactive we may suspend your account until it is active again.
+        </p>
       </div>
       <Field label="EIN (Employer Identification Number)" hint="9 digits from your IRS letter, like 12-3456789.">
         <input name="ein" required inputMode="numeric" autoComplete="off" placeholder="12-3456789" pattern="\s*\d{2}-?\d{7}\s*" title="9 digits, like 12-3456789" className={inputClass} />

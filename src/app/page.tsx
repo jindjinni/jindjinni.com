@@ -208,6 +208,9 @@ export default function Home() {
                   Sign In
                 </Link>
               </div>
+              <p className="mt-5 max-w-xl text-sm font-semibold text-muted" data-testid="active-only">
+                For active businesses only. Your company must be active and in good standing with its state&rsquo;s Secretary of State. We check, and an inactive company can be suspended until it is active again.
+              </p>
             </div>
             <HeroDashboard />
           </div>

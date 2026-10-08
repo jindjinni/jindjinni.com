@@ -84,6 +84,11 @@ export const organizations = sqliteTable("organizations", {
   approvalDecidedAt: text("approval_decided_at"),
   // The plan picked at sign-up ("monthly" or "yearly"); billing is not live yet, so nothing is charged. Empty = none chosen.
   billingPlan: text("billing_plan"),
+  // Payment standing, set by billing once it is live: "current", "grace" (a failed payment, with a 3-day grace period) or "past_due"
+  // (suspended until paid). Empty = billing has not started for this company.
+  paymentStatus: text("payment_status"),
+  paymentGraceEndsAt: text("payment_grace_ends_at"),
+  lastPaymentAt: text("last_payment_at"),
   ...timestamps,
 }, (t) => [index("organizations_approval_idx").on(t.approvalStatus, t.createdAt)]);
 

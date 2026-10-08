@@ -1,8 +1,9 @@
 import { redirect } from "next/navigation";
 import { logout } from "@/app/actions/auth";
 import { getHeldCompanyForUser, getSessionUserId } from "@/lib/tenant";
-import { isOwner } from "@/lib/permissions";
+import { isAdmin, isOwner } from "@/lib/permissions";
 import { AuthCard, AuthShell, authBtnSecondary } from "@/components/auth/auth-ui";
+import { BILLING_LIVE } from "@/lib/billing-config";
 import { ResubmitForm } from "./resubmit-form";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +20,8 @@ export default async function UnderReviewPage() {
   const held = await getHeldCompanyForUser(userId);
   if (!held) redirect("/dashboard");
   const owner = isOwner(held.role);
+  // Only the company's owner and admins are told why a company was suspended; everyone else is pointed to them.
+  const sees = isAdmin(held.role);
 
   return (
     <AuthShell>
@@ -45,15 +48,31 @@ export default async function UnderReviewPage() {
               Account suspended
             </p>
             <h1 className="mt-4 text-3xl font-extrabold tracking-tight text-ink">{held.organizationName} is suspended</h1>
-            <p className="mt-3 text-base text-muted">
-              We suspended this account{held.decidedAt ? ` on ${day(held.decidedAt)}` : ""} because it broke our Terms and Conditions. Your data is kept safe, but nobody at your company can sign in until the suspension is lifted.
-            </p>
-            {held.reason && (
-              <p className="mt-4 rounded-lg border border-line bg-white p-4 text-sm text-ink" data-testid="suspension-reason">
-                <strong>Why:</strong> {held.reason}
+            {sees ? (
+              <>
+                <p className="mt-3 text-base text-muted">
+                  We suspended this account{held.decidedAt ? ` on ${day(held.decidedAt)}` : ""}. Your data is kept safe, but nobody at your company can sign in until the problem is fixed and the suspension is lifted.
+                </p>
+                {held.reason && (
+                  <p className="mt-4 rounded-lg border border-line bg-white p-4 text-sm text-ink" data-testid="suspension-reason">
+                    <strong>Why:</strong> {held.reason}
+                  </p>
+                )}
+                {(held.paymentStatus === "past_due" || held.paymentStatus === "grace") && (
+                  <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-ink" data-testid="pay-to-reinstate">
+                    <strong>Make your payment to reinstate the account.</strong>{" "}
+                    {BILLING_LIVE
+                      ? "Update your payment method and pay what is due. The account is switched back on as soon as the payment goes through."
+                      : "Online payments aren't switched on yet. Contact support to pay what is due and we will switch the account back on."}
+                  </div>
+                )}
+                <p className="mt-4 text-base text-muted">Please contact support so we can help get this fixed. If you think this is a mistake, tell us and we will take another look.</p>
+              </>
+            ) : (
+              <p className="mt-3 text-base text-muted" data-testid="suspended-member-notice">
+                This company has been suspended. Please contact support, or your company&rsquo;s admin, for more information.
               </p>
             )}
-            <p className="mt-4 text-base text-muted">If you think this is a mistake, contact support and we will take another look.</p>
           </div>
         ) : held.status === "banned" ? (
           <div data-testid="under-review-banned">
@@ -61,9 +80,23 @@ export default async function UnderReviewPage() {
               Account closed
             </p>
             <h1 className="mt-4 text-3xl font-extrabold tracking-tight text-ink">{held.organizationName} has been removed</h1>
-            <p className="mt-3 text-base text-muted">
-              This account was permanently closed{held.decidedAt ? ` on ${day(held.decidedAt)}` : ""} for breaking our Terms and Conditions. It can&rsquo;t be reopened and can&rsquo;t sign up again. If you think this is a mistake, contact support.
-            </p>
+            {sees ? (
+              <>
+                <p className="mt-3 text-base text-muted">
+                  This account was permanently closed{held.decidedAt ? ` on ${day(held.decidedAt)}` : ""} under our Terms and Conditions. Nobody at your company can sign in.
+                </p>
+                {held.reason && (
+                  <p className="mt-4 rounded-lg border border-line bg-white p-4 text-sm text-ink" data-testid="ban-reason">
+                    <strong>Why:</strong> {held.reason}
+                  </p>
+                )}
+                <p className="mt-4 text-base text-muted">If you think this is a mistake or a misunderstanding, contact support and we will take another look.</p>
+              </>
+            ) : (
+              <p className="mt-3 text-base text-muted" data-testid="banned-member-notice">
+                This company has been closed. Please contact support, or your company&rsquo;s admin, for more information.
+              </p>
+            )}
           </div>
         ) : (
           <div data-testid="under-review-rejected">

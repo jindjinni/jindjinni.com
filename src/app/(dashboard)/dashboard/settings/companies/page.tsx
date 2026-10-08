@@ -4,6 +4,7 @@ import { requireOrg } from "@/lib/tenant";
 import { isPlatformAdmin } from "@/lib/platform-admin";
 import { stateName } from "@/lib/business-verification";
 import { DECISION_LABELS, FILTERS, companyCounts, listCompanies, parseFilter, type CompanyFilter, type CompanyStatus } from "@/lib/company-admin";
+import { TONE_CLASS, paymentStatusText } from "@/lib/account-status";
 import { canCheckAutomatically, registryLink } from "@/lib/state-registry";
 import { DecisionForm } from "./decision-form";
 import { RegistryRecheck } from "./registry-check";
@@ -163,6 +164,10 @@ export default async function CompaniesPage({ searchParams }: { searchParams: Pr
                       </dd>
                     </>
                   )}
+                  <dt className={dt}>Payment</dt>
+                  <dd data-testid="payment-line">
+                    {(() => { const ps = paymentStatusText(c); return (<><span className={`rounded-full px-2 py-0.5 text-xs font-medium ${TONE_CLASS[ps.tone]}`}>{ps.label}</span> <span className="text-slate-600 dark:text-slate-300">{ps.text}</span></>); })()}
+                  </dd>
                   <dt className={dt}>Plan chosen</dt><dd data-testid="plan-chosen">{c.billingPlan === "monthly" ? "Monthly" : c.billingPlan === "yearly" ? "Yearly" : "None yet"} <span className="text-xs text-slate-500">(billing isn&apos;t live)</span></dd>
                   <dt className={dt}>People</dt><dd>{c.teamSize} active</dd>
                   <dt className={dt}>Last sign-in</dt><dd>{c.lastSignIn ? day(c.lastSignIn) : "Never"}</dd>

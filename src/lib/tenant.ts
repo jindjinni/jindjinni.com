@@ -172,6 +172,7 @@ export type HeldCompany = {
   reason: string | null;
   decidedAt: string | null;
   createdAt: string;
+  paymentStatus: string | null;
 };
 
 /** The signed-in user's company that is waiting for approval (or was turned down), for the /under-review page, or null. */
@@ -185,6 +186,7 @@ export async function getHeldCompanyForUser(userId: string): Promise<HeldCompany
       reason: organizations.approvalReason,
       decidedAt: organizations.approvalDecidedAt,
       createdAt: organizations.createdAt,
+      paymentStatus: organizations.paymentStatus,
     })
     .from(memberships)
     .innerJoin(organizations, eq(memberships.organizationId, organizations.id))
