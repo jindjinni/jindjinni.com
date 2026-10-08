@@ -3,7 +3,7 @@ import { db } from "@/db/client";
 import { users } from "@/db/schema";
 import { requireOrg } from "@/lib/tenant";
 import { ROLE_DESCRIPTIONS, ROLE_LABELS } from "@/lib/permissions";
-import { NameForm, PasswordForm } from "./account-forms";
+import { EmailForm, NameForm, PasswordForm } from "./account-forms";
 
 export default async function MyAccountPage() {
   const org = await requireOrg();
@@ -46,6 +46,16 @@ export default async function MyAccountPage() {
         <h3 className="text-base font-semibold text-slate-900 dark:text-slate-50">Your name</h3>
         <NameForm name={me?.name ?? ""} />
       </section>
+
+      {!me?.username && (
+        <section className="rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900" data-testid="email-section">
+          <h3 className="text-base font-semibold text-slate-900 dark:text-slate-50">Change sign-in email</h3>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+            We send a 6-digit code to the new address to prove it is yours, and tell your old address afterwards. You will be signed out and sign in again with the new email.
+          </p>
+          <EmailForm />
+        </section>
+      )}
 
       <section className="rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
         <h3 className="text-base font-semibold text-slate-900 dark:text-slate-50">Change password</h3>
