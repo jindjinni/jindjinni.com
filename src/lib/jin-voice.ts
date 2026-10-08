@@ -28,11 +28,22 @@ export function scoreVoice(v: VoiceLike, lang: string): number {
   return s;
 }
 
+/**
+ * The platform's house voice for Jin, used for everyone who has not picked their own (until further notice, per the owner).
+ * Matched by name, in order. It exists on Chrome and Edge (Google's voices); on devices without it Jin falls back to the
+ * best natural voice below. To change the house voice later, change this one list.
+ */
+export const HOUSE_VOICE_NAMES = ["Google UK English Female"];
+
 /** The best voice for a language, or null when there is none worth choosing (then the browser's own default is used). */
 export function pickVoice<T extends VoiceLike>(voices: readonly T[], lang: string, preferredName?: string | null): T | null {
   if (preferredName) {
     const chosen = voices.find((v) => v.name === preferredName);
     if (chosen) return chosen;
+  }
+  for (const house of HOUSE_VOICE_NAMES) {
+    const found = voices.find((v) => v.name.toLowerCase() === house.toLowerCase());
+    if (found) return found;
   }
   let best: T | null = null;
   let bestScore = -Infinity;

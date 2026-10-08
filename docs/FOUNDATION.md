@@ -59,7 +59,7 @@ To go back to it if something breaks badly: `git checkout foundation-v1` (or bra
 
 ## Jin's reading voice
 
-Reading answers aloud uses the browser's own voices (free, nothing leaves the device). `src/lib/jin-voice.ts` picks the most natural voice the device has (Apple Enhanced/Premium, Google, Microsoft Natural), skips novelty voices and other languages, reads one sentence at a time at a calm pace, and the widget lets the person pick another voice (remembered as `jin-voice`). A paid human-like voice (OpenAI/ElevenLabs text-to-speech) is a possible later switch; who pays for it (platform with daily limits, or each company's own connector) is not decided yet, so do not add one without that decision.
+Reading answers aloud uses the browser's own voices (free, nothing leaves the device). `src/lib/jin-voice.ts` picks the most natural voice the device has (Apple Enhanced/Premium, Google, Microsoft Natural), skips novelty voices and other languages, reads one sentence at a time at a calm pace, and the widget lets the person pick another voice (remembered as `jin-voice`). Until the owner says otherwise, everyone who has not chosen a voice gets the house voice "Google UK English Female" (`HOUSE_VOICE_NAMES` in `jin-voice.ts`; Chrome/Edge have it, other browsers fall back to the best natural voice). Reading aloud itself still starts off until the person turns it on. A paid human-like voice (OpenAI/ElevenLabs text-to-speech) is a possible later switch; who pays for it (platform with daily limits, or each company's own connector) is not decided yet, so do not add one without that decision.
 
 ## Business verification and approval (who we let in)
 
