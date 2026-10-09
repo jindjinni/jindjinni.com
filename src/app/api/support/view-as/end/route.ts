@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
     const uid = (session?.user as { id?: string } | undefined)?.id;
     if (uid && uid === token.u) {
       const [s] = await db.select({ ticketId: supportViewSessions.ticketId }).from(supportViewSessions).where(eq(supportViewSessions.id, token.s)).limit(1);
-      if (s) back = `/dashboard/mothership/support/${s.ticketId}`;
+      if (s) back = `/dashboard/lamp/support/${s.ticketId}`;
       await endViewSession(token.s);
     }
   }

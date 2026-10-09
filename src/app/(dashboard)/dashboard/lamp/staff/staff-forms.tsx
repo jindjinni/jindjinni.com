@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { addStaffPerson, changeStaffLevel, newStaffPassword, removeStaffPerson, resetStaffTwoStep, type StaffState } from "@/app/actions/mothership";
+import { addStaffPerson, changeStaffLevel, deleteStaffPerson, newStaffPassword, removeStaffPerson, resetStaffTwoStep, type StaffState } from "@/app/actions/mothership";
 import { LEVEL_LABELS, type StaffLevel } from "@/lib/mothership-rules";
 
 const input = "w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-50";
@@ -58,7 +58,7 @@ export function AddStaffForm({ levels }: { levels: Exclude<StaffLevel, "owner">[
   );
 }
 
-export function StaffRowActions({ userId, level, levels, managed, hasTwoStep }: { userId: string; level: Exclude<StaffLevel, "owner">; levels: Exclude<StaffLevel, "owner">[]; managed: boolean; hasTwoStep: boolean }) {
+export function StaffRowActions({ userId, email, level, levels, managed, hasTwoStep }: { userId: string; email: string; level: Exclude<StaffLevel, "owner">; levels: Exclude<StaffLevel, "owner">[]; managed: boolean; hasTwoStep: boolean }) {
   const [lvlState, lvlAction, lvlPending] = useActionState(changeStaffLevel.bind(null, userId), undefined);
   const [pwState, pwAction, pwPending] = useActionState(newStaffPassword.bind(null, userId), undefined);
   const [tsState, tsAction, tsPending] = useActionState(resetStaffTwoStep.bind(null, userId), undefined);
@@ -91,10 +91,38 @@ export function StaffRowActions({ userId, level, levels, managed, hasTwoStep }: 
           </form>
         )}
       </div>
+      <DeleteForever userId={userId} email={email} />
       <Feedback state={lvlState} />
       <Feedback state={pwState} />
       <Feedback state={tsState} />
       <Feedback state={rmState} />
     </div>
+  );
+}
+
+/** Permanent deletion from the whole system. Closed by default; the person's email must be typed to confirm. */
+export function DeleteForever({ userId, email }: { userId: string; email: string }) {
+  const [state, action, pending] = useActionState(deleteStaffPerson.bind(null, userId), undefined);
+  const [open, setOpen] = useState(false);
+  const [typed, setTyped] = useState("");
+  if (!open) {
+    return (
+      <div>
+        <button type="button" className={danger} onClick={() => setOpen(true)} data-testid="staff-delete">Delete from the system…</button>
+        <Feedback state={state} />
+      </div>
+    );
+  }
+  return (
+    <form action={action} className="flex flex-col gap-2 rounded-md border border-red-300 bg-red-50 p-3 dark:border-red-900 dark:bg-red-950/30" data-testid="staff-delete-form">
+      <p className="text-sm text-red-900 dark:text-red-200">This deletes the person from the whole system for good: their login stops working, and their name, email, password and sign-in history are erased. It can&apos;t be undone. Records they worked on stay, with no name.</p>
+      <label htmlFor={`del-${userId}`} className="text-xs font-medium text-red-900 dark:text-red-200">Type <strong>{email}</strong> to confirm</label>
+      <input id={`del-${userId}`} name="confirm" autoComplete="off" className={input} value={typed} onChange={(e) => setTyped(e.target.value)} data-testid="staff-delete-confirm-input" />
+      <div className="flex items-center gap-2">
+        <button className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-60" disabled={pending || typed.trim().toLowerCase() !== email.toLowerCase()} data-testid="staff-delete-go">{pending ? "Deleting..." : "Delete for good"}</button>
+        <button type="button" className={ghost} onClick={() => { setOpen(false); setTyped(""); }}>Cancel</button>
+      </div>
+      <Feedback state={state} />
+    </form>
   );
 }

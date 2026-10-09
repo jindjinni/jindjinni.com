@@ -6,7 +6,7 @@ import { AddCompanyForm, RemoveCompanyForm, StageForm } from "./feature-forms";
 
 export const dynamic = "force-dynamic";
 
-/** Switch new features on in stages: try them on your own company (the mothership) first, then chosen companies, then everyone. */
+/** Switch new features on in stages: try them on your own company (the Lamp) first, then chosen companies, then everyone. */
 export default async function FeatureRolloutPage() {
   const org = await requireOrg({ real: true });
   if (!(await isPlatformAdmin(org))) notFound();
@@ -16,7 +16,7 @@ export default async function FeatureRolloutPage() {
       <div>
         <h2 className="text-2xl font-semibold text-slate-900 dark:text-slate-50">Feature rollout</h2>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          This company is the mothership: new features go live here first. Try one yourself, then open it to a few companies, then to everyone. Switching it back to &ldquo;Mothership only&rdquo; or &ldquo;Off&rdquo; hides it again right away.
+          This company is the Lamp: new features go live here first. Try one yourself, then open it to a few companies, then to everyone. Switching it back to &ldquo;Mothership only&rdquo; or &ldquo;Off&rdquo; hides it again right away.
         </p>
       </div>
       {features.map((f) => (

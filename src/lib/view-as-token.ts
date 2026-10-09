@@ -38,7 +38,7 @@ export function readViewToken(raw: string | null | undefined, nowMs = Date.now()
 
 // ---- What a person who is only LOOKING may request (used by src/proxy.ts) --------------------------------------------------
 /** Pages that stay closed while looking at someone else's account (private conversations, people's records, closing the company). */
-const BLOCKED_PAGES = ["/dashboard/chat", "/dashboard/hr", "/dashboard/settings/close-company", "/dashboard/settings/jin-library", "/dashboard/mothership"];
+const BLOCKED_PAGES = ["/dashboard/chat", "/dashboard/hr", "/dashboard/settings/close-company", "/dashboard/settings/jin-library", "/dashboard/lamp"];
 /** The only data routes a looking session may fetch: pictures shown in pages, address suggestions, the human check, ending the view. */
 const ALLOWED_API = ["/api/address-autocomplete", "/api/human-check", "/api/support/view-as/end", "/api/receiving/photos/", "/api/auth/session", "/api/auth/csrf"];
 

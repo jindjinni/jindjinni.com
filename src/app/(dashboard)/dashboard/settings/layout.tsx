@@ -8,9 +8,9 @@ export default async function SettingsLayout({ children }: { children: React.Rea
   const org = await requireOrg();
   const level = await staffLevelOf(org);
   let sections = settingsSectionsFor(org.role);
-  // Customer support (mothership) never sees the company Settings, only their own account page.
+  // Customer support (Lamp) never sees the company Settings, only their own account page.
   if (!mayOpenSettings(level)) sections = sections.filter((s) => s.href === "/dashboard/settings/account");
-  // The mothership's own pages (Companies, Support, Staff) are in the Mothership tab. Owner, co-owner and admin also get these two:
+  // The mothership's own pages (Companies, Support, Staff) are in the Lamp tab. Owner, co-owner and admin also get these two:
   if (isFullLevel(level)) {
     sections.push({ href: "/dashboard/settings/features", label: "Feature rollout", blurb: "Switch new features on in stages." });
     sections.push({ href: "/dashboard/settings/jin-library", label: "Jin library", blurb: "What Jin knows about the industry." });

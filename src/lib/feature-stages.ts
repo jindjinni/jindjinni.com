@@ -5,7 +5,7 @@ export type Stage = (typeof STAGES)[number];
 
 export const STAGE_LABELS: Record<Stage, string> = {
   off: "Off",
-  mothership: "Mothership only",
+  mothership: "The Lamp only",
   selected: "Selected companies",
   everyone: "Everyone",
 };

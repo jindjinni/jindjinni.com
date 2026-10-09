@@ -1,9 +1,9 @@
 import { notFound } from "next/navigation";
-import { listStaff } from "@/lib/mothership-staff";
+import { listRemoved, listStaff } from "@/lib/mothership-staff";
 import { GRANTABLE_LEVELS, LEVEL_BLURBS, LEVEL_LABELS, mayManageLevel, mayOpenStaffPage, type StaffLevel } from "@/lib/mothership-rules";
 import { staffLevelOf } from "@/lib/platform-admin";
 import { requireOrg } from "@/lib/tenant";
-import { AddStaffForm, StaffRowActions } from "./staff-forms";
+import { AddStaffForm, DeleteForever, StaffRowActions } from "./staff-forms";
 
 export const dynamic = "force-dynamic";
 
@@ -14,12 +14,13 @@ const PILL: Record<StaffLevel, string> = {
   support: "bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-200",
 };
 
-/** Who is on the mothership's team and what each level may do. */
+/** Who is on the Lamp's team and what each level may do. */
 export default async function StaffPage() {
   const org = await requireOrg({ real: true });
   const mine = await staffLevelOf(org);
   if (!mayOpenStaffPage(mine)) notFound();
   const staff = await listStaff(org.organizationId);
+  const removed = mine === "owner" || mine === "co_owner" ? await listRemoved(org.organizationId) : [];
   const addable = GRANTABLE_LEVELS.filter((l) => mayManageLevel(mine, l));
 
   return (
@@ -55,11 +56,26 @@ export default async function StaffPage() {
                 <span className={`text-xs ${s.twoStep ? "text-emerald-700 dark:text-emerald-400" : "text-amber-700 dark:text-amber-400"}`} data-testid="staff-twostep">{s.twoStep ? "Two-step on" : "Two-step not on yet"}</span>
                 {s.mustChangePassword && <span className="text-xs text-slate-500">Hasn&apos;t chosen a password yet</span>}
               </div>
-              {canManage && <StaffRowActions userId={s.userId} level={s.level as Exclude<StaffLevel, "owner">} levels={addable} managed={s.managed} hasTwoStep={s.twoStep} />}
+              {canManage && <StaffRowActions userId={s.userId} email={s.email} level={s.level as Exclude<StaffLevel, "owner">} levels={addable} managed={s.managed} hasTwoStep={s.twoStep} />}
             </li>
           );
         })}
       </ul>
+
+      {removed.length > 0 && (
+        <section className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900" data-testid="removed-list">
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Removed people</h3>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">They can&apos;t sign in. Delete them from the system here if they should be gone completely.</p>
+          <ul className="mt-3 flex flex-col gap-3">
+            {removed.map((r) => (
+              <li key={r.userId} className="flex flex-col gap-2" data-testid="removed-item" data-email={r.email}>
+                <div className="text-sm"><strong className="text-slate-900 dark:text-slate-50">{r.name || r.email}</strong> <span className="text-xs text-slate-500">{r.email}</span></div>
+                <DeleteForever userId={r.userId} email={r.email} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {addable.length > 0 && (
         <section className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">

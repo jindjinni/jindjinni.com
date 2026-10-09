@@ -15,7 +15,7 @@ function Feedback({ state }: { state: FeatureState }) {
 
 const HELP: Record<Stage, string> = {
   off: "Nobody sees it.",
-  mothership: "Only your own company (the mothership) sees it. Try it here first.",
+  mothership: "Only your own company (the Lamp) sees it. Try it here first.",
   selected: "Your own company plus the companies you pick below.",
   everyone: "Every company sees it.",
 };

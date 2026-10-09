@@ -14,7 +14,7 @@ function href(p: { q?: string; filter?: InboxFilter; page?: number }) {
   if (p.filter && p.filter !== "needs") sp.set("filter", p.filter);
   if (p.page && p.page > 1) sp.set("page", String(p.page));
   const s = sp.toString();
-  return `/dashboard/mothership/support${s ? `?${s}` : ""}`;
+  return `/dashboard/lamp/support${s ? `?${s}` : ""}`;
 }
 
 /** Every ticket from every company, with the company already attached. Platform owner only. */
@@ -60,7 +60,7 @@ export default async function SupportInboxPage({ searchParams }: { searchParams:
       <ul className="flex flex-col gap-2">
         {list.rows.map((t) => (
           <li key={t.id}>
-            <Link href={`/dashboard/mothership/support/${t.id}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm hover:border-emerald-400 dark:border-slate-800 dark:bg-slate-900" data-testid="inbox-item" data-status={t.status}>
+            <Link href={`/dashboard/lamp/support/${t.id}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm hover:border-emerald-400 dark:border-slate-800 dark:bg-slate-900" data-testid="inbox-item" data-status={t.status}>
               <span className="font-mono text-xs text-slate-500">{ticketLabel(t.ticketNo)}</span>
               <strong className="min-w-0 flex-1 break-words text-slate-900 dark:text-slate-50">{t.subject}</strong>
               {t.priority === "high" && <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-900 dark:bg-red-950 dark:text-red-200">High</span>}

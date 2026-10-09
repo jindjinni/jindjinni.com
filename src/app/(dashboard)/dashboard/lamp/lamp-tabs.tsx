@@ -3,10 +3,10 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-export function MothershipTabs({ tabs }: { tabs: { href: string; label: string; badge: number }[] }) {
+export function LampTabs({ tabs }: { tabs: { href: string; label: string; badge: number }[] }) {
   const pathname = usePathname();
   return (
-    <nav aria-label="Mothership" className="flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-slate-800">
+    <nav aria-label="The Lamp" className="flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-slate-800">
       {tabs.map((t) => {
         const active = pathname === t.href || pathname.startsWith(t.href + "/");
         return (

@@ -1,5 +1,5 @@
 // The mothership's staff. A company the platform runs itself (the same list as PLATFORM slugs used for the platform's own Shippo
-// account) is the mothership. Its Owner is the platform owner; people the Owner adds are co-owners, admins or customer support
+// account) is the Lamp. Its Owner is the platform owner; people the Owner adds are co-owners, admins or customer support
 // (platform_staff). Owner, co-owner and admin have complete access (isPlatformAdmin); customer support is staff (isPlatformStaff)
 // but never opens Settings. Always re-checked on the server; never tied to an email address.
 
@@ -12,7 +12,7 @@ import { mayUsePlatformShippo } from "@/lib/shippo-connection";
 
 type OrgLike = { organizationId: string; userId?: string; role: string };
 
-/** This person's staff level in the company they are signed in to, or null when they are not mothership staff. */
+/** This person's staff level in the company they are signed in to, or null when they are not Lamp staff. */
 export async function staffLevelOf(org: OrgLike): Promise<StaffLevel | null> {
   const [row] = await db.select({ slug: organizations.slug }).from(organizations).where(eq(organizations.id, org.organizationId)).limit(1);
   if (!row || !mayUsePlatformShippo(row.slug)) return null;
@@ -27,12 +27,12 @@ export async function staffLevelOf(org: OrgLike): Promise<StaffLevel | null> {
   return s?.level === "co_owner" || s?.level === "admin" || s?.level === "support" ? s.level : null;
 }
 
-/** Owner, co-owner or admin of the mothership: complete access. */
+/** Owner, co-owner or admin of the Lamp: complete access. */
 export async function isPlatformAdmin(org: OrgLike): Promise<boolean> {
   return isFullLevel(await staffLevelOf(org));
 }
 
-/** Anyone on the mothership's team, customer support included. */
+/** Anyone on the Lamp's team, customer support included. */
 export async function isPlatformStaff(org: OrgLike): Promise<boolean> {
   return isStaffLevel(await staffLevelOf(org));
 }

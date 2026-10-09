@@ -1,6 +1,6 @@
 // The mothership's staff list: the Owner(s) of the platform's own companies plus everyone given a level on the Staff page.
 
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, ne, notInArray, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { memberships, organizations, platformStaff, users } from "@/db/schema";
 import type { StaffLevel } from "@/lib/mothership-rules";
@@ -49,4 +49,19 @@ export async function staffEmails(platformSlugs: string[]): Promise<string[]> {
   const out = new Set<string>();
   for (const o of orgRows) for (const s of await listStaff(o.id)) out.add(s.email);
   return [...out].filter((e) => !!e && !e.endsWith(".local") && !e.endsWith(".invalid") && e.includes("@"));
+}
+
+export type RemovedRow = { userId: string; name: string; email: string; removedAt: string };
+
+/** People switched off in this company (removed from the team) who are not yet deleted, so they can be deleted for good. */
+export async function listRemoved(organizationId: string): Promise<RemovedRow[]> {
+  const staffIds = db.select({ id: platformStaff.userId }).from(platformStaff);
+  const rows = await db
+    .select({ userId: users.id, name: users.name, email: users.email, off: memberships.deactivatedAt })
+    .from(memberships)
+    .innerJoin(users, eq(users.id, memberships.userId))
+    .where(and(eq(memberships.organizationId, organizationId), isNotNull(memberships.deactivatedAt), ne(memberships.role, "owner"), notInArray(users.id, staffIds), sql`${users.email} not like '%@deleted.invalid'`))
+    .orderBy(asc(memberships.deactivatedAt))
+    .limit(100);
+  return rows.map((r) => ({ userId: r.userId, name: r.name ?? "", email: r.email, removedAt: r.off ?? "" }));
 }

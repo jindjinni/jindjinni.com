@@ -90,7 +90,7 @@ export async function supportReply(_prev: SupportState, formData: FormData): Pro
   const ticketId = String(formData.get("ticketId") ?? "");
   const res = await replyAsSupport(ticketId, org.userId, String(formData.get("body") ?? ""), formData.get("solve") === "on");
   if (!res.ok) return { error: res.error };
-  revalidatePath(`/dashboard/mothership/support/${ticketId}`);
+  revalidatePath(`/dashboard/lamp/support/${ticketId}`);
   return { message: formData.get("solve") === "on" ? "Reply sent and ticket marked solved." : "Reply sent." };
 }
 
@@ -99,7 +99,7 @@ export async function supportNote(_prev: SupportState, formData: FormData): Prom
   const ticketId = String(formData.get("ticketId") ?? "");
   const res = await addInternalNote(ticketId, org.userId, String(formData.get("body") ?? ""));
   if (!res.ok) return { error: res.error };
-  revalidatePath(`/dashboard/mothership/support/${ticketId}`);
+  revalidatePath(`/dashboard/lamp/support/${ticketId}`);
   return { message: "Note saved. The company never sees notes." };
 }
 
@@ -108,8 +108,8 @@ export async function supportSetStatus(_prev: SupportState, formData: FormData):
   const ticketId = String(formData.get("ticketId") ?? "");
   const ok = await setTicketStatus(ticketId, String(formData.get("status") ?? ""), String(formData.get("priority") ?? "") || undefined);
   if (!ok) return { error: "Couldn't change that." };
-  revalidatePath(`/dashboard/mothership/support/${ticketId}`);
-  revalidatePath("/dashboard/mothership/support");
+  revalidatePath(`/dashboard/lamp/support/${ticketId}`);
+  revalidatePath("/dashboard/lamp/support");
   return { message: "Updated." };
 }
 

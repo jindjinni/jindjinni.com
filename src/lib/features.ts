@@ -1,7 +1,7 @@
 // Feature rollout. A new feature is switched on in stages so it can be tried on the platform's own company first:
 //   off        -> nobody sees it
 //   mothership -> only the platform's own company (the "mothership") sees it
-//   selected   -> the mothership plus the companies the platform owner picked
+//   selected   -> the Lamp plus the companies the platform owner picked
 //   everyone   -> every company
 // The list of known features is here in code (each with the stage it starts at); the chosen stage is saved in the database.
 // The server checks featureOn() before showing or running a feature -- hiding a link is never the only guard.

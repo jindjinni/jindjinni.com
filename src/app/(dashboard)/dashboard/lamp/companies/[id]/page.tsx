@@ -52,7 +52,7 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
   return (
     <div className="flex max-w-4xl flex-col gap-5" data-testid="company-page">
       <div>
-        <Link href="/dashboard/mothership/companies" className="text-sm text-slate-600 underline dark:text-slate-300">&larr; All companies</Link>
+        <Link href="/dashboard/lamp/companies" className="text-sm text-slate-600 underline dark:text-slate-300">&larr; All companies</Link>
         <h2 className="mt-2 flex flex-wrap items-center gap-3 text-2xl font-semibold text-slate-900 dark:text-slate-50">
           <span className="min-w-0 break-words" data-testid="company-name">{c.name}</span>
           <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-sm text-slate-700 dark:bg-slate-800 dark:text-slate-200" data-testid="company-code">{c.code}</span>
@@ -93,7 +93,7 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
           <ul className="mt-2 flex flex-col divide-y divide-slate-100 text-sm dark:divide-slate-800" data-testid="company-tickets">
             {tickets.map((t) => (
               <li key={t.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
-                <Link href={`/dashboard/mothership/support/${t.id}`} className="min-w-0 flex-1 break-words underline">{ticketLabel(t.ticketNo)} {t.subject}</Link>
+                <Link href={`/dashboard/lamp/support/${t.id}`} className="min-w-0 flex-1 break-words underline">{ticketLabel(t.ticketNo)} {t.subject}</Link>
                 <StatusPill status={t.status} />
                 <span className="text-xs text-slate-500">{whenText(t.lastMessageAt)}</span>
               </li>

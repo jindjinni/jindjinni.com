@@ -31,7 +31,7 @@ export default async function SupportTicketPage({ params }: { params: Promise<{ 
   return (
     <div className="flex max-w-5xl flex-col gap-5" data-testid="support-ticket">
       <div>
-        <Link href="/dashboard/mothership/support" className="text-sm text-slate-600 underline dark:text-slate-300">&larr; All tickets</Link>
+        <Link href="/dashboard/lamp/support" className="text-sm text-slate-600 underline dark:text-slate-300">&larr; All tickets</Link>
         <h2 className="mt-2 flex flex-wrap items-center gap-3 text-2xl font-semibold text-slate-900 dark:text-slate-50">
           <span className="font-mono text-base text-slate-500">{ticketLabel(ticket.ticketNo)}</span>
           <span className="min-w-0 break-words" data-testid="ticket-subject">{ticket.subject}</span>
@@ -75,7 +75,7 @@ export default async function SupportTicketPage({ params }: { params: Promise<{ 
                   <dt className={dt}>Joined</dt>
                   <dd>{whenText(summary.createdAt)}</dd>
                 </dl>
-                <p className="mt-3 text-sm"><Link className="underline" href={`/dashboard/mothership/companies/${summary.id}`} data-testid="card-companies-link">Open company page</Link></p>
+                <p className="mt-3 text-sm"><Link className="underline" href={`/dashboard/lamp/companies/${summary.id}`} data-testid="card-companies-link">Open company page</Link></p>
               </>
             ) : (
               <p className="mt-2 text-sm text-amber-800 dark:text-amber-300" data-testid="card-unknown">This email came from an address we don&apos;t recognise, so no company is attached. Reply to the sender, or ask who they are.</p>
@@ -104,7 +104,7 @@ export default async function SupportTicketPage({ params }: { params: Promise<{ 
               <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Their other tickets</h3>
               <ul className="mt-2 flex flex-col gap-1 text-sm">
                 {previous.map((p) => (
-                  <li key={p.id}><Link className="underline" href={`/dashboard/mothership/support/${p.id}`}>{ticketLabel(p.ticketNo)} {p.subject}</Link> <span className="text-xs text-slate-500">({p.status})</span></li>
+                  <li key={p.id}><Link className="underline" href={`/dashboard/lamp/support/${p.id}`}>{ticketLabel(p.ticketNo)} {p.subject}</Link> <span className="text-xs text-slate-500">({p.status})</span></li>
                 ))}
               </ul>
             </section>

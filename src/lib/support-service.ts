@@ -54,7 +54,7 @@ export async function supportNotifyAddresses(): Promise<string[]> {
 async function emailSupportTeam(ticket: { ticketNo: number; subject: string; id: string }, companyLine: string, who: string, body: string, isNew: boolean) {
   try {
     const to = await supportNotifyAddresses();
-    const link = `${appUrl()}/dashboard/mothership/support/${ticket.id}`;
+    const link = `${appUrl()}/dashboard/lamp/support/${ticket.id}`;
     const subject = `${isNew ? "New ticket" : "New reply on ticket"} ${emailSubject(ticket.ticketNo, ticket.subject)} - ${companyLine}`;
     const text = `${companyLine}\n${who} wrote:\n\n${body}\n\nOpen it: ${link}`;
     const html = `<p><strong>${esc(companyLine)}</strong><br>${esc(who)} wrote:</p><blockquote style="border-left:3px solid #ccc;margin:0;padding-left:12px">${htmlBody(body)}</blockquote><p><a href="${link}">Open the ticket</a></p>`;
@@ -363,7 +363,7 @@ export async function listInbox(opts: { q?: string; filter?: InboxFilter; page?:
   return { rows: rows.map(asRow), total, page, pages };
 }
 
-/** A company's tickets, newest first (for its page in the Mothership tab). */
+/** A company's tickets, newest first (for its page in the Lamp tab). */
 export async function ticketsOfCompany(organizationId: string, limit = 15): Promise<TicketRow[]> {
   const rows = await db
     .select(ticketCols)

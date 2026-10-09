@@ -4,10 +4,10 @@
 // password, remove them. Every action re-checks on the SERVER who is asking and which level they may manage.
 
 import bcrypt from "bcryptjs";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, ne } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db/client";
-import { memberships, platformStaff, purchasingAuditLog, users } from "@/db/schema";
+import { memberships, platformStaff, purchasingAuditLog, signInEvents, supportMessages, supportViewSessions, teamInvitations, users } from "@/db/schema";
 import { newId } from "@/lib/ids";
 import { LEVEL_LABELS, GRANTABLE_LEVELS, mayManageLevel, type StaffLevel } from "@/lib/mothership-rules";
 import { staffLevelOf } from "@/lib/platform-admin";
@@ -64,7 +64,7 @@ export async function addStaffPerson(_prev: StaffState, formData: FormData): Pro
     const mem = await db.select({ id: memberships.id, organizationId: memberships.organizationId, role: memberships.role }).from(memberships).where(and(eq(memberships.userId, existing.id), isNull(memberships.deactivatedAt)));
     const here = mem.find((m) => m.organizationId === org.organizationId);
     if (!here) {
-      return { error: mem.length > 0 ? "That person already belongs to another company. Staff need their own login for the mothership." : "That email already has an account. Ask them to use a different email, or contact them." };
+      return { error: mem.length > 0 ? "That person already belongs to another company. Staff need their own login for the Lamp." : "That email already has an account. Ask them to use a different email, or contact them." };
     }
     if (here.role === "owner") return { error: "That's the Owner." };
     const [cur] = await db.select({ level: platformStaff.level }).from(platformStaff).where(eq(platformStaff.userId, existing.id)).limit(1);
@@ -76,7 +76,7 @@ export async function addStaffPerson(_prev: StaffState, formData: FormData): Pro
         : [db.insert(platformStaff).values({ id: newId("pstaff"), userId: existing.id, level, addedBy: org.userId })]),
     ]);
     await audit(org, existing.id, cur?.level ?? null, level, `${email} is now ${LEVEL_LABELS[level]}`);
-    revalidatePath("/dashboard/mothership/staff");
+    revalidatePath("/dashboard/lamp/staff");
     return { message: `${existing.name || email} is now ${LEVEL_LABELS[level]}.` };
   }
 
@@ -88,7 +88,7 @@ export async function addStaffPerson(_prev: StaffState, formData: FormData): Pro
     db.insert(platformStaff).values({ id: newId("pstaff"), userId, level, addedBy: org.userId }),
   ]);
   await audit(org, userId, null, level, `${email} added as ${LEVEL_LABELS[level]}`);
-  revalidatePath("/dashboard/mothership/staff");
+  revalidatePath("/dashboard/lamp/staff");
   return { message: `${name} added as ${LEVEL_LABELS[level]}. Give them this temporary password now. It is shown only once, and they choose their own at first sign-in.`, credentials: { name, email, password } };
 }
 
@@ -117,7 +117,7 @@ export async function changeStaffLevel(userId: string, _prev: StaffState, formDa
     db.update(memberships).set({ role: fit.role, deptAccess: fit.deptAccess }).where(eq(memberships.id, t.membershipId)),
   ]);
   await audit(org, userId, t.level, next, `${t.email} changed from ${LEVEL_LABELS[t.level as StaffLevel]} to ${LEVEL_LABELS[next]}`);
-  revalidatePath("/dashboard/mothership/staff");
+  revalidatePath("/dashboard/lamp/staff");
   return { message: `${t.name || t.email} is now ${LEVEL_LABELS[next]}.` };
 }
 
@@ -132,7 +132,7 @@ export async function removeStaffPerson(userId: string, _prev: StaffState, _form
     db.update(memberships).set({ deactivatedAt: new Date().toISOString() }).where(eq(memberships.id, t.membershipId)),
   ]);
   await audit(org, userId, t.level, null, `${t.email} removed from the team`);
-  revalidatePath("/dashboard/mothership/staff");
+  revalidatePath("/dashboard/lamp/staff");
   return { message: `${t.name || t.email} is off the team and can no longer sign in. (Settings → Team & access can switch them back on.)` };
 }
 
@@ -159,6 +159,78 @@ export async function resetStaffTwoStep(userId: string, _prev: StaffState, _form
   if (!u?.on) return { error: "Two-step sign-in isn't on for this person." };
   await db.update(users).set({ totpSecret: null, totpEnabledAt: null, totpBackupCodes: null, totpLastStep: null }).where(eq(users.id, userId));
   await audit(org, userId, "on", "off", `Two-step reset for ${t.email}`);
-  revalidatePath("/dashboard/mothership/staff");
+  revalidatePath("/dashboard/lamp/staff");
   return { message: `Two-step sign-in is off for ${t.name || t.email}. They can turn it on again in My account.` };
+}
+
+/** The address a deleted person's login is changed to. It can never receive mail or sign in, and it frees the real address for reuse. */
+const DELETED_EMAIL_DOMAIN = "deleted.invalid";
+const FORMER_STAFF_NAME = "Former staff member";
+
+/**
+ * Deletes a staff person from the whole system for good: their login stops working at once, their name, email, password, two-step,
+ * sign-in history and invitations are erased, and their name is removed from tickets and the company-visible access log. The
+ * (now nameless) record stays only so the company records they touched (quotes, receipts, the audit log) still add up.
+ * Needs the person's email typed to confirm. Same rules as everywhere: nobody deletes the Owner or themselves; the Owner and
+ * co-owners delete anyone; an admin deletes customer support people only. A person who also belongs to another company is refused.
+ */
+export async function deleteStaffPerson(userId: string, _prev: StaffState, formData: FormData): Promise<StaffState> {
+  const { org, level: mine } = await actor();
+  const [t] = await db
+    .select({ userId: users.id, name: users.name, email: users.email, membershipId: memberships.id, role: memberships.role, offAt: memberships.deactivatedAt, level: platformStaff.level })
+    .from(memberships)
+    .innerJoin(users, eq(users.id, memberships.userId))
+    .leftJoin(platformStaff, eq(platformStaff.userId, users.id))
+    .where(and(eq(memberships.organizationId, org.organizationId), eq(memberships.userId, userId)))
+    .limit(1);
+  if (!t || t.role === "owner") return { error: "Staff person not found." };
+  if (t.userId === org.userId) return { error: "You can't delete yourself." };
+  if (t.email.endsWith(`@${DELETED_EMAIL_DOMAIN}`)) return { error: "That person is already deleted." };
+  if (t.level) {
+    if (!mayManageLevel(mine, t.level as StaffLevel)) return { error: "You can't delete this person." };
+  } else if (!t.offAt || (mine !== "owner" && mine !== "co_owner")) {
+    // Not on the staff list: only someone already removed from the team can be deleted here, and only by the Owner or a co-owner.
+    return { error: "You can't delete this person." };
+  }
+  if (String(formData.get("confirm") ?? "").trim().toLowerCase() !== t.email.toLowerCase()) return { error: "Type the person's email exactly to confirm." };
+  const [elsewhere] = await db
+    .select({ id: memberships.id })
+    .from(memberships)
+    .where(and(eq(memberships.userId, userId), ne(memberships.organizationId, org.organizationId), isNull(memberships.deactivatedAt)))
+    .limit(1);
+  if (elsewhere) return { error: "This person also works in another company, so their login can't be deleted from here." };
+
+  const now = new Date().toISOString();
+  await db.batch([
+    db.delete(platformStaff).where(eq(platformStaff.userId, userId)),
+    db.update(memberships).set({ deactivatedAt: t.offAt ?? now }).where(eq(memberships.id, t.membershipId)),
+    db.delete(signInEvents).where(eq(signInEvents.userId, userId)),
+    db.delete(teamInvitations).where(eq(teamInvitations.email, t.email)),
+    db.update(supportMessages).set({ authorName: FORMER_STAFF_NAME }).where(eq(supportMessages.authorUserId, userId)),
+    db.update(supportViewSessions).set({ adminName: FORMER_STAFF_NAME }).where(eq(supportViewSessions.adminUserId, userId)),
+    db
+      .update(users)
+      .set({
+        email: `deleted-${userId}@${DELETED_EMAIL_DOMAIN}`,
+        name: FORMER_STAFF_NAME,
+        username: null,
+        passwordHash: null,
+        emailVerified: null,
+        image: null,
+        managedByOrgId: null,
+        mustChangePassword: false,
+        failedLogins: 0,
+        lockedUntil: "9999-12-31T00:00:00.000Z",
+        lastLoginAt: null,
+        totpSecret: null,
+        totpEnabledAt: null,
+        totpBackupCodes: null,
+        totpLastStep: null,
+      })
+      .where(eq(users.id, userId)),
+  ]);
+  // The note names no one: the person's details are gone on purpose.
+  await audit(org, userId, t.level ?? "removed", "deleted", `Staff person deleted from the system (${t.level ? LEVEL_LABELS[t.level as StaffLevel] : "already removed"})`);
+  revalidatePath("/dashboard/lamp/staff");
+  return { message: "Deleted from the system. Their login, name and email are erased." };
 }

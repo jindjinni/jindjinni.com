@@ -41,11 +41,11 @@ export default async function DashboardLayout({
   const nowIso0 = Date.parse(nowIso);
   const viewing = org.viewAs;
   const showSupport = !viewing && (await featureOn("support-center", org.organizationId));
-  // Anyone on the mothership's team should have two-step on: it is required before "View as company" works.
+  // Anyone on the Lamp team should have two-step on: it is required before "View as company" works.
   const level = viewing ? null : await staffLevelOf(org);
   const needsTwoStep = !!level && !(await twoStepOn(org.userId));
-  let mothershipBadge = 0;
-  if (level) mothershipBadge = (await waitingCount()) + (await inboxCounts()).needs;
+  let lampBadge = 0;
+  if (level) lampBadge = (await waitingCount()) + (await inboxCounts()).needs;
   const clock = await getMyClock({ organizationId: org.organizationId, userId: org.userId }, nowIso);
   const navItems: NavItem[] = [
     { href: "/dashboard", label: "Home" },
@@ -59,7 +59,7 @@ export default async function DashboardLayout({
     ...(canViewHr(org.role) ? [{ href: "/dashboard/hr", label: "HR" }] : []),
     ...(viewing ? [] : [{ href: "/dashboard/chat", label: "Chat" }]),
     ...(showSupport ? [{ href: "/dashboard/support", label: "Support" }] : []),
-    ...(level ? [{ href: "/dashboard/mothership", label: mothershipBadge ? `Mothership (${mothershipBadge})` : "Mothership" }] : []),
+    ...(level ? [{ href: "/dashboard/lamp", label: lampBadge ? `Lamp (${lampBadge})` : "Lamp" }] : []),
     { href: "/dashboard/settings", label: mayOpenSettings(level) ? "Settings" : "My account" },
   ];
 
@@ -95,7 +95,7 @@ export default async function DashboardLayout({
       </header>
       {needsTwoStep && (
         <p className="border-b border-indigo-200 bg-indigo-50 px-6 py-2 text-sm text-indigo-900 print:hidden dark:border-indigo-900 dark:bg-indigo-950/40 dark:text-indigo-200" data-testid="twostep-banner">
-          This is a mothership login. Turn on two-step sign-in so only you can use it.{" "}
+          This is a Lamp login. Turn on two-step sign-in so only you can use it.{" "}
           <Link href="/dashboard/settings/account" className="font-semibold underline">Set it up</Link>
         </p>
       )}

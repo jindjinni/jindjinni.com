@@ -33,7 +33,7 @@ function href(params: { q?: string; filter?: CompanyFilter; page?: number }) {
   if (params.filter && params.filter !== "all") sp.set("filter", params.filter);
   if (params.page && params.page > 1) sp.set("page", String(params.page));
   const s = sp.toString();
-  return `/dashboard/mothership/companies${s ? `?${s}` : ""}`;
+  return `/dashboard/lamp/companies${s ? `?${s}` : ""}`;
 }
 
 /** Every company on the platform: who they are, where they stand, and the buttons to approve, suspend or ban. Platform owner only. */
@@ -137,7 +137,7 @@ export default async function CompaniesPage({ searchParams }: { searchParams: Pr
               </summary>
               <div className="flex flex-col gap-3 border-t border-slate-100 p-4 dark:border-slate-800">
                 <CompanyDetails c={c} ownOrgId={org.organizationId} full={full} />
-                <p className="text-sm"><Link href={`/dashboard/mothership/companies/${c.id}`} className="font-medium text-emerald-700 underline dark:text-emerald-300" data-testid="open-company">Open {c.name}&apos;s page</Link> <span className="text-xs text-slate-500">(tickets, and looking at their account when they allow it)</span></p>
+                <p className="text-sm"><Link href={`/dashboard/lamp/companies/${c.id}`} className="font-medium text-emerald-700 underline dark:text-emerald-300" data-testid="open-company">Open {c.name}&apos;s page</Link> <span className="text-xs text-slate-500">(tickets, and looking at their account when they allow it)</span></p>
               </div>
             </details>
           );

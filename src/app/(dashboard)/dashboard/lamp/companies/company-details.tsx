@@ -11,7 +11,7 @@ const day = (iso: string | null) => (iso ? iso.slice(0, 10) : "");
 const dl = "grid grid-cols-[9rem_1fr] gap-x-3 gap-y-1 text-sm";
 const dt = "text-slate-500 dark:text-slate-400";
 
-/** Everything the mothership knows about one company. `full` = Owner, co-owner or admin (customer support sees the facts but not the proof document or the decision buttons). */
+/** Everything the Lamp knows about one company. `full` = Owner, co-owner or admin (customer support sees the facts but not the proof document or the decision buttons). */
 export function CompanyDetails({ c, ownOrgId, full }: { c: CompanyRow; ownOrgId: string; full: boolean }) {
   return (
     <>
