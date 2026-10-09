@@ -1,9 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
 import { DUE_BUCKETS, FUNNEL_STEPS, dropped, pct, shortDay, type DueBucketKey } from "@/lib/analytics-rules";
-import { PERIODS, PERIOD_WORDS, money, moneyWhole, plural, type Period } from "@/lib/home-rules";
+import { PERIOD_WORDS, money, moneyWhole, plural, type Period } from "@/lib/home-rules";
 import type { Pulse } from "@/lib/home-stats";
 
 // Colors are picked by the job they do (checked with the data-viz palette validator, light and dark):
@@ -301,166 +300,134 @@ function DueBars({ buckets }: { buckets: Pulse["now"]["accounts"]["buckets"] }) 
   );
 }
 
-function Department({ title, href, stripe, intro, children }: { title: string; href: string; stripe: string; intro: string; children: React.ReactNode }) {
+function OpenLink({ href, name }: { href: string; name: string }) {
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900" data-testid={`perf-${title.toLowerCase()}`}>
-      <div className={`h-1.5 rounded-t-2xl ${stripe}`} />
-      <div className="space-y-4 p-4 sm:p-5">
-        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-          <div>
-            <h3 className="text-lg font-bold text-slate-900 dark:text-slate-50">{title}</h3>
-            <p className="text-xs text-slate-500">{intro}</p>
-          </div>
-          <Link href={href} className="text-xs font-medium text-emerald-700 hover:underline dark:text-emerald-400">
-            Open {title}
-          </Link>
-        </div>
-        {children}
-      </div>
-    </section>
+    <div className="flex justify-end">
+      <Link href={href} className="text-xs font-medium text-emerald-700 hover:underline dark:text-emerald-400">
+        Open {name}
+      </Link>
+    </div>
   );
 }
 
-/** Purchasing, Receiving and Accounts, each with its numbers, its process drawn as a flow, and a chart. For the owner and admins. */
-export function AnalyticsBoard({ pulse }: { pulse: Pulse }) {
-  const [period, setPeriod] = useState<Period>("week");
+/** The full Purchasing picture: numbers, the quotation flow, how they ended, and a week of quotations. */
+export function PurchasingBody({ pulse, period }: { pulse: Pulse; period: Period }) {
+  const p = pulse.periods[period];
+  const when = PERIOD_WORDS[period];
+  const f = p.purchasing.funnel;
+  return (
+    <div className="space-y-4 pt-4" data-testid="perf-purchasing">
+      <OpenLink href="/dashboard/purchasing" name="Purchasing" />
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
+        <Kpi label={`Quotations given ${when}`} value={String(p.purchasing.quotesGiven)} testId="stat-quotes" />
+        <Kpi label="Value quoted" value={moneyWhole(p.purchasing.quotedValue)} testId="stat-quoted-value" />
+        <Kpi label="Went through the full process" value={String(f.fullProcess)} note={`${pct(f.fullProcess, f.given)}% had a free label and a tracking number`} testId="stat-full-process" />
+        <Kpi label="Successful" value={String(f.successful)} tone={f.successful > 0 ? "good" : "plain"} note={f.given > 0 ? `${pct(f.successful, f.given)}% of quotations` : undefined} testId="stat-successful" />
+        <Kpi label="Unsuccessful" value={String(f.unsuccessful)} tone={f.unsuccessful > 0 ? "warn" : "plain"} note={f.given > 0 ? `${pct(f.unsuccessful, f.given)}% of quotations` : undefined} testId="stat-unsuccessful" />
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Panel title="From quotation to received" hint={`Of the quotations given ${when}, how many reached each step.`} testId="panel-funnel">
+          <Funnel funnel={f} when={when} />
+        </Panel>
+        <div className="space-y-4">
+          <Panel title="How they ended" hint={`The quotations given ${when}: successful, unsuccessful, or still in progress.`}>
+            <Outcome funnel={f} when={when} />
+          </Panel>
+          <Panel title="Quotations given, last 7 days">
+            <Days days={pulse.daily.days} series={[{ name: "Quotations", values: pulse.daily.quotes, fill: SERIES_BLUE }]} testId="days-quotes" />
+          </Panel>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** The full Receiving picture: what came in, what is queued, where every package is. */
+export function ReceivingBody({ pulse, period }: { pulse: Pulse; period: Period }) {
   const p = pulse.periods[period];
   const when = PERIOD_WORDS[period];
   const n = pulse.now;
-  const f = p.purchasing.funnel;
   const queue = n.receiving.waitingToOpen + n.receiving.inProgress;
-  const decisions = n.accounts.decisions;
-  const attention = [
-    n.accounts.overdue > 0 ? `${plural(n.accounts.overdue, "order")} overdue` : "",
-    n.accounts.dueToday > 0 ? `${plural(n.accounts.dueToday, "order")} due today` : "",
-    n.purchasing.shippingTrouble > 0 ? `${plural(n.purchasing.shippingTrouble, "package")} with a shipping problem` : "",
-    n.receiving.waitingForDecision > 0 ? `${plural(n.receiving.waitingForDecision, "shipment")} waiting for a decision` : "",
-  ].filter(Boolean);
-
   return (
-    <div data-testid="performance-panel">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-bold text-slate-900 dark:text-slate-50">Company analytics</h2>
-          <p className="text-sm text-slate-600 dark:text-slate-400">How Purchasing, Receiving and Accounts are doing, {when}.</p>
-        </div>
-        <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 p-0.5 dark:border-slate-700 dark:bg-slate-800" role="group" aria-label="Time period">
-          {PERIODS.map((x) => (
-            <button key={x.key} type="button" onClick={() => setPeriod(x.key)} aria-pressed={period === x.key} data-testid={`period-${x.key}`} className={`rounded-full px-3 py-1 text-sm font-medium ${period === x.key ? "bg-emerald-600 text-white shadow-sm" : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"}`}>
-              {x.label}
-            </button>
-          ))}
-        </div>
+    <div className="space-y-4 pt-4" data-testid="perf-receiving">
+      <OpenLink href="/dashboard/receiving" name="Receiving" />
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
+        <Kpi label={`Delivered ${when}`} value={String(p.purchasing.delivered)} note="Packages the carrier delivered to us" testId="stat-delivered" />
+        <Kpi label={`Received ${when}`} value={String(p.receiving.received)} note="Opened and checked by our team" testId="stat-received" />
+        <Kpi label="In the queue to be received" value={String(queue)} tone={queue > 0 ? "warn" : "plain"} note={`${n.receiving.waitingToOpen} not started, ${n.receiving.inProgress} being received`} testId="stat-queue" />
+        <Kpi label="Value received" value={moneyWhole(p.receiving.receivedValue)} />
+        <Kpi label="With a problem found" value={String(p.receiving.withDiscrepancy)} tone={p.receiving.withDiscrepancy > 0 ? "warn" : "plain"} note={p.receiving.adjustments > 0 ? `${p.receiving.adjustments} need an adjusted quote` : undefined} />
       </div>
-
-      <div className="mt-3 flex flex-wrap gap-2" data-testid="analytics-attention">
-        {attention.length === 0 ? (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
-            <span aria-hidden="true">✓</span> Nothing needs attention right now
-          </span>
-        ) : (
-          attention.map((a) => (
-            <span key={a} className="inline-flex items-center gap-1.5 rounded-full bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-800 dark:bg-red-950 dark:text-red-200">
-              <span aria-hidden="true">!</span> {a}
-            </span>
-          ))
-        )}
+      <Panel title="Where the packages are" hint="Right now, from the carrier to checked and done.">
+          <Flow
+            testId="receiving-flow"
+            steps={[
+              { label: "On the way", value: n.receiving.onTheWay, note: "with the carrier" },
+              { label: "Delivered, not started", value: n.receiving.waitingToOpen, note: "waiting in the queue", tone: "warn" },
+              { label: "Being received", value: n.receiving.inProgress, note: "someone is checking" },
+              { label: `Received ${when}`, value: p.receiving.received, note: "checked and submitted", tone: "good" },
+            ]}
+          />
+      </Panel>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Panel title="Delivered and received, last 7 days">
+          <Days
+            days={pulse.daily.days}
+            series={[
+              { name: "Delivered", values: pulse.daily.delivered, fill: SERIES_BLUE },
+              { name: "Received", values: pulse.daily.received, fill: SERIES_ORANGE },
+            ]}
+            testId="days-receiving"
+          />
+        </Panel>
+        <Panel title="What the queue means" hint="Delivered means the carrier dropped it off. Received means our team opened and checked it.">
+          <ul className="space-y-1.5 text-sm text-slate-700 dark:text-slate-300">
+            <li>{plural(n.receiving.waitingToOpen, "package")} delivered and waiting for someone to start.</li>
+            <li>{plural(n.receiving.inProgress, "package")} being checked right now.</li>
+            <li>{plural(n.receiving.onTheWay, "package")} still with the carrier.</li>
+            <li>{n.receiving.waitingForDecision > 0 ? `${plural(n.receiving.waitingForDecision, "shipment")} checked and waiting for Accounts to decide.` : "Nothing waiting for Accounts to decide."}</li>
+          </ul>
+        </Panel>
       </div>
+    </div>
+  );
+}
 
-      <div className="mt-4 space-y-4">
-        <Department title="Purchasing" href="/dashboard/purchasing" stripe="bg-emerald-500" intro={`Quotations given ${when} and how far they got. Right now: ${plural(n.purchasing.waitingForCustomer, "quotation")} waiting for the customer.`}>
-          <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
-            <Kpi label={`Quotations given ${when}`} value={String(p.purchasing.quotesGiven)} testId="stat-quotes" />
-            <Kpi label="Value quoted" value={moneyWhole(p.purchasing.quotedValue)} testId="stat-quoted-value" />
-            <Kpi label="Went through the full process" value={String(f.fullProcess)} note={`${pct(f.fullProcess, f.given)}% had a free label and a tracking number`} testId="stat-full-process" />
-            <Kpi label="Successful" value={String(f.successful)} tone={f.successful > 0 ? "good" : "plain"} note={f.given > 0 ? `${pct(f.successful, f.given)}% of quotations` : undefined} testId="stat-successful" />
-            <Kpi label="Unsuccessful" value={String(f.unsuccessful)} tone={f.unsuccessful > 0 ? "warn" : "plain"} note={f.given > 0 ? `${pct(f.unsuccessful, f.given)}% of quotations` : undefined} testId="stat-unsuccessful" />
-          </div>
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Panel title="From quotation to received" hint={`Of the quotations given ${when}, how many reached each step.`} testId="panel-funnel">
-              <Funnel funnel={f} when={when} />
-            </Panel>
-            <div className="space-y-4">
-              <Panel title="How they ended" hint={`The quotations given ${when}: successful, unsuccessful, or still in progress.`}>
-                <Outcome funnel={f} when={when} />
-              </Panel>
-              <Panel title="Quotations given, last 7 days">
-                <Days days={pulse.daily.days} series={[{ name: "Quotations", values: pulse.daily.quotes, fill: SERIES_BLUE }]} testId="days-quotes" />
-              </Panel>
-            </div>
-          </div>
-        </Department>
-
-        <Department title="Receiving" href="/dashboard/receiving" stripe="bg-amber-500" intro={`Packages coming in and going through checking. ${plural(n.receiving.waitingForDecision, "shipment")} waiting for a decision.`}>
-          <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
-            <Kpi label={`Delivered ${when}`} value={String(p.purchasing.delivered)} note="Packages the carrier delivered to us" testId="stat-delivered" />
-            <Kpi label={`Received ${when}`} value={String(p.receiving.received)} note="Opened and checked by our team" testId="stat-received" />
-            <Kpi label="In the queue to be received" value={String(queue)} tone={queue > 0 ? "warn" : "plain"} note={`${n.receiving.waitingToOpen} not started, ${n.receiving.inProgress} being received`} testId="stat-queue" />
-            <Kpi label="Value received" value={moneyWhole(p.receiving.receivedValue)} />
-            <Kpi label="With a problem found" value={String(p.receiving.withDiscrepancy)} tone={p.receiving.withDiscrepancy > 0 ? "warn" : "plain"} note={p.receiving.adjustments > 0 ? `${p.receiving.adjustments} need an adjusted quote` : undefined} />
-          </div>
-          <Panel title="Where the packages are" hint="Right now, from the carrier to checked and done.">
-              <Flow
-                testId="receiving-flow"
-                steps={[
-                  { label: "On the way", value: n.receiving.onTheWay, note: "with the carrier" },
-                  { label: "Delivered, not started", value: n.receiving.waitingToOpen, note: "waiting in the queue", tone: "warn" },
-                  { label: "Being received", value: n.receiving.inProgress, note: "someone is checking" },
-                  { label: `Received ${when}`, value: p.receiving.received, note: "checked and submitted", tone: "good" },
-                ]}
-              />
-          </Panel>
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Panel title="Delivered and received, last 7 days">
-              <Days
-                days={pulse.daily.days}
-                series={[
-                  { name: "Delivered", values: pulse.daily.delivered, fill: SERIES_BLUE },
-                  { name: "Received", values: pulse.daily.received, fill: SERIES_ORANGE },
-                ]}
-                testId="days-receiving"
-              />
-            </Panel>
-            <Panel title="What the queue means" hint="Delivered means the carrier dropped it off. Received means our team opened and checked it.">
-              <ul className="space-y-1.5 text-sm text-slate-700 dark:text-slate-300">
-                <li>{plural(n.receiving.waitingToOpen, "package")} delivered and waiting for someone to start.</li>
-                <li>{plural(n.receiving.inProgress, "package")} being checked right now.</li>
-                <li>{plural(n.receiving.onTheWay, "package")} still with the carrier.</li>
-                <li>{n.receiving.waitingForDecision > 0 ? `${plural(n.receiving.waitingForDecision, "shipment")} checked and waiting for Accounts to decide.` : "Nothing waiting for Accounts to decide."}</li>
-              </ul>
-            </Panel>
-          </div>
-        </Department>
-
-        <Department title="Accounts" href="/dashboard/accounts" stripe="bg-sky-500" intro={`${plural(n.accounts.toPay, "order")} waiting to be paid (${money(n.accounts.toPayValue)}).`}>
-          <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
-            <Kpi label="Overdue" value={String(n.accounts.overdue)} tone={n.accounts.overdue > 0 ? "warn" : "plain"} note={n.accounts.overdue > 0 ? money(n.accounts.overdueValue) : "Nothing overdue"} testId="stat-overdue" />
-            <Kpi label="Due today" value={String(n.accounts.dueToday)} note={n.accounts.dueToday > 0 ? money(n.accounts.buckets.today.amount) : undefined} testId="stat-due-today" />
-            <Kpi label="Waiting to be paid" value={String(n.accounts.toPay)} note={money(n.accounts.toPayValue)} testId="stat-to-pay" />
-            <Kpi label={`Orders paid ${when}`} value={String(p.accounts.paid)} tone={p.accounts.paid > 0 ? "good" : "plain"} testId="stat-paid" />
-            <Kpi label="Amount paid out" value={moneyWhole(p.accounts.paidValue)} />
-          </div>
-          <Panel title="From received to paid" hint="Right now, what Accounts is doing with received orders.">
-            <Flow
-              testId="accounts-flow"
-              steps={[
-                { label: "Waiting for a decision", value: decisions.none, tone: "warn" },
-                { label: "Being reviewed", value: decisions.review + decisions.adjusted, note: decisions.adjusted > 0 ? `${decisions.adjusted} need an adjusted quote` : undefined },
-                { label: "To be paid", value: n.accounts.toPay },
-                { label: `Paid ${when}`, value: p.accounts.paid, tone: "good" },
-              ]}
-            />
-            <p className="mt-2 text-xs text-slate-500">{decisions.returned > 0 ? `${plural(decisions.returned, "order")} to be sent back to the customer.` : "None to be sent back."}</p>
-          </Panel>
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Panel title="When payments are due" hint="Orders waiting to be paid, by how soon they are due.">
-              <DueBars buckets={n.accounts.buckets} />
-            </Panel>
-            <Panel title="Orders paid, last 7 days">
-              <Days days={pulse.daily.days} series={[{ name: "Orders paid", values: pulse.daily.paid, fill: SERIES_BLUE }]} testId="days-paid" />
-            </Panel>
-          </div>
-        </Department>
+/** The full Accounts picture: what is overdue or due, how orders move to paid, what was paid. */
+export function AccountsBody({ pulse, period }: { pulse: Pulse; period: Period }) {
+  const p = pulse.periods[period];
+  const when = PERIOD_WORDS[period];
+  const n = pulse.now;
+  const decisions = n.accounts.decisions;
+  return (
+    <div className="space-y-4 pt-4" data-testid="perf-accounts">
+      <OpenLink href="/dashboard/accounts" name="Accounts" />
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
+        <Kpi label="Overdue" value={String(n.accounts.overdue)} tone={n.accounts.overdue > 0 ? "warn" : "plain"} note={n.accounts.overdue > 0 ? money(n.accounts.overdueValue) : "Nothing overdue"} testId="stat-overdue" />
+        <Kpi label="Due today" value={String(n.accounts.dueToday)} note={n.accounts.dueToday > 0 ? money(n.accounts.buckets.today.amount) : undefined} testId="stat-due-today" />
+        <Kpi label="Waiting to be paid" value={String(n.accounts.toPay)} note={money(n.accounts.toPayValue)} testId="stat-to-pay" />
+        <Kpi label={`Orders paid ${when}`} value={String(p.accounts.paid)} tone={p.accounts.paid > 0 ? "good" : "plain"} testId="stat-paid" />
+        <Kpi label="Amount paid out" value={moneyWhole(p.accounts.paidValue)} />
+      </div>
+      <Panel title="From received to paid" hint="Right now, what Accounts is doing with received orders.">
+        <Flow
+          testId="accounts-flow"
+          steps={[
+            { label: "Waiting for a decision", value: decisions.none, tone: "warn" },
+            { label: "Being reviewed", value: decisions.review + decisions.adjusted, note: decisions.adjusted > 0 ? `${decisions.adjusted} need an adjusted quote` : undefined },
+            { label: "To be paid", value: n.accounts.toPay },
+            { label: `Paid ${when}`, value: p.accounts.paid, tone: "good" },
+          ]}
+        />
+        <p className="mt-2 text-xs text-slate-500">{decisions.returned > 0 ? `${plural(decisions.returned, "order")} to be sent back to the customer.` : "None to be sent back."}</p>
+      </Panel>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Panel title="When payments are due" hint="Orders waiting to be paid, by how soon they are due.">
+          <DueBars buckets={n.accounts.buckets} />
+        </Panel>
+        <Panel title="Orders paid, last 7 days">
+          <Days days={pulse.daily.days} series={[{ name: "Orders paid", values: pulse.daily.paid, fill: SERIES_BLUE }]} testId="days-paid" />
+        </Panel>
       </div>
     </div>
   );

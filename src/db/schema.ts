@@ -2823,6 +2823,26 @@ export const platformStaff = sqliteTable(
   (t) => [uniqueIndex("platform_staff_user_idx").on(t.userId)],
 );
 
+/**
+ * How one person arranged their Home screen in one company: the order of its sections and which are open. New table, so it
+ * can be added safely; one row per person per company. The text is JSON ({ order, open }) and is always re-checked on read.
+ */
+export const dashboardLayouts = sqliteTable(
+  "dashboard_layouts",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    layout: text("layout").notNull(),
+    updatedAt: text("updated_at").notNull().default(sql`(current_timestamp)`),
+  },
+  (t) => [uniqueIndex("dashboard_layouts_user_org_unique").on(t.userId, t.organizationId)],
+);
+
 // ---------------------------------------------------------------------------
 // Feature rollout. New features are switched on in stages: off -> only the platform's own company ("mothership") -> chosen
 // companies -> everyone. The list of known features lives in code (lib/features.ts); a row here only records the chosen stage.

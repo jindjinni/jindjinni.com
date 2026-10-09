@@ -12,8 +12,9 @@ import { greeting, hourIn, longDay, plural } from "@/lib/home-rules";
 import { getPaymentTerms } from "@/lib/accounts-queries";
 import { LocalTime } from "@/components/local-time";
 import { IndustryBoard, RefreshButton } from "./industry-board";
-import { HomeSection, type Chip } from "./home-section";
-import { AnalyticsBoard } from "./analytics-board";
+import type { Chip } from "./home-section";
+import { HomeBoard } from "./home-board";
+import { getDashboardLayout } from "@/lib/dashboard-layout-service";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -26,7 +27,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   const blockedNote = (await searchParams).viewblocked === "1";
   const showPerformance = canViewCompanyPerformance(org.role);
   const brands = await watchedBrands(org.organizationId);
-  const [stories, run, owners, checks, pulse, me, terms] = await Promise.all([
+  const [stories, run, owners, checks, pulse, me, terms, layout] = await Promise.all([
     homeStories(org.organizationId, brands),
     lastRun(org.organizationId),
     ownersOf(org.organizationId, brands),
@@ -34,6 +35,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
     showPerformance ? getCompanyPulse(org.organizationId) : Promise.resolve(null),
     db.select({ name: users.name }).from(users).where(eq(users.id, org.userId)).limit(1),
     getPaymentTerms(org.organizationId).catch(() => null),
+    getDashboardLayout(org.userId, org.organizationId),
   ]);
 
   // The news is a few hours old (or has never been fetched): look again quietly after this page is sent.
@@ -59,35 +61,8 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   const order = { urgent: 0, important: 1, info: 2 } as const;
   const preview = [...attention].sort((a, b) => order[a.severity] - order[b.severity]).slice(0, 3).map((s) => s.title);
 
-  return (
-    <div className="mx-auto max-w-5xl px-4 py-8" data-testid="home-screen">
-      {blockedNote && (
-        <p role="status" className="mb-4 rounded-md border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm text-indigo-900" data-testid="view-blocked-note">
-          That area stays closed while you are viewing a company&apos;s account.
-        </p>
-      )}
-      <header className="rounded-2xl bg-gradient-to-br from-emerald-700 via-emerald-700 to-teal-800 px-6 py-7 text-white shadow-sm" data-testid="home-welcome">
-        <p className="text-sm font-medium text-emerald-100">
-          {greeting(hourIn(zone, now))}
-          {firstName ? `, ${firstName}` : ""} · {longDay(today)}
-        </p>
-        <h1 className="mt-1 text-2xl font-bold sm:text-3xl">
-          Welcome to <span data-testid="home-company">{org.organizationName}</span>
-        </h1>
-        <p className="mt-2 max-w-2xl text-sm text-emerald-50">
-          {showPerformance ? "Here is how the company is doing, and the news for the brands we buy. " : "Here is the news for the brands we buy. "}
-          Pick a department at the top to get to work.
-        </p>
-      </header>
-
-      {pulse && (
-        <section className="mt-6" data-testid="home-section-performance" aria-label="Company analytics">
-          <AnalyticsBoard pulse={pulse} />
-        </section>
-      )}
-
-      <div className="mt-6 space-y-4">
-        <HomeSection id="news" title="Industry news" blurb="Recalls, bad lots, safety notices and new products, straight from the makers of the brands we buy." chips={newsChips} preview={preview}>
+  const newsContent = (
+    <>
           <div className="flex flex-wrap items-center justify-between gap-3 pt-4">
             {brands.length > 0 ? (
               <p className="text-xs text-slate-500" data-testid="industry-status">
@@ -146,9 +121,27 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
               </Link>
             </section>
           )}
-        </HomeSection>
+    </>
+  );
 
-      </div>
+  return (
+    <div className="mx-auto max-w-5xl px-4 py-8" data-testid="home-screen">
+      {blockedNote && (
+        <p role="status" className="mb-4 rounded-md border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm text-indigo-900" data-testid="view-blocked-note">
+          That area stays closed while you are viewing a company&apos;s account.
+        </p>
+      )}
+      <header className="rounded-2xl bg-gradient-to-br from-emerald-700 via-emerald-700 to-teal-800 px-5 py-4 text-white shadow-sm" data-testid="home-welcome">
+        <p className="text-xs font-medium text-emerald-100 sm:text-sm">
+          {greeting(hourIn(zone, now))}
+          {firstName ? `, ${firstName}` : ""} · {longDay(today)}
+        </p>
+        <h1 className="mt-0.5 text-xl font-bold sm:text-2xl">
+          Welcome to <span data-testid="home-company">{org.organizationName}</span>
+        </h1>
+      </header>
+
+      <HomeBoard newsChips={newsChips} newsPreview={preview} news={newsContent} pulse={pulse} initialLayout={layout} readOnly={!!org.viewAs} />
     </div>
   );
 }

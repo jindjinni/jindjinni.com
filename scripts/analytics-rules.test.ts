@@ -65,3 +65,66 @@ assert.equal(lastDays("2026-03-02", 7)[0], "2026-02-24");
 assert.deepEqual(countByDay(lastDays("2026-10-09", 3), ["2026-10-09", "2026-10-09", "2026-10-07", "2026-09-01", ""]), [1, 0, 2]);
 
 console.log("analytics-rules: all passed");
+
+// ---- Home screen arrangement ----
+import { SECTION_IDS, defaultLayout, moveSection, normalizeLayout, parseLayout, serializeLayout, setAllOpen, toggleOpen, visibleOrder } from "../src/lib/dashboard-layout";
+assert.deepEqual(defaultLayout(), { order: ["news", "purchasing", "receiving", "accounts"], open: [] }); // the news is first and everything starts closed
+assert.deepEqual(parseLayout(null), defaultLayout());
+assert.deepEqual(parseLayout("not json"), defaultLayout());
+assert.deepEqual(parseLayout('"text"'), defaultLayout());
+// Unknown names and repeats are dropped, missing sections come back at the end.
+assert.deepEqual(normalizeLayout({ order: ["accounts", "bogus", "accounts", "news"], open: ["news", "x", "news"] }), { order: ["accounts", "news", "purchasing", "receiving"], open: ["news"] });
+assert.deepEqual(normalizeLayout({ order: "nope", open: 5 }), defaultLayout());
+assert.deepEqual(parseLayout(serializeLayout({ order: ["receiving", "news", "purchasing", "accounts"], open: ["accounts"] })), { order: ["receiving", "news", "purchasing", "accounts"], open: ["accounts"] });
+// Moving.
+const all = [...SECTION_IDS];
+let l = defaultLayout();
+l = moveSection(l, "accounts", -1, all);
+assert.deepEqual(l.order, ["news", "purchasing", "accounts", "receiving"]);
+l = moveSection(l, "news", 1, all);
+assert.deepEqual(l.order, ["purchasing", "news", "accounts", "receiving"]);
+assert.deepEqual(moveSection(l, "purchasing", -1, all), l); // already first: nothing changes
+assert.deepEqual(moveSection(l, "receiving", 1, all), l); // already last
+// A person who cannot see the analytics only has the news: moving among what is shown never disturbs the hidden ones.
+assert.deepEqual(visibleOrder(l, ["news"]), ["news"]);
+assert.deepEqual(moveSection(l, "news", 1, ["news"]), l);
+const two = moveSection(defaultLayout(), "news", 1, ["news", "accounts"]);
+assert.deepEqual(two.order, ["accounts", "purchasing", "receiving", "news"]);
+// Opening and closing.
+let o = toggleOpen(defaultLayout(), "purchasing");
+assert.deepEqual(o.open, ["purchasing"]);
+o = toggleOpen(o, "purchasing");
+assert.deepEqual(o.open, []);
+assert.deepEqual(setAllOpen(defaultLayout(), ["news", "accounts"], true).open, ["news", "accounts"]);
+assert.deepEqual(setAllOpen(setAllOpen(defaultLayout(), all, true), all, false).open, []);
+
+// The small summaries on a closed section.
+import { accountsMini, attentionNotes, purchasingMini, receivingMini } from "../src/lib/analytics-mini";
+import type { Pulse } from "../src/lib/home-stats";
+const fx = { given: 6, confirmed: 4, fullProcess: 4, delivered: 3, received: 2, successful: 1, unsuccessful: 2, inProgress: 3 };
+const zeroP = { purchasing: { quotesGiven: 0, quotedValue: 0, confirmed: 0, delivered: 0, funnel: { given: 0, confirmed: 0, fullProcess: 0, delivered: 0, received: 0, successful: 0, unsuccessful: 0, inProgress: 0 } }, receiving: { received: 0, receivedValue: 0, withDiscrepancy: 0, adjustments: 0 }, accounts: { paid: 0, paidValue: 0 } };
+const pulse = {
+  today: "2026-10-09",
+  timeZone: "America/New_York",
+  periods: { today: { ...zeroP, purchasing: { ...zeroP.purchasing, delivered: 3, funnel: fx }, receiving: { ...zeroP.receiving, received: 2 }, accounts: { paid: 1, paidValue: 10 } }, week: zeroP, month: zeroP },
+  daily: { days: [], quotes: [], delivered: [], received: [], paid: [] },
+  now: {
+    purchasing: { waitingForCustomer: 0, onTheWay: 0, shippingTrouble: 1 },
+    receiving: { inProgress: 6, waitingForDecision: 0, onTheWay: 2, waitingToOpen: 1 },
+    accounts: { toPay: 2, toPayValue: 600, overdue: 1, overdueValue: 500, dueToday: 0, buckets: bucketOrders([{ dueDay: "2026-10-08", amount: 500 }, { dueDay: "2026-10-20", amount: 100 }], "2026-10-09"), decisions: { none: 0, review: 0, adjusted: 0, returned: 0 } },
+  },
+} as unknown as Pulse;
+const pm = purchasingMini(pulse, "today");
+assert.deepEqual(pm.chips.map((c) => c.text), ["6 quotations today", "67% full process", "1 successful", "2 unsuccessful"]);
+assert.deepEqual(pm.bar.map((s) => s.n), [1, 2, 3]);
+const rm = receivingMini(pulse, "today");
+assert.deepEqual(rm.chips.map((c) => c.text), ["3 delivered today", "2 received today", "7 packages in the queue"]);
+assert.deepEqual(rm.bar.map((s) => s.n), [2, 1, 6]);
+const am = accountsMini(pulse, "today");
+assert.equal(am.chips[0].tone, "red");
+assert.deepEqual(am.bar.map((s) => s.n), [1, 0, 1, 0]);
+assert.deepEqual(attentionNotes(pulse), ["1 order overdue", "1 package with a shipping problem"]);
+assert.equal(receivingMini(pulse, "week").chips[2].text, "7 packages in the queue"); // the queue is "right now", whatever the period
+assert.equal(purchasingMini(pulse, "week").chips.length, 3); // nothing given this week: no percentage chip
+
+console.log("dashboard layout and mini summaries: all passed");
