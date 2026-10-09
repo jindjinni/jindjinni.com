@@ -13,7 +13,7 @@ import { getPaymentTerms } from "@/lib/accounts-queries";
 import { LocalTime } from "@/components/local-time";
 import { IndustryBoard, RefreshButton } from "./industry-board";
 import { HomeSection, type Chip } from "./home-section";
-import { PerformancePanel } from "./performance-panel";
+import { AnalyticsBoard } from "./analytics-board";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -59,14 +59,6 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   const order = { urgent: 0, important: 1, info: 2 } as const;
   const preview = [...attention].sort((a, b) => order[a.severity] - order[b.severity]).slice(0, 3).map((s) => s.title);
 
-  const perfChips: Chip[] = pulse
-    ? [
-        { text: `${plural(pulse.periods.week.purchasing.quotesGiven, "quotation")} this week`, tone: "slate" },
-        { text: `${plural(pulse.periods.week.receiving.received, "shipment")} received this week`, tone: "slate" },
-        pulse.now.accounts.overdue > 0 ? { text: `${plural(pulse.now.accounts.overdue, "order")} overdue`, tone: "red" } : { text: `${plural(pulse.now.accounts.toPay, "order")} to be paid`, tone: pulse.now.accounts.toPay > 0 ? "amber" : "green" },
-      ]
-    : [];
-
   return (
     <div className="mx-auto max-w-5xl px-4 py-8" data-testid="home-screen">
       {blockedNote && (
@@ -83,10 +75,16 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           Welcome to <span data-testid="home-company">{org.organizationName}</span>
         </h1>
         <p className="mt-2 max-w-2xl text-sm text-emerald-50">
-          {showPerformance ? "Here is the news for the brands we buy and a quick look at how the company is doing. " : "Here is the news for the brands we buy. "}
+          {showPerformance ? "Here is how the company is doing, and the news for the brands we buy. " : "Here is the news for the brands we buy. "}
           Pick a department at the top to get to work.
         </p>
       </header>
+
+      {pulse && (
+        <section className="mt-6" data-testid="home-section-performance" aria-label="Company analytics">
+          <AnalyticsBoard pulse={pulse} />
+        </section>
+      )}
 
       <div className="mt-6 space-y-4">
         <HomeSection id="news" title="Industry news" blurb="Recalls, bad lots, safety notices and new products, straight from the makers of the brands we buy." chips={newsChips} preview={preview}>
@@ -150,11 +148,6 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           )}
         </HomeSection>
 
-        {pulse && (
-          <HomeSection id="performance" title="Company performance" blurb="How Purchasing, Receiving and Accounts are doing, at a glance." chips={perfChips}>
-            <PerformancePanel pulse={pulse} />
-          </HomeSection>
-        )}
       </div>
     </div>
   );
