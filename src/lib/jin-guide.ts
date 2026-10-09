@@ -8,6 +8,8 @@ import { departmentsFor, isAdmin, ROLE_LABELS, settingsSectionsFor, type Access,
 const WHAT: Record<MenuDept, Record<string, string>> = {
   purchasing: {
     dashboard: "Counts of customers, products and open quotations, with shortcuts.",
+    "purchase-orders": "Make a purchase order for a wholesaler you buy from (part numbers and NDCs, quantities, net cost), save it as a draft, send it as a PDF and as an email with the order written out, and follow it from Sent to Confirmed to Received.",
+    suppliers: "The wholesalers you buy from, saved once with their email, address and license number and expiry, ready to pick on every purchase order.",
     quotations: "Create a quotation for a customer, choose products and conditions, see its status (Quoted, Confirmed, Received, Cancelled), print or send the receipt, and track the package.",
     customers: "The people you buy from: contact details, shipping address and every quotation made for them.",
     products: "The list of products you buy, with their category and pricing.",
@@ -82,7 +84,7 @@ const GENERAL = [
 ];
 
 /** The guide for one signed-in person, as plain text for Jin's instructions. */
-export function guideFor(role: Role, access: Access): string {
+export function guideFor(role: Role, access: Access, opts: { hidden?: string[] } = {}): string {
   const lines: string[] = [];
   lines.push(`The person asking is a ${ROLE_LABELS[role] ?? role}.`);
   const depts = departmentsFor(role, access) as MenuDept[];
@@ -92,7 +94,7 @@ export function guideFor(role: Role, access: Access): string {
     const ids = menuIdsFor(d, { connectors: isAdmin(role) });
     lines.push(`\n${menu.title} (${menu.items[0].href.split("/").slice(0, 3).join("/")}):`);
     for (const item of menu.items) {
-      if (!ids.includes(item.id)) continue;
+      if (!ids.includes(item.id) || opts.hidden?.includes(item.id)) continue;
       lines.push(`- ${item.label}${item.setup ? " (Settings)" : ""}: ${WHAT[d][item.id] ?? ""} Link: ${item.href}`);
     }
   }

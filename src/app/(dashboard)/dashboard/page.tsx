@@ -2,9 +2,10 @@ import Link from "next/link";
 import { after } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db/client";
-import { users } from "@/db/schema";
+import { organizations, users } from "@/db/schema";
+import { parseOperationType } from "@/lib/operation-type";
 import { requireOrg } from "@/lib/tenant";
-import { canRefreshIndustryNews, canViewCompanyPerformance, canViewReceiving } from "@/lib/permissions";
+import { canRefreshIndustryNews, canViewCompanyPerformance, canViewReceiving, isAdmin } from "@/lib/permissions";
 import { activeRecallChecks, homeStories, isStale, lastRun, ownersOf, runIndustryWatch, watchedBrands } from "@/lib/industry-service";
 import { groupNews, needsAttention } from "@/lib/industry-rules";
 import { getCompanyPulse } from "@/lib/home-stats";
@@ -27,7 +28,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   const blockedNote = (await searchParams).viewblocked === "1";
   const showPerformance = canViewCompanyPerformance(org.role);
   const brands = await watchedBrands(org.organizationId);
-  const [stories, run, owners, checks, pulse, me, terms, layout] = await Promise.all([
+  const [stories, run, owners, checks, pulse, me, terms, layout, orgRow] = await Promise.all([
     homeStories(org.organizationId, brands),
     lastRun(org.organizationId),
     ownersOf(org.organizationId, brands),
@@ -36,7 +37,10 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
     db.select({ name: users.name }).from(users).where(eq(users.id, org.userId)).limit(1),
     getPaymentTerms(org.organizationId).catch(() => null),
     getDashboardLayout(org.userId, org.organizationId),
+    isAdmin(org.role) ? db.select({ t: organizations.operationType }).from(organizations).where(eq(organizations.id, org.organizationId)).limit(1) : Promise.resolve(null),
   ]);
+  // A company that signed up before the "type of operation" question was added is asked once, by its owner or an admin.
+  const askOperation = !!orgRow && parseOperationType(orgRow[0]?.t) === null;
 
   // The news is a few hours old (or has never been fetched): look again quietly after this page is sent.
   const updating = brands.length > 0 && isStale(run);
@@ -140,6 +144,13 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           Welcome to <span data-testid="home-company">{org.organizationName}</span>
         </h1>
       </header>
+
+      {askOperation && (
+        <p role="status" className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-950 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100" data-testid="operation-prompt">
+          <span>One quick question: is your company a wholesaler, a distributor or both? It sets up Purchasing with the right documents. Nothing you use today will change.</span>
+          <Link href="/dashboard/settings/company-profile" className="rounded-md bg-emerald-700 px-3 py-1.5 font-semibold text-white hover:bg-emerald-800">Answer now</Link>
+        </p>
+      )}
 
       <HomeBoard newsChips={newsChips} newsPreview={preview} news={newsContent} pulse={pulse} initialLayout={layout} readOnly={!!org.viewAs} />
     </div>

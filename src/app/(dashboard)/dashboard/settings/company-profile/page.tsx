@@ -7,6 +7,8 @@ import { isAdmin, isOwner } from "@/lib/permissions";
 import { stateName } from "@/lib/business-verification";
 import { TONE_CLASS, accountStatusText, paymentStatusText } from "@/lib/account-status";
 import { UpdateFilingForm } from "./update-filing-form";
+import { OperationForm } from "./operation-form";
+import { operationLabel, parseOperationType, sendsPurchaseOrders } from "@/lib/operation-type";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +31,7 @@ export default async function CompanyProfilePage() {
       paymentStatus: organizations.paymentStatus,
       paymentGraceEndsAt: organizations.paymentGraceEndsAt,
       lastPaymentAt: organizations.lastPaymentAt,
+      operationType: organizations.operationType,
     })
     .from(organizations)
     .where(eq(organizations.id, org.organizationId))
@@ -49,6 +52,7 @@ export default async function CompanyProfilePage() {
     .where(eq(businessVerifications.organizationId, org.organizationId))
     .limit(1);
 
+  const operation = parseOperationType(o?.operationType);
   const account = accountStatusText(o?.status ?? null);
   const payment = paymentStatusText({ billingPlan: o?.plan ?? null, trialStartsOn: o?.trialStartsOn ?? null, firstBillableOn: o?.firstBillableOn ?? null, paymentStatus: o?.paymentStatus ?? null, paymentGraceEndsAt: o?.paymentGraceEndsAt ?? null, lastPaymentAt: o?.lastPaymentAt ?? null });
   const sec = "rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900";
@@ -93,6 +97,19 @@ export default async function CompanyProfilePage() {
           <dt className={dt}>Company since</dt><dd className={dd}>{day(o?.createdAt ?? null)}</dd>
         </dl>
         <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">Change these in <Link href="/dashboard/settings/business-profile" className="underline">Business profile</Link>.</p>
+      </section>
+
+      <section className={sec} data-testid="operation-section">
+        <h3 className="mb-1 text-base font-semibold text-slate-900 dark:text-slate-50">How your company operates</h3>
+        <p className="mb-3 text-sm text-slate-600 dark:text-slate-300">
+          Currently: <strong data-testid="operation-current">{operationLabel(operation)}</strong>.{" "}
+          {operation === null
+            ? "You haven't answered this yet. Choose one so Purchasing shows the right documents. Nothing you already use will change."
+            : sendsPurchaseOrders(operation)
+              ? "Purchasing includes purchase orders for buying from wholesalers."
+              : "Purchasing gives quotations to the people you buy from."}
+        </p>
+        <OperationForm current={operation} />
       </section>
 
       <section className={sec}>

@@ -30,6 +30,12 @@ export const FEATURES: FeatureDef[] = [
     blurb: "Lets platform support look at a company's account, read-only, after that company says yes on a ticket.",
     defaultStage: "mothership",
   },
+  {
+    key: "purchase-orders",
+    label: "Purchase orders",
+    blurb: "Purchase orders and saved suppliers in Purchasing, for companies that buy from wholesalers (distributors, or both). Sent as a PDF and as an email in the order's layout.",
+    defaultStage: "mothership",
+  },
 ];
 
 export const featureDef = (key: string) => FEATURES.find((f) => f.key === key);

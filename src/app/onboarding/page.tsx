@@ -2,9 +2,11 @@
 
 import { useRef, useState, useTransition, type FormEvent } from "react";
 import { createOrganization, type ActionState } from "@/app/actions/onboarding";
-import { AuthCard, AuthError, AuthShell, authBtnPrimary } from "@/components/auth/auth-ui";
+import { AuthCard, AuthError, AuthSection as Section, AuthShell, authBtnPrimary } from "@/components/auth/auth-ui";
 import { Icon } from "@/components/landing/icons";
 import { BusinessProfileSignupFields } from "@/components/business-profile-signup-fields";
+import { OperationTypeField } from "@/components/operation-type-field";
+import { RequiredLegend, RequiredMarks } from "@/components/required-marks";
 
 export default function OnboardingPage() {
   // Called directly rather than through <form action={...}>/useActionState
@@ -41,8 +43,14 @@ export default function OnboardingPage() {
           a few fields are optional.
         </p>
 
+        <RequiredMarks>
         <form ref={formRef} onSubmit={handleSubmit} className="mt-8 flex flex-col gap-6">
+          <RequiredLegend />
           <BusinessProfileSignupFields />
+
+          <Section title="How Your Company Operates" description="This sets up your Purchasing department with the right documents. You can change it later in Settings.">
+            <OperationTypeField />
+          </Section>
 
           {state?.error && <AuthError>{state.error}</AuthError>}
 
@@ -51,6 +59,7 @@ export default function OnboardingPage() {
             {!pending && <Icon name="arrow" className="h-5 w-5" />}
           </button>
         </form>
+        </RequiredMarks>
       </AuthCard>
     </AuthShell>
   );

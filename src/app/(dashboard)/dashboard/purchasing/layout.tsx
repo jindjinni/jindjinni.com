@@ -5,6 +5,7 @@ import { DEPARTMENT_MENUS, menuIdsFor, resolveMenu } from "@/lib/sidebar-menu";
 import { getSavedSidebarMenus } from "@/lib/sidebar-menu-store";
 import { DepartmentSidebar } from "@/components/department-sidebar";
 import { PurchasingContent } from "./purchasing-content";
+import { purchaseOrdersEnabled } from "@/lib/purchase-order-service";
 
 // Purchasing is its own department, laid out like Receiving: a colored sidebar down the left, a full-width workspace.
 // The sidebar's names and order can be changed by an Administrator (Edit menu); see lib/sidebar-menu.ts.
@@ -18,7 +19,9 @@ export default async function PurchasingLayout({ children }: { children: React.R
   // Everyone sees the four everyday tabs. Managers also see the Setup tabs. (Archive, Audit log and Database are under Settings.)
   const everyday = DEPARTMENT_MENUS.purchasing.items.filter((i) => !i.setup).map((i) => i.id);
   const allowed = menuIdsFor("purchasing", { connectors: isAdmin(org.role), base: isManager ? undefined : everyday });
-  const menu = resolveMenu("purchasing", await getSavedSidebarMenus(org.organizationId), allowed);
+  // Purchase orders and suppliers appear only for a distributor (or both) that the feature is switched on for.
+  const poOn = await purchaseOrdersEnabled(org.organizationId);
+  const menu = resolveMenu("purchasing", await getSavedSidebarMenus(org.organizationId), poOn ? allowed : allowed.filter((id) => id !== "purchase-orders" && id !== "suppliers"));
 
   return (
     <div className="-my-8 mx-[calc(50%-50vw)] flex min-h-[calc(100vh-3.4rem)] w-screen flex-col md:flex-row print:m-0 print:w-auto">

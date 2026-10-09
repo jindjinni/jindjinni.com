@@ -48,9 +48,10 @@ export function longDate(day: string | null): string {
   return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" });
 }
 
-function wrap(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
+export function wrap(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
   const out: string[] = [];
-  for (const para of pdfSafe(text).split("\n")) {
+  // Split into lines first: pdfSafe drops everything outside printable characters, and that includes the line breaks of an address.
+  for (const para of text.replace(/\r/g, "").split("\n").map((p) => pdfSafe(p))) {
     const words = para.split(/\s+/).filter(Boolean);
     if (!words.length) {
       out.push("");

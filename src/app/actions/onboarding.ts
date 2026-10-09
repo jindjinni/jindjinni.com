@@ -20,6 +20,7 @@ import {
 import { setupNewOrgCatalog } from "@/lib/catalog-template";
 import { extractBusinessProfileIdentityFields } from "@/lib/business-profile-form";
 import { encodeLogoFile } from "@/lib/logo-validation";
+import { readRequiredOperationType } from "@/lib/operation-type";
 import { readVerification, einInUse, saveVerification, EIN_IN_USE_MESSAGE } from "@/lib/business-verification";
 
 export type ActionState = { error?: string } | undefined;
@@ -41,6 +42,9 @@ export async function createOrganization(
 
   const companyName = String(formData.get("companyName") ?? "").trim();
   if (!companyName) return { error: "Official Legal Business Name is required." };
+
+  const operation = readRequiredOperationType(formData.get("operationType"));
+  if (!operation.ok) return { error: operation.error };
 
   const logoFile = formData.get("logo");
   if (!(logoFile instanceof File) || logoFile.size === 0) {
@@ -80,7 +84,7 @@ export async function createOrganization(
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/(^-|-$)/g, "") || newId("org");
 
-  await db.insert(organizations).values({ id: orgId, name: companyName, slug, approvalStatus: "pending" });
+  await db.insert(organizations).values({ id: orgId, name: companyName, slug, approvalStatus: "pending", operationType: operation.type });
   await db.insert(memberships).values({
     id: newId("mem"),
     userId: userId!,

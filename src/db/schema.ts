@@ -101,6 +101,9 @@ export const organizations = sqliteTable("organizations", {
   // The company's short, permanent reference (e.g. "JJ-1042"), handed out once (see lib/company-code.ts). Shown on every support ticket
   // and in the Companies panel so the platform owner always knows which company is calling. Empty until first needed.
   companyCode: text("company_code"),
+  // How the company operates: "WHOLESALER" | "DISTRIBUTOR" | "BOTH" (see lib/operation-type.ts). Asked at sign-up; null = a company that
+  // existed before the question (not answered yet -- never guessed). Plain nullable text on purpose -- same drizzle-kit rule as seatLimit.
+  operationType: text("operation_type"),
   ...timestamps,
 }, (t) => [index("organizations_approval_idx").on(t.approvalStatus, t.createdAt), uniqueIndex("organizations_company_code_unique").on(t.companyCode)]);
 
@@ -2866,4 +2869,100 @@ export const featureFlagCompanies = sqliteTable(
     createdAt: text("created_at").notNull().default(sql`(current_timestamp)`),
   },
   (t) => [primaryKey({ columns: [t.flagKey, t.organizationId] })],
+);
+
+// ---------------------------------------------------------------------------
+// Purchase orders (Purchasing). A distributor buys from wholesalers by sending them purchase orders. Suppliers are typed in once and
+// saved; a purchase order keeps its own copy (snapshot) of the supplier, ship-to and bill-to details as they were when it was made.
+// ---------------------------------------------------------------------------
+
+export const purchasingSuppliers = sqliteTable(
+  "purchasing_suppliers",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    contactName: text("contact_name"),
+    email: text("email"),
+    phone: text("phone"),
+    address: text("address"),
+    licenseNumber: text("license_number"),
+    licenseExpires: text("license_expires"), // YYYY-MM-DD
+    notes: text("notes"),
+    archivedAt: text("archived_at"),
+    ...timestamps,
+  },
+  (t) => [index("purchasing_suppliers_org_idx").on(t.organizationId)],
+);
+
+export const purchasingPurchaseOrders = sqliteTable(
+  "purchasing_purchase_orders",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    seq: integer("seq").notNull(),
+    poNumber: text("po_number").notNull(),
+    /** DRAFT | SENT | CONFIRMED | RECEIVED | CANCELLED */
+    status: text("status").notNull().default("DRAFT"),
+    supplierId: text("supplier_id").references(() => purchasingSuppliers.id, { onDelete: "set null" }),
+    supplierName: text("supplier_name").notNull(),
+    supplierAddress: text("supplier_address"),
+    supplierEmail: text("supplier_email"),
+    supplierLicense: text("supplier_license"),
+    supplierLicenseExpires: text("supplier_license_expires"),
+    issueDate: text("issue_date").notNull(),
+    shipToName: text("ship_to_name"),
+    shipToAddress: text("ship_to_address"),
+    billToName: text("bill_to_name"),
+    billToAddress: text("bill_to_address"),
+    /** The "Reference" box on the order (our own reference or the supplier's quotation number). */
+    reference: text("reference"),
+    /** The "Comments" box. */
+    comments: text("comments"),
+    /** The terms printed at the bottom (dating requirements, how long the order stands, pedigree needs, ...). */
+    terms: text("terms"),
+    fromName: text("from_name"),
+    fromAddress: text("from_address"),
+    fromPhone: text("from_phone"),
+    fromEmail: text("from_email"),
+    subtotal: real("subtotal").notNull().default(0),
+    shipping: real("shipping").notNull().default(0),
+    total: real("total").notNull().default(0),
+    sentAt: text("sent_at"),
+    emailedTo: text("emailed_to"),
+    createdByUserId: text("created_by_user_id"),
+    ...timestamps,
+  },
+  (t) => [
+    index("purchasing_po_org_idx").on(t.organizationId, t.status),
+    uniqueIndex("purchasing_po_org_seq_unique").on(t.organizationId, t.seq),
+  ],
+);
+
+export const purchasingPurchaseOrderLines = sqliteTable(
+  "purchasing_purchase_order_lines",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    purchaseOrderId: text("purchase_order_id")
+      .notNull()
+      .references(() => purchasingPurchaseOrders.id, { onDelete: "cascade" }),
+    position: integer("position").notNull().default(0),
+    productId: text("product_id"),
+    partNumber: text("part_number"),
+    ndc: text("ndc"),
+    name: text("name").notNull(),
+    size: text("size"),
+    quantity: integer("quantity").notNull().default(1),
+    unit: text("unit").notNull().default("EA"),
+    unitCost: real("unit_cost").notNull().default(0),
+    total: real("total").notNull().default(0),
+  },
+  (t) => [index("purchasing_po_lines_po_idx").on(t.purchaseOrderId)],
 );

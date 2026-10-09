@@ -33,6 +33,7 @@ import { guardLogin, guardPublicForm, noteFailedLogin } from "@/lib/human-check"
 import { looksLikeUsername } from "@/lib/staff-login";
 import { hasTwoStep } from "@/lib/two-step";
 import { ensureCompanyCode } from "@/lib/company-code";
+import { readRequiredOperationType } from "@/lib/operation-type";
 
 export type ActionState = { error?: string; needCode?: boolean } | undefined;
 
@@ -122,6 +123,9 @@ export async function signUpOrganization(
     return { error: "Fill in your email and a password of at least 8 characters." };
   }
 
+  const operation = readRequiredOperationType(formData.get("operationType"));
+  if (!operation.ok) return { error: operation.error };
+
   const logoFile = formData.get("logo");
   if (!(logoFile instanceof File) || logoFile.size === 0) {
     return { error: "A company logo is required to sign up." };
@@ -195,7 +199,7 @@ export async function signUpOrganization(
     termsAcceptedAt: new Date().toISOString(),
     termsVersion: TERMS_VERSION,
   });
-  await db.insert(organizations).values({ id: orgId, name: companyName, slug, approvalStatus: "pending", billingPlan: parseBillingPlan(formData.get("billingPlan")) });
+  await db.insert(organizations).values({ id: orgId, name: companyName, slug, approvalStatus: "pending", billingPlan: parseBillingPlan(formData.get("billingPlan")), operationType: operation.type });
   // Every company gets its permanent reference ("JJ-1042") right away, so support always knows who is calling.
   await ensureCompanyCode(orgId).catch(() => {});
   await db.insert(memberships).values({

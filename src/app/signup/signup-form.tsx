@@ -9,6 +9,7 @@ import { Icon } from "@/components/landing/icons";
 import { BusinessProfileSignupFields } from "@/components/business-profile-signup-fields";
 import { HumanCheck } from "@/components/human-check";
 import { BillingSection } from "@/components/billing-section";
+import { OperationTypeField } from "@/components/operation-type-field";
 import { RequiredLegend, RequiredMarks } from "@/components/required-marks";
 import { TermsCheckbox } from "@/components/legal/terms-checkbox";
 
@@ -140,6 +141,13 @@ export function SignupForm({ needsVerification }: { needsVerification: boolean }
           </Section>
 
           <BusinessProfileSignupFields accountName={accountName} accountEmail={accountEmail} />
+
+          <Section
+            title="How Your Company Operates"
+            description="This sets up your Purchasing department with the right documents: quotations for buying from individuals, purchase orders for buying from wholesalers, or both. You can change it later in Settings."
+          >
+            <OperationTypeField />
+          </Section>
 
           <BillingSection />
 
