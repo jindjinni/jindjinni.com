@@ -6,7 +6,6 @@ import { organizations, users } from "@/db/schema";
 import { parseOperationType } from "@/lib/operation-type";
 import { operationsEnabled, operationsOf, stepProgressOf } from "@/lib/operations-service";
 import { GettingStarted } from "@/components/getting-started";
-import { sidesFrom, sidesLabel } from "@/lib/operations-rules";
 import { requireOrg } from "@/lib/tenant";
 import { canRefreshIndustryNews, canViewCompanyPerformance, canViewReceiving, isAdmin } from "@/lib/permissions";
 import { activeRecallChecks, homeStories, isStale, lastRun, ownersOf, runIndustryWatch, watchedBrands } from "@/lib/industry-service";
@@ -40,15 +39,14 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
     db.select({ name: users.name }).from(users).where(eq(users.id, org.userId)).limit(1),
     getPaymentTerms(org.organizationId).catch(() => null),
     getDashboardLayout(org.userId, org.organizationId),
-    isAdmin(org.role) ? db.select({ t: organizations.operationType, chosen: organizations.operationsChosenAt }).from(organizations).where(eq(organizations.id, org.organizationId)).limit(1) : Promise.resolve(null),
+    isAdmin(org.role) ? db.select({ t: organizations.operationType, kind: organizations.operationKind }).from(organizations).where(eq(organizations.id, org.organizationId)).limit(1) : Promise.resolve(null),
   ]);
   // A company that signed up before the "type of operation" question was added is asked once, by its owner or an admin.
   // With the two-sides feature on, the one question becomes a one-time "is this right?" for every company that never confirmed.
   const sidesOn = isAdmin(org.role) && (await operationsEnabled(org.organizationId));
-  const confirmSides = sidesOn && !!orgRow && !orgRow[0]?.chosen;
+  const confirmSides = sidesOn && !!orgRow && !orgRow[0]?.kind;
   const askOperation = !sidesOn && !!orgRow && parseOperationType(orgRow[0]?.t) === null;
   const [sidesSet, stepsDone] = sidesOn ? await Promise.all([operationsOf(org.organizationId), stepProgressOf(org.organizationId)]) : [null, null];
-  const sidesNow = confirmSides ? sidesLabel(sidesFrom({ operationType: orgRow?.[0]?.t })) : "";
 
   // The news is a few hours old (or has never been fetched): look again quietly after this page is sent.
   const updating = brands.length > 0 && isStale(run);
@@ -155,8 +153,8 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
 
       {confirmSides && (
         <p role="status" className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-950 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100" data-testid="sides-prompt">
-          <span>Your company is set up for <strong>{sidesNow}</strong>. Is that right? Both sides are free, and you can switch either one on or off whenever you like. Nothing you use today will change.</span>
-          <Link href="/dashboard/settings/operations" className="rounded-md bg-emerald-700 px-3 py-1.5 font-semibold text-white hover:bg-emerald-800">Check it</Link>
+          <span>Your company can now run <strong>Wholesale</strong> and <strong>Distribution</strong> as two separate operations. Tell us which one your current records are, and you can add the other, free. Nothing you use today will change.</span>
+          <Link href="/dashboard/settings/operations" className="rounded-md bg-emerald-700 px-3 py-1.5 font-semibold text-white hover:bg-emerald-800">Set it up</Link>
         </p>
       )}
 

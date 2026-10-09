@@ -28,6 +28,7 @@ export type OpsOrg = { organizationId: string; userId: string };
 export type Operations = { sides: Sides; confirmed: boolean; since: { wholesale: string | null; distribution: string | null }; chosenAt: string | null };
 
 const columns = {
+  operationKind: organizations.operationKind,
   operationType: organizations.operationType,
   wholesaleActiveAt: organizations.wholesaleActiveAt,
   distributionActiveAt: organizations.distributionActiveAt,

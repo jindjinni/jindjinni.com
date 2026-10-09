@@ -72,7 +72,8 @@ export async function companyCounts(): Promise<CompanyCounts> {
       banned: sql<number>`coalesce(sum(case when ${organizations.approvalStatus} = 'banned' then 1 else 0 end), 0)`,
       newThisWeek: sql<number>`coalesce(sum(case when ${organizations.createdAt} >= datetime('now', '-7 days') then 1 else 0 end), 0)`,
     })
-    .from(organizations);
+    .from(organizations)
+    .where(isNull(organizations.parentOrganizationId)); // one line per company; its operations are inside
   const total = Number(r?.total ?? 0);
   const waiting = Number(r?.waiting ?? 0);
   const suspended = Number(r?.suspended ?? 0);
@@ -83,7 +84,7 @@ export async function companyCounts(): Promise<CompanyCounts> {
 
 /** How many companies are waiting for a decision (the number in the Settings menu). */
 export async function waitingCount(): Promise<number> {
-  const [r] = await db.select({ n: sql<number>`count(*)` }).from(organizations).where(eq(organizations.approvalStatus, "pending"));
+  const [r] = await db.select({ n: sql<number>`count(*)` }).from(organizations).where(and(eq(organizations.approvalStatus, "pending"), isNull(organizations.parentOrganizationId)));
   return Number(r?.n ?? 0);
 }
 
@@ -91,8 +92,12 @@ export type DecisionEntry = { id: string; decision: string; reason: string | nul
 
 import { needsConfirmation, sidesFrom, sidesLabel, type OperationsRow } from "@/lib/operations-rules";
 
-function sidesText(row: OperationsRow): string {
-  return sidesLabel(sidesFrom(row)) + (needsConfirmation(row) ? " (not confirmed yet)" : "");
+function sidesText(row: OperationsRow, otherKinds: string[] = []): string {
+  if (row.operationKind) {
+    const all = [row.operationKind, ...otherKinds].map((k) => (k === "wholesale" ? "Wholesale" : "Distribution"));
+    return all.length > 1 ? `${all.join(" and ")} (two separate operations)` : all[0];
+  }
+  return sidesLabel(sidesFrom(row)) + (needsConfirmation(row) ? " (records not named yet)" : "");
 }
 
 export type CompanyRow = {
@@ -148,7 +153,7 @@ export type CompanyPage = { rows: CompanyRow[]; total: number; page: number; pag
 /** One page of companies: waiting ones first, then newest first. */
 export async function listCompanies(opts: { q?: string; filter?: CompanyFilter; page?: number; id?: string }): Promise<CompanyPage> {
   const filter = opts.filter ?? "all";
-  const where = and(filterWhere(filter), searchWhere(opts.q ?? ""), opts.id ? eq(organizations.id, opts.id) : undefined);
+  const where = and(isNull(organizations.parentOrganizationId), filterWhere(filter), searchWhere(opts.q ?? ""), opts.id ? eq(organizations.id, opts.id) : undefined);
 
   const [{ n }] = await db
     .select({ n: sql<number>`count(*)` })
@@ -184,6 +189,7 @@ export async function listCompanies(opts: { q?: string; filter?: CompanyFilter; 
       opWholesale: organizations.wholesaleActiveAt,
       opDistribution: organizations.distributionActiveAt,
       opChosen: organizations.operationsChosenAt,
+      opKind: organizations.operationKind,
       ein: businessVerifications.ein,
       registeredState: businessVerifications.registeredState,
       entityType: businessVerifications.entityType,
@@ -255,6 +261,11 @@ export async function listCompanies(opts: { q?: string; filter?: CompanyFilter; 
     histBy.set(h.orgId, list);
   }
 
+  // A company's other operations (its separate workspaces), for the "Operation" line.
+  const kids = ids.length ? await db.select({ parent: organizations.parentOrganizationId, kind: organizations.operationKind }).from(organizations).where(inArray(organizations.parentOrganizationId, ids)) : [];
+  const kidKinds = new Map<string, string[]>();
+  for (const k of kids) if (k.parent && k.kind) kidKinds.set(k.parent, [...(kidKinds.get(k.parent) ?? []), k.kind]);
+
   const rows: CompanyRow[] = base.map((b) => ({
     id: b.id,
     name: b.name,
@@ -273,7 +284,7 @@ export async function listCompanies(opts: { q?: string; filter?: CompanyFilter; 
     cancelRefundCents: b.cancelRefundCents,
     paymentGraceEndsAt: b.paymentGraceEndsAt,
     lastPaymentAt: b.lastPaymentAt,
-    sides: sidesText({ operationType: b.opType, wholesaleActiveAt: b.opWholesale, distributionActiveAt: b.opDistribution, operationsChosenAt: b.opChosen }),
+    sides: sidesText({ operationType: b.opType, wholesaleActiveAt: b.opWholesale, distributionActiveAt: b.opDistribution, operationsChosenAt: b.opChosen, operationKind: b.opKind }, kidKinds.get(b.id) ?? []),
     ein: b.ein,
     registeredState: b.registeredState,
     entityType: b.entityType,

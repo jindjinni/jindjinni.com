@@ -111,6 +111,13 @@ export const organizations = sqliteTable("organizations", {
   distributionActiveAt: text("distribution_active_at"),
   operationsChosenAt: text("operations_chosen_at"),
   operationsChosenBy: text("operations_chosen_by"),
+  // Separate operations under one company (see lib/operation-groups-rules.ts). An operation is its own workspace: its own organization row, so
+  // every query already scoped by organizationId keeps its customers, suppliers, products, orders, stock, money and connections apart from
+  // the other operation's. `operationKind` says which one this workspace is ("wholesale" | "distribution"; null = a company that has not
+  // chosen yet). `parentOrganizationId` points at the company's main row (the one that holds the verification, plan, approval and closing);
+  // null = this row is the main one. Both plain nullable text on purpose -- same drizzle-kit rule as seatLimit.
+  operationKind: text("operation_kind"),
+  parentOrganizationId: text("parent_organization_id"),
   ...timestamps,
 }, (t) => [index("organizations_approval_idx").on(t.approvalStatus, t.createdAt), uniqueIndex("organizations_company_code_unique").on(t.companyCode)]);
 

@@ -22,6 +22,8 @@ export async function saveOperationType(_prev: OperationState, fd: FormData): Pr
   const picked = readRequiredOperationType(fd.get("operationType"));
   if (!picked.ok) return { error: picked.error };
 
+  const [kindRow] = await db.select({ k: organizations.operationKind }).from(organizations).where(eq(organizations.id, org.organizationId)).limit(1);
+  if (kindRow?.k) return { error: "This operation is managed in Settings → Operations." };
   const [cur] = await db.select({ t: organizations.operationType }).from(organizations).where(eq(organizations.id, org.organizationId)).limit(1);
   if (parseOperationType(cur?.t) === picked.type) return { message: "That is already how your company is set up." };
 

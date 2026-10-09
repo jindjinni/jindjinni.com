@@ -35,6 +35,10 @@ import { hasTwoStep } from "@/lib/two-step";
 import { ensureCompanyCode } from "@/lib/company-code";
 import { readRequiredOperationType } from "@/lib/operation-type";
 import { columnsForChoice } from "@/lib/operations-rules";
+import { firstKindFor, typeFromKind } from "@/lib/operation-groups-rules";
+import { addOperation } from "@/lib/operation-groups";
+import { featureOn } from "@/lib/features";
+import { forgetWorkspace } from "@/app/actions/workspaces";
 
 export type ActionState = { error?: string; needCode?: boolean } | undefined;
 
@@ -78,6 +82,9 @@ export async function login(
     return { error: "That email or username and password don't match an account." };
   }
 
+  // A fresh sign-in always asks which operation to open (when the company has two).
+  await forgetWorkspace();
+
   // Optional "come back to" page (e.g. an invitation link). Only same-site
   // paths are honoured, never an outside address.
   const next = String(formData.get("next") ?? "");
@@ -86,6 +93,7 @@ export async function login(
 }
 
 export async function logout() {
+  await forgetWorkspace();
   await signOut({ redirect: false });
   redirect("/login");
 }
@@ -200,7 +208,9 @@ export async function signUpOrganization(
     termsAcceptedAt: new Date().toISOString(),
     termsVersion: TERMS_VERSION,
   });
-  await db.insert(organizations).values({ id: orgId, name: companyName, slug, approvalStatus: "pending", billingPlan: parseBillingPlan(formData.get("billingPlan")), ...columnsForChoice(operation.type, new Date(), userId) });
+  // With separate operations on, the company's main row is its first operation (and "Both" gets the second one next to it below).
+  const splitOn = await featureOn("operations", "__new__").catch(() => false);
+  await db.insert(organizations).values({ id: orgId, name: companyName, slug, approvalStatus: "pending", billingPlan: parseBillingPlan(formData.get("billingPlan")), ...(splitOn ? { ...columnsForChoice(typeFromKind(firstKindFor(operation.type)), new Date(), userId), operationKind: firstKindFor(operation.type) } : columnsForChoice(operation.type, new Date(), userId)) });
   // Every company gets its permanent reference ("JJ-1042") right away, so support always knows who is calling.
   await ensureCompanyCode(orgId).catch(() => {});
   await db.insert(memberships).values({
@@ -225,6 +235,8 @@ export async function signUpOrganization(
     logoUpdatedAt: new Date().toISOString(),
   });
   await saveVerification(orgId, verification.data);
+  // "Both": the second operation is created next to the first, empty and separate, and the owner can open either one.
+  if (splitOn && operation.type === "BOTH") await addOperation({ userId: userId, organizationId: orgId }, true, "distribution");
   // Compare the file number with the state's public records once the response is sent; the owner sees the result in Settings -> Companies.
   after(() => runRegistryCheck(orgId));
 

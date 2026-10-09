@@ -39,7 +39,7 @@ export const FEATURES: FeatureDef[] = [
   {
     key: "operations",
     label: "Wholesale and Distribution sides",
-    blurb: "Settings -> Operations: each company switches its Wholesale side (buying from individuals) and its Distribution side (buying from wholesalers, selling to pharmacies) on or off, free. Later steps hide what a switched-off side owns.",
+    blurb: "Separate operations: a company can run Wholesale (buying from individuals) and Distribution (buying from wholesalers, selling to pharmacies) as two separate workspaces under one sign-in, free. Settings -> Operations, the sign-in picker, the top-bar switcher and Overall status come with it.",
     defaultStage: "mothership",
   },
 ];
@@ -58,14 +58,16 @@ export async function featureOn(key: string, organizationId: string): Promise<bo
   const stage = await stageOf(key);
   if (stage === "everyone") return true;
   if (stage === "off") return false;
-  const [org] = await db.select({ slug: organizations.slug }).from(organizations).where(eq(organizations.id, organizationId)).limit(1);
+  const [org] = await db.select({ slug: organizations.slug, parent: organizations.parentOrganizationId }).from(organizations).where(eq(organizations.id, organizationId)).limit(1);
+  // An operation of a company follows the company's own choice (its main row).
+  const companyId = org?.parent ?? organizationId;
   const mothership = !!org && mayUsePlatformShippo(org.slug);
   let selected = false;
   if (stage === "selected" && !mothership) {
     const [pick] = await db
       .select({ k: featureFlagCompanies.flagKey })
       .from(featureFlagCompanies)
-      .where(and(eq(featureFlagCompanies.flagKey, key), eq(featureFlagCompanies.organizationId, organizationId)))
+      .where(and(eq(featureFlagCompanies.flagKey, key), eq(featureFlagCompanies.organizationId, companyId)))
       .limit(1);
     selected = !!pick;
   }

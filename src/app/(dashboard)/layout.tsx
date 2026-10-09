@@ -9,6 +9,9 @@ import { logout } from "@/app/actions/auth";
 import { parseDepartmentThemes } from "@/lib/theme";
 import { ThemeScope } from "@/components/theme-scope";
 import { MainNav, type NavItem } from "./main-nav";
+import { WorkspaceSwitcher } from "@/components/workspace-switcher";
+import { workspacesOfUser } from "@/lib/operation-groups";
+import { isAdmin } from "@/lib/permissions";
 import { ClockWidget } from "@/components/clock-widget";
 import { JinWidget } from "@/components/jin/jin-widget";
 import { getMyClock } from "@/lib/hr-service";
@@ -37,6 +40,10 @@ export default async function DashboardLayout({
 
   const [orgRow] = await db.select({ departmentThemes: organizations.departmentThemes }).from(organizations).where(eq(organizations.id, org.organizationId)).limit(1);
 
+  // A company that runs two operations gets a switcher in the top bar (never while a platform person is only looking).
+  const myWorkspaces = org.viewAs ? [] : await workspacesOfUser(org.userId);
+  const me0 = myWorkspaces.find((w) => w.organizationId === org.organizationId);
+  const siblings = me0 ? myWorkspaces.filter((w) => w.rootId === me0.rootId) : [];
   const nowIso = new Date().toISOString();
   const nowIso0 = Date.parse(nowIso);
   const viewing = org.viewAs;
@@ -81,6 +88,7 @@ export default async function DashboardLayout({
             </span>
             {org.organizationName}
           </span>
+          <WorkspaceSwitcher currentId={org.organizationId} siblings={siblings} canSeeOverall={siblings.length > 1 && siblings.every((w) => isAdmin(w.role))} />
           <MainNav items={navItems} />
         </div>
         <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500 dark:text-slate-400">

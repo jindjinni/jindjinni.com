@@ -6,11 +6,12 @@
 
 import { redirect } from "next/navigation";
 import bcrypt from "bcryptjs";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, or } from "drizzle-orm";
 import { db } from "@/db/client";
 import { organizations, purchasingAuditLog, teamInvitations, users } from "@/db/schema";
 import { getClosedCompanyForUser, getSessionUserId, requireOrg } from "@/lib/tenant";
 import { isOwner } from "@/lib/permissions";
+import { rootIdOf } from "@/lib/operation-groups";
 import { newId } from "@/lib/ids";
 import { sendEmail } from "@/lib/email";
 
@@ -36,12 +37,13 @@ export async function closeCompany(_prev: CompanyActionState, formData: FormData
     return { error: "Your password isn't right." };
   }
 
+  const rootId = await rootIdOf(org.organizationId);
   const now = new Date();
   const purgeAfter = new Date(now.getTime() + CLOSE_GRACE_DAYS * 24 * 60 * 60 * 1000);
   await db
     .update(organizations)
     .set({ closedAt: now.toISOString(), closedByUserId: org.userId, purgeAfter: purgeAfter.toISOString() })
-    .where(eq(organizations.id, org.organizationId));
+    .where(or(eq(organizations.id, rootId), eq(organizations.parentOrganizationId, rootId))); // the company and all of its operations
   // Open invitations can't be used once the company is closed -- cancel them so a reopened company doesn't revive stale links.
   await db
     .update(teamInvitations)
@@ -88,7 +90,7 @@ export async function restoreCompany(): Promise<CompanyActionState> {
   await db
     .update(organizations)
     .set({ closedAt: null, closedByUserId: null, purgeAfter: null })
-    .where(eq(organizations.id, closed.organizationId));
+    .where(or(eq(organizations.id, closed.organizationId), eq(organizations.parentOrganizationId, closed.organizationId)));
   await db.insert(purchasingAuditLog).values({
     id: newId("paudit"),
     organizationId: closed.organizationId,

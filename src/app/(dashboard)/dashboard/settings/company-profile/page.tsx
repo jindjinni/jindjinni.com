@@ -32,6 +32,7 @@ export default async function CompanyProfilePage() {
       paymentGraceEndsAt: organizations.paymentGraceEndsAt,
       lastPaymentAt: organizations.lastPaymentAt,
       operationType: organizations.operationType,
+      operationKind: organizations.operationKind,
     })
     .from(organizations)
     .where(eq(organizations.id, org.organizationId))
@@ -107,7 +108,13 @@ export default async function CompanyProfilePage() {
             ? "You haven't answered this yet. Choose one so the right document comes first. Nothing you already use will change."
             : operationDefaultText(operation)}
         </p>
-        <OperationForm current={operation} />
+        {o?.operationKind ? (
+          <p className="text-sm text-slate-600 dark:text-slate-300" data-testid="operation-managed">
+            This is your <strong>{o.operationKind === "wholesale" ? "Wholesale" : "Distribution"}</strong> operation. Operations are managed in <Link href="/dashboard/settings/operations" className="underline">Settings → Operations</Link>.
+          </p>
+        ) : (
+          <OperationForm current={operation} />
+        )}
       </section>
 
       <section className={sec}>

@@ -1,0 +1,14 @@
+import { addOperationBlocker, mayOpen, otherKind, parseKind, pickWorkspace, workspaceTitle, type Workspace } from "../src/lib/operation-groups-rules";
+let f = 0; const t = (n: string, c: boolean) => { if (!c) { f++; console.log("FAIL", n); } };
+const w = (id: string, root: string, kind: "wholesale" | "distribution" | null = null): Workspace => ({ organizationId: id, rootId: root, kind, role: "owner", companyName: "Acme" });
+t("none", pickWorkspace([], null) === null);
+t("single opens", JSON.stringify(pickWorkspace([w("a", "a")], null)) === '{"action":"open","organizationId":"a"}');
+t("two of one company ask", pickWorkspace([w("a", "a", "wholesale"), w("b", "a", "distribution")], null)?.action === "choose");
+t("remembered wins", JSON.stringify(pickWorkspace([w("a", "a"), w("b", "a")], "b")) === '{"action":"open","organizationId":"b"}');
+t("a remembered workspace the person lost access to is ignored", pickWorkspace([w("a", "a"), w("b", "a")], "zzz")?.action === "choose");
+t("unrelated companies keep the first", JSON.stringify(pickWorkspace([w("a", "a"), w("c", "c")], null)) === '{"action":"open","organizationId":"a"}');
+t("title", workspaceTitle("Acme", "wholesale", true) === "Acme · Wholesale" && workspaceTitle("Acme", "wholesale", false) === "Acme" && workspaceTitle("Acme", null, true) === "Acme");
+t("blockers", addOperationBlocker("wholesale", ["wholesale"], "distribution", true) === null && !!addOperationBlocker("wholesale", ["wholesale", "distribution"], "distribution", true) && !!addOperationBlocker(null, [], "distribution", true) && !!addOperationBlocker("wholesale", ["wholesale"], "distribution", false));
+t("kinds", parseKind("wholesale") === "wholesale" && parseKind("x") === null && otherKind("wholesale") === "distribution");
+t("mayOpen", mayOpen([w("a", "a")], "a") && !mayOpen([w("a", "a")], "b"));
+console.log(f ? `${f} failed` : "Operation groups rules: all passed"); process.exit(f ? 1 : 0);

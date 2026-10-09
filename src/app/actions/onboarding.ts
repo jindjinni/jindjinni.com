@@ -22,6 +22,9 @@ import { extractBusinessProfileIdentityFields } from "@/lib/business-profile-for
 import { encodeLogoFile } from "@/lib/logo-validation";
 import { readRequiredOperationType } from "@/lib/operation-type";
 import { columnsForChoice } from "@/lib/operations-rules";
+import { firstKindFor, typeFromKind } from "@/lib/operation-groups-rules";
+import { addOperation } from "@/lib/operation-groups";
+import { featureOn } from "@/lib/features";
 import { readVerification, einInUse, saveVerification, EIN_IN_USE_MESSAGE } from "@/lib/business-verification";
 
 export type ActionState = { error?: string } | undefined;
@@ -85,7 +88,9 @@ export async function createOrganization(
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/(^-|-$)/g, "") || newId("org");
 
-  await db.insert(organizations).values({ id: orgId, name: companyName, slug, approvalStatus: "pending", ...columnsForChoice(operation.type, new Date(), userId!) });
+  // With separate operations on, the company's main row is its first operation (and "Both" gets the second one next to it below).
+  const splitOn = await featureOn("operations", "__new__").catch(() => false);
+  await db.insert(organizations).values({ id: orgId, name: companyName, slug, approvalStatus: "pending", ...(splitOn ? { ...columnsForChoice(typeFromKind(firstKindFor(operation.type)), new Date(), userId!), operationKind: firstKindFor(operation.type) } : columnsForChoice(operation.type, new Date(), userId!)) });
   await db.insert(memberships).values({
     id: newId("mem"),
     userId: userId!,
@@ -108,6 +113,8 @@ export async function createOrganization(
     logoUpdatedAt: new Date().toISOString(),
   });
   await saveVerification(orgId, verification.data);
+  // "Both": the second operation is created next to the first, empty and separate, and the owner can open either one.
+  if (splitOn && operation.type === "BOTH") await addOperation({ userId: userId!, organizationId: orgId }, true, "distribution");
   // Compare the file number with the state's public records once the response is sent; the owner sees the result in Settings -> Companies.
   after(() => runRegistryCheck(orgId));
 

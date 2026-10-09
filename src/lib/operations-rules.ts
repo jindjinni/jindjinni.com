@@ -13,6 +13,8 @@ export type Side = (typeof SIDES)[number];
 export type Sides = { wholesale: boolean; distribution: boolean };
 
 export type OperationsRow = {
+  /** Set once this workspace is one named operation: then it is exactly that side. */
+  operationKind?: string | null;
   operationType?: string | null;
   wholesaleActiveAt?: string | null;
   distributionActiveAt?: string | null;
@@ -29,6 +31,8 @@ export const BOTH_SIDES: Sides = { wholesale: true, distribution: true };
  */
 export function sidesFrom(row: OperationsRow | null | undefined): Sides {
   if (!row) return { ...BOTH_SIDES };
+  if (row.operationKind === "wholesale") return { wholesale: true, distribution: false };
+  if (row.operationKind === "distribution") return { wholesale: false, distribution: true };
   if (row.operationsChosenAt) {
     const s = { wholesale: !!row.wholesaleActiveAt, distribution: !!row.distributionActiveAt };
     return s.wholesale || s.distribution ? s : { ...BOTH_SIDES }; // a damaged record never leaves a company with nothing

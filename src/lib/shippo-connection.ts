@@ -27,7 +27,8 @@ export function platformShippoSlugs(): string[] {
 
 /** Pure: may this company fall back to the platform's own Shippo account? */
 export function mayUsePlatformShippo(slug: string): boolean {
-  return platformShippoSlugs().includes(slug.toLowerCase());
+  // An operation workspace of a platform company has the company's slug, two dashes, then its kind ("acme--distribution").
+  return platformShippoSlugs().includes(slug.toLowerCase().split("--")[0]);
 }
 
 export const NOT_CONNECTED_MESSAGE = "Shipping labels aren't connected yet. An owner or admin can connect your Shippo account in Purchasing → Settings → Connectors.";
