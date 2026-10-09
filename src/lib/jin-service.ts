@@ -13,6 +13,8 @@ import { noteAiRefused, resolveAi, type AiKey } from "@/lib/ai-connection";
 import { chat, textOf, type Block, type Msg } from "@/lib/ai-provider";
 import { guideFor } from "@/lib/jin-guide";
 import { purchaseOrdersEnabled } from "@/lib/purchase-order-service";
+import { operationsEnabled, operationsOf } from "@/lib/operations-service";
+import { sidesNote } from "@/lib/operations-rules";
 import { JIN_REFUSAL } from "@/lib/ip-notice";
 import { houseRules, liveKnowledge } from "@/lib/jin-library";
 import { JIN_LIMITS, type JinMessage } from "@/lib/jin-rules";
@@ -63,7 +65,7 @@ async function refund(who: JinWho) {
     .where(and(eq(jinUsage.organizationId, who.organizationId), eq(jinUsage.userId, who.userId), eq(jinUsage.day, today())));
 }
 
-function systemPrompt(who: JinWho, rules: string[], hiddenTabs: string[]): string {
+function systemPrompt(who: JinWho, rules: string[], hiddenTabs: string[], sides = ""): string {
   return `You are Jin, the friendly built-in helper of a business platform used by ${who.organizationName} to run purchasing, receiving, accounts, customer service, inventory, sales, HR and marketing. You are a genie: warm, brief, and happy to help ("your wish is my command" is your spirit, say it rarely).
 
 What you do:
@@ -87,6 +89,7 @@ Rules:
 
 Today is ${today()}.
 
+${sides ? `${sides}\n` : ""}
 GUIDE FOR THIS PERSON:
 ${guideFor(who.role, who.access, { hidden: hiddenTabs })}`;
 }
@@ -102,7 +105,8 @@ export async function askJin(who: JinWho, question: string, history: JinMessage[
   const rules = houseRules(await liveKnowledge()).map((r) => `${r.title}: ${r.body}`.slice(0, 700)).slice(0, 12);
   // Purchase orders and suppliers are mentioned only to a company that has them.
   const hiddenTabs = (await purchaseOrdersEnabled(who.organizationId)) ? [] : ["purchase-orders", "suppliers", "templates"];
-  const system = systemPrompt(who, rules, hiddenTabs);
+  const sides = (await operationsEnabled(who.organizationId)) ? sidesNote(await operationsOf(who.organizationId)) : "";
+  const system = systemPrompt(who, rules, hiddenTabs, sides);
   const tools = toolsFor(who);
   const messages: Msg[] = [...history.map((m) => ({ role: m.role, content: m.content })), { role: "user", content: question }];
 

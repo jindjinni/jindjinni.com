@@ -4,7 +4,8 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { organizations, users } from "@/db/schema";
 import { parseOperationType } from "@/lib/operation-type";
-import { operationsEnabled } from "@/lib/operations-service";
+import { operationsEnabled, operationsOf, stepProgressOf } from "@/lib/operations-service";
+import { GettingStarted } from "@/components/getting-started";
 import { sidesFrom, sidesLabel } from "@/lib/operations-rules";
 import { requireOrg } from "@/lib/tenant";
 import { canRefreshIndustryNews, canViewCompanyPerformance, canViewReceiving, isAdmin } from "@/lib/permissions";
@@ -46,6 +47,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   const sidesOn = isAdmin(org.role) && (await operationsEnabled(org.organizationId));
   const confirmSides = sidesOn && !!orgRow && !orgRow[0]?.chosen;
   const askOperation = !sidesOn && !!orgRow && parseOperationType(orgRow[0]?.t) === null;
+  const [sidesSet, stepsDone] = sidesOn ? await Promise.all([operationsOf(org.organizationId), stepProgressOf(org.organizationId)]) : [null, null];
   const sidesNow = confirmSides ? sidesLabel(sidesFrom({ operationType: orgRow?.[0]?.t })) : "";
 
   // The news is a few hours old (or has never been fetched): look again quietly after this page is sent.
@@ -157,6 +159,8 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           <Link href="/dashboard/settings/operations" className="rounded-md bg-emerald-700 px-3 py-1.5 font-semibold text-white hover:bg-emerald-800">Check it</Link>
         </p>
       )}
+
+      {sidesSet && stepsDone && <GettingStarted sides={sidesSet} done={stepsDone} />}
 
       {askOperation && (
         <p role="status" className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-950 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100" data-testid="operation-prompt">

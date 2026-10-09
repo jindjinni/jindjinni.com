@@ -215,7 +215,7 @@ export type ResolvedMenu = { title: string; setupLabel: string; defaultSetupLabe
  * chose, with the names the company chose. Tabs the company never placed (for example, ones added later) follow
  * the placed ones in their original order. The main tabs always come first and the Setup tabs after them.
  */
-export function resolveMenu(dept: MenuDept, saved: SavedMenus, allowedIds?: string[], opts: { purchaseOrdersFirst?: boolean } = {}): ResolvedMenu {
+export function resolveMenu(dept: MenuDept, saved: SavedMenus, allowedIds?: string[], opts: { purchaseOrdersFirst?: boolean; defaultLabels?: Record<string, string> } = {}): ResolvedMenu {
   const def = DEPARTMENT_MENUS[dept];
   const mine = saved[dept] ?? {};
   const allowed = allowedIds ? new Set(allowedIds) : null;
@@ -232,7 +232,7 @@ export function resolveMenu(dept: MenuDept, saved: SavedMenus, allowedIds?: stri
   }
   const items = def.items
     .filter((it) => !allowed || allowed.has(it.id))
-    .map<ResolvedItem>((it) => ({ id: it.id, href: it.href, label: mine.labels?.[it.id] || it.label, defaultLabel: it.label, icon: it.icon, exact: !!it.exact, setup: !!it.setup }));
+    .map<ResolvedItem>((it) => ({ id: it.id, href: it.href, label: mine.labels?.[it.id] || opts.defaultLabels?.[it.id] || it.label, defaultLabel: opts.defaultLabels?.[it.id] || it.label, icon: it.icon, exact: !!it.exact, setup: !!it.setup }));
   items.sort((a, b) => {
     if (a.setup !== b.setup) return a.setup ? 1 : -1;
     const ra = rank.has(a.id) ? rank.get(a.id)! : 1000 + defaultIndex.get(a.id)!;

@@ -6,6 +6,8 @@ import { getSavedSidebarMenus } from "@/lib/sidebar-menu-store";
 import { DepartmentSidebar } from "@/components/department-sidebar";
 import { operationTypeOf, purchaseOrdersEnabled } from "@/lib/purchase-order-service";
 import { primaryDocument } from "@/lib/operation-type";
+import { operationsOf } from "@/lib/operations-service";
+import { wordsFor } from "@/lib/operations-rules";
 
 // Sales is its own department, built like Inventory: a colored sidebar down the left and a workspace beside it.
 // Quotations, invoices, buyers and prices are for the Purchasing roles (the accountant only looks); the company profile
@@ -16,12 +18,12 @@ export default async function SalesLayout({ children }: { children: React.ReactN
   const everyday = ["quotations", "purchase-orders", "invoices", "buyers", "price-comparison"];
   const allowed = menuIdsFor("sales", { connectors: isAdmin(org.role), base: canManageSalesSettings(org.role) ? undefined : everyday });
   // Purchase orders and the document templates come with the "purchase-orders" rollout feature; a Distributor sees Purchase Orders first.
-  const [poOn, operation] = await Promise.all([purchaseOrdersEnabled(org.organizationId), operationTypeOf(org.organizationId)]);
+  const [poOn, operation, sides] = await Promise.all([purchaseOrdersEnabled(org.organizationId), operationTypeOf(org.organizationId), operationsOf(org.organizationId)]);
   const menu = resolveMenu(
     "sales",
     await getSavedSidebarMenus(org.organizationId),
     poOn ? allowed : allowed.filter((id) => id !== "purchase-orders" && id !== "templates"),
-    { purchaseOrdersFirst: primaryDocument(operation) === "PURCHASE_ORDER" },
+    { purchaseOrdersFirst: primaryDocument(operation) === "PURCHASE_ORDER", defaultLabels: { buyers: wordsFor(sides).buyers } },
   );
 
   return (

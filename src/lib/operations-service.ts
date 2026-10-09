@@ -3,7 +3,7 @@
 
 import { and, count, eq, inArray } from "drizzle-orm";
 import { db } from "@/db/client";
-import { organizations, purchasingPurchaseOrders, purchasingQuotations } from "@/db/schema";
+import { documentTemplates, organizations, purchasingProducts, purchasingPurchaseOrders, purchasingQuotations, purchasingSuppliers, salesBuyers, shippoConnections } from "@/db/schema";
 import { featureOn } from "@/lib/features";
 import { logActivity } from "@/lib/hr-service";
 import { type OperationType } from "@/lib/operation-type";
@@ -17,6 +17,7 @@ import {
   typeFromSides,
   validateSides,
   type OpenWork,
+  type StepProgress,
   type Side,
   type Sides,
 } from "@/lib/operations-rules";
@@ -133,4 +134,22 @@ export async function applyOperationType(org: OpsOrg, type: OperationType): Prom
       updatedAt: now,
     })
     .where(eq(organizations.id, org.organizationId));
+}
+
+/** Which first steps are done for this company (counts only; every query is scoped by organizationId). */
+export async function stepProgressOf(organizationId: string): Promise<StepProgress> {
+  const n = async (table: typeof purchasingProducts | typeof purchasingSuppliers | typeof salesBuyers | typeof purchasingQuotations | typeof purchasingPurchaseOrders | typeof shippoConnections) => {
+    const [r] = await db.select({ c: count() }).from(table).where(eq(table.organizationId, organizationId));
+    return Number(r?.c ?? 0) > 0;
+  };
+  const [shippo, products, quotation, supplier, buyers, po, poTemplate] = await Promise.all([
+    n(shippoConnections),
+    n(purchasingProducts),
+    n(purchasingQuotations),
+    n(purchasingSuppliers),
+    n(salesBuyers),
+    n(purchasingPurchaseOrders),
+    db.select({ c: count() }).from(documentTemplates).where(and(eq(documentTemplates.organizationId, organizationId), eq(documentTemplates.docType, "PURCHASE_ORDER"), eq(documentTemplates.department, "purchasing"))).then((r) => Number(r[0]?.c ?? 0) > 0),
+  ]);
+  return { shippo, products, quotation, supplier, buyers, po, "po-look": poTemplate };
 }

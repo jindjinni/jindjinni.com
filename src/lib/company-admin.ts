@@ -89,6 +89,12 @@ export async function waitingCount(): Promise<number> {
 
 export type DecisionEntry = { id: string; decision: string; reason: string | null; createdAt: string };
 
+import { needsConfirmation, sidesFrom, sidesLabel, type OperationsRow } from "@/lib/operations-rules";
+
+function sidesText(row: OperationsRow): string {
+  return sidesLabel(sidesFrom(row)) + (needsConfirmation(row) ? " (not confirmed yet)" : "");
+}
+
 export type CompanyRow = {
   id: string;
   name: string;
@@ -108,6 +114,8 @@ export type CompanyRow = {
   cancelRefundCents: number | null;
   paymentGraceEndsAt: string | null;
   lastPaymentAt: string | null;
+  /** Which sides the company runs, in words: "Wholesale", "Distribution" or "Wholesale and Distribution" (plus "not confirmed yet"). */
+  sides: string;
   ein: string | null;
   registeredState: string | null;
   entityType: string | null;
@@ -172,6 +180,10 @@ export async function listCompanies(opts: { q?: string; filter?: CompanyFilter; 
       cancelRefundCents: organizations.cancelRefundCents,
       paymentGraceEndsAt: organizations.paymentGraceEndsAt,
       lastPaymentAt: organizations.lastPaymentAt,
+      opType: organizations.operationType,
+      opWholesale: organizations.wholesaleActiveAt,
+      opDistribution: organizations.distributionActiveAt,
+      opChosen: organizations.operationsChosenAt,
       ein: businessVerifications.ein,
       registeredState: businessVerifications.registeredState,
       entityType: businessVerifications.entityType,
@@ -261,6 +273,7 @@ export async function listCompanies(opts: { q?: string; filter?: CompanyFilter; 
     cancelRefundCents: b.cancelRefundCents,
     paymentGraceEndsAt: b.paymentGraceEndsAt,
     lastPaymentAt: b.lastPaymentAt,
+    sides: sidesText({ operationType: b.opType, wholesaleActiveAt: b.opWholesale, distributionActiveAt: b.opDistribution, operationsChosenAt: b.opChosen }),
     ein: b.ein,
     registeredState: b.registeredState,
     entityType: b.entityType,

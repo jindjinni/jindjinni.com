@@ -1,0 +1,10 @@
+import { SIDE_INFO, progressSummary, sidesNote, wordsFor } from "../src/lib/operations-rules";
+let f = 0; const t = (n: string, c: boolean) => { if (!c) { f++; console.log("FAIL", n); } };
+const both = { wholesale: true, distribution: true }, w = { wholesale: true, distribution: false }, d = { wholesale: false, distribution: true };
+t("words", wordsFor(w).buyers === "Distributors" && wordsFor(d).buyers === "Pharmacies & outlets" && wordsFor(both).buyers === "Buyers");
+t("progress counts only known steps", JSON.stringify(progressSummary(w, { shippo: true, products: false, quotation: false })) === '{"done":1,"total":3}');
+t("progress ignores the side that is off", progressSummary(d, { shippo: true, supplier: true }).done === 1);
+t("note names both sides", /Wholesale/.test(sidesNote(both)) && /Distribution/.test(sidesNote(both)) && !/Distribution/.test(sidesNote(w).split("\n").slice(1).join("")));
+t("note links stay inside the app", [...sidesNote(both).matchAll(/\]\(([^)]+)\)/g)].every((m) => m[1].startsWith("/dashboard")));
+t("every step has an id", Object.values(SIDE_INFO).every((s) => s.firstSteps.every((x) => x.id)));
+console.log(f ? `${f} failed` : "Operations rules 2: all passed"); process.exit(f ? 1 : 0);

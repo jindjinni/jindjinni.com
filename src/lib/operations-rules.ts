@@ -95,7 +95,7 @@ export type SideInfo = {
   buysFrom: string;
   sellsTo: string;
   turnsOn: string[];
-  firstSteps: { text: string; href: string }[];
+  firstSteps: { id: string; text: string; href: string }[];
 };
 
 export const SIDE_INFO: Record<Side, SideInfo> = {
@@ -112,10 +112,10 @@ export const SIDE_INFO: Record<Side, SideInfo> = {
       "Paying individuals in Accounts, and payment emails in Customer Service",
     ],
     firstSteps: [
-      { text: "Connect your own Shippo account so you can send free labels", href: "/dashboard/purchasing/connectors" },
-      { text: "Set the return address printed on your labels", href: "/dashboard/settings/business" },
-      { text: "Add your products and prices", href: "/dashboard/purchasing/products" },
-      { text: "Make your first quotation", href: "/dashboard/purchasing/quotations" },
+      { id: "shippo", text: "Connect your own Shippo account so you can send free labels", href: "/dashboard/purchasing/connectors" },
+      { id: "address", text: "Set the return address printed on your labels", href: "/dashboard/settings/business" },
+      { id: "products", text: "Add your products and prices", href: "/dashboard/purchasing/products" },
+      { id: "quotation", text: "Make your first quotation", href: "/dashboard/purchasing/quotations" },
     ],
   },
   distribution: {
@@ -131,10 +131,48 @@ export const SIDE_INFO: Record<Side, SideInfo> = {
       "Returns to suppliers with a return label",
     ],
     firstSteps: [
-      { text: "Add your first supplier", href: "/dashboard/purchasing/suppliers" },
-      { text: "Choose how your purchase orders look", href: "/dashboard/purchasing/templates?type=PURCHASE_ORDER" },
-      { text: "Add the pharmacies and outlets you sell to", href: "/dashboard/sales/buyers" },
-      { text: "Make your first purchase order", href: "/dashboard/purchasing/purchase-orders" },
+      { id: "supplier", text: "Add your first supplier", href: "/dashboard/purchasing/suppliers" },
+      { id: "po-look", text: "Choose how your purchase orders look", href: "/dashboard/purchasing/templates?type=PURCHASE_ORDER" },
+      { id: "buyers", text: "Add the pharmacies and outlets you sell to", href: "/dashboard/sales/buyers" },
+      { id: "po", text: "Make your first purchase order", href: "/dashboard/purchasing/purchase-orders" },
     ],
   },
 };
+
+/** Which first steps are done, by step id. A step that cannot be told from the data is left out (shown without a tick). */
+export type StepProgress = Record<string, boolean>;
+
+/** "2 of 4 done" across the sides that are on (steps with no tick do not count). */
+export function progressSummary(sides: Sides, done: StepProgress): { done: number; total: number } {
+  let d = 0;
+  let t = 0;
+  for (const side of SIDES) {
+    if (!sides[side]) continue;
+    for (const st of SIDE_INFO[side].firstSteps) {
+      if (!(st.id in done)) continue;
+      t++;
+      if (done[st.id]) d++;
+    }
+  }
+  return { done: d, total: t };
+}
+
+/**
+ * The words a side uses for the people a company sells to (the Sales "Buyers" tab). A company with both sides, or none chosen,
+ * keeps the plain word. A name the company typed itself always wins over these defaults.
+ */
+export function wordsFor(sides: Sides): { buyers: string } {
+  if (sides.wholesale && !sides.distribution) return { buyers: "Distributors" };
+  if (sides.distribution && !sides.wholesale) return { buyers: "Pharmacies & outlets" };
+  return { buyers: "Buyers" };
+}
+
+/**
+ * A short plain note for Jin about which sides this company runs, so it explains the right flow from start to finish.
+ * Links are inside the app only; the Operations settings page is for owners and admins.
+ */
+export function sidesNote(sides: Sides): string {
+  const on = SIDES.filter((x) => sides[x]);
+  const lines = on.map((x) => `- ${SIDE_INFO[x].title}: buys from ${SIDE_INFO[x].buysFrom.toLowerCase()}; sells to ${SIDE_INFO[x].sellsTo.toLowerCase()}. First steps: ${SIDE_INFO[x].firstSteps.map((st, i) => `${i + 1}) [${st.text}](${st.href})`).join(" ")}`);
+  return `HOW THIS COMPANY OPERATES (both sides are free; an owner or admin can switch a side on or off in [Operations](/dashboard/settings/operations)):\n${lines.join("\n")}\nWhen asked how things work "from A to Z", walk through the flow for the side(s) above.`;
+}
