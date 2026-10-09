@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { catalogItems, getPurchaseOrder, listSuppliers } from "@/lib/purchase-order-service";
+import { listRevisions } from "@/lib/document-revision-service";
 import { LICENSE_WARNING, isPoStatus, licenseState, money, usDate } from "@/lib/purchase-order-rules";
 import { PoEditor, type EditorInitial } from "../po-editor";
 import { PoActions } from "../po-actions";
@@ -12,14 +13,16 @@ export const dynamic = "force-dynamic";
 
 const dt = "text-xs font-medium uppercase tracking-wide text-slate-500";
 
-export default async function PurchaseOrderPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function PurchaseOrderPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ revise?: string }> }) {
   const { org, canWrite, today } = await requirePoPage();
-  const { id } = await params;
+  const [{ id }, sp] = await Promise.all([params, searchParams]);
   const have = await getPurchaseOrder(org.organizationId, id);
   if (!have) notFound();
   const { po, lines } = have;
   const status = isPoStatus(po.status) ? po.status : "DRAFT";
-  const editable = status === "DRAFT" && canWrite;
+  const revising = sp.revise === "1" && canWrite && (status === "SENT" || status === "CONFIRMED");
+  const editable = (status === "DRAFT" && canWrite) || revising;
+  const history = await listRevisions(org.organizationId, "purchasing_po", po.id);
 
   let editor = null;
   if (editable) {
@@ -50,6 +53,7 @@ export default async function PurchaseOrderPage({ params }: { params: Promise<{ 
         today={today}
         suppliers={suppliers.map((s) => ({ id: s.id, name: s.name, email: s.email ?? "", address: s.address ?? "", license: s.licenseNumber ?? "", licenseExpires: s.licenseExpires ?? "" }))}
         catalog={catalog}
+        revise={revising}
       />
     );
   }
@@ -62,11 +66,18 @@ export default async function PurchaseOrderPage({ params }: { params: Promise<{ 
         <div className="mt-1 flex flex-wrap items-center gap-3">
           <h1 className="text-xl font-bold text-slate-900 dark:text-slate-50" data-testid="po-number">{po.poNumber}</h1>
           <PoStatusChip status={status} />
+          {!!po.revision && po.revision > 0 && <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-800 dark:bg-red-950 dark:text-red-200" data-testid="po-revision">Revision {po.revision}</span>}
           <span className="text-sm text-slate-500">to {po.supplierName} · {usDate(po.issueDate)}</span>
         </div>
       </div>
 
+      {revising ? (
+        <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200" data-testid="po-revising">
+          You are revising an order the supplier already has. Change what needs changing (or nothing), write what is different below, and send it. They get the PDF and an email marked Revision {(po.revision ?? 0) + 1}.
+        </p>
+      ) : (
       <PoActions id={po.id} number={po.poNumber} status={status} supplierEmail={po.supplierEmail ?? ""} emailedTo={po.emailedTo} canWrite={canWrite} />
+      )}
 
       {editor ?? (
         <div className={`${card} space-y-4`} data-testid="po-readonly">
@@ -115,6 +126,21 @@ export default async function PurchaseOrderPage({ params }: { params: Promise<{ 
             <div className="flex justify-between border-t border-slate-200 pt-1 text-base font-bold dark:border-slate-700"><span>Grand total</span><span className="tabular-nums" data-testid="po-grand-total">{money(po.total)}</span></div>
           </div>
           {po.terms && <p className="whitespace-pre-line text-xs text-slate-600 dark:text-slate-400">{po.terms}</p>}
+        </div>
+      )}
+
+      {history.length > 0 && (
+        <div className={card} data-testid="po-revisions">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Revisions sent</h2>
+          <ul className="mt-2 space-y-2 text-sm">
+            {history.map((r) => (
+              <li key={r.id} data-testid="po-revision-row">
+                <span className="font-semibold">Revision {r.revision}</span>
+                <span className="text-slate-500"> · {usDate(r.createdAt.slice(0, 10))}{r.emailedTo ? ` · emailed to ${r.emailedTo}` : ""}</span>
+                <p className="whitespace-pre-line text-slate-700 dark:text-slate-300">{r.note}</p>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </div>

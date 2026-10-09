@@ -11,12 +11,12 @@ const ORDER: (SalesStatus | "PAST_DUE")[] = ["PAST_DUE", "PARTIALLY_PAID", "SENT
 
 // Quotations or invoices, grouped under closed headings by where they stand (Past due, Sent, Drafts, Paid ...), each
 // heading showing how many and how much. A search opens the groups that have a match.
-export function DocList({ kind, base, rows }: { kind: "QUOTATION" | "INVOICE"; base: string; rows: DocRow[] }) {
+export function DocList({ kind, base, rows }: { kind: "QUOTATION" | "INVOICE" | "PURCHASE_ORDER"; base: string; rows: DocRow[] }) {
   const [q, setQ] = useState("");
   const needle = q.trim().toLowerCase();
   const shown = rows.filter((r) => !needle || `${r.number} ${r.buyer}`.toLowerCase().includes(needle));
   const groups = ORDER.map((s) => ({ s, rows: shown.filter((r) => r.status === s) })).filter((g) => g.rows.length);
-  const word = kind === "INVOICE" ? "invoices" : "quotations";
+  const word = kind === "INVOICE" ? "invoices" : kind === "PURCHASE_ORDER" ? "purchase orders" : "quotations";
   return (
     <div className="mt-5 space-y-3">
       <div className="flex flex-wrap items-center gap-3">

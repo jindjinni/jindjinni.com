@@ -8,7 +8,7 @@ import { stateName } from "@/lib/business-verification";
 import { TONE_CLASS, accountStatusText, paymentStatusText } from "@/lib/account-status";
 import { UpdateFilingForm } from "./update-filing-form";
 import { OperationForm } from "./operation-form";
-import { operationLabel, parseOperationType, sendsPurchaseOrders } from "@/lib/operation-type";
+import { operationDefaultText, operationLabel, parseOperationType } from "@/lib/operation-type";
 
 export const dynamic = "force-dynamic";
 
@@ -104,10 +104,8 @@ export default async function CompanyProfilePage() {
         <p className="mb-3 text-sm text-slate-600 dark:text-slate-300">
           Currently: <strong data-testid="operation-current">{operationLabel(operation)}</strong>.{" "}
           {operation === null
-            ? "You haven't answered this yet. Choose one so Purchasing shows the right documents. Nothing you already use will change."
-            : sendsPurchaseOrders(operation)
-              ? "Purchasing includes purchase orders for buying from wholesalers."
-              : "Purchasing gives quotations to the people you buy from."}
+            ? "You haven't answered this yet. Choose one so the right document comes first. Nothing you already use will change."
+            : operationDefaultText(operation)}
         </p>
         <OperationForm current={operation} />
       </section>

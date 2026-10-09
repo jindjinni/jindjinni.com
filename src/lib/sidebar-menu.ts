@@ -48,6 +48,7 @@ export const DEPARTMENT_MENUS: Record<MenuDept, DepartmentMenu> = {
       { id: "product-multipliers", href: `${P}/product-multipliers`, label: "Product Multipliers", setup: true },
       { id: "bonus-tiers", href: `${P}/bonus-tiers`, label: "Bonus tiers", setup: true },
       { id: "quotation-profile", href: `${P}/quotation-profile`, label: "Quotation Profile", setup: true },
+      { id: "templates", href: `${P}/templates`, label: "Document Templates", setup: true },
       { id: "receipt-layout", href: `${P}/receipt-layout`, label: "Quotation Receipt Layout", setup: true },
       { id: "shipment-tracking", href: `${P}/tracking`, label: "Shipment Tracking", setup: true },
       { id: "connectors", href: `${P}/connectors`, label: "Connectors", setup: true },
@@ -103,10 +104,12 @@ export const DEPARTMENT_MENUS: Record<MenuDept, DepartmentMenu> = {
     setupLabel: "Settings",
     items: [
       { id: "quotations", href: S, label: "Quotations", icon: "🧾", exact: true },
+      { id: "purchase-orders", href: `${S}/purchase-orders`, label: "Purchase Orders", icon: "📑" },
       { id: "invoices", href: `${S}/invoices`, label: "Invoices", icon: "💵" },
       { id: "buyers", href: `${S}/buyers`, label: "Buyers", icon: "👥" },
       { id: "price-comparison", href: `${S}/price-comparison`, label: "Price Comparison", icon: "⚖️" },
       { id: "company-profile", href: `${S}/company-profile`, label: "Company Profile", setup: true },
+      { id: "templates", href: `${S}/templates`, label: "Document Templates", setup: true },
       { id: "connectors", href: `${S}/connectors`, label: "Connectors", setup: true },
     ],
   },
@@ -212,12 +215,21 @@ export type ResolvedMenu = { title: string; setupLabel: string; defaultSetupLabe
  * chose, with the names the company chose. Tabs the company never placed (for example, ones added later) follow
  * the placed ones in their original order. The main tabs always come first and the Setup tabs after them.
  */
-export function resolveMenu(dept: MenuDept, saved: SavedMenus, allowedIds?: string[]): ResolvedMenu {
+export function resolveMenu(dept: MenuDept, saved: SavedMenus, allowedIds?: string[], opts: { purchaseOrdersFirst?: boolean } = {}): ResolvedMenu {
   const def = DEPARTMENT_MENUS[dept];
   const mine = saved[dept] ?? {};
   const allowed = allowedIds ? new Set(allowedIds) : null;
   const rank = new Map((mine.order ?? []).map((id, i) => [id, i]));
   const defaultIndex = new Map(def.items.map((it, i) => [it.id, i]));
+  // A Distributor starts with Purchase Orders before Quotations (the company's own saved order, if any, always wins).
+  if (opts.purchaseOrdersFirst && !(mine.order && mine.order.length)) {
+    const q = defaultIndex.get("quotations");
+    const o = defaultIndex.get("purchase-orders");
+    if (q !== undefined && o !== undefined) {
+      defaultIndex.set("quotations", o);
+      defaultIndex.set("purchase-orders", q);
+    }
+  }
   const items = def.items
     .filter((it) => !allowed || allowed.has(it.id))
     .map<ResolvedItem>((it) => ({ id: it.id, href: it.href, label: mine.labels?.[it.id] || it.label, defaultLabel: it.label, icon: it.icon, exact: !!it.exact, setup: !!it.setup }));

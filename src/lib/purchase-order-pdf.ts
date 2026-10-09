@@ -25,6 +25,15 @@ export type PoPdfInput = {
   subtotal: number;
   shipping: number;
   total: number;
+  /** From the company's Purchase Order template (all optional). */
+  title?: string | null;
+  intro?: string | null;
+  footer?: string | null;
+  /** The standing notice that is switched on today (e.g. out-of-office), already checked against its end date. */
+  notice?: string | null;
+  /** Revision number (1, 2, ...) and the note that went with it. */
+  revision?: number | null;
+  revisionNote?: string | null;
 };
 
 const PAGE_W = 612;
@@ -37,6 +46,9 @@ const BAR = rgb(0.92, 0.93, 0.94);
 const RULE = rgb(0.82, 0.84, 0.87);
 const ACC = rgb(0.0, 0.34, 0.24);
 const RED = rgb(0.72, 0.11, 0.11);
+const AMBER_BG = rgb(1, 0.97, 0.86);
+const AMBER_LINE = rgb(0.85, 0.65, 0.13);
+const RED_BG = rgb(0.99, 0.93, 0.93);
 
 export async function buildPurchaseOrderPdf(input: PoPdfInput): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
@@ -98,9 +110,13 @@ export async function buildPurchaseOrderPdf(input: PoPdfInput): Promise<Uint8Arr
     leftY -= 11.5;
   }
   const right = PAGE_W - M;
-  drawRight("PURCHASE ORDER", right, 9, bold, MUT, y);
+  drawRight(input.title?.trim() ? input.title.trim() : "PURCHASE ORDER", right, 9, bold, MUT, y);
   drawRight(`#${input.number}`, right, 24, bold, ACC, y - 26);
   let rightY = y - 44;
+  if (input.revision && input.revision > 0) {
+    drawRight(`REVISION ${Math.floor(input.revision)}`, right, 11, bold, RED, rightY);
+    rightY -= 14;
+  }
   drawRight(`Issue date  ${usDate(input.issueDate)}`, right, 9.5, regular, INK, rightY);
   rightY -= 14;
   if (input.status !== "SENT" && input.status !== "CONFIRMED" && input.status !== "RECEIVED") {
@@ -109,6 +125,27 @@ export async function buildPurchaseOrderPdf(input: PoPdfInput): Promise<Uint8Arr
     rightY -= 14;
   }
   y = Math.min(leftY, rightY) - 16;
+
+  // ---- Callouts: what changed in this revision, then the company's standing notice, then its opening wording
+  const callout = (label: string, text: string, bg: ReturnType<typeof rgb>, line: ReturnType<typeof rgb>) => {
+    const ls = wrap(text, regular, 9.5, CONTENT_W - 20).filter((l, i, a) => l || i < a.length - 1);
+    const h = 22 + ls.length * 12;
+    ensure(h + 10);
+    page.drawRectangle({ x: M, y: y - h + 6, width: CONTENT_W, height: h, color: bg, borderColor: line, borderWidth: 0.8 });
+    draw(label.toUpperCase(), M + 10, 8, bold, line === AMBER_LINE ? rgb(0.5, 0.35, 0.02) : RED, y - 8);
+    ls.forEach((l, i) => draw(l, M + 10, 9.5, regular, INK, y - 22 - i * 12));
+    y -= h + 8;
+  };
+  if (input.revision && input.revision > 0 && input.revisionNote?.trim()) callout(`Revision ${Math.floor(input.revision)} - what changed`, input.revisionNote.trim(), RED_BG, RED);
+  if (input.notice?.trim()) callout("Please note", input.notice.trim(), AMBER_BG, AMBER_LINE);
+  if (input.intro?.trim()) {
+    for (const l of wrap(input.intro.trim(), regular, 9.5, CONTENT_W)) {
+      ensure(13);
+      draw(l, M, 9.5, regular, INK);
+      y -= 12;
+    }
+    y -= 6;
+  }
 
   // ---- Supplier | Documents
   const half = (CONTENT_W - 10) / 2;
@@ -252,13 +289,23 @@ export async function buildPurchaseOrderPdf(input: PoPdfInput): Promise<Uint8Arr
     }
   }
 
+  // ---- Closing wording from the template
+  if (input.footer && input.footer.trim()) {
+    y -= 6;
+    for (const l of wrap(input.footer.trim(), regular, 8.5, CONTENT_W)) {
+      ensure(11);
+      draw(l, M, 8.5, regular, MUT);
+      y -= 11;
+    }
+  }
+
   // ---- Footer on every page: who sent it, the order number and the page
   const foot = [input.from.name, (input.from.address ?? "").replace(/\s*\n\s*/g, ", "), input.from.phone].filter(Boolean).join("  |  ");
   pages.forEach((p, i) => {
     p.drawLine({ start: { x: M, y: 44 }, end: { x: PAGE_W - M, y: 44 }, thickness: 0.5, color: RULE });
     const t = pdfSafe(foot).slice(0, 120);
     p.drawText(t, { x: M, y: 30, size: 8, font: regular, color: MUT });
-    const n = `${input.number}  |  Page ${i + 1} of ${pages.length}`;
+    const n = `${input.revision && input.revision > 0 ? `${input.number} Rev ${Math.floor(input.revision)}` : input.number}  |  Page ${i + 1} of ${pages.length}`;
     p.drawText(n, { x: PAGE_W - M - regular.widthOfTextAtSize(n, 8), y: 30, size: 8, font: regular, color: MUT });
   });
 

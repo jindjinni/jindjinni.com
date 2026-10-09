@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
-import { savePurchaseOrderAction, saveSupplierAction } from "@/app/actions/purchase-orders";
+import { revisePurchaseOrderAction, savePurchaseOrderAction, saveSupplierAction } from "@/app/actions/purchase-orders";
 import { LICENSE_WARNING, PO_UNITS, computeTotals, licenseState } from "@/lib/purchase-order-rules";
 import { card, field, fmtMoney, ghostBtn, primaryBtn } from "@/components/sales-ui";
 
@@ -36,12 +36,15 @@ const num = (s: string) => (s.trim() === "" ? 0 : Number(s));
 const cleanNum = (s: string) => s.replace(/[^\d.]/g, "");
 const label = "text-xs font-medium text-slate-700 dark:text-slate-300";
 
-export function PoEditor(props: { docId: string | null; number: string | null; initial: EditorInitial; suppliers: EditorSupplier[]; catalog: EditorCatalogItem[]; today: string }) {
+export function PoEditor(props: { docId: string | null; number: string | null; initial: EditorInitial; suppliers: EditorSupplier[]; catalog: EditorCatalogItem[]; today: string; revise?: boolean }) {
   const { docId, suppliers, catalog, today } = props;
   const router = useRouter();
   const [h, setH] = useState(props.initial);
   const [lines, setLines] = useState<EditorLine[]>(() => (props.initial.lines.length ? props.initial.lines.map((l, i) => ({ ...l, rid: i + 1 })) : [{ ...blankLine(), rid: 1 }]));
   const [remember, setRemember] = useState(false);
+  const revising = !!props.revise && !!docId;
+  const [revNote, setRevNote] = useState("");
+  const [revEmail, setRevEmail] = useState(true);
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const setHead = <K extends keyof EditorInitial>(k: K, v: EditorInitial[K]) => setH((p) => ({ ...p, [k]: v }));
@@ -72,8 +75,7 @@ export function PoEditor(props: { docId: string | null; number: string | null; i
         if (!s.ok) return setMsg({ ok: false, text: s.error });
         supplierId = s.id ?? null;
       }
-      const res = await savePurchaseOrderAction({
-        id: docId,
+      const doc = {
         supplierId,
         supplierName: h.supplierName,
         supplierAddress: h.supplierAddress,
@@ -90,7 +92,15 @@ export function PoEditor(props: { docId: string | null; number: string | null; i
         terms: h.terms,
         shipping: num(h.shipping),
         lines: lines.map((l) => ({ productId: l.productId, partNumber: l.partNumber, ndc: l.ndc, name: l.name, size: l.size, quantity: l.quantity, unit: l.unit, unitCost: l.unitCost })),
-      });
+      };
+      if (revising && docId) {
+        const out = await revisePurchaseOrderAction(docId, { note: revNote, edits: { ...doc, id: docId }, email: revEmail, to: h.supplierEmail });
+        if (!out.ok) return setMsg({ ok: false, text: out.error });
+        router.replace(`/dashboard/purchasing/purchase-orders/${docId}`);
+        router.refresh();
+        return;
+      }
+      const res = await savePurchaseOrderAction({ id: docId, ...doc });
       if (!res.ok) return setMsg({ ok: false, text: res.error });
       if (!docId && res.id) router.replace(`/dashboard/purchasing/purchase-orders/${res.id}`);
       else {
@@ -258,9 +268,21 @@ export function PoEditor(props: { docId: string | null; number: string | null; i
         </div>
       </div>
 
+      {revising && (
+        <div className={`${card} space-y-3 !border-red-300 dark:!border-red-900`} data-testid="po-revise-box">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-red-700 dark:text-red-300">Revision note (required)</h2>
+          <p className="text-sm text-slate-600 dark:text-slate-400">Tell the supplier what changed or what is wrong, for example &ldquo;you sent 15 boxes, we ordered 20&rdquo;. It prints in a highlighted box at the top of the revised order and in the email.</p>
+          <textarea id="po-revnote" rows={3} value={revNote} onChange={(e) => setRevNote(e.target.value)} className={field} data-testid="po-revnote" />
+          <label htmlFor="po-revemail" className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+            <input id="po-revemail" type="checkbox" checked={revEmail} onChange={(e) => setRevEmail(e.target.checked)} data-testid="po-revemail" />
+            Email the revision{h.supplierEmail ? ` to ${h.supplierEmail}` : " (add the supplier's email above)"}
+          </label>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-3">
-        <button type="button" onClick={save} disabled={pending} className={primaryBtn} data-testid="po-save">{pending ? "Saving…" : docId ? "Save changes" : "Save as a draft"}</button>
-        <Link href="/dashboard/purchasing/purchase-orders" className={ghostBtn}>Cancel</Link>
+        <button type="button" onClick={save} disabled={pending} className={primaryBtn} data-testid="po-save">{pending ? "Saving…" : revising ? (revEmail ? "Save and send revision" : "Save revision") : docId ? "Save changes" : "Save as a draft"}</button>
+        <Link href={revising && docId ? `/dashboard/purchasing/purchase-orders/${docId}` : "/dashboard/purchasing/purchase-orders"} className={ghostBtn}>Cancel</Link>
         {msg && <span className={`text-sm ${msg.ok ? "text-emerald-800 dark:text-emerald-300" : "text-red-700 dark:text-red-300"}`} data-testid={msg.ok ? "po-message" : "po-error"}>{msg.text}</span>}
       </div>
     </div>

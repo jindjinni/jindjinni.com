@@ -8,7 +8,7 @@ export async function loadEditorData(organizationId: string, excludeDocId: strin
   const editorBuyers: EditorBuyer[] = buyers
     .filter((b) => b.active)
     .map((b) => ({ id: b.id, name: b.companyName, contact: b.contactName ?? "", email: b.email ?? "", phone: b.phone ?? "", billing: b.billingAddress ?? "", shipping: b.shippingAddress ?? "", terms: b.paymentTerms ?? "", notes: b.defaultNotes ?? "" }));
-  const editorProducts: EditorProduct[] = products.map((p) => ({ id: p.id, key: p.key, name: p.name, brand: p.brand }));
+  const editorProducts: EditorProduct[] = products.map((p) => ({ id: p.id, key: p.key, name: p.name, brand: p.brand, code: p.code }));
   // Stock for products that aren't in the catalog under that key (received by name) still needs a way to be chosen.
   const known = new Set(editorProducts.map((p) => p.key));
   for (const [key, s] of Object.entries(ctx.stock)) if (!known.has(key)) editorProducts.push({ id: "", key, name: s.productName, brand: s.brand });

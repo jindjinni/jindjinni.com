@@ -3,14 +3,14 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
-import { saveDocumentAction } from "@/app/actions/sales";
+import { reviseDocumentAction, saveDocumentAction } from "@/app/actions/sales";
 import { normKey } from "@/lib/inventory-rules";
 import { availability, computeTotals, dueDateFor, lineAmount, reserveKey, TERMS_OPTIONS, type Reserved, type StockMap } from "@/lib/sales-rules";
 import { card, field, fmtMoney, ghostBtn, primaryBtn } from "@/components/sales-ui";
 
 export type EditorBuyer = { id: string; name: string; contact: string; email: string; phone: string; billing: string; shipping: string; terms: string; notes: string };
-export type EditorProduct = { id: string; key: string; name: string; brand: string };
-export type EditorLine = { rid: number; productKey: string; productId: string | null; productName: string; condition: string; groupKey: string | null; groupLabel: string | null; quantity: string; unitPrice: string; note: string };
+export type EditorProduct = { id: string; key: string; name: string; brand: string; code?: string | null };
+export type EditorLine = { rid: number; productKey: string; productId: string | null; productName: string; condition: string; groupKey: string | null; groupLabel: string | null; quantity: string; unitPrice: string; note: string; ndc: string };
 export type EditorInitial = {
   buyerId: string;
   company: string;
@@ -34,12 +34,14 @@ export type EditorInitial = {
 
 // Lines added after the page loads count up from 1000; the lines it opens with are numbered 1, 2, ... so the server's HTML and the browser agree on the field ids.
 let counter = 1000;
-const blankLine = (): EditorLine => ({ rid: ++counter, productKey: "", productId: null, productName: "", condition: "Mint", groupKey: null, groupLabel: null, quantity: "", unitPrice: "", note: "" });
+const blankLine = (): EditorLine => ({ rid: ++counter, productKey: "", productId: null, productName: "", condition: "Mint", groupKey: null, groupLabel: null, quantity: "", unitPrice: "", note: "", ndc: "" });
 const num = (s: string) => (s.trim() === "" ? 0 : Number(s));
 const cleanNum = (s: string) => s.replace(/[^\d.]/g, "");
 
 export function DocEditor(props: {
-  kind: "QUOTATION" | "INVOICE";
+  kind: "QUOTATION" | "INVOICE" | "PURCHASE_ORDER";
+  /** Revising a document that was already sent: a note is required and saving sends the revision. */
+  revise?: boolean;
   docId: string | null;
   number: string | null;
   base: string;
@@ -53,7 +55,12 @@ export function DocEditor(props: {
 }) {
   const { kind, docId, base, buyers, products, conditions, stock, reserved, buyerPrices } = props;
   const isInvoice = kind === "INVOICE";
+  const isPo = kind === "PURCHASE_ORDER";
+  const word = isInvoice ? "invoice" : isPo ? "purchase order" : "quotation";
+  const revising = !!props.revise && !!docId;
   const router = useRouter();
+  const [revNote, setRevNote] = useState("");
+  const [revEmail, setRevEmail] = useState(true);
   const [h, setH] = useState(props.initial);
   const [lines, setLines] = useState<EditorLine[]>(() => (props.initial.lines.length ? props.initial.lines.map((l, i) => ({ ...l, rid: i + 1 })) : [{ ...blankLine(), rid: 1 }]));
   const [dueTouched, setDueTouched] = useState(false);
@@ -108,7 +115,7 @@ export function DocEditor(props: {
     const conds = Object.values(stock[p.key]?.conditions ?? {});
     const condition = conds.find((c) => normKey(c.condition) === "mint")?.condition ?? conds[0]?.condition ?? "Mint";
     const price = buyerPrices[h.buyerId]?.[`${p.key}|${normKey(condition)}`];
-    patch(rid, { productKey: p.key, productId: p.id || null, productName: p.name, condition, groupKey: null, groupLabel: null, unitPrice: price != null ? String(price) : "" });
+    patch(rid, { productKey: p.key, productId: p.id || null, productName: p.name, condition, groupKey: null, groupLabel: null, unitPrice: price != null ? String(price) : "", ndc: p.code ?? "" });
   }
 
   function changeCondition(l: EditorLine, condition: string) {
@@ -119,9 +126,7 @@ export function DocEditor(props: {
   function save() {
     setMsg(null);
     start(async () => {
-      const res = await saveDocumentAction({
-        id: docId,
-        kind,
+      const doc = {
         buyerId: h.buyerId || null,
         buyerCompany: h.company,
         buyerContact: h.contact,
@@ -139,8 +144,16 @@ export function DocEditor(props: {
         otherCharges: num(h.other),
         customerNotes: h.notes,
         internalNotes: h.internalNotes,
-        lines: lines.map((l) => ({ productId: l.productId, productKey: l.productKey, productName: l.productName, condition: l.condition, groupKey: l.groupKey, groupLabel: l.groupLabel, quantity: Number(l.quantity), unitPrice: num(l.unitPrice), note: l.note || null })),
-      });
+        lines: lines.map((l) => ({ productId: l.productId, productKey: l.productKey, productName: l.productName, condition: l.condition, groupKey: l.groupKey, groupLabel: l.groupLabel, quantity: Number(l.quantity), unitPrice: num(l.unitPrice), note: l.note || null, ndc: l.ndc || null })),
+      };
+      if (revising && docId) {
+        const out = await reviseDocumentAction(docId, { note: revNote, edits: doc, email: revEmail, to: h.email });
+        if (!out.ok) return setMsg({ ok: false, text: out.error });
+        router.replace(`${base}/${docId}`);
+        router.refresh();
+        return;
+      }
+      const res = await saveDocumentAction({ id: docId, kind, ...doc });
       if (!res.ok) return setMsg({ ok: false, text: res.error });
       if (!docId && res.id) router.replace(`${base}/${res.id}`);
       else {
@@ -154,7 +167,7 @@ export function DocEditor(props: {
     <div className="space-y-4" data-testid="doc-editor">
       {/* Buyer and dates */}
       <div className={`${card} space-y-3`}>
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Bill to</h2>
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{isPo ? "From (the buyer who sent the order)" : "Bill to"}</h2>
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <label htmlFor="de-buyer" className="text-xs font-medium text-slate-700 dark:text-slate-300">Buyer</label>
@@ -164,7 +177,7 @@ export function DocEditor(props: {
             </select>
           </div>
           <div>
-            <label htmlFor="de-company" className="text-xs font-medium text-slate-700 dark:text-slate-300">Company name on this {isInvoice ? "invoice" : "quotation"}</label>
+            <label htmlFor="de-company" className="text-xs font-medium text-slate-700 dark:text-slate-300">Company name on this {word}</label>
             <input id="de-company" value={h.company} onChange={(e) => setHead("company", e.target.value)} className={`${field} mt-1`} data-testid="de-company" />
           </div>
           <div>
@@ -186,7 +199,7 @@ export function DocEditor(props: {
         </div>
         <div className="grid gap-3 sm:grid-cols-4">
           <div>
-            <label htmlFor="de-date" className="text-xs font-medium text-slate-700 dark:text-slate-300">{isInvoice ? "Invoice date" : "Quotation date"}</label>
+            <label htmlFor="de-date" className="text-xs font-medium text-slate-700 dark:text-slate-300">{isInvoice ? "Invoice date" : isPo ? "Date received" : "Quotation date"}</label>
             <input id="de-date" type="date" value={h.docDate} onChange={(e) => setH((p) => ({ ...p, docDate: e.target.value, dueDate: dueTouched ? p.dueDate : dueDateFor(e.target.value, p.terms) }))} className={`${field} mt-1`} data-testid="de-date" />
           </div>
           {isInvoice && (
@@ -198,11 +211,11 @@ export function DocEditor(props: {
             </div>
           )}
           <div>
-            <label htmlFor="de-due" className="text-xs font-medium text-slate-700 dark:text-slate-300">{isInvoice ? "Due date" : "Valid until"}</label>
+            <label htmlFor="de-due" className="text-xs font-medium text-slate-700 dark:text-slate-300">{isInvoice ? "Due date" : isPo ? "Needed by" : "Valid until"}</label>
             <input id="de-due" type="date" value={h.dueDate} onChange={(e) => { setDueTouched(true); setHead("dueDate", e.target.value); }} className={`${field} mt-1`} data-testid="de-due" />
           </div>
           <div>
-            <label htmlFor="de-ref" className="text-xs font-medium text-slate-700 dark:text-slate-300">Reference (optional)</label>
+            <label htmlFor="de-ref" className="text-xs font-medium text-slate-700 dark:text-slate-300">{isPo ? "Buyer's PO number" : "Reference (optional)"}</label>
             <input id="de-ref" value={h.reference} onChange={(e) => setHead("reference", e.target.value)} className={`${field} mt-1`} data-testid="de-ref" />
           </div>
         </div>
@@ -241,7 +254,7 @@ export function DocEditor(props: {
       <div className="grid gap-4 lg:grid-cols-2">
         <div className={`${card} space-y-3`}>
           <div>
-            <label htmlFor="de-notes" className="text-xs font-medium text-slate-700 dark:text-slate-300">Notes on the {isInvoice ? "invoice" : "quotation"} (the buyer sees these)</label>
+            <label htmlFor="de-notes" className="text-xs font-medium text-slate-700 dark:text-slate-300">Notes on the {word} (the buyer sees these)</label>
             <textarea id="de-notes" rows={3} value={h.notes} onChange={(e) => setHead("notes", e.target.value)} className={`${field} mt-1`} data-testid="de-notes" />
           </div>
           <div>
@@ -264,9 +277,21 @@ export function DocEditor(props: {
         </div>
       </div>
 
+      {revising && (
+        <div className={`${card} space-y-3 !border-red-300 dark:!border-red-900`} data-testid="de-revise-box">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-red-700 dark:text-red-300">Revision note (required)</h2>
+          <p className="text-sm text-slate-600 dark:text-slate-400">Tell them what changed or what is wrong, for example &ldquo;you sent 15 boxes, not the 20 on the order&rdquo;. It prints in a highlighted box at the top of the revised {word} and in the email.</p>
+          <textarea id="de-revnote" rows={3} value={revNote} onChange={(e) => setRevNote(e.target.value)} className={field} data-testid="de-revnote" />
+          <label htmlFor="de-revemail" className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+            <input id="de-revemail" type="checkbox" checked={revEmail} onChange={(e) => setRevEmail(e.target.checked)} data-testid="de-revemail" />
+            Email the revision{h.email ? ` to ${h.email}` : " (add their email address above)"}
+          </label>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-3">
-        <button type="button" onClick={save} disabled={pending} className={primaryBtn} data-testid="de-save">{pending ? "Saving…" : docId ? "Save changes" : `Save ${isInvoice ? "invoice" : "quotation"} as a draft`}</button>
-        <Link href={base === "/dashboard/sales/quotations" ? "/dashboard/sales" : base} className={ghostBtn}>Cancel</Link>
+        <button type="button" onClick={save} disabled={pending} className={primaryBtn} data-testid="de-save">{pending ? "Saving…" : revising ? (revEmail ? "Save and send revision" : "Save revision") : docId ? "Save changes" : `Save ${word} as a draft`}</button>
+        <Link href={revising && docId ? `${base}/${docId}` : base === "/dashboard/sales/quotations" ? "/dashboard/sales" : base} className={ghostBtn}>Cancel</Link>
         {msg && <span className={`text-sm ${msg.ok ? "text-emerald-800 dark:text-emerald-300" : "text-red-700 dark:text-red-300"}`} data-testid={msg.ok ? "de-message" : "de-error"}>{msg.text}</span>}
       </div>
     </div>
@@ -361,6 +386,10 @@ function LineRow(props: {
           </div>
         </div>
         <div className="grid gap-3 sm:grid-cols-4">
+          <div>
+            <label htmlFor={`de-ndc-${rid}`} className="text-xs font-medium text-slate-700 dark:text-slate-300">NDC</label>
+            <input id={`de-ndc-${rid}`} value={l.ndc} onChange={(e) => props.onPatch({ ndc: e.target.value.replace(/[^\d-]/g, "").slice(0, 20) })} className={`${field} mt-1`} placeholder="00000-0000-00" data-testid="de-ndc" />
+          </div>
           <div>
             <label htmlFor={`de-price-${rid}`} className="text-xs font-medium text-slate-700 dark:text-slate-300">Unit price ($)</label>
             <input id={`de-price-${rid}`} inputMode="decimal" value={l.unitPrice} onChange={(e) => props.onPatch({ unitPrice: cleanNum(e.target.value) })} className={`${field} mt-1`} data-testid="de-price" />

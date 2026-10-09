@@ -2208,6 +2208,8 @@ export const salesProfiles = sqliteTable(
     footerText: text("footer_text"),
     nextInvoiceNumber: integer("next_invoice_number").notNull().default(1001),
     nextQuotationNumber: integer("next_quotation_number").notNull().default(1001),
+    /** Numbering of the purchase orders we receive (RPO-1001...). Null until the first one is logged; counts from 1001. */
+    nextPurchaseOrderNumber: integer("next_purchase_order_number"),
     ...timestamps,
   },
   (t) => [uniqueIndex("sales_profiles_org_unique").on(t.organizationId)],
@@ -2279,7 +2281,7 @@ export const salesPriceItems = sqliteTable(
   (t) => [index("sales_price_items_org_buyer_idx").on(t.organizationId, t.buyerId), index("sales_price_items_product_idx").on(t.organizationId, t.productKey)],
 );
 
-export const SALES_KINDS = ["QUOTATION", "INVOICE"] as const;
+export const SALES_KINDS = ["QUOTATION", "INVOICE", "PURCHASE_ORDER"] as const;
 export const SALES_STATUSES = ["DRAFT", "SENT", "PARTIALLY_PAID", "PAID", "ACCEPTED", "DECLINED", "CONVERTED", "VOID"] as const;
 
 export const salesDocuments = sqliteTable(
@@ -2323,6 +2325,10 @@ export const salesDocuments = sqliteTable(
     internalNotes: text("internal_notes"),
     convertedFromId: text("converted_from_id"),
     convertedToId: text("converted_to_id"),
+    /** Revision number sent to the other company (null or 0 = the original). */
+    revision: integer("revision"),
+    revisionNote: text("revision_note"),
+    revisedAt: text("revised_at"),
     /** Stock has been taken out of Inventory for this invoice. */
     inventoryPosted: integer("inventory_posted", { mode: "boolean" }).notNull().default(false),
     createdByUserId: text("created_by_user_id"),
@@ -2357,6 +2363,8 @@ export const salesDocumentLines = sqliteTable(
     /** What prints in the Expires column; filled from the real stock when the document is sent. */
     expiryText: text("expiry_text"),
     note: text("note"),
+    /** NDC, printed on purchase orders (and quotations when filled in). */
+    ndc: text("ndc"),
     ...timestamps,
   },
   (t) => [index("sales_document_lines_doc_idx").on(t.documentId)],
@@ -2934,6 +2942,10 @@ export const purchasingPurchaseOrders = sqliteTable(
     total: real("total").notNull().default(0),
     sentAt: text("sent_at"),
     emailedTo: text("emailed_to"),
+    /** Revision number sent to the supplier (null or 0 = the original), with the note that went with it. */
+    revision: integer("revision"),
+    revisionNote: text("revision_note"),
+    revisedAt: text("revised_at"),
     createdByUserId: text("created_by_user_id"),
     ...timestamps,
   },
@@ -2965,4 +2977,70 @@ export const purchasingPurchaseOrderLines = sqliteTable(
     total: real("total").notNull().default(0),
   },
   (t) => [index("purchasing_po_lines_po_idx").on(t.purchaseOrderId)],
+);
+
+
+// ---------------------------------------------------------------------------
+// Document templates and revisions (Purchasing and Sales)
+// ---------------------------------------------------------------------------
+
+/**
+ * How a company's Quotation and Purchase Order documents look, per department: the name and logo at the top, the title and
+ * wording, the footer, and a standing notice (e.g. "We are out of the office until Monday") printed on every new document
+ * while it is switched on and not past its end date. One row per company, department and document type; a blank field
+ * falls back to the department's own profile (Quotation Profile / Sales Company Profile) and the built-in wording.
+ */
+export const documentTemplates = sqliteTable(
+  "document_templates",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    /** purchasing | sales */
+    department: text("department").notNull(),
+    /** QUOTATION | PURCHASE_ORDER */
+    docType: text("doc_type").notNull(),
+    displayName: text("display_name"),
+    logoData: text("logo_data"), // base64, no data: prefix
+    logoContentType: text("logo_content_type"),
+    showLogo: integer("show_logo", { mode: "boolean" }).notNull().default(true),
+    titleText: text("title_text"),
+    introText: text("intro_text"),
+    termsText: text("terms_text"),
+    footerText: text("footer_text"),
+    noticeText: text("notice_text"),
+    noticeEnabled: integer("notice_enabled", { mode: "boolean" }).notNull().default(false),
+    /** Last day the notice shows (YYYY-MM-DD); empty = until it is switched off. */
+    noticeUntil: text("notice_until"),
+    updatedByUserId: text("updated_by_user_id"),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex("document_templates_unique").on(t.organizationId, t.department, t.docType)],
+);
+
+/**
+ * One row each time a sent document is revised: the revision number, the note that went to the other company, and the
+ * document as it was just before the change (JSON), so earlier versions are never lost.
+ */
+export const documentRevisions = sqliteTable(
+  "document_revisions",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    /** purchasing_po | sales_doc */
+    source: text("source").notNull(),
+    documentId: text("document_id").notNull(),
+    revision: integer("revision").notNull(),
+    note: text("note").notNull(),
+    snapshot: text("snapshot").notNull(),
+    emailedTo: text("emailed_to"),
+    createdByUserId: text("created_by_user_id"),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(current_timestamp)`),
+  },
+  (t) => [index("document_revisions_doc_idx").on(t.organizationId, t.source, t.documentId)],
 );

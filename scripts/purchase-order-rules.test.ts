@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { OPERATION_OPTIONS, OPERATION_TYPES, givesQuotations, operationLabel, parseOperationType, readRequiredOperationType, sendsPurchaseOrders } from "../src/lib/operation-type";
+import { OPERATION_OPTIONS, OPERATION_TYPES, documentOrder, operationDefaultText, operationLabel, parseOperationType, primaryDocument, readRequiredOperationType } from "../src/lib/operation-type";
 import {
   FIRST_PO_SEQ,
   canMoveTo,
@@ -31,14 +31,15 @@ assert.equal(readRequiredOperationType(undefined).ok, false);
 assert.equal(operationLabel(null), "Not answered yet");
 assert.equal(operationLabel("BOTH"), "Both");
 // who gets which document: an unanswered company keeps what it had (quotations) and gets no purchase orders until it answers
-assert.equal(sendsPurchaseOrders("WHOLESALER"), false);
-assert.equal(sendsPurchaseOrders("DISTRIBUTOR"), true);
-assert.equal(sendsPurchaseOrders("BOTH"), true);
-assert.equal(sendsPurchaseOrders(null), false);
-assert.equal(givesQuotations("WHOLESALER"), true);
-assert.equal(givesQuotations("DISTRIBUTOR"), false);
-assert.equal(givesQuotations("BOTH"), true);
-assert.equal(givesQuotations(null), true);
+// Everyone gets both documents; the answer only decides which comes first.
+assert.equal(primaryDocument("WHOLESALER"), "QUOTATION");
+assert.equal(primaryDocument("DISTRIBUTOR"), "PURCHASE_ORDER");
+assert.equal(primaryDocument("BOTH"), "QUOTATION");
+assert.equal(primaryDocument(null), "QUOTATION");
+assert.deepEqual(documentOrder("DISTRIBUTOR"), ["PURCHASE_ORDER", "QUOTATION"]);
+assert.deepEqual(documentOrder("WHOLESALER"), ["QUOTATION", "PURCHASE_ORDER"]);
+assert.deepEqual(documentOrder(undefined), ["QUOTATION", "PURCHASE_ORDER"]);
+for (const t of [...OPERATION_TYPES, null]) assert.ok(operationDefaultText(t).length > 20);
 
 // ---- money in whole cents (the classic 0.1 + 0.2 drift must not show)
 assert.equal(lineTotal(3, 0.1), 0.3);

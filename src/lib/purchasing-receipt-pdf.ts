@@ -28,6 +28,8 @@ export type ReceiptPdfInput = {
   bonusTierLabel?: string | null;
   deductionAmount: number; // already 0 when the deduction is off
   grandTotal: number;
+  /** The standing notice that is switched on today (Purchasing -> Document Templates), e.g. out-of-office dates. */
+  notice?: string | null;
   copy: {
     bannerText: string;
     shippingSuffix: string;
@@ -192,6 +194,22 @@ export async function buildReceiptPdf(input: ReceiptPdfInput): Promise<Uint8Arra
     by -= 2;
   }
   y -= bannerH + 16;
+
+  // --- Standing notice from Document Templates (only while it is switched on and not past its last day)
+  if (input.notice && input.notice.trim()) {
+    const ls = wrap(input.notice.trim(), regular, 10, CW - 24);
+    const h = ls.length * 13 + 26;
+    ensure(h + 12);
+    const top = y;
+    page.drawRectangle({ x: M, y: top - h, width: CW, height: h, color: rgb(1, 0.97, 0.86), borderColor: rgb(0.85, 0.65, 0.13), borderWidth: 0.8 });
+    y = top - 15;
+    text("PLEASE NOTE", M + 12, 8, bold, rgb(0.5, 0.35, 0.02));
+    for (const l of ls) {
+      y -= 13;
+      text(l, M + 12, 10, regular, C.ink);
+    }
+    y = top - h - 14;
+  }
 
   // --- Date + customer
   const d = new Date(`${input.quotationDate}T12:00:00Z`);

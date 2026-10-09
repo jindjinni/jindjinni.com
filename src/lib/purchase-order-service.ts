@@ -15,7 +15,10 @@ import {
 } from "@/db/schema";
 import { newId } from "@/lib/ids";
 import { featureOn } from "@/lib/features";
-import { parseOperationType, sendsPurchaseOrders } from "@/lib/operation-type";
+import { templateWithNotice } from "@/lib/document-template-service";
+import { cleanRevisionNote, nextRevision } from "@/lib/document-template-rules";
+import { addRevisionRecord } from "@/lib/document-revision-service";
+import { parseOperationType } from "@/lib/operation-type";
 import {
   DEFAULT_PO_TERMS,
   canMoveTo,
@@ -44,11 +47,19 @@ export type PoWithLines = { po: PurchaseOrder; lines: PurchaseOrderLine[] };
 
 export const PO_FEATURE = "purchase-orders";
 
-/** Purchase orders exist for a company only when the feature is switched on for it AND it is a distributor (or both). */
+/**
+ * Purchase orders (Purchasing and Sales), the document templates and revisions are on for a company when the "purchase-orders"
+ * feature is switched on for it (Settings -> Feature rollout). Every company gets them -- what a company answered at sign-up
+ * only decides which document comes first, never whether it has the document.
+ */
 export async function purchaseOrdersEnabled(organizationId: string): Promise<boolean> {
-  const [org] = await db.select({ t: organizations.operationType }).from(organizations).where(eq(organizations.id, organizationId)).limit(1);
-  if (!sendsPurchaseOrders(parseOperationType(org?.t))) return false;
   return featureOn(PO_FEATURE, organizationId);
+}
+
+/** The company's sign-up answer, for the order of the tabs. Null = not answered. */
+export async function operationTypeOf(organizationId: string) {
+  const [org] = await db.select({ t: organizations.operationType }).from(organizations).where(eq(organizations.id, organizationId)).limit(1);
+  return parseOperationType(org?.t);
 }
 
 // ---- the company as the sender -----------------------------------------------------------------------------------
@@ -194,7 +205,9 @@ export async function getPurchaseOrder(organizationId: string, id: string): Prom
 export async function newOrderDefaults(organizationId: string) {
   const ident = await companyIdentity(organizationId);
   const [last] = await db.select({ terms: purchasingPurchaseOrders.terms }).from(purchasingPurchaseOrders).where(eq(purchasingPurchaseOrders.organizationId, organizationId)).orderBy(desc(purchasingPurchaseOrders.seq)).limit(1);
-  return { shipTo: ident.shipTo, billTo: ident.billTo, terms: last?.terms?.trim() ? last.terms : DEFAULT_PO_TERMS };
+  // The company's own Purchase Order template wording (Settings -> Document Templates) comes first, then the last order's, then ours.
+  const { template } = await templateWithNotice(organizationId, "purchasing", "PURCHASE_ORDER");
+  return { shipTo: ident.shipTo, billTo: ident.billTo, terms: template.termsText?.trim() ? template.termsText : last?.terms?.trim() ? last.terms : DEFAULT_PO_TERMS };
 }
 
 export type PoInput = {
@@ -217,7 +230,14 @@ export type PoInput = {
   lines: PoLineInput[];
 };
 
-export async function savePurchaseOrder(org: Org, input: PoInput): Promise<{ ok: true; id: string; number: string } | { ok: false; error: string }> {
+type PoPrepared = {
+  ok: true;
+  header: Omit<typeof purchasingPurchaseOrders.$inferInsert, "id" | "organizationId" | "seq" | "poNumber">;
+  lineRows: (poId: string) => (typeof purchasingPurchaseOrderLines.$inferInsert)[];
+  from: Identity;
+};
+
+async function preparePo(org: Org, input: PoInput): Promise<PoPrepared | { ok: false; error: string }> {
   const supplierName = cleanText(input.supplierName, 160);
   if (!supplierName) return { ok: false, error: "Choose or type the supplier this order is going to." };
   const supplierEmail = nullIfEmpty(input.supplierEmail, 160);
@@ -260,6 +280,13 @@ export async function savePurchaseOrder(org: Org, input: PoInput): Promise<{ ok:
   };
   const lineRows = (poId: string) =>
     cleaned.lines.map((l, i) => ({ id: newId("pol"), organizationId: org.organizationId, purchaseOrderId: poId, position: i, productId: l.productId, partNumber: l.partNumber, ndc: l.ndc, name: l.name, size: l.size, quantity: l.quantity, unit: l.unit, unitCost: l.unitCost, total: l.total }));
+  return { ok: true, header, lineRows, from };
+}
+
+export async function savePurchaseOrder(org: Org, input: PoInput): Promise<{ ok: true; id: string; number: string } | { ok: false; error: string }> {
+  const prep = await preparePo(org, input);
+  if (!prep.ok) return prep;
+  const { header, lineRows, from } = prep;
   const now = new Date().toISOString();
 
   if (input.id) {
@@ -339,14 +366,26 @@ export async function setStatus(org: Org, id: string, to: string): Promise<{ ok:
 // ---- the PDF and the email ---------------------------------------------------------------------------------------
 
 export async function pdfInputFor(organizationId: string, d: PoWithLines): Promise<PoPdfInput> {
-  const ident = await companyIdentity(organizationId);
+  const [ident, { template, notice }] = await Promise.all([companyIdentity(organizationId), templateWithNotice(organizationId, "purchasing", "PURCHASE_ORDER")]);
   const { po, lines } = d;
   return {
     number: po.poNumber,
     status: po.status,
     issueDate: po.issueDate,
-    // The company as it was when the order was made, with today's logo.
-    from: { name: po.fromName ?? ident.name, address: po.fromAddress ?? ident.address, phone: po.fromPhone ?? ident.phone, email: po.fromEmail ?? ident.email, logoDataUrl: ident.logoDataUrl },
+    // The company as it was when the order was made; the template's name and logo win when the company set them there.
+    from: {
+      name: template.displayName ?? po.fromName ?? ident.name,
+      address: po.fromAddress ?? ident.address,
+      phone: po.fromPhone ?? ident.phone,
+      email: po.fromEmail ?? ident.email,
+      logoDataUrl: template.showLogo ? (template.logoDataUrl ?? ident.logoDataUrl) : null,
+    },
+    title: template.titleText,
+    intro: template.introText,
+    footer: template.footerText,
+    notice,
+    revision: po.revision ?? 0,
+    revisionNote: po.revisionNote,
     supplier: { name: po.supplierName, address: po.supplierAddress, email: po.supplierEmail, license: po.supplierLicense, licenseExpires: po.supplierLicenseExpires },
     shipTo: { name: po.shipToName, address: po.shipToAddress },
     billTo: { name: po.billToName, address: po.billToAddress },
@@ -364,7 +403,7 @@ export async function renderPdf(organizationId: string, id: string): Promise<{ b
   const d = await getPurchaseOrder(organizationId, id);
   if (!d) return null;
   const bytes = await buildPurchaseOrderPdf(await pdfInputFor(organizationId, d));
-  return { bytes, fileName: poFileName(d.po.poNumber, d.po.supplierName) };
+  return { bytes, fileName: poFileName(d.po.poNumber, d.po.supplierName, d.po.revision) };
 }
 
 export async function emailFor(organizationId: string, d: PoWithLines, message?: string | null) {
@@ -384,6 +423,12 @@ export async function emailFor(organizationId: string, d: PoWithLines, message?:
     shipping: p.shipping,
     total: p.total,
     message: message ?? null,
+    title: p.title,
+    intro: p.intro,
+    footer: p.footer,
+    notice: p.notice,
+    revision: p.revision,
+    revisionNote: p.revisionNote,
   };
   return buildPoEmail(input);
 }
@@ -411,7 +456,7 @@ export async function sendPurchaseOrder(org: Org, id: string, opts: { mailer: Ma
       const mail = await emailFor(org.organizationId, have, nullIfEmpty(opts.message, 2000));
       const pdf = await buildPurchaseOrderPdf(await pdfInputFor(org.organizationId, have));
       const ident = await companyIdentity(org.organizationId);
-      const sent = await opts.mailer({ to, subject: mail.subject, text: mail.text, html: mail.html, fromName: have.po.fromName ?? ident.name, replyTo: have.po.fromEmail ?? ident.email, fileName: poFileName(have.po.poNumber, have.po.supplierName), pdf });
+      const sent = await opts.mailer({ to, subject: mail.subject, text: mail.text, html: mail.html, fromName: have.po.fromName ?? ident.name, replyTo: have.po.fromEmail ?? ident.email, fileName: poFileName(have.po.poNumber, have.po.supplierName, have.po.revision), pdf });
       if (!sent.ok) return { ok: false, error: `The email wasn't sent, so nothing was changed. ${sent.error}` };
     } catch (e) {
       return { ok: false, error: `The email wasn't sent, so nothing was changed. ${e instanceof Error ? e.message : ""}`.trim() };
@@ -423,6 +468,76 @@ export async function sendPurchaseOrder(org: Org, id: string, opts: { mailer: Ma
     .set({ status: "SENT", sentAt: now, emailedTo: opts.mailer ? to : have.po.emailedTo, updatedAt: now })
     .where(and(eq(purchasingPurchaseOrders.id, id), eq(purchasingPurchaseOrders.organizationId, org.organizationId)));
   return { ok: true, emailedTo: opts.mailer ? to : null };
+}
+
+// ---- revisions ---------------------------------------------------------------------------------------------------
+
+export type ReviseOutcome = { ok: true; revision: number; emailedTo: string | null } | { ok: false; error: string };
+
+/**
+ * Sends a revision of an order the supplier already has (Sent or Confirmed): a required note saying what changed or what is
+ * wrong ("you sent 15 boxes, we ordered 20"), optionally with the items changed too. The supplier gets the PDF marked "Revision n"
+ * with the note in a box, and an email in the same words. The email goes first; if it is refused nothing is changed. The
+ * version before the change is kept in the revision history.
+ */
+export async function revisePurchaseOrder(
+  org: Org,
+  id: string,
+  opts: { note: unknown; edits?: PoInput | null; mailer: Mailer | null; to?: string | null; message?: string | null },
+): Promise<ReviseOutcome> {
+  const noted = cleanRevisionNote(opts.note);
+  if (!noted.ok) return noted;
+  const have = await getPurchaseOrder(org.organizationId, id);
+  if (!have) return { ok: false, error: "That purchase order wasn't found." };
+  if (have.po.status === "DRAFT") return { ok: false, error: "This order hasn't been sent yet. Just edit it and send it." };
+  if (have.po.status !== "SENT" && have.po.status !== "CONFIRMED") return { ok: false, error: "Only an order the supplier already has (Sent or Confirmed) can be revised." };
+
+  const now = new Date().toISOString();
+  const revision = nextRevision(have.po.revision);
+  let nextPo: PurchaseOrder = { ...have.po, revision, revisionNote: noted.note, revisedAt: now, status: "SENT", updatedAt: now };
+  let nextLines: PurchaseOrderLine[] = have.lines;
+  let rows: (typeof purchasingPurchaseOrderLines.$inferInsert)[] | null = null;
+  if (opts.edits) {
+    const prep = await preparePo(org, { ...opts.edits, id });
+    if (!prep.ok) return prep;
+    nextPo = { ...nextPo, ...(prep.header as Partial<PurchaseOrder>) };
+    rows = prep.lineRows(id);
+    nextLines = rows.map((r) => ({ ...r, productId: r.productId ?? null, partNumber: r.partNumber ?? null, ndc: r.ndc ?? null, size: r.size ?? null, createdAt: now, updatedAt: now })) as PurchaseOrderLine[];
+  }
+  const next: PoWithLines = { po: nextPo, lines: nextLines };
+
+  const to = nullIfEmpty(opts.to, 160) ?? nextPo.supplierEmail;
+  if (opts.mailer) {
+    if (!to) return { ok: false, error: "Add the supplier's email address to send the revision." };
+    if (!looksLikeEmail(to)) return { ok: false, error: "That email address doesn't look right." };
+    try {
+      const mail = await emailFor(org.organizationId, next, nullIfEmpty(opts.message, 2000));
+      const pdf = await buildPurchaseOrderPdf(await pdfInputFor(org.organizationId, next));
+      const ident = await companyIdentity(org.organizationId);
+      const sent = await opts.mailer({ to, subject: mail.subject, text: mail.text, html: mail.html, fromName: nextPo.fromName ?? ident.name, replyTo: nextPo.fromEmail ?? ident.email, fileName: poFileName(nextPo.poNumber, nextPo.supplierName, revision), pdf });
+      if (!sent.ok) return { ok: false, error: `The email wasn't sent, so nothing was changed. ${sent.error}` };
+    } catch (e) {
+      return { ok: false, error: `The email wasn't sent, so nothing was changed. ${e instanceof Error ? e.message : ""}`.trim() };
+    }
+  }
+
+  await addRevisionRecord({ organizationId: org.organizationId, userId: org.userId, source: "purchasing_po", documentId: id, revision, note: noted.note, before: have, emailedTo: opts.mailer ? to : null });
+  const { id: _id, organizationId: _o, seq: _s, poNumber: _n, createdAt: _c, ...changes } = nextPo;
+  void [_id, _o, _s, _n, _c];
+  const update = db
+    .update(purchasingPurchaseOrders)
+    .set({ ...changes, sentAt: now, emailedTo: opts.mailer ? to : have.po.emailedTo })
+    .where(and(eq(purchasingPurchaseOrders.id, id), eq(purchasingPurchaseOrders.organizationId, org.organizationId)));
+  if (rows) {
+    await db.batch([
+      update,
+      db.delete(purchasingPurchaseOrderLines).where(and(eq(purchasingPurchaseOrderLines.purchaseOrderId, id), eq(purchasingPurchaseOrderLines.organizationId, org.organizationId))),
+      db.insert(purchasingPurchaseOrderLines).values(rows),
+    ]);
+  } else {
+    await update;
+  }
+  return { ok: true, revision, emailedTo: opts.mailer ? to : null };
 }
 
 export async function orderCounts(organizationId: string): Promise<Record<PoStatus, number>> {

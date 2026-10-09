@@ -6,10 +6,10 @@ import { useState, useTransition } from "react";
 import { convertToInvoiceAction, deleteDraftAction, duplicateDocumentAction, quotationStatusAction, recordPaymentAction, removePaymentAction, sendDocumentAction, voidDocumentAction, type SalesResult } from "@/app/actions/sales";
 import { card, field, fmtDay, fmtMoney, ghostBtn, primaryBtn } from "@/components/sales-ui";
 
-export type ActionDoc = { id: string; kind: "QUOTATION" | "INVOICE"; status: string; number: string; buyerEmail: string; total: number; amountPaid: number; convertedToId: string | null; inventoryPosted: boolean; emailedTo: string | null; sentAt: string | null };
+export type ActionDoc = { id: string; kind: "QUOTATION" | "INVOICE" | "PURCHASE_ORDER"; status: string; number: string; buyerEmail: string; total: number; amountPaid: number; convertedToId: string | null; inventoryPosted: boolean; emailedTo: string | null; sentAt: string | null };
 export type ActionPayment = { id: string; amount: number; paidOn: string; method: string; note: string };
 
-export function DocActions({ doc, payments, today, canWrite, base }: { doc: ActionDoc; payments: ActionPayment[]; today: string; canWrite: boolean; base: string }) {
+export function DocActions({ doc, payments, today, canWrite, canRevise = false, base }: { doc: ActionDoc; payments: ActionPayment[]; today: string; canWrite: boolean; canRevise?: boolean; base: string }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -17,6 +17,8 @@ export function DocActions({ doc, payments, today, canWrite, base }: { doc: Acti
   const [message, setMessage] = useState("");
   const [pay, setPay] = useState({ amount: String(Math.max(0, Math.round((doc.total - doc.amountPaid) * 100) / 100)), paidOn: today, method: "", note: "" });
   const isInvoice = doc.kind === "INVOICE";
+  const isPo = doc.kind === "PURCHASE_ORDER";
+  const word = isInvoice ? "invoice" : isPo ? "purchase order" : "quotation";
   const isDraft = doc.status === "DRAFT";
   const owed = Math.max(0, Math.round((doc.total - doc.amountPaid) * 100) / 100);
 
@@ -42,30 +44,31 @@ export function DocActions({ doc, payments, today, canWrite, base }: { doc: Acti
         {canWrite && isDraft && (
           <button type="button" disabled={pending} onClick={() => { if (confirm("Delete this draft?")) run(() => deleteDraftAction(doc.id), () => router.push(base === "/dashboard/sales/quotations" ? "/dashboard/sales" : base)); }} className="rounded-lg border border-red-300 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-60 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950/40" data-testid="act-delete">Delete draft</button>
         )}
-        {canWrite && !isDraft && doc.status !== "VOID" && !(doc.kind === "QUOTATION" && doc.status === "CONVERTED") && (
+        {canWrite && !isDraft && doc.status !== "VOID" && !(!isInvoice && doc.status === "CONVERTED") && (
           <button type="button" disabled={pending} onClick={() => { if (confirm(isInvoice && doc.inventoryPosted ? "Void this invoice? Its units go back into Inventory." : "Void this document?")) run(() => voidDocumentAction(doc.id)); }} className="rounded-lg border border-red-300 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-60 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950/40" data-testid="act-void">Void</button>
         )}
       </div>
 
-      {/* Quotation: turn it into an invoice, or record the answer */}
+      {/* Quotation or purchase order: turn it into an invoice, record the answer, or send a revision */}
       {canWrite && !isInvoice && (doc.status === "SENT" || doc.status === "ACCEPTED" || doc.status === "DECLINED") && (
         <div className={`${card} flex flex-wrap items-center gap-2`} data-testid="act-quotation-box">
           <button type="button" disabled={pending} onClick={() => run(() => convertToInvoiceAction(doc.id), (r) => router.push(`/dashboard/sales/invoices/${r.id}`))} className={primaryBtn} data-testid="act-convert">Make this an invoice</button>
-          {doc.status !== "ACCEPTED" && <button type="button" disabled={pending} onClick={() => run(() => quotationStatusAction(doc.id, "ACCEPTED"))} className={ghostBtn} data-testid="act-accepted">Buyer accepted</button>}
-          {doc.status !== "DECLINED" && <button type="button" disabled={pending} onClick={() => run(() => quotationStatusAction(doc.id, "DECLINED"))} className={ghostBtn} data-testid="act-declined">Buyer declined</button>}
-          <p className="basis-full text-xs text-slate-500">Making it an invoice starts a draft with the same items. The draft holds the units; sending it takes them out of Inventory.</p>
+          {doc.status !== "ACCEPTED" && <button type="button" disabled={pending} onClick={() => run(() => quotationStatusAction(doc.id, "ACCEPTED"))} className={ghostBtn} data-testid="act-accepted">{isPo ? "We confirmed it" : "Buyer accepted"}</button>}
+          {doc.status !== "DECLINED" && <button type="button" disabled={pending} onClick={() => run(() => quotationStatusAction(doc.id, "DECLINED"))} className={ghostBtn} data-testid="act-declined">{isPo ? "We can't fill it" : "Buyer declined"}</button>}
+          {canRevise && doc.status !== "DECLINED" && <Link href={`${base}/${doc.id}?revise=1`} className={ghostBtn} data-testid="act-revise">Send a revision</Link>}
+          <p className="basis-full text-xs text-slate-500">Making it an invoice starts a draft with the same items. The draft holds the units; sending it takes them out of Inventory. A revision goes out with a Rev number and your note on what changed.</p>
         </div>
       )}
       {!isInvoice && doc.status === "CONVERTED" && doc.convertedToId && (
-        <p className={`${card} text-sm`} data-testid="act-converted">This quotation became an invoice. <Link href={`/dashboard/sales/invoices/${doc.convertedToId}`} className="font-medium text-emerald-800 underline dark:text-emerald-300">Open the invoice</Link></p>
+        <p className={`${card} text-sm`} data-testid="act-converted">This {word} became an invoice. <Link href={`/dashboard/sales/invoices/${doc.convertedToId}`} className="font-medium text-emerald-800 underline dark:text-emerald-300">Open the invoice</Link></p>
       )}
 
       {/* Send: a draft invoice or quotation, or a sent quotation again */}
       {canWrite && (isDraft || (!isInvoice && doc.status === "SENT")) && (
         <div className={`${card} space-y-3`} data-testid="act-send-box">
-          <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">{isDraft ? `Send this ${isInvoice ? "invoice" : "quotation"}` : "Send it again"}</h2>
+          <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">{isDraft ? `Send this ${word}` : "Send it again"}</h2>
           {isDraft && isInvoice && <p className="text-xs text-slate-600 dark:text-slate-400">Sending takes the units out of Inventory, earliest expiration first. It sends what you last saved.</p>}
-          {isDraft && !isInvoice && <p className="text-xs text-slate-600 dark:text-slate-400">A quotation doesn&apos;t touch Inventory. It sends what you last saved.</p>}
+          {isDraft && !isInvoice && <p className="text-xs text-slate-600 dark:text-slate-400">A {word} doesn&apos;t touch Inventory. It sends what you last saved.</p>}
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <label htmlFor="act-email" className="text-xs font-medium text-slate-700 dark:text-slate-300">Send to</label>

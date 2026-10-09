@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { deleteDraftAction, duplicatePurchaseOrderAction, sendPurchaseOrderAction, setStatusAction, type PoResult } from "@/app/actions/purchase-orders";
@@ -38,6 +39,9 @@ export function PoActions({ id, number, status, supplierEmail, emailedTo, canWri
         <a href={`/api/purchasing/purchase-orders/${id}/pdf?download=1`} className={ghostBtn} data-testid="po-act-pdf-download">Download PDF</a>
         {canWrite && <button type="button" disabled={pending} onClick={() => run(() => duplicatePurchaseOrderAction(id), (r) => router.push(`/dashboard/purchasing/purchase-orders/${r.id}`))} className={ghostBtn} data-testid="po-act-duplicate">Make a copy</button>}
         {step("CONFIRMED", "Supplier confirmed it", "po-act-confirmed")}
+        {canWrite && (status === "SENT" || status === "CONFIRMED") && (
+          <Link href={`/dashboard/purchasing/purchase-orders/${id}?revise=1`} className={ghostBtn} data-testid="po-act-revise">Send a revision</Link>
+        )}
         {step("RECEIVED", "We received it", "po-act-received")}
         {step("DRAFT", "Back to a draft to edit", "po-act-draft")}
         {step("CANCELLED", "Cancel the order", "po-act-cancel", true)}

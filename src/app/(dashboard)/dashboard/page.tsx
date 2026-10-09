@@ -147,7 +147,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
 
       {askOperation && (
         <p role="status" className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-950 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100" data-testid="operation-prompt">
-          <span>One quick question: is your company a wholesaler, a distributor or both? It sets up Purchasing with the right documents. Nothing you use today will change.</span>
+          <span>One quick question: is your company a wholesaler, a distributor or both? It decides whether Quotations or Purchase Orders come first in Purchasing and Sales. Nothing you use today will change.</span>
           <Link href="/dashboard/settings/company-profile" className="rounded-md bg-emerald-700 px-3 py-1.5 font-semibold text-white hover:bg-emerald-800">Answer now</Link>
         </p>
       )}

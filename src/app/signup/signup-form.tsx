@@ -144,7 +144,7 @@ export function SignupForm({ needsVerification }: { needsVerification: boolean }
 
           <Section
             title="How Your Company Operates"
-            description="This sets up your Purchasing department with the right documents: quotations for buying from individuals, purchase orders for buying from wholesalers, or both. You can change it later in Settings."
+            description="Everyone gets both Quotations (for buying from individuals) and Purchase Orders (for buying from wholesalers), in Purchasing and in Sales. Your answer decides which one comes first. You can change it later in Settings."
           >
             <OperationTypeField />
           </Section>

@@ -18,6 +18,8 @@ import {
   renderReceiptCopy,
 } from "@/lib/queries";
 import { buildReceiptPdf } from "@/lib/purchasing-receipt-pdf";
+import { templateWithNotice } from "@/lib/document-template-service";
+import { purchaseOrdersEnabled } from "@/lib/purchase-order-service";
 
 // Vercel rejects request bodies over 4.5 MB, so 4 MB is the honest ceiling for one attached file.
 export const MAX_RECEIPT_UPLOAD_BYTES = 4 * 1024 * 1024;
@@ -72,7 +74,10 @@ export async function buildQuotationReceiptPdf(
   const rangesById = new Map(ranges.map((r) => [r.id, r]));
   const business = resolveBusinessDocumentIdentity(organizationName, profile, quotationProfile);
   const copy = renderReceiptCopy(resolvePurchasingReceiptSettings(settingsRow), business.displayName);
+  // The standing notice is part of the Document Templates rollout.
+  const notice = (await purchaseOrdersEnabled(organizationId)) ? (await templateWithNotice(organizationId, "purchasing", "QUOTATION")).notice : null;
   const bytes = await buildReceiptPdf({
+    notice,
     businessName: business.displayName,
     logoDataUrl: business.showLogo ? business.logoDataUrl : null,
     quotationDate: quotation.quotationDate,
@@ -202,6 +207,18 @@ export async function getReceiptForViewing(
     .where(and(eq(purchasingQuotationDocuments.organizationId, org.organizationId), eq(purchasingQuotationDocuments.quotationId, quotationId)));
   const uploaded = docs.find((d) => d.kind === "UPLOADED");
   const generated = docs.find((d) => d.kind === "GENERATED");
+  // The app's own receipt is rebuilt each time it is opened, so the standing notice (and any wording changed in Settings) is always current.
+  if (!uploaded && generated) {
+    try {
+      const fresh = await buildQuotationReceiptPdf(org.organizationId, org.organizationName, quotationId);
+      if (fresh) {
+        await saveDocument({ organizationId: org.organizationId, quotationId, kind: "GENERATED", filename: fresh.filename, bytes: fresh.bytes, userId: org.userId });
+        return { bytes: Buffer.from(fresh.bytes), filename: fresh.filename, kind: "GENERATED" };
+      }
+    } catch {
+      /* fall back to the stored copy below */
+    }
+  }
   const pick = uploaded ?? generated;
   if (pick) return { bytes: Buffer.from(pick.contentBase64, "base64"), filename: pick.filename, kind: pick.kind };
   const built = await buildQuotationReceiptPdf(org.organizationId, org.organizationName, quotationId);

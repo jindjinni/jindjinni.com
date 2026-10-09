@@ -42,10 +42,17 @@ export function dueDateFor(docDate: string, terms: string | null | undefined): s
   return isDay(docDate) ? addDays(docDate, termsDays(terms)) : docDate;
 }
 
-/** Quotations are numbered Q-1001, invoices 1001. */
-export function formatNumber(kind: "QUOTATION" | "INVOICE", seq: number): string {
-  return kind === "QUOTATION" ? `Q-${seq}` : String(seq);
+export type SalesKind = "QUOTATION" | "INVOICE" | "PURCHASE_ORDER";
+
+/** Quotations are numbered Q-1001, invoices 1001, and the purchase orders we receive RPO-1001 (the buyer's own number is kept in Reference). */
+export function formatNumber(kind: SalesKind, seq: number): string {
+  return kind === "QUOTATION" ? `Q-${seq}` : kind === "PURCHASE_ORDER" ? `RPO-${seq}` : String(seq);
 }
+
+/** Quotations and purchase orders are "offers/orders" that can be sent, accepted or declined and made into an invoice. Invoices are different (stock, payments). */
+export const isOrderDoc = (kind: string) => kind === "QUOTATION" || kind === "PURCHASE_ORDER";
+
+export const KIND_LABEL: Record<SalesKind, string> = { QUOTATION: "Quotation", INVOICE: "Invoice", PURCHASE_ORDER: "Purchase order" };
 
 export type SalesStatus = "DRAFT" | "SENT" | "PARTIALLY_PAID" | "PAID" | "ACCEPTED" | "DECLINED" | "CONVERTED" | "VOID";
 
@@ -172,6 +179,8 @@ export type LineInput = {
   quantity: number;
   unitPrice: number;
   note?: string | null;
+  /** NDC, printed on purchase orders. */
+  ndc?: string | null;
 };
 
 /** The first thing wrong with a set of lines, or null. Quotations and invoices follow the same rules. */

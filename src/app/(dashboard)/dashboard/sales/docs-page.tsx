@@ -8,7 +8,7 @@ import { balanceOf, shownStatus } from "@/lib/sales-rules";
 import { DocList, type DocRow } from "./doc-list";
 
 // The list page of quotations or invoices (the two screens only differ by kind).
-export async function DocsPage({ kind }: { kind: "QUOTATION" | "INVOICE" }) {
+export async function DocsPage({ kind }: { kind: "QUOTATION" | "INVOICE" | "PURCHASE_ORDER" }) {
   const org = await requireOrg();
   const [docs, terms] = await Promise.all([listDocuments(org.organizationId, kind), getPaymentTerms(org.organizationId)]);
   const today = todayIn(terms.timeZone);
@@ -23,22 +23,25 @@ export async function DocsPage({ kind }: { kind: "QUOTATION" | "INVOICE" }) {
     status: shownStatus(d, today),
     units: 0,
   }));
-  const base = kind === "INVOICE" ? "/dashboard/sales/invoices" : "/dashboard/sales/quotations";
+  const base = kind === "INVOICE" ? "/dashboard/sales/invoices" : kind === "PURCHASE_ORDER" ? "/dashboard/sales/purchase-orders" : "/dashboard/sales/quotations";
   const isInvoice = kind === "INVOICE";
+  const isPo = kind === "PURCHASE_ORDER";
   return (
     <div className="max-w-5xl">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-slate-900 dark:text-slate-50">{isInvoice ? "Invoices" : "Quotations"}</h1>
+          <h1 className="text-xl font-bold text-slate-900 dark:text-slate-50">{isInvoice ? "Invoices" : isPo ? "Purchase Orders" : "Quotations"}</h1>
           <p className="mt-1 max-w-2xl text-sm text-slate-600 dark:text-slate-400">
             {isInvoice
               ? "Invoices to your buyers. A draft holds its units; sending it takes them out of Inventory."
-              : "Prices you offer a buyer before they order. A quotation doesn't touch Inventory; when the buyer says yes, make it into an invoice."}
+              : isPo
+                ? "Orders your buyers send you after a quotation. Log each one with their PO number and the NDCs, confirm it (or send a revision if something is off), then make it into an invoice. A purchase order doesn't touch Inventory."
+                : "Prices you offer a buyer before they order. A quotation doesn't touch Inventory; when the buyer says yes, make it into an invoice."}
           </p>
         </div>
         {canWriteSales(org.role, org.access) && (
           <Link href={`${base}/new`} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800" data-testid="doc-new">
-            + New {isInvoice ? "invoice" : "quotation"}
+            + New {isInvoice ? "invoice" : isPo ? "purchase order" : "quotation"}
           </Link>
         )}
       </div>

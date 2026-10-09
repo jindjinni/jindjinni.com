@@ -21,6 +21,10 @@ import {
   salesProfiles,
 } from "@/db/schema";
 import { newId } from "@/lib/ids";
+import { templateWithNotice } from "@/lib/document-template-service";
+import { cleanRevisionNote, nextRevision } from "@/lib/document-template-rules";
+import { addRevisionRecord } from "@/lib/document-revision-service";
+import type { DocType } from "@/lib/operation-type";
 import { brandFor } from "@/lib/receiving-serial-rules";
 import { todayIn } from "@/lib/payment-due";
 import { getPaymentTerms } from "@/lib/accounts-queries";
@@ -34,6 +38,8 @@ import {
   computeTotals,
   dueDateFor,
   formatNumber,
+  isOrderDoc,
+  looksLikeEmail,
   lineAmount,
   matchProduct,
   round2,
@@ -41,6 +47,7 @@ import {
   validateLines,
   type LineInput,
   type Reserved,
+  type SalesKind,
   type SheetItem,
   type StockMap,
 } from "@/lib/sales-rules";
@@ -91,15 +98,17 @@ export async function resolveFrom(organizationId: string, profile?: SalesProfile
 }
 
 /** Takes the next number for a quotation or an invoice (never one already in use, even if the counter was moved back). */
-async function takeNumber(organizationId: string, kind: "QUOTATION" | "INVOICE"): Promise<{ seq: number; number: string }> {
+async function takeNumber(organizationId: string, kind: SalesKind): Promise<{ seq: number; number: string }> {
   await ensureSalesProfile(organizationId);
   for (let i = 0; i < 200; i++) {
-    const col = kind === "INVOICE" ? salesProfiles.nextInvoiceNumber : salesProfiles.nextQuotationNumber;
-    const [row] = await db
-      .update(salesProfiles)
-      .set(kind === "INVOICE" ? { nextInvoiceNumber: sql`${salesProfiles.nextInvoiceNumber} + 1` } : { nextQuotationNumber: sql`${salesProfiles.nextQuotationNumber} + 1` })
-      .where(eq(salesProfiles.organizationId, organizationId))
-      .returning({ next: col });
+    const col = kind === "INVOICE" ? salesProfiles.nextInvoiceNumber : kind === "PURCHASE_ORDER" ? salesProfiles.nextPurchaseOrderNumber : salesProfiles.nextQuotationNumber;
+    const bump =
+      kind === "INVOICE"
+        ? { nextInvoiceNumber: sql`${salesProfiles.nextInvoiceNumber} + 1` }
+        : kind === "PURCHASE_ORDER"
+          ? { nextPurchaseOrderNumber: sql`coalesce(${salesProfiles.nextPurchaseOrderNumber}, 1001) + 1` }
+          : { nextQuotationNumber: sql`${salesProfiles.nextQuotationNumber} + 1` };
+    const [row] = await db.update(salesProfiles).set(bump).where(eq(salesProfiles.organizationId, organizationId)).returning({ next: col });
     const seq = (row?.next ?? 1) - 1;
     const [taken] = await db
       .select({ id: salesDocuments.id })
@@ -312,7 +321,7 @@ export async function buyerPriceMap(organizationId: string): Promise<Record<stri
 
 export type DocWithLines = { doc: SalesDocument; lines: SalesLine[]; payments: (typeof salesPayments.$inferSelect)[] };
 
-export async function listDocuments(organizationId: string, kind: "QUOTATION" | "INVOICE") {
+export async function listDocuments(organizationId: string, kind: SalesKind) {
   return db
     .select()
     .from(salesDocuments)
@@ -348,7 +357,7 @@ export async function salesStockContext(organizationId: string, excludeDocId?: s
 
 export type DocInput = {
   id?: string | null;
-  kind: "QUOTATION" | "INVOICE";
+  kind: SalesKind;
   buyerId: string | null;
   buyerCompany: string;
   buyerContact?: string | null;
@@ -375,23 +384,10 @@ const money0 = (v: unknown) => {
   return Number.isFinite(n) ? n : NaN;
 };
 
-/** Creates or updates a DRAFT quotation or invoice. Totals are always worked out here, never trusted from the browser. */
-export async function saveDocument(org: Org, input: DocInput): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
-  const company = cleanText(input.buyerCompany, 120);
-  if (!company) return { ok: false, error: "Choose a buyer, or type the company name." };
-  if (!isDayText(input.docDate)) return { ok: false, error: "Enter the date." };
-  const bad = validateLines(input.lines);
-  if (bad) return { ok: false, error: bad };
-  const nums = [input.discount, input.shipping, input.tax, input.otherCharges].map(money0);
-  if (nums.some((n) => Number.isNaN(n) || n < 0 || n > 10_000_000)) return { ok: false, error: "Discount, shipping, tax and other charges must be $0 or more." };
-  const [discount, shipping, tax, otherCharges] = nums.map(round2);
-  const totals = computeTotals({ lines: input.lines, discount, shipping, tax, otherCharges });
-  if (totals.total < 0) return { ok: false, error: "The discount is bigger than the order." };
+type Prepared = { header: ReturnType<typeof buildHeader>; lineRows: (docId: string) => (typeof salesDocumentLines.$inferInsert)[] };
 
-  const terms = nz(cleanText(input.terms, 40));
-  const dueDate = isDayText(input.dueDate) ? (input.dueDate as string) : dueDateFor(input.docDate, terms);
-  const from = await resolveFrom(org.organizationId);
-  const header = {
+function buildHeader(input: DocInput, company: string, dueDate: string, terms: string | null, from: FromIdentity, totals: { subtotal: number; total: number }, nums: { discount: number; shipping: number; tax: number; otherCharges: number }) {
+  return {
     buyerId: input.buyerId,
     buyerCompany: company,
     buyerContact: nz(cleanText(input.buyerContact, 120)),
@@ -407,15 +403,34 @@ export async function saveDocument(org: Org, input: DocInput): Promise<{ ok: tru
     dueDate,
     terms,
     reference: nz(cleanText(input.reference, 120)),
-    discount,
-    shipping,
-    tax,
-    otherCharges,
+    discount: nums.discount,
+    shipping: nums.shipping,
+    tax: nums.tax,
+    otherCharges: nums.otherCharges,
     subtotal: totals.subtotal,
     total: totals.total,
     customerNotes: nz(cleanText(input.customerNotes, 2000)),
     internalNotes: nz(cleanText(input.internalNotes, 2000)),
   };
+}
+
+/** Checks a document as typed and works out its totals and rows. Nothing is trusted from the browser. */
+async function prepareDocument(org: Org, input: DocInput): Promise<({ ok: true } & Prepared) | { ok: false; error: string }> {
+  const company = cleanText(input.buyerCompany, 120);
+  if (!company) return { ok: false, error: "Choose a buyer, or type the company name." };
+  if (!isDayText(input.docDate)) return { ok: false, error: "Enter the date." };
+  const bad = validateLines(input.lines);
+  if (bad) return { ok: false, error: bad };
+  const nums = [input.discount, input.shipping, input.tax, input.otherCharges].map(money0);
+  if (nums.some((n) => Number.isNaN(n) || n < 0 || n > 10_000_000)) return { ok: false, error: "Discount, shipping, tax and other charges must be $0 or more." };
+  const [discount, shipping, tax, otherCharges] = nums.map(round2);
+  const totals = computeTotals({ lines: input.lines, discount, shipping, tax, otherCharges });
+  if (totals.total < 0) return { ok: false, error: "The discount is bigger than the order." };
+
+  const terms = nz(cleanText(input.terms, 40));
+  const dueDate = isDayText(input.dueDate) ? (input.dueDate as string) : dueDateFor(input.docDate, terms);
+  const from = await resolveFrom(org.organizationId);
+  const header = buildHeader(input, company, dueDate, terms, from, totals, { discount, shipping, tax, otherCharges });
   const lineRows = (docId: string) =>
     input.lines.map((l, position) => ({
       id: newId("sline"),
@@ -431,26 +446,35 @@ export async function saveDocument(org: Org, input: DocInput): Promise<{ ok: tru
       quantity: l.quantity,
       unitPrice: round2(l.unitPrice),
       note: nz(cleanText(l.note, 200)),
+      ndc: nz(cleanText(l.ndc, 40)),
     }));
+  return { ok: true, header, lineRows };
+}
+
+/** Creates or updates a DRAFT quotation, purchase order or invoice. Totals are always worked out here, never trusted from the browser. */
+export async function saveDocument(org: Org, input: DocInput): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  const prep = await prepareDocument(org, input);
+  if (!prep.ok) return prep;
+  const { header, lineRows } = prep;
 
   if (input.id) {
     const have = await getDocument(org.organizationId, input.id);
     if (!have || have.doc.kind !== input.kind) return { ok: false, error: "That document wasn't found." };
-    if (have.doc.status !== "DRAFT") return { ok: false, error: "Only a draft can be changed. Make a copy to change a sent one." };
+    if (have.doc.status !== "DRAFT") return { ok: false, error: "Only a draft can be changed. Make a copy, or send a revision, to change a sent one." };
     await db.update(salesDocuments).set({ ...header, updatedAt: new Date().toISOString() }).where(eq(salesDocuments.id, input.id));
     await db.delete(salesDocumentLines).where(eq(salesDocumentLines.documentId, input.id));
     await db.insert(salesDocumentLines).values(lineRows(input.id));
     return { ok: true, id: input.id };
   }
   const { seq, number } = await takeNumber(org.organizationId, input.kind);
-  const id = newId(input.kind === "INVOICE" ? "sinv" : "squo");
+  const id = newId(input.kind === "INVOICE" ? "sinv" : input.kind === "PURCHASE_ORDER" ? "spo" : "squo");
   await db.insert(salesDocuments).values({ id, organizationId: org.organizationId, kind: input.kind, seq, number, status: "DRAFT", createdByUserId: org.userId, ...header });
   await db.insert(salesDocumentLines).values(lineRows(id));
   return { ok: true, id };
 }
 
 const asInputLines = (lines: SalesLine[]): LineInput[] =>
-  lines.map((l) => ({ productId: l.productId, productKey: l.productKey, productName: l.productName, condition: l.condition, groupKey: l.groupKey, groupLabel: l.groupLabel, quantity: l.quantity, unitPrice: l.unitPrice, note: l.note }));
+  lines.map((l) => ({ productId: l.productId, productKey: l.productKey, productName: l.productName, condition: l.condition, groupKey: l.groupKey, groupLabel: l.groupLabel, quantity: l.quantity, unitPrice: l.unitPrice, note: l.note, ndc: l.ndc }));
 
 /** A new DRAFT of the same kind with the same buyer and items (to change a sent document, or repeat an order). */
 export async function duplicateDocument(org: Org, id: string): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
@@ -481,13 +505,14 @@ export async function duplicateDocument(org: Org, id: string): Promise<{ ok: tru
   });
 }
 
-/** Makes a DRAFT invoice from a quotation (same buyer and items); the quotation is marked as made into an invoice. */
+/** Makes a DRAFT invoice from a quotation or a received purchase order (same buyer and items); the original is marked as made into an invoice. */
 export async function convertToInvoice(org: Org, quotationId: string): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
   const have = await getDocument(org.organizationId, quotationId);
-  if (!have || have.doc.kind !== "QUOTATION") return { ok: false, error: "That quotation wasn't found." };
+  if (!have || !isOrderDoc(have.doc.kind)) return { ok: false, error: "That quotation or purchase order wasn't found." };
   const d = have.doc;
-  if (d.status === "CONVERTED") return { ok: false, error: "This quotation is already an invoice." };
-  if (d.status === "VOID" || d.status === "DECLINED") return { ok: false, error: "A void or declined quotation can't be made into an invoice." };
+  const word = d.kind === "PURCHASE_ORDER" ? "purchase order" : "quotation";
+  if (d.status === "CONVERTED") return { ok: false, error: `This ${word} is already an invoice.` };
+  if (d.status === "VOID" || d.status === "DECLINED") return { ok: false, error: `A void or declined ${word} can't be made into an invoice.` };
   const [terms, from] = await Promise.all([getPaymentTerms(org.organizationId), resolveFrom(org.organizationId)]);
   const today = todayIn(terms.timeZone);
   const invTerms = nz(d.terms) ?? from.defaultTerms;
@@ -503,7 +528,7 @@ export async function convertToInvoice(org: Org, quotationId: string): Promise<{
     docDate: today,
     dueDate: null,
     terms: invTerms,
-    reference: d.number ? `From quotation ${d.number}` : d.reference,
+    reference: d.kind === "PURCHASE_ORDER" ? `From purchase order ${d.reference ? d.reference : d.number}` : d.number ? `From quotation ${d.number}` : d.reference,
     discount: d.discount,
     shipping: d.shipping,
     tax: d.tax,
@@ -528,8 +553,8 @@ export async function deleteDraft(org: Org, id: string): Promise<{ ok: true } | 
 
 export async function setQuotationStatus(org: Org, id: string, status: "ACCEPTED" | "DECLINED"): Promise<{ ok: true } | { ok: false; error: string }> {
   const have = await getDocument(org.organizationId, id);
-  if (!have || have.doc.kind !== "QUOTATION") return { ok: false, error: "That quotation wasn't found." };
-  if (have.doc.status !== "SENT" && have.doc.status !== "ACCEPTED" && have.doc.status !== "DECLINED") return { ok: false, error: "Send the quotation first." };
+  if (!have || !isOrderDoc(have.doc.kind)) return { ok: false, error: "That quotation or purchase order wasn't found." };
+  if (have.doc.status !== "SENT" && have.doc.status !== "ACCEPTED" && have.doc.status !== "DECLINED") return { ok: false, error: `Send the ${have.doc.kind === "PURCHASE_ORDER" ? "purchase order" : "quotation"} first.` };
   await db.update(salesDocuments).set({ status, updatedAt: new Date().toISOString() }).where(eq(salesDocuments.id, id));
   return { ok: true };
 }
@@ -538,8 +563,16 @@ export async function setQuotationStatus(org: Org, id: string, status: "ACCEPTED
 
 export async function pdfInputFor(organizationId: string, d: DocWithLines): Promise<SalesPdfInput> {
   const from = await resolveFrom(organizationId);
+  // The company's Sales template for this kind of document (invoices have none): name, logo, title, wording, footer and the standing notice.
+  const tpl = isOrderDoc(d.doc.kind) ? await templateWithNotice(organizationId, "sales", d.doc.kind as DocType) : null;
+  const t = tpl?.template ?? null;
   return {
     kind: d.doc.kind,
+    title: t?.titleText ?? null,
+    intro: t?.introText ?? null,
+    notice: tpl?.notice ?? null,
+    revision: d.doc.revision ?? 0,
+    revisionNote: d.doc.revisionNote,
     number: d.doc.number,
     status: d.doc.status,
     docDate: d.doc.docDate,
@@ -547,9 +580,15 @@ export async function pdfInputFor(organizationId: string, d: DocWithLines): Prom
     terms: d.doc.terms,
     reference: d.doc.reference,
     // The company as it was when the document was made, with today's logo.
-    from: { name: d.doc.fromName ?? from.name, address: d.doc.fromAddress ?? from.address, phone: d.doc.fromPhone ?? from.phone, email: d.doc.fromEmail ?? from.email, logoDataUrl: from.logoDataUrl },
+    from: {
+      name: t?.displayName ?? d.doc.fromName ?? from.name,
+      address: d.doc.fromAddress ?? from.address,
+      phone: d.doc.fromPhone ?? from.phone,
+      email: d.doc.fromEmail ?? from.email,
+      logoDataUrl: t ? (t.showLogo ? (t.logoDataUrl ?? from.logoDataUrl) : null) : from.logoDataUrl,
+    },
     buyer: { company: d.doc.buyerCompany ?? "", contact: d.doc.buyerContact, billing: d.doc.buyerBillingAddress, shipping: d.doc.buyerShippingAddress, email: d.doc.buyerEmail, phone: d.doc.buyerPhone },
-    lines: d.lines.map((l) => ({ productName: l.productName, expiryText: l.expiryText ?? (l.groupLabel ?? null), condition: l.condition, quantity: l.quantity, unitPrice: l.unitPrice, amount: lineAmount(l.quantity, l.unitPrice) })),
+    lines: d.lines.map((l) => ({ productName: l.productName, expiryText: l.expiryText ?? (l.groupLabel ?? null), condition: l.condition, quantity: l.quantity, unitPrice: l.unitPrice, amount: lineAmount(l.quantity, l.unitPrice), ndc: l.ndc })),
     subtotal: d.doc.subtotal,
     discount: d.doc.discount,
     shipping: d.doc.shipping,
@@ -558,7 +597,7 @@ export async function pdfInputFor(organizationId: string, d: DocWithLines): Prom
     total: d.doc.total,
     amountPaid: d.doc.amountPaid,
     notes: d.doc.customerNotes,
-    footer: from.footer,
+    footer: t?.footerText ?? from.footer,
   };
 }
 
@@ -566,7 +605,38 @@ export async function renderPdf(organizationId: string, id: string): Promise<{ b
   const d = await getDocument(organizationId, id);
   if (!d) return null;
   const bytes = await buildSalesPdf(await pdfInputFor(organizationId, d));
-  return { bytes, fileName: pdfFileName(d.doc.kind, d.doc.number, d.doc.buyerCompany ?? "") };
+  return { bytes, fileName: pdfFileName(d.doc.kind, d.doc.number, d.doc.buyerCompany ?? "", d.doc.revision) };
+}
+
+// ---- the email ---------------------------------------------------------------------------------------------------
+
+const escHtml = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/\n/g, "<br>");
+
+/**
+ * The email that goes with a quotation, purchase order or invoice: the PDF attached, the words the sender typed (or a plain
+ * hello), and -- above them -- what changed in this revision and the company's standing notice when they apply.
+ */
+export async function composeMail(organizationId: string, d: DocWithLines, message?: string | null) {
+  const doc = d.doc;
+  const from = await resolveFrom(organizationId);
+  const input = await pdfInputFor(organizationId, d);
+  const pdf = await buildSalesPdf(input);
+  const kindWord = doc.kind === "INVOICE" ? "Invoice" : doc.kind === "PURCHASE_ORDER" ? "Purchase order" : "Quotation";
+  const rev = doc.revision && doc.revision > 0 ? Math.floor(doc.revision) : 0;
+  const name = input.from.name;
+  const subject = rev ? `REVISED ${kindWord} ${doc.number} Rev ${rev} from ${name}` : `${kindWord} ${doc.number} from ${name}`;
+  const hello = `Hello${doc.buyerContact ? ` ${doc.buyerContact}` : ""},`;
+  const main =
+    nz(message) ??
+    (rev ? `${hello}\n\nWe have revised ${kindWord.toLowerCase()} ${doc.number}. The new version is attached.\n\nThank you,\n${name}` : `${hello}\n\n${kindWord} ${doc.number} is attached.\n\nThank you,\n${name}`);
+  const parts: { label: string; text: string }[] = [];
+  if (rev && doc.revisionNote?.trim()) parts.push({ label: `Revision ${rev} - what changed`, text: doc.revisionNote.trim() });
+  if (input.notice?.trim()) parts.push({ label: "Please note", text: input.notice.trim() });
+  const text = [...parts.map((p) => `${p.label.toUpperCase()}: ${p.text}`), main].join("\n\n");
+  const box = (p: { label: string; text: string }) =>
+    `<div style="margin:0 0 14px;padding:10px 12px;background:${p.label.startsWith("Revision") ? "#fdeeee" : "#fff8dc"};border:1px solid ${p.label.startsWith("Revision") ? "#b91c1c" : "#d9a521"};"><div style="font-size:11px;font-weight:bold;letter-spacing:.5px;text-transform:uppercase;">${escHtml(p.label)}</div><div style="margin-top:4px;">${escHtml(p.text)}</div></div>`;
+  const html = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#1a1d21">${parts.map(box).join("")}${escHtml(main)}</div>`;
+  return { subject, text, html, fromName: name, replyTo: from.email, fileName: pdfFileName(doc.kind, doc.number, doc.buyerCompany ?? "", rev), pdf };
 }
 
 // ---- sending (and taking stock out) ------------------------------------------------------------------------------
@@ -586,7 +656,8 @@ export async function sendDocument(org: Org, id: string, opts: { mailer: Mailer 
   if (!have) return { ok: false, error: "That document wasn't found." };
   const { doc, lines } = have;
   const isInvoice = doc.kind === "INVOICE";
-  if (isInvoice ? doc.status !== "DRAFT" : doc.status !== "DRAFT" && doc.status !== "SENT") return { ok: false, error: isInvoice ? "This invoice has already been sent." : "This quotation can't be sent again." };
+  const kindWord = isInvoice ? "Invoice" : doc.kind === "PURCHASE_ORDER" ? "Purchase order" : "Quotation";
+  if (isInvoice ? doc.status !== "DRAFT" : doc.status !== "DRAFT" && doc.status !== "SENT") return { ok: false, error: isInvoice ? "This invoice has already been sent." : `This ${kindWord.toLowerCase()} can't be sent again.` };
   const to = nz(opts.to) ?? nz(doc.buyerEmail);
   if (opts.mailer && !to) return { ok: false, error: "Add the buyer's email address to send it." };
 
@@ -611,6 +682,9 @@ export async function sendDocument(org: Org, id: string, opts: { mailer: Mailer 
       const dates = r.takes.map((t) => t.expiry).filter((x): x is string => !!x).sort();
       expiryTexts.push(dates.length ? expirySpan(dates[0], dates[dates.length - 1]) : null);
     }
+  } else if (doc.kind === "PURCHASE_ORDER") {
+    // A purchase order we received names what the buyer wants; there is no stock expiry to print on it.
+    for (let i = 0; i < lines.length; i++) expiryTexts.push(null);
   } else {
     const preview = await deductStockMany(org, inputs, { dryRun: true });
     for (const [i] of lines.entries()) {
@@ -627,16 +701,8 @@ export async function sendDocument(org: Org, id: string, opts: { mailer: Mailer 
   if (opts.mailer && to) {
     try {
       const fresh = (await getDocument(org.organizationId, id))!;
-      const from = await resolveFrom(org.organizationId);
-      const pdf = await buildSalesPdf(await pdfInputFor(org.organizationId, fresh));
-      const kindWord = isInvoice ? "Invoice" : "Quotation";
-      const subject = `${kindWord} ${doc.number} from ${from.name}`;
-      const body = nz(opts.message) ?? `Hello${doc.buyerContact ? ` ${doc.buyerContact}` : ""},\n\n${kindWord} ${doc.number} is attached.\n\nThank you,\n${from.name}`;
-      const html = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#1a1d21">${body
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/\n/g, "<br>")}</div>`;
-      const sent = await opts.mailer({ to, subject, text: body, html, fromName: from.name, replyTo: from.email, fileName: pdfFileName(doc.kind, doc.number, doc.buyerCompany ?? ""), pdf });
+      const mail = await composeMail(org.organizationId, fresh, opts.message);
+      const sent = await opts.mailer({ to, ...mail });
       if (!sent.ok) {
         if (movementIds.length) await discardMovements(org.organizationId, movementIds);
         return { ok: false, error: `The email wasn't sent, so nothing was changed. ${sent.error}` };
@@ -654,13 +720,72 @@ export async function sendDocument(org: Org, id: string, opts: { mailer: Mailer 
   return { ok: true, emailedTo: opts.mailer ? to : null, units: isInvoice ? lines.reduce((n, l) => n + l.quantity, 0) : 0 };
 }
 
+// ---- revisions ---------------------------------------------------------------------------------------------------
+
+export type ReviseOutcome = { ok: true; revision: number; emailedTo: string | null } | { ok: false; error: string };
+
+/**
+ * Sends a revision of a SENT (or accepted) quotation or purchase order: a required note saying what changed or what is wrong,
+ * optionally with the items changed too. The other company gets the new PDF marked "Revision n" with the note in a box, and
+ * an email in the same words. The email goes first: if it is refused nothing is changed. The version before the change is kept.
+ */
+export async function reviseDocument(
+  org: Org,
+  id: string,
+  opts: { note: unknown; edits?: Omit<DocInput, "kind" | "id"> | null; mailer: Mailer | null; to?: string | null; message?: string | null },
+): Promise<ReviseOutcome> {
+  const noted = cleanRevisionNote(opts.note);
+  if (!noted.ok) return noted;
+  const have = await getDocument(org.organizationId, id);
+  if (!have || !isOrderDoc(have.doc.kind)) return { ok: false, error: "That quotation or purchase order wasn't found." };
+  const word = have.doc.kind === "PURCHASE_ORDER" ? "purchase order" : "quotation";
+  if (have.doc.status === "DRAFT") return { ok: false, error: `This ${word} hasn't been sent yet. Just edit it and send it.` };
+  if (have.doc.status !== "SENT" && have.doc.status !== "ACCEPTED") return { ok: false, error: `Only a sent ${word} can be revised.` };
+
+  const now = new Date().toISOString();
+  const revision = nextRevision(have.doc.revision);
+  let nextDoc: SalesDocument = { ...have.doc, revision, revisionNote: noted.note, revisedAt: now, status: "SENT", updatedAt: now };
+  let nextLines: SalesLine[] = have.lines;
+  let rows: ReturnType<Prepared["lineRows"]> | null = null;
+  if (opts.edits) {
+    const prep = await prepareDocument(org, { ...opts.edits, kind: have.doc.kind, id });
+    if (!prep.ok) return prep;
+    nextDoc = { ...nextDoc, ...prep.header };
+    rows = prep.lineRows(id);
+    nextLines = rows.map((r) => ({ ...r, productId: r.productId ?? null, groupKey: r.groupKey ?? null, groupLabel: r.groupLabel ?? null, condition: r.condition ?? "Mint", expiryText: null, note: r.note ?? null, ndc: r.ndc ?? null, unitPrice: r.unitPrice ?? 0, createdAt: now, updatedAt: now })) as SalesLine[];
+  }
+
+  const to = nz(opts.to) ?? nz(nextDoc.buyerEmail);
+  if (opts.mailer) {
+    if (!to) return { ok: false, error: "Add the buyer's email address to send the revision." };
+    if (!looksLikeEmail(to)) return { ok: false, error: "That email address doesn't look right." };
+    try {
+      const mail = await composeMail(org.organizationId, { doc: nextDoc, lines: nextLines, payments: [] }, opts.message);
+      const sent = await opts.mailer({ to, ...mail });
+      if (!sent.ok) return { ok: false, error: `The email wasn't sent, so nothing was changed. ${sent.error}` };
+    } catch (e) {
+      return { ok: false, error: `The email wasn't sent, so nothing was changed. ${e instanceof Error ? e.message : ""}`.trim() };
+    }
+  }
+
+  await addRevisionRecord({ organizationId: org.organizationId, userId: org.userId, source: "sales_doc", documentId: id, revision, note: noted.note, before: { doc: have.doc, lines: have.lines }, emailedTo: opts.mailer ? to : null });
+  const { id: _id, organizationId: _o, kind: _k, seq: _s, number: _n, createdAt: _c, ...changes } = nextDoc;
+  void [_id, _o, _k, _s, _n, _c];
+  await db.update(salesDocuments).set({ ...changes, sentAt: now, emailedTo: opts.mailer ? to : have.doc.emailedTo }).where(and(eq(salesDocuments.id, id), eq(salesDocuments.organizationId, org.organizationId)));
+  if (rows) {
+    await db.delete(salesDocumentLines).where(eq(salesDocumentLines.documentId, id));
+    await db.insert(salesDocumentLines).values(rows);
+  }
+  return { ok: true, revision, emailedTo: opts.mailer ? to : null };
+}
+
 /** Voids a quotation or an unpaid invoice. A sent invoice's units go back into Inventory. */
 export async function voidDocument(org: Org, id: string): Promise<{ ok: true; returned: number } | { ok: false; error: string }> {
   const have = await getDocument(org.organizationId, id);
   if (!have) return { ok: false, error: "That document wasn't found." };
   const d = have.doc;
   if (d.status === "VOID") return { ok: false, error: "It is already void." };
-  if (d.kind === "QUOTATION" && d.status === "CONVERTED") return { ok: false, error: "This quotation became an invoice. Void the invoice instead." };
+  if (isOrderDoc(d.kind) && d.status === "CONVERTED") return { ok: false, error: `This ${d.kind === "PURCHASE_ORDER" ? "purchase order" : "quotation"} became an invoice. Void the invoice instead.` };
   if (d.kind === "INVOICE" && d.amountPaid > 0) return { ok: false, error: "This invoice has payments recorded. Remove them first, then void it." };
   let returned = 0;
   if (d.kind === "INVOICE" && d.inventoryPosted) returned = await returnSale(org, "sales_invoice", d.id, `Invoice ${d.number} voided`);

@@ -32,8 +32,8 @@ export const FEATURES: FeatureDef[] = [
   },
   {
     key: "purchase-orders",
-    label: "Purchase orders",
-    blurb: "Purchase orders and saved suppliers in Purchasing, for companies that buy from wholesalers (distributors, or both). Sent as a PDF and as an email in the order's layout.",
+    label: "Purchase orders, templates and revisions",
+    blurb: "Purchase orders and saved suppliers in Purchasing, received purchase orders in Sales, the quotation and purchase order templates (logo, wording, standing notice) in both departments' Settings, and sending revisions. For every company; the sign-up answer only decides which document comes first.",
     defaultStage: "mothership",
   },
 ];

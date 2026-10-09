@@ -9,6 +9,7 @@ import { logActivity } from "@/lib/hr-service";
 import { canManageSalesSettings, canWriteSales } from "@/lib/permissions";
 import { encodeLogoFile } from "@/lib/logo-validation";
 import { sendOrgEmail } from "@/lib/email-connector";
+import { purchaseOrdersEnabled } from "@/lib/purchase-order-service";
 import { findColumn, parseSpreadsheetFile } from "@/lib/spreadsheet-import";
 import { buyersFromSheet } from "@/lib/sales-import";
 import { cleanText, guessColumns, looksLikeEmail, readSheetRows, TERMS_OPTIONS } from "@/lib/sales-rules";
@@ -24,6 +25,7 @@ import {
   matchPriceItem,
   recordPayment,
   removePayment,
+  reviseDocument,
   saveDocument,
   savePriceSheet,
   sendDocument,
@@ -241,7 +243,8 @@ export async function removePriceSheetAction(buyerId: string): Promise<SalesResu
 export async function saveDocumentAction(input: DocInput): Promise<SalesResult> {
   const w = await writer();
   if ("error" in w) return { ok: false, error: w.error };
-  if (input.kind !== "QUOTATION" && input.kind !== "INVOICE") return { ok: false, error: "Something went wrong. Reload the page and try again." };
+  if (input.kind !== "QUOTATION" && input.kind !== "INVOICE" && input.kind !== "PURCHASE_ORDER") return { ok: false, error: "Something went wrong. Reload the page and try again." };
+  if (input.kind === "PURCHASE_ORDER" && !(await purchaseOrdersEnabled(w.org.organizationId))) return { ok: false, error: "Purchase orders aren't turned on for your company yet." };
   const res = await saveDocument(w.org, { ...input, lines: Array.isArray(input.lines) ? input.lines.map((l) => ({ ...l, quantity: Number(l.quantity), unitPrice: Number(l.unitPrice) })) : [] });
   if (!res.ok) return res;
   refresh();
@@ -264,12 +267,37 @@ export async function sendDocumentAction(id: string, opts: { email: boolean; to?
   if (!res.ok) return res;
   if (before) {
     const isInvoice = before.doc.kind === "INVOICE";
-    await logActivity(w.org, isInvoice ? "INVOICE_SENT" : "QUOTE_SENT", `${isInvoice ? "Sent invoice" : "Sent quotation"} ${before.doc.number} to ${before.doc.buyerCompany ?? "a buyer"}`, { type: "sales_document", id });
+    const word = isInvoice ? "invoice" : before.doc.kind === "PURCHASE_ORDER" ? "purchase order" : "quotation";
+    await logActivity(w.org, isInvoice ? "INVOICE_SENT" : "QUOTE_SENT", `Sent ${word} ${before.doc.number} to ${before.doc.buyerCompany ?? "a buyer"}`, { type: "sales_document", id });
   }
   revalidatePath("/dashboard/inventory", "layout");
   refresh();
   const what = res.units ? ` ${res.units} ${res.units === 1 ? "unit" : "units"} came out of Inventory.` : "";
   return { ok: true, message: (res.emailedTo ? `Sent to ${res.emailedTo}.` : "Marked as sent.") + what };
+}
+
+/** Sends a revision of a sent quotation or purchase order: a required note, optionally with the items changed, by email and PDF. */
+export async function reviseDocumentAction(
+  id: string,
+  opts: { note: string; edits?: Omit<DocInput, "kind" | "id"> | null; email: boolean; to?: string; message?: string },
+): Promise<SalesResult> {
+  const w = await writer();
+  if ("error" in w) return { ok: false, error: w.error };
+  if (!(await purchaseOrdersEnabled(w.org.organizationId))) return { ok: false, error: "Revisions aren't turned on for your company yet." };
+  const to = cleanText(opts?.to, 160);
+  if (opts?.email && to && !looksLikeEmail(to)) return { ok: false, error: "That email address doesn't look right." };
+  const edits = opts?.edits
+    ? { ...opts.edits, lines: Array.isArray(opts.edits.lines) ? opts.edits.lines.map((l) => ({ ...l, quantity: Number(l.quantity), unitPrice: Number(l.unitPrice) })) : [] }
+    : null;
+  const before = await getDocument(w.org.organizationId, id);
+  const res = await reviseDocument(w.org, id, { note: opts?.note, edits, mailer: opts?.email ? mailer(w.org) : null, to: to || null, message: opts?.message ? String(opts.message).slice(0, 2000) : null });
+  if (!res.ok) return res;
+  if (before) {
+    const word = before.doc.kind === "PURCHASE_ORDER" ? "purchase order" : "quotation";
+    await logActivity(w.org, "QUOTE_SENT", `Sent revision ${res.revision} of ${word} ${before.doc.number} to ${before.doc.buyerCompany ?? "a buyer"}`, { type: "sales_document", id });
+  }
+  refresh();
+  return { ok: true, id, message: res.emailedTo ? `Revision ${res.revision} sent to ${res.emailedTo}.` : `Revision ${res.revision} saved.` };
 }
 
 export async function voidDocumentAction(id: string): Promise<SalesResult> {

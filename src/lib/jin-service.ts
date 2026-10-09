@@ -101,7 +101,7 @@ export async function askJin(who: JinWho, question: string, history: JinMessage[
 
   const rules = houseRules(await liveKnowledge()).map((r) => `${r.title}: ${r.body}`.slice(0, 700)).slice(0, 12);
   // Purchase orders and suppliers are mentioned only to a company that has them.
-  const hiddenTabs = (await purchaseOrdersEnabled(who.organizationId)) ? [] : ["purchase-orders", "suppliers"];
+  const hiddenTabs = (await purchaseOrdersEnabled(who.organizationId)) ? [] : ["purchase-orders", "suppliers", "templates"];
   const system = systemPrompt(who, rules, hiddenTabs);
   const tools = toolsFor(who);
   const messages: Msg[] = [...history.map((m) => ({ role: m.role, content: m.content })), { role: "user", content: question }];

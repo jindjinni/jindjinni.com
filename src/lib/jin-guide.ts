@@ -8,8 +8,9 @@ import { departmentsFor, isAdmin, ROLE_LABELS, settingsSectionsFor, type Access,
 const WHAT: Record<MenuDept, Record<string, string>> = {
   purchasing: {
     dashboard: "Counts of customers, products and open quotations, with shortcuts.",
-    "purchase-orders": "Make a purchase order for a wholesaler you buy from (part numbers and NDCs, quantities, net cost), save it as a draft, send it as a PDF and as an email with the order written out, and follow it from Sent to Confirmed to Received.",
+    "purchase-orders": "Make a purchase order for a wholesaler you buy from (part numbers and NDCs, quantities, net cost), save it as a draft, send it as a PDF and as an email with the order written out, and follow it from Sent to Confirmed to Received. A sent order can be corrected with \"Send a revision\" and a note saying what is wrong.",
     suppliers: "The wholesalers you buy from, saved once with their email, address and license number and expiry, ready to pick on every purchase order.",
+    templates: "How your Quotation and Purchase Order documents look: logo, name, title and wording, plus one standing notice (for example \"out of office for a week\") that prints on every one while it is switched on (manager only).",
     quotations: "Create a quotation for a customer, choose products and conditions, see its status (Quoted, Confirmed, Received, Cancelled), print or send the receipt, and track the package.",
     customers: "The people you buy from: contact details, shipping address and every quotation made for them.",
     products: "The list of products you buy, with their category and pricing.",
@@ -53,11 +54,13 @@ const WHAT: Record<MenuDept, Record<string, string>> = {
     "estimated-prices": "Your estimated resale price per product and condition.",
   },
   sales: {
-    quotations: "Quotations to your buyers.",
+    quotations: "Quotations to your buyers; a sent one can be corrected with \"Send a revision\" and a note.",
+    "purchase-orders": "Purchase orders your buyers send you: log the buyer's PO number and the NDC of each item, send a confirmation, correct it with \"Send a revision\" and a note, and turn it into an invoice.",
     invoices: "Invoices to your buyers.",
     buyers: "The companies you sell to.",
     "price-comparison": "Compare your price with what buyers offer.",
     "company-profile": "Your company details printed on sales documents.",
+    templates: "How your Sales quotations and purchase orders look: logo, name, title and wording, plus one standing notice that prints on every one while it is switched on.",
     connectors: "Your company mailbox (owner or admin only).",
   },
   hr: {

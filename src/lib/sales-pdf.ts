@@ -6,10 +6,10 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import { pdfSafe } from "@/lib/purchasing-receipt-pdf";
 
-export type SalesPdfLine = { productName: string; expiryText: string | null; condition: string; quantity: number; unitPrice: number; amount: number };
+export type SalesPdfLine = { productName: string; expiryText: string | null; condition: string; quantity: number; unitPrice: number; amount: number; ndc?: string | null };
 
 export type SalesPdfInput = {
-  kind: "QUOTATION" | "INVOICE";
+  kind: "QUOTATION" | "INVOICE" | "PURCHASE_ORDER";
   number: string;
   status: string;
   docDate: string; // YYYY-MM-DD
@@ -28,6 +28,13 @@ export type SalesPdfInput = {
   amountPaid: number;
   notes: string | null;
   footer: string | null;
+  /** From the company's template (all optional): the word at the top right, opening wording, the standing notice that is on today. */
+  title?: string | null;
+  intro?: string | null;
+  notice?: string | null;
+  /** Revision number (1, 2, ...) and the note that went with it. */
+  revision?: number | null;
+  revisionNote?: string | null;
 };
 
 const PAGE_W = 612;
@@ -79,18 +86,21 @@ export function wrap(text: string, font: PDFFont, size: number, maxWidth: number
   return out;
 }
 
-export function pdfFileName(kind: "QUOTATION" | "INVOICE", number: string, buyer: string): string {
-  const label = kind === "INVOICE" ? "Invoice" : "Quotation";
+export function pdfFileName(kind: "QUOTATION" | "INVOICE" | "PURCHASE_ORDER", number: string, buyer: string, revision?: number | null): string {
+  const label = kind === "INVOICE" ? "Invoice" : kind === "PURCHASE_ORDER" ? "PurchaseOrder" : "Quotation";
   const who = buyer.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "");
-  return `${label}-${number.replace(/[^A-Za-z0-9-]+/g, "")}${who ? `-${who}` : ""}.pdf`;
+  return `${label}-${number.replace(/[^A-Za-z0-9-]+/g, "")}${revision && revision > 0 ? `-Rev${Math.floor(revision)}` : ""}${who ? `-${who}` : ""}.pdf`;
 }
 
 export async function buildSalesPdf(input: SalesPdfInput): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   const regular = await doc.embedFont(StandardFonts.Helvetica);
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
-  const label = input.kind === "INVOICE" ? "INVOICE" : "QUOTATION";
-  doc.setTitle(pdfSafe(`${label} ${input.number} - ${input.buyer.company}`));
+  const defaultLabel = input.kind === "INVOICE" ? "INVOICE" : input.kind === "PURCHASE_ORDER" ? "PURCHASE ORDER" : "QUOTATION";
+  const label = input.title?.trim() ? input.title.trim().toUpperCase() : defaultLabel;
+  const isPo = input.kind === "PURCHASE_ORDER";
+  const rev = input.revision && input.revision > 0 ? Math.floor(input.revision) : 0;
+  doc.setTitle(pdfSafe(`${label} ${input.number}${rev ? ` Rev ${rev}` : ""} - ${input.buyer.company}`));
   doc.setProducer("Ledger");
 
   let page: PDFPage = doc.addPage([PAGE_W, PAGE_H]);
@@ -148,10 +158,14 @@ export async function buildSalesPdf(input: SalesPdfInput): Promise<Uint8Array> {
   drawRight(label, PAGE_W - M, 9, bold, MUT, y);
   drawRight(`#${input.number}`, PAGE_W - M, 26, bold, ACC, y - 26);
   let rightY = y - 46;
+  if (rev) {
+    drawRight(`REVISION ${rev}`, PAGE_W - M, 11, bold, rgb(0.72, 0.11, 0.11), rightY);
+    rightY -= 15;
+  }
   drawRight(`Date  ${longDate(input.docDate)}`, PAGE_W - M, 9, regular, INK, rightY);
   rightY -= 13;
   if (input.dueDate) {
-    drawRight(`${input.kind === "INVOICE" ? "Due" : "Valid until"}  ${longDate(input.dueDate)}`, PAGE_W - M, 9, regular, INK, rightY);
+    drawRight(`${input.kind === "INVOICE" ? "Due" : isPo ? "Needed by" : "Valid until"}  ${longDate(input.dueDate)}`, PAGE_W - M, 9, regular, INK, rightY);
     rightY -= 13;
   }
   if (input.terms && input.kind === "INVOICE") {
@@ -164,6 +178,27 @@ export async function buildSalesPdf(input: SalesPdfInput): Promise<Uint8Array> {
   }
 
   y = Math.min(leftY, rightY) - 22;
+
+  // ---- Callouts: what changed in this revision, then the company's standing notice, then its opening wording
+  const callout = (head: string, text: string, bg: ReturnType<typeof rgb>, line: ReturnType<typeof rgb>, headColor: ReturnType<typeof rgb>) => {
+    const ls = wrap(text, regular, 9.5, PAGE_W - 2 * M - 20);
+    const h = 24 + ls.length * 12;
+    ensure(h + 10);
+    page.drawRectangle({ x: M, y: y - h + 8, width: PAGE_W - 2 * M, height: h, color: bg, borderColor: line, borderWidth: 0.8 });
+    draw(head.toUpperCase(), M + 10, 8, bold, headColor, y - 6);
+    ls.forEach((l, i) => draw(l, M + 10, 9.5, regular, INK, y - 20 - i * 12));
+    y -= h + 8;
+  };
+  if (rev && input.revisionNote?.trim()) callout(`Revision ${rev} - what changed`, input.revisionNote.trim(), rgb(0.99, 0.93, 0.93), rgb(0.72, 0.11, 0.11), rgb(0.72, 0.11, 0.11));
+  if (input.notice?.trim()) callout("Please note", input.notice.trim(), rgb(1, 0.97, 0.86), rgb(0.85, 0.65, 0.13), rgb(0.5, 0.35, 0.02));
+  if (input.intro?.trim()) {
+    for (const l of wrap(input.intro.trim(), regular, 9.5, PAGE_W - 2 * M)) {
+      ensure(13);
+      draw(l, M, 9.5, regular, INK);
+      y -= 12;
+    }
+    y -= 8;
+  }
 
   // ---- Bill to / Ship to
   const colR = M + 290;
@@ -197,7 +232,7 @@ export async function buildSalesPdf(input: SalesPdfInput): Promise<Uint8Array> {
   }
   if (input.reference) {
     sy -= 6;
-    draw("REFERENCE", colR, 8, bold, MUT, sy);
+    draw(isPo ? "BUYER'S PO #" : "REFERENCE", colR, 8, bold, MUT, sy);
     sy -= 13;
     draw(input.reference, colR, 9.5, regular, INK, sy);
     sy -= 12;
@@ -206,8 +241,8 @@ export async function buildSalesPdf(input: SalesPdfInput): Promise<Uint8Array> {
 
   // ---- Items table
   const cols = [
-    { head: "ITEM", x: M + 7, w: 190, align: "left" as const },
-    { head: "EXPIRES", x: M + 197, w: 66, align: "left" as const },
+    { head: "ITEM", x: M + 7, w: isPo ? 170 : 190, align: "left" as const },
+    { head: isPo ? "NDC" : "EXPIRES", x: isPo ? M + 177 : M + 197, w: isPo ? 86 : 66, align: "left" as const },
     { head: "COND.", x: M + 263, w: 52, align: "left" as const },
     { head: "QTY", x: M + 315, w: 36, align: "right" as const },
     { head: "UNIT PRICE", x: M + 351, w: 72, align: "right" as const },
@@ -233,7 +268,7 @@ export async function buildSalesPdf(input: SalesPdfInput): Promise<Uint8Array> {
     if (i % 2 === 1) page.drawRectangle({ x: M, y: y - rowH, width: tableW, height: rowH, color: ZEBRA });
     const top = y - 14;
     nameLines.forEach((nl, k) => draw(nl, cols[0].x, 9.3, regular, INK, top - k * 11.5));
-    draw(l.expiryText ?? "", cols[1].x, 9.3, regular, MUT, top);
+    draw(isPo ? (l.ndc ?? "") : (l.expiryText ?? ""), cols[1].x, 9.3, regular, MUT, top);
     draw(l.condition, cols[2].x, 9.3, regular, MUT, top);
     drawRight(String(l.quantity), cols[3].x + cols[3].w - 7, 9.3, regular, INK, top);
     drawRight(money(l.unitPrice), cols[4].x + cols[4].w - 7, 9.3, regular, INK, top);
@@ -293,8 +328,8 @@ export async function buildSalesPdf(input: SalesPdfInput): Promise<Uint8Array> {
     p.drawLine({ start: { x: M, y: 46 }, end: { x: PAGE_W - M, y: 46 }, thickness: 0.5, color: RULE });
     const t = pdfSafe(foot).slice(0, 110);
     p.drawText(t, { x: (PAGE_W - regular.widthOfTextAtSize(t, 9)) / 2, y: 30, size: 9, font: regular, color: MUT });
-    if (pages.length > 1) {
-      const n = `Page ${i + 1} of ${pages.length}`;
+    if (pages.length > 1 || rev) {
+      const n = `${rev ? `${input.number} Rev ${rev}  |  ` : ""}Page ${i + 1} of ${pages.length}`;
       p.drawText(n, { x: PAGE_W - M - regular.widthOfTextAtSize(n, 8), y: 16, size: 8, font: regular, color: MUT });
     }
   });

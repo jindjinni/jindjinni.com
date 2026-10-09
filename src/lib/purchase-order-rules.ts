@@ -158,7 +158,7 @@ export function usDate(day: string | null | undefined): string {
 export const money = (n: number) => "$" + (Number.isFinite(n) ? n : 0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 
 /** A safe file name such as "PO-1001-Acme-Supply.pdf". */
-export function poFileName(number: string, supplier: string): string {
+export function poFileName(number: string, supplier: string, revision?: number | null): string {
   const who = supplier.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "");
-  return `${number.replace(/[^A-Za-z0-9-]+/g, "")}${who ? `-${who}` : ""}.pdf`;
+  return `${number.replace(/[^A-Za-z0-9-]+/g, "")}${revision && revision > 0 ? `-Rev${Math.floor(revision)}` : ""}${who ? `-${who}` : ""}.pdf`;
 }
