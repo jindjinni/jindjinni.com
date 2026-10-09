@@ -1,5 +1,6 @@
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { isValidElement, type ReactNode } from "react";
+import { RequiredStar } from "@/components/required-marks";
 import { BrandLogo, Icon, LogoMark, Sparkle } from "@/components/landing/icons";
 
 export const authBtnPrimary =
@@ -122,10 +123,12 @@ export function AuthSection({
   );
 }
 
-export function AuthField({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+export function AuthField({ label, hint, required, children }: { label: string; hint?: string; required?: boolean; children: ReactNode }) {
+  // A field is required when told so, or when the input inside it is (the red asterisk only shows on the sign-up page).
+  const isRequired = required ?? (isValidElement(children) && !!(children.props as { required?: boolean }).required);
   return (
     <label className="flex flex-col gap-1.5 text-sm">
-      <span className="font-medium">{label}</span>
+      <span className="font-medium">{label}<RequiredStar required={isRequired} /></span>
       {children}
       {hint && <span className="text-xs text-slate-400">{hint}</span>}
     </label>

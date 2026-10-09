@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { RequiredStar } from "@/components/required-marks";
 
 const link = "underline decoration-brand decoration-2 underline-offset-4";
 
@@ -34,7 +35,7 @@ export function TermsCheckbox({ id = "accept-terms" }: { id?: string }) {
           <Link href="/acceptable-use" target="_blank" className={link}>
             Acceptable Use Policy
           </Link>
-          , and I understand that copying or cloning this software, including with AI tools, is prohibited.
+          , and I understand that copying or cloning this software, including with AI tools, is prohibited.<RequiredStar required />
         </span>
       </label>
     </div>

@@ -9,6 +9,7 @@ import { Icon } from "@/components/landing/icons";
 import { BusinessProfileSignupFields } from "@/components/business-profile-signup-fields";
 import { HumanCheck } from "@/components/human-check";
 import { BillingSection } from "@/components/billing-section";
+import { RequiredLegend, RequiredMarks } from "@/components/required-marks";
 import { TermsCheckbox } from "@/components/legal/terms-checkbox";
 
 // Field styling comes from the .auth-theme scope in globals.css.
@@ -72,7 +73,9 @@ export function SignupForm({ needsVerification }: { needsVerification: boolean }
           and a few fields are optional.
         </p>
 
+        <RequiredMarks>
         <form ref={formRef} onSubmit={handleCreateAccount} className="mt-8 flex flex-col gap-6">
+          <RequiredLegend />
           <Section title="Your Account">
             <Field label="Your Name">
               <input name="name" value={accountName} onChange={(e) => setAccountName(e.target.value)} className={inputClass} />
@@ -155,6 +158,7 @@ export function SignupForm({ needsVerification }: { needsVerification: boolean }
             {!pending && <Icon name="arrow" className="h-5 w-5" />}
           </button>
         </form>
+        </RequiredMarks>
 
         <p className="mt-8 border-t border-line pt-6 text-sm font-semibold text-muted">
           Already have an account?{" "}

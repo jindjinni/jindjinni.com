@@ -1,5 +1,6 @@
 "use client";
 
+import { RequiredStar } from "@/components/required-marks";
 import { useEffect, useRef, useState } from "react";
 import type { AddressSuggestion } from "@/lib/address-autocomplete-types";
 
@@ -95,7 +96,7 @@ export function AddressAutocompleteFields({
   return (
     <>
       <div ref={wrapperRef} className="relative flex flex-col gap-1 text-sm sm:col-span-2">
-        <span className="font-medium text-slate-700 dark:text-slate-300">Address Line 1</span>
+        <span className="font-medium text-slate-700 dark:text-slate-300">Address Line 1<RequiredStar required={required} /></span>
         <input
           name={`${prefix}Street1`}
           value={street1}
@@ -158,7 +159,7 @@ export function AddressAutocompleteFields({
       )}
 
       <label className="flex flex-col gap-1 text-sm">
-        <span className="font-medium text-slate-700 dark:text-slate-300">City</span>
+        <span className="font-medium text-slate-700 dark:text-slate-300">City<RequiredStar required={required} /></span>
         <input
           name={`${prefix}City`}
           value={city}
@@ -169,7 +170,7 @@ export function AddressAutocompleteFields({
       </label>
       <div className="flex gap-2">
         <label className="flex flex-1 flex-col gap-1 text-sm">
-          <span className="font-medium text-slate-700 dark:text-slate-300">State</span>
+          <span className="font-medium text-slate-700 dark:text-slate-300">State<RequiredStar required={required} /></span>
           <input
             name={`${prefix}State`}
             value={state}
@@ -180,7 +181,7 @@ export function AddressAutocompleteFields({
           />
         </label>
         <label className="flex flex-1 flex-col gap-1 text-sm">
-          <span className="font-medium text-slate-700 dark:text-slate-300">ZIP Code</span>
+          <span className="font-medium text-slate-700 dark:text-slate-300">ZIP Code<RequiredStar required={required} /></span>
           <input
             name={`${prefix}Zip`}
             value={zip}
