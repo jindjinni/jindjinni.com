@@ -10,6 +10,7 @@ import { organizations } from "@/db/schema";
 import { requireOrg } from "@/lib/tenant";
 import { isAdmin } from "@/lib/permissions";
 import { logActivity } from "@/lib/hr-service";
+import { applyOperationType } from "@/lib/operations-service";
 import { operationLabel, parseOperationType, readRequiredOperationType } from "@/lib/operation-type";
 
 export type OperationState = { error?: string; message?: string } | undefined;
@@ -24,7 +25,7 @@ export async function saveOperationType(_prev: OperationState, fd: FormData): Pr
   const [cur] = await db.select({ t: organizations.operationType }).from(organizations).where(eq(organizations.id, org.organizationId)).limit(1);
   if (parseOperationType(cur?.t) === picked.type) return { message: "That is already how your company is set up." };
 
-  await db.update(organizations).set({ operationType: picked.type, updatedAt: new Date().toISOString() }).where(eq(organizations.id, org.organizationId));
+  await applyOperationType(org, picked.type);
   await logActivity(org, "OTHER", `Changed how the company operates from ${operationLabel(parseOperationType(cur?.t))} to ${operationLabel(picked.type)}`, { type: "organization", id: org.organizationId });
   revalidatePath("/dashboard", "layout");
   return { message: `Saved. Your company is set up as: ${operationLabel(picked.type)}.` };

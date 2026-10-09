@@ -1,7 +1,8 @@
 import { requireOrg } from "@/lib/tenant";
-import { settingsSectionsFor } from "@/lib/permissions";
+import { isAdmin, settingsSectionsFor } from "@/lib/permissions";
 import { staffLevelOf } from "@/lib/platform-admin";
 import { isFullLevel, mayOpenSettings } from "@/lib/mothership-rules";
+import { operationsEnabled } from "@/lib/operations-service";
 import { SettingsNav } from "./settings-nav";
 
 export default async function SettingsLayout({ children }: { children: React.ReactNode }) {
@@ -10,6 +11,12 @@ export default async function SettingsLayout({ children }: { children: React.Rea
   let sections = settingsSectionsFor(org.role);
   // Customer support (Lamp) never sees the company Settings, only their own account page.
   if (!mayOpenSettings(level)) sections = sections.filter((s) => s.href === "/dashboard/settings/account");
+  // Operations (Wholesale / Distribution sides) is for owners and admins, once the feature is on for the company.
+  if (mayOpenSettings(level) && isAdmin(org.role) && (await operationsEnabled(org.organizationId))) {
+    const at = sections.findIndex((s) => s.href === "/dashboard/settings/company-profile");
+    const entry = { href: "/dashboard/settings/operations", label: "Operations", blurb: "Switch your Wholesale and Distribution sides on or off. Both are free." };
+    sections.splice(at >= 0 ? at + 1 : sections.length, 0, entry);
+  }
   // The mothership's own pages (Companies, Support, Staff) are in the Lamp tab. Owner, co-owner and admin also get these two:
   if (isFullLevel(level)) {
     sections.push({ href: "/dashboard/settings/features", label: "Feature rollout", blurb: "Switch new features on in stages." });

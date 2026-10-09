@@ -36,6 +36,12 @@ export const FEATURES: FeatureDef[] = [
     blurb: "Purchase orders and saved suppliers in Purchasing, received purchase orders in Sales, the quotation and purchase order templates (logo, wording, standing notice) in both departments' Settings, and sending revisions. For every company; the sign-up answer only decides which document comes first.",
     defaultStage: "mothership",
   },
+  {
+    key: "operations",
+    label: "Wholesale and Distribution sides",
+    blurb: "Settings -> Operations: each company switches its Wholesale side (buying from individuals) and its Distribution side (buying from wholesalers, selling to pharmacies) on or off, free. Later steps hide what a switched-off side owns.",
+    defaultStage: "mothership",
+  },
 ];
 
 export const featureDef = (key: string) => FEATURES.find((f) => f.key === key);

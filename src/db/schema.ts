@@ -104,6 +104,13 @@ export const organizations = sqliteTable("organizations", {
   // How the company operates: "WHOLESALER" | "DISTRIBUTOR" | "BOTH" (see lib/operation-type.ts). Asked at sign-up; null = a company that
   // existed before the question (not answered yet -- never guessed). Plain nullable text on purpose -- same drizzle-kit rule as seatLimit.
   operationType: text("operation_type"),
+  // The two operation sides (see lib/operations-rules.ts). Each is the day-and-time the company switched that side on; empty = off. Both are
+  // free and can be switched on or off by the owner or an admin at any time. `operationsChosenAt` empty = the company has not confirmed its
+  // sides yet (then the old `operationType` answer decides, and with no answer both sides count as on, so nothing is ever hidden).
+  wholesaleActiveAt: text("wholesale_active_at"),
+  distributionActiveAt: text("distribution_active_at"),
+  operationsChosenAt: text("operations_chosen_at"),
+  operationsChosenBy: text("operations_chosen_by"),
   ...timestamps,
 }, (t) => [index("organizations_approval_idx").on(t.approvalStatus, t.createdAt), uniqueIndex("organizations_company_code_unique").on(t.companyCode)]);
 
