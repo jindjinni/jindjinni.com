@@ -29,11 +29,47 @@ export function scoreVoice(v: VoiceLike, lang: string): number {
 }
 
 /**
- * The platform's house voice for Jin, used for everyone who has not picked their own (until further notice, per the owner).
- * Matched by name, in order. It exists on Chrome and Edge (Google's voices); on devices without it Jin falls back to the
- * best natural voice below. To change the house voice later, change this one list.
+ * The platform's house voice for Jin, used for everyone who has not picked their own (until further notice, per the owner): a
+ * natural British English female voice. The first choice is Google's "Google UK English Female" (Chrome and Edge); when a
+ * browser or device does not offer that, the next British female voices are tried in this order (Microsoft's natural UK
+ * voices, then Apple's UK voices), and only then any other British voice that is not a man's. Only when the device has no
+ * British voice at all does Jin use the best natural voice in the person's own language. To change the house voice later,
+ * change this one list.
  */
-export const HOUSE_VOICE_NAMES = ["Google UK English Female"];
+export const HOUSE_VOICE_NAMES = ["Google UK English Female", "Microsoft Libby Online (Natural)", "Microsoft Sonia Online (Natural)", "Microsoft Maisie Online (Natural)", "Serena (Premium)", "Serena (Enhanced)", "Serena", "Kate (Premium)", "Kate (Enhanced)", "Kate", "Stephanie", "Martha", "Hazel"];
+
+/** Names of British men's voices, never used as the stand-in for the house voice. */
+const UK_MALE_NAMES = ["daniel", "oliver", "arthur", "george", "ryan", "thomas", "alfie", "male"];
+
+export const isBritish = (v: VoiceLike) => /^en[-_]gb$/i.test((v.lang || "").trim());
+
+/** The house voice if the device offers it (the first name on the list that exists), or null. */
+export function houseVoice<T extends VoiceLike>(voices: readonly T[]): T | null {
+  const british = voices.filter(isBritish);
+  for (const house of HOUSE_VOICE_NAMES) {
+    const h = house.toLowerCase();
+    const found = british.find((v) => v.name.toLowerCase() === h) ?? british.find((v) => v.name.toLowerCase().startsWith(h));
+    if (found) return found;
+  }
+  return null;
+}
+
+/** When the exact house voice is missing: the best other British voice that is not a man's (null when there is none). */
+export function britishStandIn<T extends VoiceLike>(voices: readonly T[]): T | null {
+  let best: T | null = null;
+  let bestScore = -Infinity;
+  for (const v of voices) {
+    if (!isBritish(v)) continue;
+    const name = v.name.toLowerCase();
+    if (UK_MALE_NAMES.some((m) => new RegExp(`\\b${m}\\b`).test(name) && !/female/.test(name))) continue;
+    const sc = scoreVoice(v, "en-GB");
+    if (sc > bestScore) {
+      best = v;
+      bestScore = sc;
+    }
+  }
+  return best && bestScore > -100 ? best : null;
+}
 
 /** The best voice for a language, or null when there is none worth choosing (then the browser's own default is used). */
 export function pickVoice<T extends VoiceLike>(voices: readonly T[], lang: string, preferredName?: string | null): T | null {
@@ -41,10 +77,8 @@ export function pickVoice<T extends VoiceLike>(voices: readonly T[], lang: strin
     const chosen = voices.find((v) => v.name === preferredName);
     if (chosen) return chosen;
   }
-  for (const house of HOUSE_VOICE_NAMES) {
-    const found = voices.find((v) => v.name.toLowerCase() === house.toLowerCase());
-    if (found) return found;
-  }
+  const house = houseVoice(voices) ?? britishStandIn(voices);
+  if (house) return house;
   let best: T | null = null;
   let bestScore = -Infinity;
   for (const v of voices) {

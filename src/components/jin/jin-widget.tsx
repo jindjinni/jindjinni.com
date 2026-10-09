@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { GenieLamp } from "@/components/jin/genie-lamp";
 import { parseAnswer, plainText, remainingText, type Inline, type JinMessage } from "@/lib/jin-rules";
-import { offeredVoices, pickVoice, speechChunks, spokenText, VOICE_PITCH, VOICE_RATE } from "@/lib/jin-voice";
+import { HOUSE_VOICE_NAMES, houseVoice, offeredVoices, pickVoice, speechChunks, spokenText, VOICE_PITCH, VOICE_RATE } from "@/lib/jin-voice";
 
 type Shown = JinMessage & { error?: boolean };
 
@@ -56,21 +56,27 @@ function VoicePicker({ onHear }: { onHear: () => void }) {
   });
   if (voices.length < 2) return null;
   const auto = pickVoice(voices, lang)?.name ?? "";
+  const usual = houseVoice(voices);
+  const using = (chosen && voices.some((v) => v.name === chosen) ? chosen : auto) || "";
+  const usualMissing = !usual && !(chosen && voices.some((v) => v.name === chosen));
+  const choose = (name: string) => {
+    setChosen(name);
+    try {
+      if (name) localStorage.setItem("jin-voice", name);
+      else localStorage.removeItem("jin-voice");
+    } catch {
+      /* storage blocked: the choice lasts until the page is closed */
+    }
+    setTimeout(onHear, 0);
+  };
   return (
-    <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-2 text-xs text-slate-600 dark:border-slate-800 dark:text-slate-300" data-testid="jin-voice-picker">
+    <div className="border-b border-slate-200 px-4 py-2 text-xs text-slate-600 dark:border-slate-800 dark:text-slate-300" data-testid="jin-voice-picker">
+    <div className="flex items-center gap-2">
       <label htmlFor="jin-voice-select" className="shrink-0 font-medium">Voice</label>
       <select
         id="jin-voice-select"
-        value={chosen || auto}
-        onChange={(e) => {
-          setChosen(e.target.value);
-          try {
-            localStorage.setItem("jin-voice", e.target.value);
-          } catch {
-            /* storage blocked: the choice lasts until the page is closed */
-          }
-          setTimeout(onHear, 0);
-        }}
+        value={using}
+        onChange={(e) => choose(e.target.value)}
         className="min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-950"
       >
         {voices.map((v) => (
@@ -78,6 +84,17 @@ function VoicePicker({ onHear }: { onHear: () => void }) {
         ))}
       </select>
       <button type="button" onClick={onHear} className="shrink-0 rounded-md border border-slate-300 px-2 py-1 hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800" data-testid="jin-voice-hear">Hear it</button>
+    </div>
+    {usual && using !== usual.name && (
+      <p className="mt-1.5" data-testid="jin-voice-usual">
+        <button type="button" onClick={() => choose("")} className="font-semibold text-emerald-700 underline dark:text-emerald-300" data-testid="jin-voice-usual-btn">Use Jin&apos;s usual voice</button> ({usual.name})
+      </p>
+    )}
+    {usualMissing && (
+      <p className="mt-1.5" data-testid="jin-voice-missing">
+        Jin&apos;s usual voice ({HOUSE_VOICE_NAMES[0]}) isn&apos;t offered by this browser right now, so Jin is using {using || "the browser's own voice"}. Chrome or Edge on a computer usually has it.
+      </p>
+    )}
     </div>
   );
 }
