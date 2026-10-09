@@ -15,22 +15,23 @@ export type OperationOption = { value: OperationType; label: string; description
 export const OPERATION_OPTIONS: OperationOption[] = [
   {
     value: "WHOLESALER",
-    label: "Wholesaler",
+    label: "Wholesale",
     description: "We source supplies from individuals and sell them back to distribution companies. We give quotations and sometimes provide a free shipping label.",
   },
   {
     value: "DISTRIBUTOR",
-    label: "Distributor",
+    label: "Distribution",
     description: "We sell to pharmacies and other established retail places that deal in medical supplies. We buy from wholesalers by sending purchase orders.",
   },
   {
     value: "BOTH",
-    label: "Both",
+    label: "Both (we do both)",
     description: "We do both: we buy from individuals and from wholesalers, and we sell on to distributors and retailers.",
   },
 ];
 
 export const OPERATION_QUESTION = "What type of operation do you run?";
+export const OPERATION_FREE_NOTE = "Both sides are free. You can switch either one on or off later in Settings → Operations.";
 
 /** The saved value, or null when it is empty or not one of the three. Never throws. */
 export function parseOperationType(value: unknown): OperationType | null {
@@ -46,7 +47,7 @@ export function operationLabel(type: OperationType | null | undefined): string {
 /** Reads the answer from a form for sign-up; returns the plain message to show when it is missing. */
 export function readRequiredOperationType(value: unknown): { ok: true; type: OperationType } | { ok: false; error: string } {
   const type = parseOperationType(value);
-  return type ? { ok: true, type } : { ok: false, error: "Choose what type of operation you run: Wholesaler, Distributor or Both." };
+  return type ? { ok: true, type } : { ok: false, error: "Choose what type of operation you run: Wholesale, Distribution or Both." };
 }
 
 /**

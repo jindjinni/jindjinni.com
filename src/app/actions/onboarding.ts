@@ -21,6 +21,7 @@ import { setupNewOrgCatalog } from "@/lib/catalog-template";
 import { extractBusinessProfileIdentityFields } from "@/lib/business-profile-form";
 import { encodeLogoFile } from "@/lib/logo-validation";
 import { readRequiredOperationType } from "@/lib/operation-type";
+import { columnsForChoice } from "@/lib/operations-rules";
 import { readVerification, einInUse, saveVerification, EIN_IN_USE_MESSAGE } from "@/lib/business-verification";
 
 export type ActionState = { error?: string } | undefined;
@@ -84,7 +85,7 @@ export async function createOrganization(
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/(^-|-$)/g, "") || newId("org");
 
-  await db.insert(organizations).values({ id: orgId, name: companyName, slug, approvalStatus: "pending", operationType: operation.type });
+  await db.insert(organizations).values({ id: orgId, name: companyName, slug, approvalStatus: "pending", ...columnsForChoice(operation.type, new Date(), userId!) });
   await db.insert(memberships).values({
     id: newId("mem"),
     userId: userId!,

@@ -49,6 +49,22 @@ export function typeFromSides(s: Sides): OperationType {
 }
 
 /** True when the company has never confirmed its sides: the owner is asked once. */
+/**
+ * The columns saved when a company is created (sign-up or onboarding): the sides it chose, today's date for each, and that it
+ * has confirmed them, so a new company never sees the "is this right?" prompt that older companies see once.
+ */
+export function columnsForChoice(type: OperationType, now: Date, userId: string | null) {
+  const s = sidesFromType(type);
+  const day = now.toISOString();
+  return {
+    operationType: type,
+    wholesaleActiveAt: s.wholesale ? day : null,
+    distributionActiveAt: s.distribution ? day : null,
+    operationsChosenAt: day,
+    operationsChosenBy: userId,
+  };
+}
+
 export const needsConfirmation = (row: OperationsRow | null | undefined) => !row?.operationsChosenAt;
 
 export const sidesLabel = (s: Sides) => (s.wholesale && s.distribution ? "Wholesale and Distribution" : s.wholesale ? "Wholesale" : "Distribution");

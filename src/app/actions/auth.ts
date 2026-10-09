@@ -34,6 +34,7 @@ import { looksLikeUsername } from "@/lib/staff-login";
 import { hasTwoStep } from "@/lib/two-step";
 import { ensureCompanyCode } from "@/lib/company-code";
 import { readRequiredOperationType } from "@/lib/operation-type";
+import { columnsForChoice } from "@/lib/operations-rules";
 
 export type ActionState = { error?: string; needCode?: boolean } | undefined;
 
@@ -199,7 +200,7 @@ export async function signUpOrganization(
     termsAcceptedAt: new Date().toISOString(),
     termsVersion: TERMS_VERSION,
   });
-  await db.insert(organizations).values({ id: orgId, name: companyName, slug, approvalStatus: "pending", billingPlan: parseBillingPlan(formData.get("billingPlan")), operationType: operation.type });
+  await db.insert(organizations).values({ id: orgId, name: companyName, slug, approvalStatus: "pending", billingPlan: parseBillingPlan(formData.get("billingPlan")), ...columnsForChoice(operation.type, new Date(), userId) });
   // Every company gets its permanent reference ("JJ-1042") right away, so support always knows who is calling.
   await ensureCompanyCode(orgId).catch(() => {});
   await db.insert(memberships).values({

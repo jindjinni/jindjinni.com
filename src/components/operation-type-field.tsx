@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { RequiredStar } from "@/components/required-marks";
-import { OPERATION_OPTIONS, OPERATION_QUESTION, type OperationType } from "@/lib/operation-type";
+import { OPERATION_FREE_NOTE, OPERATION_OPTIONS, OPERATION_QUESTION, type OperationType } from "@/lib/operation-type";
 
 /**
  * "What type of operation do you run?" -- Wholesaler, Distributor or Both, as three big choices with a plain description each.
@@ -54,6 +54,7 @@ export function OperationTypeField({
           </label>
         ))}
       </div>
+      <p className={auth ? "text-sm text-muted" : "text-xs text-slate-600 dark:text-slate-300"} data-testid="operation-free-note">{OPERATION_FREE_NOTE}</p>
     </fieldset>
   );
 }
