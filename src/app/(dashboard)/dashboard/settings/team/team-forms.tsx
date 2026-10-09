@@ -6,6 +6,7 @@ import {
   createStaffLogin,
   resendInvitation,
   resetStaffPassword,
+  resetMemberTwoStep,
   revokeInvitation,
   saveMemberAccess,
   setMemberActive,
@@ -372,10 +373,12 @@ export function MemberRow(props: {
   locked: boolean;
   paused: boolean;
   canReset: boolean;
+  hasTwoStep?: boolean;
   roles: RoleChoice[];
 }) {
   const [accessState, saveAccess, savingAccess] = useActionState(saveMemberAccess.bind(null, props.membershipId), undefined);
   const [resetState, reset, resetting] = useActionState(resetStaffPassword.bind(null, props.membershipId), undefined);
+  const [twoState, resetTwo, resettingTwo] = useActionState(resetMemberTwoStep.bind(null, props.membershipId), undefined);
   const [activeState, toggle, toggling] = useActionState(
     setMemberActive.bind(null, props.membershipId, !props.active),
     undefined,
@@ -445,6 +448,13 @@ export function MemberRow(props: {
               {props.active ? "Turn off access" : "Turn access back on"}
             </button>
           </form>
+          {props.hasTwoStep && (
+            <form action={resetTwo}>
+              <button className={linkBtn} disabled={resettingTwo} data-testid="reset-twostep">
+                {resettingTwo ? "Resetting..." : "Reset two-step sign-in"}
+              </button>
+            </form>
+          )}
           {props.canReset && (
             <form action={reset}>
               <button className={linkBtn} disabled={resetting}>
@@ -454,7 +464,7 @@ export function MemberRow(props: {
           )}
         </div>
       )}
-      <Feedback state={resetState ?? activeState} />
+      <Feedback state={twoState ?? resetState ?? activeState} />
       <CredentialsBox credentials={resetState?.credentials} />
     </li>
   );

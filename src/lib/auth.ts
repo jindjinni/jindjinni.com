@@ -8,6 +8,7 @@ import { signInEvents, users } from "@/db/schema";
 import { newId } from "@/lib/ids";
 import { afterFailedLogin, lockMinutesLeft } from "@/lib/login-throttle";
 import { looksLikeUsername } from "@/lib/staff-login";
+import { hasTwoStep, passSecondStep } from "@/lib/two-step";
 
 // "Remember me" on the login form: unchecked, a session is good for a day;
 // checked (the default -- see the login form and server action), it's good
@@ -48,6 +49,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
         rememberMe: { label: "Remember me", type: "text" },
+        // Two-step sign-in: the 6-digit code from the authenticator app, or a backup code.
+        code: { label: "Code", type: "text" },
       },
       authorize: async (credentials) => {
         // The "email" field also accepts a staff username ("maria_acme-supplies").
@@ -71,6 +74,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           const next = afterFailedLogin(user.failedLogins, Date.now());
           await db.update(users).set(next).where(eq(users.id, user.id)).catch(() => {});
           return null;
+        }
+
+        // Two-step sign-in. Enforced HERE, not only in the login form, so no other way of calling sign-in can skip it.
+        // A wrong or missing code counts like a wrong password (8 in a row pauses sign-in for 15 minutes).
+        if (hasTwoStep(user)) {
+          const ok = await passSecondStep(user, credentials?.code as string | undefined);
+          if (!ok) {
+            const next = afterFailedLogin(user.failedLogins, Date.now());
+            await db.update(users).set(next).where(eq(users.id, user.id)).catch(() => {});
+            return null;
+          }
         }
 
         // Missing entirely (e.g. the sign-up flow's auto sign-in) defaults

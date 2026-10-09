@@ -2,6 +2,7 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db/client";
 import { purchasingAuditLog, signInEvents, users } from "@/db/schema";
 import { requireOrg } from "@/lib/tenant";
+import { blockSupportStaff } from "@/lib/staff-guard";
 import { ROLE_LABELS, isAdmin } from "@/lib/permissions";
 import { getTeamMembers } from "@/lib/team-queries";
 
@@ -12,6 +13,7 @@ function when(iso: string) {
 
 export default async function ActivityPage() {
   const org = await requireOrg();
+  await blockSupportStaff(org);
   const mine = await db
     .select({ createdAt: signInEvents.createdAt })
     .from(signInEvents)

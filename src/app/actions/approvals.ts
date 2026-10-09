@@ -77,7 +77,7 @@ export async function decideApprovalAction(_prev: ApprovalState, fd: FormData): 
     .where(eq(organizations.id, orgId));
   await logDecision(orgId, LOG[decision], reason || null, org.userId);
 
-  revalidatePath("/dashboard/settings/companies");
+  revalidatePath("/dashboard/mothership/companies");
   return { message: DONE[decision] };
 }
 
@@ -88,6 +88,6 @@ export async function recheckRegistryAction(_prev: ApprovalState, fd: FormData):
   const orgId = String(fd.get("orgId") ?? "").slice(0, 80);
   if (!orgId) return { error: "Choose a company." };
   await runRegistryCheck(orgId);
-  revalidatePath("/dashboard/settings/companies");
+  revalidatePath("/dashboard/mothership/companies");
   return { message: "Checked again." };
 }

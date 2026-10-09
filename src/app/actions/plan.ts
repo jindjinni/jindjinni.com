@@ -45,7 +45,7 @@ export async function cancelPlanAction(_prev: PlanState, fd: FormData): Promise<
   );
   revalidatePath("/dashboard/settings/billing");
   revalidatePath("/dashboard/settings/company-profile");
-  revalidatePath("/dashboard/settings/companies");
+  revalidatePath("/dashboard/mothership/companies");
   return { message: `Your plan is cancelled. You keep the service through ${longDay(out.serviceEndsOn)}.` };
 }
 
@@ -67,6 +67,6 @@ export async function undoCancelAction(_prev: PlanState, _fd: FormData): Promise
   await logDecision(org.organizationId, "cancellation_undone", "Kept the plan", org.userId);
   revalidatePath("/dashboard/settings/billing");
   revalidatePath("/dashboard/settings/company-profile");
-  revalidatePath("/dashboard/settings/companies");
+  revalidatePath("/dashboard/mothership/companies");
   return { message: "Good news: your plan is back on. Nothing changes." };
 }

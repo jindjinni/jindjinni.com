@@ -28,6 +28,8 @@ const sections: LegalSection[] = [
       "When email verification is turned on for new accounts, the owner's email address is checked with a one-time code before the account is created.",
       "Invitation links are long, random and single-purpose. They expire after 7 days, only work for the invited email address, and can be cancelled by an admin. We store only a fingerprint of each link, not the link itself.",
       "Each sign-in is recorded, and you can review your own on the Security & activity page. Admins can also see each team member's last sign-in.",
+      "Anyone can turn on two-step sign-in (a 6-digit code from an authenticator app, with one-time backup codes) under Settings, My account. Our own platform login uses it.",
+      "We look inside a company's workspace for support only when an Owner or Admin allows it on a support request. The look is read-only, limited to 30 minutes at a time, closed to team chat, employee records and downloads, emailed to the requester and listed in the company's Support access log.",
     ],
   },
   {

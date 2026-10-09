@@ -18,13 +18,14 @@ export async function getTeamMembers(organizationId: string) {
       deactivatedAt: memberships.deactivatedAt,
       lastLoginAt: users.lastLoginAt,
       lockedUntil: users.lockedUntil,
+      totpEnabledAt: users.totpEnabledAt,
     })
     .from(memberships)
     .innerJoin(users, eq(memberships.userId, users.id))
     .where(eq(memberships.organizationId, organizationId))
     .orderBy(asc(users.name));
   // "Paused" = sign-in is locked for a while after too many wrong passwords.
-  return rows.map((r) => ({ ...r, paused: lockMinutesLeft(r.lockedUntil, now) > 0 }));
+  return rows.map((r) => ({ ...r, paused: lockMinutesLeft(r.lockedUntil, now) > 0, hasTwoStep: !!r.totpEnabledAt }));
 }
 
 /** Open invitations (not accepted, not cancelled). Expired ones are included so they can be re-sent. */

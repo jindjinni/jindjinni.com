@@ -1,14 +1,38 @@
-// The platform owner: the Owner of a company the platform runs itself (the same list as PLATFORM slugs used for the
-// platform's own Shippo account). Only they can open Jin's library and read Jin feedback. Always re-checked on the server.
+// The mothership's staff. A company the platform runs itself (the same list as PLATFORM slugs used for the platform's own Shippo
+// account) is the mothership. Its Owner is the platform owner; people the Owner adds are co-owners, admins or customer support
+// (platform_staff). Owner, co-owner and admin have complete access (isPlatformAdmin); customer support is staff (isPlatformStaff)
+// but never opens Settings. Always re-checked on the server; never tied to an email address.
 
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db/client";
-import { organizations } from "@/db/schema";
+import { memberships, organizations, platformStaff } from "@/db/schema";
 import { isOwner } from "@/lib/permissions";
+import { isFullLevel, isStaffLevel, type StaffLevel } from "@/lib/mothership-rules";
 import { mayUsePlatformShippo } from "@/lib/shippo-connection";
 
-export async function isPlatformAdmin(org: { organizationId: string; role: string }): Promise<boolean> {
-  if (!isOwner(org.role)) return false;
+type OrgLike = { organizationId: string; userId?: string; role: string };
+
+/** This person's staff level in the company they are signed in to, or null when they are not mothership staff. */
+export async function staffLevelOf(org: OrgLike): Promise<StaffLevel | null> {
   const [row] = await db.select({ slug: organizations.slug }).from(organizations).where(eq(organizations.id, org.organizationId)).limit(1);
-  return !!row && mayUsePlatformShippo(row.slug);
+  if (!row || !mayUsePlatformShippo(row.slug)) return null;
+  if (isOwner(org.role)) return "owner";
+  if (!org.userId) return null;
+  const [s] = await db
+    .select({ level: platformStaff.level })
+    .from(platformStaff)
+    .innerJoin(memberships, and(eq(memberships.userId, platformStaff.userId), eq(memberships.organizationId, org.organizationId), isNull(memberships.deactivatedAt)))
+    .where(eq(platformStaff.userId, org.userId))
+    .limit(1);
+  return s?.level === "co_owner" || s?.level === "admin" || s?.level === "support" ? s.level : null;
+}
+
+/** Owner, co-owner or admin of the mothership: complete access. */
+export async function isPlatformAdmin(org: OrgLike): Promise<boolean> {
+  return isFullLevel(await staffLevelOf(org));
+}
+
+/** Anyone on the mothership's team, customer support included. */
+export async function isPlatformStaff(org: OrgLike): Promise<boolean> {
+  return isStaffLevel(await staffLevelOf(org));
 }

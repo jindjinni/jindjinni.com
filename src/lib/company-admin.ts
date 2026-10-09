@@ -5,6 +5,7 @@
 import { and, desc, eq, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db/client";
 import { businessProfiles, businessVerifications, companyDecisions, memberships, organizations, users } from "@/db/schema";
+import { ensureCompanyCode } from "@/lib/company-code";
 import { newId } from "@/lib/ids";
 
 export const PAGE_SIZE = 25;
@@ -50,6 +51,7 @@ function searchWhere(q: string): SQL | undefined {
   const parts: SQL[] = [
     sql`lower(${organizations.name}) like ${like} escape '\\'`,
     sql`lower(${organizations.slug}) like ${like} escape '\\'`,
+    sql`lower(${organizations.companyCode}) like ${like} escape '\\'`,
     sql`lower(${businessVerifications.ein}) like ${like} escape '\\'`,
     sql`lower(${businessProfiles.businessEmail}) like ${like} escape '\\'`,
     sql`lower(${businessProfiles.primaryContactEmail}) like ${like} escape '\\'`,
@@ -91,6 +93,8 @@ export type CompanyRow = {
   id: string;
   name: string;
   slug: string;
+  /** The company's permanent reference, e.g. "JJ-1042". */
+  code: string;
   status: CompanyStatus;
   reason: string | null;
   decidedAt: string | null;
@@ -134,9 +138,9 @@ export type CompanyRow = {
 export type CompanyPage = { rows: CompanyRow[]; total: number; page: number; pages: number };
 
 /** One page of companies: waiting ones first, then newest first. */
-export async function listCompanies(opts: { q?: string; filter?: CompanyFilter; page?: number }): Promise<CompanyPage> {
+export async function listCompanies(opts: { q?: string; filter?: CompanyFilter; page?: number; id?: string }): Promise<CompanyPage> {
   const filter = opts.filter ?? "all";
-  const where = and(filterWhere(filter), searchWhere(opts.q ?? ""));
+  const where = and(filterWhere(filter), searchWhere(opts.q ?? ""), opts.id ? eq(organizations.id, opts.id) : undefined);
 
   const [{ n }] = await db
     .select({ n: sql<number>`count(*)` })
@@ -154,6 +158,7 @@ export async function listCompanies(opts: { q?: string; filter?: CompanyFilter; 
       id: organizations.id,
       name: organizations.name,
       slug: organizations.slug,
+      code: organizations.companyCode,
       status: organizations.approvalStatus,
       reason: organizations.approvalReason,
       decidedAt: organizations.approvalDecidedAt,
@@ -199,6 +204,8 @@ export async function listCompanies(opts: { q?: string; filter?: CompanyFilter; 
 
   const ids = base.map((b) => b.id);
   if (ids.length === 0) return { rows: [], total, page, pages };
+  // Companies that have no reference yet get theirs the first time the owner's panel shows them.
+  for (const b of base) if (!b.code) b.code = await ensureCompanyCode(b.id);
 
   const [team, owners, last, hist] = await Promise.all([
     db
@@ -240,6 +247,7 @@ export async function listCompanies(opts: { q?: string; filter?: CompanyFilter; 
     id: b.id,
     name: b.name,
     slug: b.slug,
+    code: b.code ?? "",
     status: normalizeStatus(b.status),
     reason: b.reason,
     decidedAt: b.decidedAt,

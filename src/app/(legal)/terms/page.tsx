@@ -154,6 +154,14 @@ const sections: LegalSection[] = [
     ],
   },
   {
+    heading: "Support and looking at your account",
+    paras: [
+      "You can ask for help from the Support page in your workspace, or by email to our support address. A support request is stored with the details we need to answer it: who sent it, your company's name and company ID, the messages, and the standing of your account (for example whether it is active and whether payments are up to date). Replies are shown in your workspace and sent by email to the person who asked.",
+      "We do not look at the inside of your workspace for support unless you allow it. An Owner or Admin can allow it for one support request, for 1, 3 or 7 days, and can take that permission back at any time. While it is allowed, a member of our support team may open your workspace in a read-only view for up to 30 minutes at a time. In that view nothing can be changed, and private areas such as team chat and employee records, downloads and exports stay closed. We protect that access with two-step sign-in. Every time we look, we email the person who made the request and record it in the Support access log on your Support page, where Owners and Admins can read it.",
+      "Apart from a look you allow, we may still access your information where needed to keep the Service secure, enforce these Terms, prevent misuse or meet legal duties, as described in our Privacy Policy.",
+    ],
+  },
+  {
     heading: "Availability, support and security",
     paras: [
       "We aim to keep the Service available, but it may be interrupted for maintenance, updates, provider outages, attacks or other reasons outside our control, and we do not promise it will be uninterrupted, timely, secure or error-free. We do not offer a service-level commitment unless we agree one with you in writing.",

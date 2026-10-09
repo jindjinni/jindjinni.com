@@ -90,6 +90,7 @@ export default async function AdminPage() {
                 locked={locked}
                 paused={m.paused}
                 canReset={!!m.username && m.managedByOrgId === org.organizationId}
+                hasTwoStep={m.hasTwoStep}
               />
             );
           })}

@@ -1,5 +1,6 @@
 import { isAdmin } from "@/lib/permissions";
 import { requireOrg } from "@/lib/tenant";
+import { blockSupportStaff } from "@/lib/staff-guard";
 import { getBusinessProfile } from "@/lib/queries";
 import { BusinessProfileForm } from "./business-profile-form";
 import { LogoUploadForm } from "./logo-upload-form";
@@ -13,6 +14,7 @@ import { LogoUploadForm } from "./logo-upload-form";
  */
 export default async function ProfilePage() {
   const org = await requireOrg();
+  await blockSupportStaff(org);
   const profile = await getBusinessProfile(org.organizationId);
   const canEdit = isAdmin(org.role);
 

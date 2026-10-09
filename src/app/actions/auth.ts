@@ -31,8 +31,10 @@ import { readVerification, einInUse, saveVerification, EIN_IN_USE_MESSAGE } from
 import { lockMinutesLeft, lockedMessage } from "@/lib/login-throttle";
 import { guardLogin, guardPublicForm, noteFailedLogin } from "@/lib/human-check";
 import { looksLikeUsername } from "@/lib/staff-login";
+import { hasTwoStep } from "@/lib/two-step";
+import { ensureCompanyCode } from "@/lib/company-code";
 
-export type ActionState = { error?: string } | undefined;
+export type ActionState = { error?: string; needCode?: boolean } | undefined;
 
 /** Existing user signing in. */
 export async function login(
@@ -52,7 +54,7 @@ export async function login(
   // Tell the person when sign-in is paused (too many wrong passwords) instead of a confusing "doesn't match".
   const [found] = email
     ? await db
-        .select({ lockedUntil: users.lockedUntil })
+        .select({ lockedUntil: users.lockedUntil, passwordHash: users.passwordHash, totpSecret: users.totpSecret, totpEnabledAt: users.totpEnabledAt })
         .from(users)
         .where(looksLikeUsername(email) ? eq(users.username, email) : eq(users.email, email))
         .limit(1)
@@ -60,10 +62,17 @@ export async function login(
   const minutes = lockMinutesLeft(found?.lockedUntil, Date.now());
   if (minutes > 0) return { error: lockedMessage(minutes) };
 
+  // Two-step sign-in: when the password is right but there is no code yet, ask for the code (the real check is inside sign-in itself).
+  const code = String(formData.get("code") ?? "").trim();
+  if (!code && found && hasTwoStep(found) && found.passwordHash && (await bcrypt.compare(password, found.passwordHash))) {
+    return { needCode: true };
+  }
+
   try {
-    await signIn("credentials", { email, password, rememberMe, redirect: false });
+    await signIn("credentials", { email, password, rememberMe, code, redirect: false });
   } catch {
     await noteFailedLogin(guard.ip);
+    if (code && found && hasTwoStep(found)) return { needCode: true, error: "That code isn't right, or it was already used. Try the next one your app shows, or use a backup code." };
     return { error: "That email or username and password don't match an account." };
   }
 
@@ -187,6 +196,8 @@ export async function signUpOrganization(
     termsVersion: TERMS_VERSION,
   });
   await db.insert(organizations).values({ id: orgId, name: companyName, slug, approvalStatus: "pending", billingPlan: parseBillingPlan(formData.get("billingPlan")) });
+  // Every company gets its permanent reference ("JJ-1042") right away, so support always knows who is calling.
+  await ensureCompanyCode(orgId).catch(() => {});
   await db.insert(memberships).values({
     id: newId("mem"),
     userId,

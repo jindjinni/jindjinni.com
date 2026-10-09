@@ -2,12 +2,14 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { organizations } from "@/db/schema";
 import { requireOrg } from "@/lib/tenant";
+import { blockSupportStaff } from "@/lib/staff-guard";
 import { isAdmin } from "@/lib/permissions";
 import { parseDepartmentThemes } from "@/lib/theme";
 import { ThemeForm } from "./theme-form";
 
 export default async function AppearancePage() {
   const org = await requireOrg();
+  await blockSupportStaff(org);
   const [row] = await db.select({ departmentThemes: organizations.departmentThemes }).from(organizations).where(eq(organizations.id, org.organizationId)).limit(1);
   const current = parseDepartmentThemes(row?.departmentThemes);
 

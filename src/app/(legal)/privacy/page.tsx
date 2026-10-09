@@ -67,6 +67,13 @@ const sections: LegalSection[] = [
     ],
   },
   {
+    heading: "Support requests and support access",
+    paras: [
+      "When you send a support request, from the Support page or by email, we keep the request, the replies, the sender's name and email address, your company's name and company ID, and a summary of your account standing (such as whether it is active and whether payments are current), so we can help you and see who is asking. Internal notes our team writes about a request are not shown to you. Support requests are kept for as long as your company is open and as needed to resolve disputes.",
+      "We open the inside of your workspace for support only if an Owner or Admin allows it on that request. The permission is limited to 1, 3 or 7 days, can be taken back at any time, and each look is read-only, lasts up to 30 minutes and is limited to our platform owner's login, which is protected with two-step sign-in. Team chat, employee records, downloads and exports are not available in that view. Each look is emailed to the person who made the request and listed in your Support access log.",
+    ],
+  },
+  {
     heading: "How long we keep information",
     items: [
       "While your company is open, we keep your account and workspace data so you can use the Service, until your company deletes it.",

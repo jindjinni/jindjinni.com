@@ -400,6 +400,29 @@ export async function resetStaffPassword(membershipId: string, _prev: TeamAction
 }
 
 /**
+ * A person lost their phone AND their backup codes: an owner/admin turns their two-step sign-in off so they can sign in with just
+ * their password and set it up again. Only for people who belong to this company alone (or a login this company created), so one
+ * company can never weaken a sign-in that another company also relies on. The owner's own can't be reset here.
+ */
+export async function resetMemberTwoStep(membershipId: string, _prev: TeamActionState, _formData: FormData): Promise<TeamActionState> {
+  const org = await requireAdmin();
+  if (org.viewAs) return { error: "Not available while viewing a company's account." };
+  const target = await loadTargetMember(org, membershipId);
+  if (!target) return { error: "Team member not found." };
+  const blocked = cannotManage(org, target);
+  if (blocked) return { error: blocked };
+  const [u] = await db.select({ id: users.id, name: users.name, managedByOrgId: users.managedByOrgId, on: users.totpEnabledAt }).from(users).where(eq(users.id, target.userId)).limit(1);
+  if (!u?.on) return { error: "Two-step sign-in isn't on for this person." };
+  const others = await db.select({ id: memberships.id }).from(memberships).where(and(eq(memberships.userId, u.id), ne(memberships.organizationId, org.organizationId))).limit(1);
+  if (others.length > 0 && u.managedByOrgId !== org.organizationId) {
+    return { error: "This person also belongs to another company, so only they can change their two-step sign-in." };
+  }
+  await db.update(users).set({ totpSecret: null, totpEnabledAt: null, totpBackupCodes: null, totpLastStep: null }).where(eq(users.id, u.id));
+  await audit(org, target.id, "two-step", "on", "off", `Two-step sign-in reset for ${u.name || target.email}`);
+  return { message: `Two-step sign-in is off for ${u.name || target.email}. They can turn it on again in My account.` };
+}
+
+/**
  * Public (no admin needed): the person opens their invite link and accepts.
  *  - Already signed in as the invited email -> just joins.
  *  - Account exists for that email but they're signed out -> must sign in first.

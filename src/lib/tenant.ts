@@ -15,6 +15,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/db/client";
 import { memberships, organizations } from "@/db/schema";
 import { parseAccess, type Access, type Role } from "@/lib/permissions";
+import { applyViewAs, type ViewAsInfo } from "@/lib/view-as";
 
 export type CurrentOrg = {
   userId: string;
@@ -23,6 +24,13 @@ export type CurrentOrg = {
   role: Role;
   /** Departments an admin opened for this person by hand, on top of the role (empty for most people). */
   access: Access;
+  /** Set only while a platform person is looking at this company through "View as company" (read-only). userId is then the company owner's. */
+  viewAs?: ViewAsInfo;
+};
+
+export type OrgOptions = {
+  /** Ignore any "View as company" session and give the person's own company. Only the support screens use this. */
+  real?: boolean;
 };
 
 /**
@@ -35,7 +43,7 @@ export type CurrentOrg = {
  * resolves to the first membership found. Add a selected-org cookie and a
  * switcher when that becomes a real need (Phase 2).
  */
-export async function requireOrg(): Promise<CurrentOrg> {
+export async function requireOrg(opts: OrgOptions = {}): Promise<CurrentOrg> {
   const session = await auth();
   const userId = (session?.user as { id?: string } | undefined)?.id;
   if (!userId) redirect("/login");
@@ -95,13 +103,14 @@ export async function requireOrg(): Promise<CurrentOrg> {
     redirect("/under-review");
   }
 
-  return {
+  const own: CurrentOrg = {
     userId: userId!,
     organizationId: row!.organizationId,
     organizationName: row!.organizationName,
     role: row!.role as CurrentOrg["role"],
     access: parseAccess(row!.deptAccess),
   };
+  return opts.real ? own : applyViewAs(own, { pages: true });
 }
 
 /**
@@ -109,7 +118,7 @@ export async function requireOrg(): Promise<CurrentOrg> {
  * active membership in a company that isn't closed), but returns null instead
  * of redirecting, so an API route can answer 401/403 itself.
  */
-export async function requireOrgApi(): Promise<CurrentOrg | null> {
+export async function requireOrgApi(opts: OrgOptions = {}): Promise<CurrentOrg | null> {
   const session = await auth();
   const userId = (session?.user as { id?: string } | undefined)?.id;
   if (!userId) return null;
@@ -131,13 +140,14 @@ export async function requireOrgApi(): Promise<CurrentOrg | null> {
     await endPlanIfDue(row.organizationId);
     return null;
   }
-  return {
+  const own: CurrentOrg = {
     userId,
     organizationId: row.organizationId,
     organizationName: row.organizationName,
     role: row.role as CurrentOrg["role"],
     access: parseAccess(row.deptAccess),
   };
+  return opts.real ? own : applyViewAs(own);
 }
 
 /**

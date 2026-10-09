@@ -36,6 +36,6 @@ export async function updateFilingNumber(_prev: ProfileState, fd: FormData): Pro
   after(() => runRegistryCheck(org.organizationId));
 
   revalidatePath("/dashboard/settings/company-profile");
-  revalidatePath("/dashboard/settings/companies");
+  revalidatePath("/dashboard/mothership/companies");
   return { message: "Saved. We'll check the new number against your state's records." };
 }

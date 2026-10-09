@@ -21,8 +21,9 @@ export const maxDuration = 60;
 // The Home screen everyone lands on after signing in. It belongs to no department. It welcomes the person to the company,
 // then has two closed sections: the industry news for the brands the company buys (everyone), and the company's
 // performance (owner and admins only): how Purchasing, Receiving and Accounts are doing.
-export default async function HomePage() {
+export default async function HomePage({ searchParams }: { searchParams: Promise<{ viewblocked?: string }> }) {
   const org = await requireOrg();
+  const blockedNote = (await searchParams).viewblocked === "1";
   const showPerformance = canViewCompanyPerformance(org.role);
   const brands = await watchedBrands(org.organizationId);
   const [stories, run, owners, checks, pulse, me, terms] = await Promise.all([
@@ -37,7 +38,8 @@ export default async function HomePage() {
 
   // The news is a few hours old (or has never been fetched): look again quietly after this page is sent.
   const updating = brands.length > 0 && isStale(run);
-  if (updating) after(() => runIndustryWatch(org.organizationId, "auto").then(() => undefined, () => undefined));
+  // (Never while a platform person is only looking at this company: nothing is written then.)
+  if (updating && !org.viewAs) after(() => runIndustryWatch(org.organizationId, "auto").then(() => undefined, () => undefined));
 
   const now = new Date();
   const groups = groupNews(brands, stories, owners);
@@ -67,6 +69,11 @@ export default async function HomePage() {
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8" data-testid="home-screen">
+      {blockedNote && (
+        <p role="status" className="mb-4 rounded-md border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm text-indigo-900" data-testid="view-blocked-note">
+          That area stays closed while you are viewing a company&apos;s account.
+        </p>
+      )}
       <header className="rounded-2xl bg-gradient-to-br from-emerald-700 via-emerald-700 to-teal-800 px-6 py-7 text-white shadow-sm" data-testid="home-welcome">
         <p className="text-sm font-medium text-emerald-100">
           {greeting(hourIn(zone, now))}

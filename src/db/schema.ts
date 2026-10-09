@@ -98,8 +98,11 @@ export const organizations = sqliteTable("organizations", {
   paymentStatus: text("payment_status"),
   paymentGraceEndsAt: text("payment_grace_ends_at"),
   lastPaymentAt: text("last_payment_at"),
+  // The company's short, permanent reference (e.g. "JJ-1042"), handed out once (see lib/company-code.ts). Shown on every support ticket
+  // and in the Companies panel so the platform owner always knows which company is calling. Empty until first needed.
+  companyCode: text("company_code"),
   ...timestamps,
-}, (t) => [index("organizations_approval_idx").on(t.approvalStatus, t.createdAt)]);
+}, (t) => [index("organizations_approval_idx").on(t.approvalStatus, t.createdAt), uniqueIndex("organizations_company_code_unique").on(t.companyCode)]);
 
 /**
  * "Who the company is" -- one row per Organization, separate from the
@@ -201,6 +204,13 @@ export const users = sqliteTable("users", {
   // Sign-in throttle: too many wrong passwords in a row pauses sign-in for a while.
   failedLogins: integer("failed_logins"),
   lockedUntil: text("locked_until"),
+  // Two-step sign-in (authenticator app). The secret is stored ENCRYPTED (see lib/email-connector-crypto.ts); the backup codes are
+  // stored only as hashes (a JSON list) and each works once; totpLastStep is the last time step accepted so a code can't be replayed.
+  // All nullable -- never NOT NULL on a table that already has rows. totpEnabledAt empty = two-step is off for this person.
+  totpSecret: text("totp_secret"),
+  totpEnabledAt: text("totp_enabled_at"),
+  totpBackupCodes: text("totp_backup_codes"),
+  totpLastStep: integer("totp_last_step"),
   ...timestamps,
 }, (t) => [uniqueIndex("users_username_unique").on(t.username)]);
 
@@ -2712,4 +2722,128 @@ export const industryBrandMakers = sqliteTable(
     ...timestamps,
   },
   (t) => [uniqueIndex("industry_brand_makers_unique").on(t.organizationId, t.brand)],
+);
+
+
+// ---------------------------------------------------------------------------
+// Support center. Companies send tickets from their own Support page (or by email to support@); the platform owner answers from
+// Settings -> Support. A ticket always remembers which company it came from (organizationId + the company's permanent code),
+// unless it arrived by email from someone we could not match to a company.
+// ---------------------------------------------------------------------------
+
+export const supportTickets = sqliteTable(
+  "support_tickets",
+  {
+    id: text("id").primaryKey(),
+    /** Human number shown to people ("#1042"), handed out in order. */
+    ticketNo: integer("ticket_no").notNull(),
+    /** The company it came from. Empty only for email from an unknown address. No cascade: tickets outlive a purged company. */
+    organizationId: text("organization_id"),
+    createdByUserId: text("created_by_user_id"),
+    fromEmail: text("from_email"),
+    fromName: text("from_name"),
+    subject: text("subject").notNull(),
+    category: text("category"),
+    /** "open" (needs us), "waiting" (waiting on the company), "solved". */
+    status: text("status").notNull().default("open"),
+    priority: text("priority").notNull().default("normal"),
+    /** "app" or "email". */
+    source: text("source").notNull().default("app"),
+    /** Who spoke last: "company" or "support" -- drives the "needs reply" badge. */
+    lastAuthorKind: text("last_author_kind").notNull().default("company"),
+    lastMessageAt: text("last_message_at").notNull().default(sql`(current_timestamp)`),
+    /** The company's OK for support to look at its account (read-only), good until this time. Empty = no permission. */
+    viewConsentUntil: text("view_consent_until"),
+    viewConsentByUserId: text("view_consent_by_user_id"),
+    viewConsentAt: text("view_consent_at"),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("support_tickets_no_unique").on(t.ticketNo),
+    index("support_tickets_org_idx").on(t.organizationId, t.lastMessageAt),
+    index("support_tickets_status_idx").on(t.status, t.lastMessageAt),
+  ],
+);
+
+export const supportMessages = sqliteTable(
+  "support_messages",
+  {
+    id: text("id").primaryKey(),
+    ticketId: text("ticket_id")
+      .notNull()
+      .references(() => supportTickets.id, { onDelete: "cascade" }),
+    /** "company" (the customer), "support" (our reply, the customer sees it) or "note" (internal, the customer NEVER sees it). */
+    authorKind: text("author_kind").notNull(),
+    authorUserId: text("author_user_id"),
+    authorName: text("author_name"),
+    body: text("body").notNull(),
+    /** "app" or "email". */
+    via: text("via").notNull().default("app"),
+    /** The email's Message-ID, so a webhook that is delivered twice never creates two messages. */
+    externalId: text("external_id"),
+    createdAt: text("created_at").notNull().default(sql`(current_timestamp)`),
+  },
+  (t) => [index("support_messages_ticket_idx").on(t.ticketId, t.createdAt), uniqueIndex("support_messages_external_unique").on(t.externalId)],
+);
+
+/** Every time support looked at a company's account ("View as company"). The company can read this list. */
+export const supportViewSessions = sqliteTable(
+  "support_view_sessions",
+  {
+    id: text("id").primaryKey(),
+    ticketId: text("ticket_id").notNull(),
+    ticketNo: integer("ticket_no"),
+    organizationId: text("organization_id").notNull(),
+    adminUserId: text("admin_user_id").notNull(),
+    adminName: text("admin_name"),
+    reason: text("reason"),
+    startedAt: text("started_at").notNull(),
+    expiresAt: text("expires_at").notNull(),
+    endedAt: text("ended_at"),
+    createdAt: text("created_at").notNull().default(sql`(current_timestamp)`),
+  },
+  (t) => [index("support_view_sessions_org_idx").on(t.organizationId, t.startedAt)],
+);
+
+/**
+ * The mothership's own staff. The Owner is whoever has the Owner role in a platform company (not listed here); everyone else on the
+ * team is one row: level "co_owner" and "admin" can do everything, "support" can help companies but never opens Settings.
+ * Only counts while the person is an active member of a platform company; the server re-checks that every time.
+ */
+export const platformStaff = sqliteTable(
+  "platform_staff",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    level: text("level").notNull(),
+    addedBy: text("added_by"),
+    createdAt: text("created_at").notNull().default(sql`(current_timestamp)`),
+    updatedAt: text("updated_at"),
+  },
+  (t) => [uniqueIndex("platform_staff_user_idx").on(t.userId)],
+);
+
+// ---------------------------------------------------------------------------
+// Feature rollout. New features are switched on in stages: off -> only the platform's own company ("mothership") -> chosen
+// companies -> everyone. The list of known features lives in code (lib/features.ts); a row here only records the chosen stage.
+// ---------------------------------------------------------------------------
+
+export const featureFlags = sqliteTable("feature_flags", {
+  key: text("key").primaryKey(),
+  /** "off" | "mothership" | "selected" | "everyone" */
+  stage: text("stage").notNull().default("off"),
+  updatedByUserId: text("updated_by_user_id"),
+  updatedAt: text("updated_at").notNull().default(sql`(current_timestamp)`),
+});
+
+export const featureFlagCompanies = sqliteTable(
+  "feature_flag_companies",
+  {
+    flagKey: text("flag_key").notNull(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    createdAt: text("created_at").notNull().default(sql`(current_timestamp)`),
+  },
+  (t) => [primaryKey({ columns: [t.flagKey, t.organizationId] })],
 );

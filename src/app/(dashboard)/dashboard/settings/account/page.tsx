@@ -4,14 +4,25 @@ import { users } from "@/db/schema";
 import { requireOrg } from "@/lib/tenant";
 import { ROLE_DESCRIPTIONS, ROLE_LABELS } from "@/lib/permissions";
 import { EmailForm, NameForm, PasswordForm } from "./account-forms";
+import { FinishSetupForm, NewCodesForm, StartSetupForm, TurnOffForm } from "./two-step-forms";
+import { decryptToken } from "@/lib/email-connector-crypto";
+import { qrSvg } from "@/lib/qr";
+import { otpauthUri, parseHashes } from "@/lib/totp";
+import { hasTwoStep } from "@/lib/two-step";
 
 export default async function MyAccountPage() {
   const org = await requireOrg();
   const [me] = await db
-    .select({ name: users.name, email: users.email, username: users.username, termsAcceptedAt: users.termsAcceptedAt })
+    .select({ name: users.name, email: users.email, username: users.username, termsAcceptedAt: users.termsAcceptedAt, totpSecret: users.totpSecret, totpEnabledAt: users.totpEnabledAt, totpBackupCodes: users.totpBackupCodes })
     .from(users)
     .where(eq(users.id, org.userId))
     .limit(1);
+
+  const twoStepOn = !!me && hasTwoStep(me);
+  // A setup that was started but not finished: show its picture again so a page reload doesn't lose it.
+  const pendingSecret = me && !twoStepOn && me.totpSecret ? decryptToken(me.totpSecret) : null;
+  const pendingSvg = pendingSecret ? qrSvg(otpauthUri("jindjinni", me?.username ?? me?.email ?? "account", pendingSecret)) : null;
+  const codesLeft = parseHashes(me?.totpBackupCodes).length;
 
   return (
     <div className="flex max-w-2xl flex-col gap-6">
@@ -60,6 +71,35 @@ export default async function MyAccountPage() {
       <section className="rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
         <h3 className="text-base font-semibold text-slate-900 dark:text-slate-50">Change password</h3>
         <PasswordForm />
+      </section>
+
+      <section className="rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900" data-testid="twostep-section">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-base font-semibold text-slate-900 dark:text-slate-50">Two-step sign-in</h3>
+          <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${twoStepOn ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300" : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"}`} data-testid="twostep-status">
+            {twoStepOn ? "On" : "Off"}
+          </span>
+        </div>
+        <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+          Adds a second lock: after your password, you type a 6-digit code from an app on your phone. Even if someone learns your password, they can&apos;t get in.
+        </p>
+        {twoStepOn ? (
+          <>
+            <p className="mt-3 text-sm text-slate-700 dark:text-slate-300" data-testid="twostep-codes-left">You have {codesLeft} backup code{codesLeft === 1 ? "" : "s"} left.</p>
+            <details className="mt-3">
+              <summary className="cursor-pointer text-sm font-medium text-slate-800 dark:text-slate-200">Make new backup codes</summary>
+              <NewCodesForm />
+            </details>
+            <details className="mt-3">
+              <summary className="cursor-pointer text-sm font-medium text-slate-800 dark:text-slate-200">Turn off</summary>
+              <TurnOffForm />
+            </details>
+          </>
+        ) : pendingSecret ? (
+          <FinishSetupForm secret={pendingSecret} svg={pendingSvg} />
+        ) : (
+          <StartSetupForm />
+        )}
       </section>
 
       <p className="text-xs text-slate-500 dark:text-slate-400">
