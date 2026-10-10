@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { requireOrg } from "@/lib/tenant";
 import { isAdmin } from "@/lib/permissions";
 import { carriersLabel, shippoConnectionView } from "@/lib/shippo-connection";
+import { ConnectGuide } from "@/components/connect-guide";
 import { ShippoConnector } from "./shippo-connector";
 
 export const dynamic = "force-dynamic";
@@ -35,6 +36,7 @@ export default async function PurchasingConnectorsPage() {
         connectedAt={view.connectedAt}
         companyName={org.organizationName}
       />
+      <ConnectGuide guideKey="shippo" open={view.source !== "company" || view.status !== "ACTIVE"} />
     </div>
   );
 }

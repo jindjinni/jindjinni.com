@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ConnectGuide } from "@/components/connect-guide";
 import { MailTime } from "@/components/mail/mail-time";
 import { featureOn } from "@/lib/features";
 import { DEPT_LABEL, MAIL_DEPTS } from "@/lib/mail-rules";
@@ -97,6 +98,7 @@ export default async function LampMailPage({ searchParams }: { searchParams: Pro
           {f.page < pages ? <Link href={href(f, f.page + 1)} className="underline">Older &rarr;</Link> : <span />}
         </nav>
       )}
+      <ConnectGuide guideKey="cron-ping" />
     </div>
   );
 }

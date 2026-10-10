@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { guideAnchor } from "@/lib/connect-guides";
 import { CONNECTORS, STATE_LABEL, needsAction, type ConnectorKey, type ConnectorStatus } from "@/lib/connectors";
 
 const PILL: Record<ConnectorStatus["state"], string> = {
@@ -26,9 +27,19 @@ export function ConnectorSummaryCard({ status, canManage, here }: { status: Conn
       {!here && status.state !== "coming_soon" && (
         <p className="mt-3 text-sm">
           {canManage ? (
-            <Link href={info.manageHref} className="font-medium text-emerald-700 hover:underline dark:text-emerald-400" data-testid={`connector-${status.key}-manage`}>
-              {needsAction(status.state) ? "Connect it" : "Manage"} in {info.manageWhere} →
-            </Link>
+            <>
+              <Link href={info.manageHref} className="font-medium text-emerald-700 hover:underline dark:text-emerald-400" data-testid={`connector-${status.key}-manage`}>
+                {needsAction(status.state) ? "Connect it" : "Manage"} in {info.manageWhere} →
+              </Link>
+              {info.guide && needsAction(status.state) && (
+                <>
+                  {" · "}
+                  <Link href={`${info.manageHref}#${guideAnchor(info.guide)}`} className="font-medium text-emerald-700 hover:underline dark:text-emerald-400" data-testid={`connector-${status.key}-how`}>
+                    Show me how
+                  </Link>
+                </>
+              )}
+            </>
           ) : (
             <span className="text-slate-500 dark:text-slate-400">An owner or admin manages this in {info.manageWhere}.</span>
           )}

@@ -8,6 +8,7 @@ import { getConnection, OAUTH } from "@/lib/email-connector";
 import { aiConnectionView } from "@/lib/ai-connection";
 import { connectorStatuses } from "@/lib/connectors";
 import { ConnectorSummaryCard } from "@/components/connector-card";
+import { ConnectGuide } from "@/components/connect-guide";
 import { EmailConnectorCard, type ConnectionView } from "./email-connector-card";
 import { SmtpConnectForm } from "./smtp-connect-form";
 import { AiConnector } from "./ai-connector";
@@ -63,7 +64,10 @@ export default async function CompanyConnectorsPage({ searchParams }: { searchPa
             </p>
           )}
         </div>
+        <ConnectGuide guideKey="email" open={!connection || connection.status !== "ACTIVE"} />
         <AiConnector source={ai.source} provider={ai.provider} status={ai.status} keyHint={ai.keyHint} lastError={ai.lastError} companyName={org.organizationName} />
+        <ConnectGuide guideKey="ai-anthropic" open={(ai.source !== "company" || ai.status !== "ACTIVE") && ai.provider === "anthropic"} />
+        <ConnectGuide guideKey="ai-openai" open={(ai.source !== "company" || ai.status !== "ACTIVE") && ai.provider === "openai"} />
         <ConnectorSummaryCard status={statuses.text} canManage />
       </section>
 

@@ -147,19 +147,6 @@ export function ShippoConnector(props: {
           </p>
         </form>
       </section>
-
-      <details className={card}>
-        <summary className="cursor-pointer text-base font-semibold text-slate-900 dark:text-slate-50">How to get your token</summary>
-        <ol className="mt-3 list-decimal space-y-1.5 pl-5 text-sm text-slate-700 dark:text-slate-300">
-          <li>Sign in at goshippo.com (or create your free Shippo account).</li>
-          <li>Open <strong>Settings → API</strong> and copy your <strong>Live</strong> token. Use the <strong>Test</strong> token first if you only want to practice.</li>
-          <li>In Shippo, open <strong>Settings → Carriers</strong> and switch on <strong>UPS</strong> and <strong>USPS</strong>. Add your payment method there too, because Shippo bills you for labels.</li>
-          <li>Paste the token above and press <strong>Connect Shippo</strong>.</li>
-        </ol>
-        <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
-          Once connected, your Purchasing team can generate UPS Ground or USPS Priority Mail labels from any quotation, and packages are followed automatically.
-        </p>
-      </details>
     </>
   );
 }

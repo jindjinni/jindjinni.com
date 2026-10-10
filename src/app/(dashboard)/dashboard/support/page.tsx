@@ -7,12 +7,15 @@ import { listCompanyTickets, viewLogForCompany } from "@/lib/support-service";
 import { ticketLabel, whenText } from "@/lib/support-rules";
 import { requireOrg } from "@/lib/tenant";
 import { StatusPill } from "@/components/support-thread";
+import { supportPrefill } from "@/lib/connect-guides";
 import { NewTicketForm } from "./support-forms";
 
 export const dynamic = "force-dynamic";
 
 /** The company's own Support page: send a ticket, follow your tickets, and (owners/admins) see every time support looked at the account. */
-export default async function SupportPage() {
+export default async function SupportPage({ searchParams }: { searchParams: Promise<{ about?: string }> }) {
+  const sp = await searchParams;
+  const prefill = supportPrefill(sp.about);
   const org = await requireOrg();
   if (!(await featureOn("support-center", org.organizationId))) notFound();
   const admin = isAdmin(org.role);
@@ -35,7 +38,7 @@ export default async function SupportPage() {
 
       <section className="rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
         <h3 className="mb-3 text-base font-semibold text-slate-900 dark:text-slate-50">New ticket</h3>
-        <NewTicketForm canAllowView={admin} />
+        <NewTicketForm canAllowView={admin} initial={prefill} />
       </section>
 
       <section>

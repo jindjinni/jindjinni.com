@@ -11,6 +11,7 @@
 import { aiConnectionView } from "@/lib/ai-connection";
 import { PROVIDER_LABEL } from "@/lib/ai-provider";
 import { getConnection } from "@/lib/email-connector";
+import type { GuideKey } from "@/lib/connect-guides";
 import { shippoConnectionView } from "@/lib/shippo-connection";
 import type { MenuDept } from "@/lib/sidebar-menu";
 
@@ -27,6 +28,8 @@ export type ConnectorInfo = {
   manageHref: string;
   /** Where it is managed, in words ("Purchasing → Settings → Connectors"). */
   manageWhere: string;
+  /** The "Connect it" guide that explains it (none while the connector isn't built yet). */
+  guide: GuideKey | null;
 };
 
 export const CONNECTORS: Record<ConnectorKey, ConnectorInfo> = {
@@ -37,6 +40,7 @@ export const CONNECTORS: Record<ConnectorKey, ConnectorInfo> = {
     scope: "department",
     manageHref: "/dashboard/purchasing/connectors",
     manageWhere: "Purchasing → Settings → Connectors",
+    guide: "shippo",
   },
   email: {
     key: "email",
@@ -45,6 +49,7 @@ export const CONNECTORS: Record<ConnectorKey, ConnectorInfo> = {
     scope: "company",
     manageHref: "/dashboard/settings/connectors",
     manageWhere: "Settings → Connectors",
+    guide: "email",
   },
   ai: {
     key: "ai",
@@ -53,6 +58,7 @@ export const CONNECTORS: Record<ConnectorKey, ConnectorInfo> = {
     scope: "company",
     manageHref: "/dashboard/settings/connectors",
     manageWhere: "Settings → Connectors",
+    guide: "ai-anthropic",
   },
   text: {
     key: "text",
@@ -61,6 +67,7 @@ export const CONNECTORS: Record<ConnectorKey, ConnectorInfo> = {
     scope: "company",
     manageHref: "/dashboard/marketing/connectors",
     manageWhere: "Marketing → Settings → Connectors",
+    guide: null,
   },
 };
 

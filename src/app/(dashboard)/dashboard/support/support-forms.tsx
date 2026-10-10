@@ -15,12 +15,12 @@ function Feedback({ state }: { state: SupportState }) {
 }
 
 /** Start a new ticket. Owners and admins may also allow support to look at the account (read-only) right away. */
-export function NewTicketForm({ canAllowView }: { canAllowView: boolean }) {
+export function NewTicketForm({ canAllowView, initial }: { canAllowView: boolean; initial?: { subject: string; category: string; body: string } | null }) {
   const [state, action, pending] = useActionState(sendTicket, undefined);
   // Controlled so a failed send (for example "title too short") keeps what the person typed.
-  const [subject, setSubject] = useState("");
-  const [category, setCategory] = useState<string>(CATEGORIES[0]);
-  const [body, setBody] = useState("");
+  const [subject, setSubject] = useState(initial?.subject ?? "");
+  const [category, setCategory] = useState<string>(initial?.category ?? CATEGORIES[0]);
+  const [body, setBody] = useState(initial?.body ?? "");
   const [allow, setAllow] = useState(false);
   const [days, setDays] = useState("3");
   return (
