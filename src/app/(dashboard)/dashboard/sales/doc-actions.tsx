@@ -3,13 +3,13 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { convertToInvoiceAction, deleteDraftAction, duplicateDocumentAction, quotationStatusAction, recordPaymentAction, removePaymentAction, sendDocumentAction, voidDocumentAction, type SalesResult } from "@/app/actions/sales";
+import { convertToInvoiceAction, deleteDraftAction, makeSalesOrderAction, duplicateDocumentAction, quotationStatusAction, recordPaymentAction, removePaymentAction, sendDocumentAction, voidDocumentAction, type SalesResult } from "@/app/actions/sales";
 import { card, field, fmtDay, fmtMoney, ghostBtn, primaryBtn } from "@/components/sales-ui";
 
-export type ActionDoc = { id: string; kind: "QUOTATION" | "INVOICE" | "PURCHASE_ORDER"; status: string; number: string; buyerEmail: string; total: number; amountPaid: number; convertedToId: string | null; inventoryPosted: boolean; emailedTo: string | null; sentAt: string | null };
+export type ActionDoc = { id: string; kind: "QUOTATION" | "INVOICE" | "PURCHASE_ORDER" | "SALES_ORDER"; status: string; number: string; buyerEmail: string; total: number; amountPaid: number; convertedToId: string | null; convertedToKind?: "INVOICE" | "SALES_ORDER" | null; inventoryPosted: boolean; emailedTo: string | null; sentAt: string | null };
 export type ActionPayment = { id: string; amount: number; paidOn: string; method: string; note: string };
 
-export function DocActions({ doc, payments, today, canWrite, canRevise = false, base }: { doc: ActionDoc; payments: ActionPayment[]; today: string; canWrite: boolean; canRevise?: boolean; base: string }) {
+export function DocActions({ doc, payments, today, canWrite, canRevise = false, canMakeSo = false, base }: { doc: ActionDoc; payments: ActionPayment[]; today: string; canWrite: boolean; canRevise?: boolean; canMakeSo?: boolean; base: string }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -18,7 +18,8 @@ export function DocActions({ doc, payments, today, canWrite, canRevise = false, 
   const [pay, setPay] = useState({ amount: String(Math.max(0, Math.round((doc.total - doc.amountPaid) * 100) / 100)), paidOn: today, method: "", note: "" });
   const isInvoice = doc.kind === "INVOICE";
   const isPo = doc.kind === "PURCHASE_ORDER";
-  const word = isInvoice ? "invoice" : isPo ? "purchase order" : "quotation";
+  const isSo = doc.kind === "SALES_ORDER";
+  const word = isInvoice ? "invoice" : isPo ? "purchase order" : isSo ? "sales order" : "quotation";
   const isDraft = doc.status === "DRAFT";
   const owed = Math.max(0, Math.round((doc.total - doc.amountPaid) * 100) / 100);
 
@@ -52,15 +53,23 @@ export function DocActions({ doc, payments, today, canWrite, canRevise = false, 
       {/* Quotation or purchase order: turn it into an invoice, record the answer, or send a revision */}
       {canWrite && !isInvoice && (doc.status === "SENT" || doc.status === "ACCEPTED" || doc.status === "DECLINED") && (
         <div className={`${card} flex flex-wrap items-center gap-2`} data-testid="act-quotation-box">
-          <button type="button" disabled={pending} onClick={() => run(() => convertToInvoiceAction(doc.id), (r) => router.push(`/dashboard/sales/invoices/${r.id}`))} className={primaryBtn} data-testid="act-convert">Make this an invoice</button>
-          {doc.status !== "ACCEPTED" && <button type="button" disabled={pending} onClick={() => run(() => quotationStatusAction(doc.id, "ACCEPTED"))} className={ghostBtn} data-testid="act-accepted">{isPo ? "We confirmed it" : "Buyer accepted"}</button>}
-          {doc.status !== "DECLINED" && <button type="button" disabled={pending} onClick={() => run(() => quotationStatusAction(doc.id, "DECLINED"))} className={ghostBtn} data-testid="act-declined">{isPo ? "We can't fill it" : "Buyer declined"}</button>}
+          {canMakeSo && !isSo && doc.status !== "DECLINED" && (
+            <button type="button" disabled={pending} onClick={() => run(() => makeSalesOrderAction(doc.id), (r) => router.push(`/dashboard/sales/sales-orders/${r.id}`))} className={primaryBtn} data-testid="act-make-so">Make a sales order</button>
+          )}
+          <button type="button" disabled={pending} onClick={() => run(() => convertToInvoiceAction(doc.id), (r) => router.push(`/dashboard/sales/invoices/${r.id}`))} className={canMakeSo && !isSo && doc.status !== "DECLINED" ? ghostBtn : primaryBtn} data-testid="act-convert">Make this an invoice</button>
+          {doc.status !== "ACCEPTED" && <button type="button" disabled={pending} onClick={() => run(() => quotationStatusAction(doc.id, "ACCEPTED"))} className={ghostBtn} data-testid="act-accepted">{isPo ? "We confirmed it" : isSo ? "Buyer confirmed" : "Buyer accepted"}</button>}
+          {doc.status !== "DECLINED" && <button type="button" disabled={pending} onClick={() => run(() => quotationStatusAction(doc.id, "DECLINED"))} className={ghostBtn} data-testid="act-declined">{isPo || isSo ? "We can't fill it" : "Buyer declined"}</button>}
           {canRevise && doc.status !== "DECLINED" && <Link href={`${base}/${doc.id}?revise=1`} className={ghostBtn} data-testid="act-revise">Send a revision</Link>}
-          <p className="basis-full text-xs text-slate-500">Making it an invoice starts a draft with the same items. The draft holds the units; sending it takes them out of Inventory. A revision goes out with a Rev number and your note on what changed.</p>
+          <p className="basis-full text-xs text-slate-500">
+            {canMakeSo && !isSo ? "A sales order sets the units aside and can be confirmed to the buyer first; " : ""}Making it an invoice starts a draft with the same items. The draft holds the units; sending it takes them out of Inventory. A revision goes out with a Rev number and your note on what changed.
+          </p>
         </div>
       )}
       {!isInvoice && doc.status === "CONVERTED" && doc.convertedToId && (
-        <p className={`${card} text-sm`} data-testid="act-converted">This {word} became an invoice. <Link href={`/dashboard/sales/invoices/${doc.convertedToId}`} className="font-medium text-emerald-800 underline dark:text-emerald-300">Open the invoice</Link></p>
+        <p className={`${card} text-sm`} data-testid="act-converted">
+          This {word} became {doc.convertedToKind === "SALES_ORDER" ? "a sales order" : "an invoice"}.{" "}
+          <Link href={`/dashboard/sales/${doc.convertedToKind === "SALES_ORDER" ? "sales-orders" : "invoices"}/${doc.convertedToId}`} className="font-medium text-emerald-800 underline dark:text-emerald-300">Open the {doc.convertedToKind === "SALES_ORDER" ? "sales order" : "invoice"}</Link>
+        </p>
       )}
 
       {/* Send: a draft invoice or quotation, or a sent quotation again */}
@@ -68,7 +77,7 @@ export function DocActions({ doc, payments, today, canWrite, canRevise = false, 
         <div className={`${card} space-y-3`} data-testid="act-send-box">
           <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">{isDraft ? `Send this ${word}` : "Send it again"}</h2>
           {isDraft && isInvoice && <p className="text-xs text-slate-600 dark:text-slate-400">Sending takes the units out of Inventory, earliest expiration first. It sends what you last saved.</p>}
-          {isDraft && !isInvoice && <p className="text-xs text-slate-600 dark:text-slate-400">A {word} doesn&apos;t touch Inventory. It sends what you last saved.</p>}
+          {isDraft && !isInvoice && <p className="text-xs text-slate-600 dark:text-slate-400">A {word} doesn&apos;t touch Inventory{isSo ? " (its units are set aside, not taken out)" : ""}. It sends what you last saved.</p>}
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <label htmlFor="act-email" className="text-xs font-medium text-slate-700 dark:text-slate-300">Send to</label>

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 import { reviseDocumentAction, saveDocumentAction } from "@/app/actions/sales";
 import { normKey } from "@/lib/inventory-rules";
+import { dateLabel, docWord, dueLabel, refLabel, type DocKind } from "@/lib/sales-doc-ui";
 import { availability, computeTotals, dueDateFor, lineAmount, reserveKey, TERMS_OPTIONS, type Reserved, type StockMap } from "@/lib/sales-rules";
 import { card, field, fmtMoney, ghostBtn, primaryBtn } from "@/components/sales-ui";
 
@@ -39,7 +40,7 @@ const num = (s: string) => (s.trim() === "" ? 0 : Number(s));
 const cleanNum = (s: string) => s.replace(/[^\d.]/g, "");
 
 export function DocEditor(props: {
-  kind: "QUOTATION" | "INVOICE" | "PURCHASE_ORDER";
+  kind: DocKind;
   /** Revising a document that was already sent: a note is required and saving sends the revision. */
   revise?: boolean;
   docId: string | null;
@@ -56,7 +57,8 @@ export function DocEditor(props: {
   const { kind, docId, base, buyers, products, conditions, stock, reserved, buyerPrices } = props;
   const isInvoice = kind === "INVOICE";
   const isPo = kind === "PURCHASE_ORDER";
-  const word = isInvoice ? "invoice" : isPo ? "purchase order" : "quotation";
+  const isSo = kind === "SALES_ORDER";
+  const word = docWord(kind);
   const revising = !!props.revise && !!docId;
   const router = useRouter();
   const [revNote, setRevNote] = useState("");
@@ -88,7 +90,7 @@ export function DocEditor(props: {
     return { ...a, groups, anyCondition: Object.values(stock[l.productKey]?.conditions ?? {}) };
   };
 
-  const short = isInvoice ? lines.filter((l) => l.productKey && (Number(l.quantity) || 0) > stockFor(l).available) : [];
+  const short = isInvoice || isSo ? lines.filter((l) => l.productKey && (Number(l.quantity) || 0) > stockFor(l).available) : [];
 
   function pickBuyer(id: string) {
     const b = buyers.find((x) => x.id === id);
@@ -167,7 +169,7 @@ export function DocEditor(props: {
     <div className="space-y-4" data-testid="doc-editor">
       {/* Buyer and dates */}
       <div className={`${card} space-y-3`}>
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{isPo ? "From (the buyer who sent the order)" : "Bill to"}</h2>
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{isPo ? "From (the buyer who sent the order)" : isSo ? "Order for" : "Bill to"}</h2>
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <label htmlFor="de-buyer" className="text-xs font-medium text-slate-700 dark:text-slate-300">Buyer</label>
@@ -199,23 +201,23 @@ export function DocEditor(props: {
         </div>
         <div className="grid gap-3 sm:grid-cols-4">
           <div>
-            <label htmlFor="de-date" className="text-xs font-medium text-slate-700 dark:text-slate-300">{isInvoice ? "Invoice date" : isPo ? "Date received" : "Quotation date"}</label>
-            <input id="de-date" type="date" value={h.docDate} onChange={(e) => setH((p) => ({ ...p, docDate: e.target.value, dueDate: dueTouched ? p.dueDate : dueDateFor(e.target.value, p.terms) }))} className={`${field} mt-1`} data-testid="de-date" />
+            <label htmlFor="de-date" className="text-xs font-medium text-slate-700 dark:text-slate-300">{dateLabel(kind)}</label>
+            <input id="de-date" type="date" value={h.docDate} onChange={(e) => setH((p) => ({ ...p, docDate: e.target.value, dueDate: dueTouched ? p.dueDate : dueDateFor(e.target.value, isSo ? "Net 7" : p.terms) }))} className={`${field} mt-1`} data-testid="de-date" />
           </div>
-          {isInvoice && (
+          {(isInvoice || isSo) && (
             <div>
               <label htmlFor="de-terms" className="text-xs font-medium text-slate-700 dark:text-slate-300">Terms</label>
-              <select id="de-terms" value={h.terms} onChange={(e) => setH((p) => ({ ...p, terms: e.target.value, dueDate: dueTouched ? p.dueDate : dueDateFor(p.docDate, e.target.value) }))} className={`${field} mt-1`} data-testid="de-terms">
+              <select id="de-terms" value={h.terms} onChange={(e) => setH((p) => ({ ...p, terms: e.target.value, dueDate: dueTouched || isSo ? p.dueDate : dueDateFor(p.docDate, e.target.value) }))} className={`${field} mt-1`} data-testid="de-terms">
                 {TERMS_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
           )}
           <div>
-            <label htmlFor="de-due" className="text-xs font-medium text-slate-700 dark:text-slate-300">{isInvoice ? "Due date" : isPo ? "Needed by" : "Valid until"}</label>
+            <label htmlFor="de-due" className="text-xs font-medium text-slate-700 dark:text-slate-300">{dueLabel(kind)}</label>
             <input id="de-due" type="date" value={h.dueDate} onChange={(e) => { setDueTouched(true); setHead("dueDate", e.target.value); }} className={`${field} mt-1`} data-testid="de-due" />
           </div>
           <div>
-            <label htmlFor="de-ref" className="text-xs font-medium text-slate-700 dark:text-slate-300">{isPo ? "Buyer's PO number" : "Reference (optional)"}</label>
+            <label htmlFor="de-ref" className="text-xs font-medium text-slate-700 dark:text-slate-300">{refLabel(kind)}</label>
             <input id="de-ref" value={h.reference} onChange={(e) => setHead("reference", e.target.value)} className={`${field} mt-1`} data-testid="de-ref" />
           </div>
         </div>
@@ -226,7 +228,7 @@ export function DocEditor(props: {
         <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Items</h2>
         {short.length > 0 && (
           <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200" data-testid="de-short-banner">
-            {short.length === 1 ? "One item asks" : `${short.length} items ask`} for more than is available. You can save the draft, but it can&apos;t be sent until the stock is there.
+            {short.length === 1 ? "One item asks" : `${short.length} items ask`} for more than is available. {isSo ? "You can save the draft, but check the stock before you confirm it: the invoice can't be sent until the stock is there." : "You can save the draft, but it can't be sent until the stock is there."}
           </p>
         )}
         {lines.map((l, i) => (

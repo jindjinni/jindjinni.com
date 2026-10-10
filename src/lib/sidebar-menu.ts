@@ -77,6 +77,7 @@ export const DEPARTMENT_MENUS: Record<MenuDept, DepartmentMenu> = {
     items: [
       { id: "to-be-paid", href: A, label: "To Be Paid", icon: "💵", exact: true },
       { id: "paid-orders", href: `${A}/paid`, label: "Paid Orders", icon: "✅" },
+      { id: "to-be-collected", href: `${A}/collect`, label: "To Be Collected", icon: "🧾" },
       { id: "monthly-report", href: `${A}/report`, label: "Monthly Report", icon: "📊" },
       { id: "audit-center", href: `${A}/audit-center`, label: "Audit Center", icon: "🔍" },
       { id: "mail", href: `${A}/mail`, label: "Mail", icon: "✉️" },
@@ -89,6 +90,7 @@ export const DEPARTMENT_MENUS: Record<MenuDept, DepartmentMenu> = {
     items: [
       { id: "to-be-emailed", href: C, label: "To Be Emailed", icon: "✉️", exact: true },
       { id: "emailed", href: `${C}/emailed`, label: "Emailed", icon: "📨" },
+      { id: "payments-received", href: `${C}/payments`, label: "Payments Received", icon: "💰" },
       { id: "mail", href: `${C}/mail`, label: "Mail", icon: "📬" },
       { id: "email-settings", href: `${C}/email-settings`, label: "Email Settings", setup: true },
       { id: "connectors", href: `${C}/connectors`, label: "Connectors", setup: true },
@@ -110,6 +112,7 @@ export const DEPARTMENT_MENUS: Record<MenuDept, DepartmentMenu> = {
     items: [
       { id: "quotations", href: S, label: "Quotations", icon: "🧾", exact: true },
       { id: "purchase-orders", href: `${S}/purchase-orders`, label: "Purchase Orders", icon: "📑" },
+      { id: "sales-orders", href: `${S}/sales-orders`, label: "Sales Orders", icon: "📦" },
       { id: "invoices", href: `${S}/invoices`, label: "Invoices", icon: "💵" },
       { id: "buyers", href: `${S}/buyers`, label: "Buyers", icon: "👥" },
       { id: "price-comparison", href: `${S}/price-comparison`, label: "Price Comparison", icon: "⚖️" },

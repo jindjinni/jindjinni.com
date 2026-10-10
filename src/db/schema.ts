@@ -2235,6 +2235,7 @@ export const salesProfiles = sqliteTable(
     nextQuotationNumber: integer("next_quotation_number").notNull().default(1001),
     /** Numbering of the purchase orders we receive (RPO-1001...). Null until the first one is logged; counts from 1001. */
     nextPurchaseOrderNumber: integer("next_purchase_order_number"),
+    nextSalesOrderNumber: integer("next_sales_order_number"),
     ...timestamps,
   },
   (t) => [uniqueIndex("sales_profiles_org_unique").on(t.organizationId)],
@@ -2309,7 +2310,7 @@ export const salesPriceItems = sqliteTable(
   (t) => [index("sales_price_items_org_buyer_idx").on(t.organizationId, t.buyerId), index("sales_price_items_product_idx").on(t.organizationId, t.productKey)],
 );
 
-export const SALES_KINDS = ["QUOTATION", "INVOICE", "PURCHASE_ORDER"] as const;
+export const SALES_KINDS = ["QUOTATION", "INVOICE", "PURCHASE_ORDER", "SALES_ORDER"] as const;
 export const SALES_STATUSES = ["DRAFT", "SENT", "PARTIALLY_PAID", "PAID", "ACCEPTED", "DECLINED", "CONVERTED", "VOID"] as const;
 
 export const salesDocuments = sqliteTable(
@@ -2416,6 +2417,38 @@ export const salesPayments = sqliteTable(
     ...timestamps,
   },
   (t) => [index("sales_payments_doc_idx").on(t.documentId)],
+);
+
+/**
+ * What Customer Service did about a payment that came in on an invoice: emailed the customer ("payment received"), or decided no email
+ * was needed. One row per payment (unique), never deleted, with the exact words and addresses kept. It deliberately has no foreign
+ * key to the payment, so the history survives if the payment is corrected in Sales.
+ */
+export const paymentNotices = sqliteTable(
+  "payment_notices",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    paymentId: text("payment_id").notNull(),
+    documentId: text("document_id").notNull(),
+    /** "SENT" or "SKIPPED". */
+    status: text("status", { enum: ["SENT", "SKIPPED"] }).notNull(),
+    invoiceNumber: text("invoice_number").notNull(),
+    buyerCompany: text("buyer_company"),
+    amount: real("amount").notNull(),
+    paidOn: text("paid_on").notNull(),
+    toEmail: text("to_email"),
+    subject: text("subject"),
+    body: text("body"),
+    note: text("note"),
+    handledByUserId: text("handled_by_user_id"),
+    handledByName: text("handled_by_name"),
+    handledAt: text("handled_at").notNull(),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex("payment_notices_payment_unique").on(t.organizationId, t.paymentId), index("payment_notices_org_idx").on(t.organizationId, t.handledAt)],
 );
 
 // ---------------------------------------------------------------------------

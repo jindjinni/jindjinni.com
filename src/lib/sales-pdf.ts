@@ -9,7 +9,7 @@ import { pdfSafe } from "@/lib/purchasing-receipt-pdf";
 export type SalesPdfLine = { productName: string; expiryText: string | null; condition: string; quantity: number; unitPrice: number; amount: number; ndc?: string | null };
 
 export type SalesPdfInput = {
-  kind: "QUOTATION" | "INVOICE" | "PURCHASE_ORDER";
+  kind: "QUOTATION" | "INVOICE" | "PURCHASE_ORDER" | "SALES_ORDER";
   number: string;
   status: string;
   docDate: string; // YYYY-MM-DD
@@ -86,8 +86,8 @@ export function wrap(text: string, font: PDFFont, size: number, maxWidth: number
   return out;
 }
 
-export function pdfFileName(kind: "QUOTATION" | "INVOICE" | "PURCHASE_ORDER", number: string, buyer: string, revision?: number | null): string {
-  const label = kind === "INVOICE" ? "Invoice" : kind === "PURCHASE_ORDER" ? "PurchaseOrder" : "Quotation";
+export function pdfFileName(kind: "QUOTATION" | "INVOICE" | "PURCHASE_ORDER" | "SALES_ORDER", number: string, buyer: string, revision?: number | null): string {
+  const label = kind === "INVOICE" ? "Invoice" : kind === "PURCHASE_ORDER" ? "PurchaseOrder" : kind === "SALES_ORDER" ? "SalesOrder" : "Quotation";
   const who = buyer.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "");
   return `${label}-${number.replace(/[^A-Za-z0-9-]+/g, "")}${revision && revision > 0 ? `-Rev${Math.floor(revision)}` : ""}${who ? `-${who}` : ""}.pdf`;
 }
@@ -96,9 +96,10 @@ export async function buildSalesPdf(input: SalesPdfInput): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   const regular = await doc.embedFont(StandardFonts.Helvetica);
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
-  const defaultLabel = input.kind === "INVOICE" ? "INVOICE" : input.kind === "PURCHASE_ORDER" ? "PURCHASE ORDER" : "QUOTATION";
+  const defaultLabel = input.kind === "INVOICE" ? "INVOICE" : input.kind === "PURCHASE_ORDER" ? "PURCHASE ORDER" : input.kind === "SALES_ORDER" ? "SALES ORDER" : "QUOTATION";
   const label = input.title?.trim() ? input.title.trim().toUpperCase() : defaultLabel;
-  const isPo = input.kind === "PURCHASE_ORDER";
+  const isPo = input.kind === "PURCHASE_ORDER" || input.kind === "SALES_ORDER"; // both list the NDC and carry the buyer's PO number
+  const dueWord = input.kind === "INVOICE" ? "Due" : input.kind === "SALES_ORDER" ? "Ship by" : isPo ? "Needed by" : "Valid until";
   const rev = input.revision && input.revision > 0 ? Math.floor(input.revision) : 0;
   doc.setTitle(pdfSafe(`${label} ${input.number}${rev ? ` Rev ${rev}` : ""} - ${input.buyer.company}`));
   doc.setProducer("Ledger");
@@ -165,7 +166,7 @@ export async function buildSalesPdf(input: SalesPdfInput): Promise<Uint8Array> {
   drawRight(`Date  ${longDate(input.docDate)}`, PAGE_W - M, 9, regular, INK, rightY);
   rightY -= 13;
   if (input.dueDate) {
-    drawRight(`${input.kind === "INVOICE" ? "Due" : isPo ? "Needed by" : "Valid until"}  ${longDate(input.dueDate)}`, PAGE_W - M, 9, regular, INK, rightY);
+    drawRight(`${dueWord}  ${longDate(input.dueDate)}`, PAGE_W - M, 9, regular, INK, rightY);
     rightY -= 13;
   }
   if (input.terms && input.kind === "INVOICE") {

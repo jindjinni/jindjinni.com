@@ -2,31 +2,33 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireOrg } from "@/lib/tenant";
 import { canWriteSales } from "@/lib/permissions";
-import { getDocument } from "@/lib/sales-service";
+import { getDocument, salesOrdersOn } from "@/lib/sales-service";
+import { DOC_BACK, DOC_BASE, docWord, dueLabel, refShort, type DocKind } from "@/lib/sales-doc-ui";
 import { listRevisions } from "@/lib/document-revision-service";
 import { getTemplate } from "@/lib/document-template-service";
 import { purchaseOrdersEnabled } from "@/lib/purchase-order-service";
-import { balanceOf, dueDateFor, lineAmount, shownStatus } from "@/lib/sales-rules";
+import { balanceOf, dueDateFor, hasNdcColumn, lineAmount, shownStatus } from "@/lib/sales-rules";
 import { StatusChip, card, fmtDay, fmtMoney } from "@/components/sales-ui";
 import { DocActions } from "./doc-actions";
 import { DocEditor, type EditorInitial } from "./doc-editor";
 import { loadEditorData } from "./editor-data";
 
-type Kind = "QUOTATION" | "INVOICE" | "PURCHASE_ORDER";
-const baseOf = (kind: Kind) => (kind === "INVOICE" ? "/dashboard/sales/invoices" : kind === "PURCHASE_ORDER" ? "/dashboard/sales/purchase-orders" : "/dashboard/sales/quotations");
-const backOf = (kind: Kind) => (kind === "INVOICE" ? "/dashboard/sales/invoices" : kind === "PURCHASE_ORDER" ? "/dashboard/sales/purchase-orders" : "/dashboard/sales");
-const wordOf = (kind: Kind) => (kind === "INVOICE" ? "invoice" : kind === "PURCHASE_ORDER" ? "purchase order" : "quotation");
+type Kind = DocKind;
+const baseOf = (kind: Kind) => DOC_BASE[kind];
+const backOf = (kind: Kind) => DOC_BACK[kind];
+const wordOf = (kind: Kind) => docWord(kind);
 
 export async function DocNewPage({ kind, buyerId }: { kind: Kind; buyerId?: string }) {
   const org = await requireOrg();
   if (!canWriteSales(org.role, org.access)) notFound();
   const data = await loadEditorData(org.organizationId, null);
+  if (kind === "SALES_ORDER" && !(await salesOrdersOn(org.organizationId))) notFound();
   const isInvoice = kind === "INVOICE";
   const isPo = kind === "PURCHASE_ORDER";
   const buyer = data.buyers.find((b) => b.id === buyerId);
   const terms = buyer?.terms || data.from.defaultTerms;
   // The company's Sales template (Settings -> Document Templates) can supply the standard notes for a new quotation or purchase order.
-  const tplNotes = isInvoice ? null : (await getTemplate(org.organizationId, "sales", kind as "QUOTATION" | "PURCHASE_ORDER")).termsText;
+  const tplNotes = isInvoice || kind === "SALES_ORDER" ? null : (await getTemplate(org.organizationId, "sales", kind as "QUOTATION" | "PURCHASE_ORDER")).termsText;
   const initial: EditorInitial = {
     buyerId: buyer?.id ?? "",
     company: buyer?.name ?? "",
@@ -36,7 +38,7 @@ export async function DocNewPage({ kind, buyerId }: { kind: Kind; buyerId?: stri
     billing: buyer?.billing ?? "",
     shipping: buyer?.shipping ?? "",
     docDate: data.today,
-    dueDate: isInvoice ? dueDateFor(data.today, terms) : dueDateFor(data.today, "Net 7"),
+    dueDate: isInvoice ? dueDateFor(data.today, terms) : dueDateFor(data.today, "Net 7"), // an order's "needed by" / "ship by" / "valid until" is a week out
     terms,
     reference: "",
     discount: "",
@@ -54,6 +56,8 @@ export async function DocNewPage({ kind, buyerId }: { kind: Kind; buyerId?: stri
       <p className="mt-1 max-w-2xl text-sm text-slate-600 dark:text-slate-400">
         {isPo
           ? "Pick the buyer who sent the order, type their PO number in Reference, then add the items with their NDCs. Beside each item you'll see how many you have in stock."
+          : kind === "SALES_ORDER"
+            ? "Most sales orders are made from a sent quotation or a received purchase order (open it and press Make a sales order). To start one by hand, pick the buyer, type their PO number, and add the items. Its units are set aside for the buyer."
           : "Pick the buyer, then add items. Beside each item you'll see how many you have in stock and how many are still available to sell."}
       </p>
       <div className="mt-4">
@@ -67,23 +71,28 @@ export async function DocDetailPage({ kind, id, revise }: { kind: Kind; id: stri
   const org = await requireOrg();
   const found = await getDocument(org.organizationId, id);
   if (!found || found.doc.kind !== kind) notFound();
+  if (kind === "SALES_ORDER" && !(await salesOrdersOn(org.organizationId))) notFound();
   const { doc, lines, payments } = found;
   const canWrite = canWriteSales(org.role, org.access);
   const isInvoice = kind === "INVOICE";
   const isPo = kind === "PURCHASE_ORDER";
   const word = wordOf(kind);
   const revEnabled = await purchaseOrdersEnabled(org.organizationId);
+  const soEnabled = await salesOrdersOn(org.organizationId);
+  const target = doc.convertedToId ? await getDocument(org.organizationId, doc.convertedToId) : null;
+  const convertedToKind = target?.doc.kind === "SALES_ORDER" ? "SALES_ORDER" : target?.doc.kind === "INVOICE" ? "INVOICE" : null;
   const revising = revEnabled && !!revise && canWrite && !isInvoice && (doc.status === "SENT" || doc.status === "ACCEPTED");
   const history = isInvoice ? [] : await listRevisions(org.organizationId, "sales_doc", doc.id);
   const data = await loadEditorData(org.organizationId, doc.status === "DRAFT" ? doc.id : null);
   const status = shownStatus(doc, data.today);
   const actions = (
     <DocActions
-      doc={{ id: doc.id, kind, status: doc.status, number: doc.number, buyerEmail: doc.buyerEmail ?? "", total: doc.total, amountPaid: doc.amountPaid, convertedToId: doc.convertedToId, inventoryPosted: doc.inventoryPosted, emailedTo: doc.emailedTo, sentAt: doc.sentAt }}
+      doc={{ id: doc.id, kind, status: doc.status, number: doc.number, buyerEmail: doc.buyerEmail ?? "", total: doc.total, amountPaid: doc.amountPaid, convertedToId: doc.convertedToId, convertedToKind, inventoryPosted: doc.inventoryPosted, emailedTo: doc.emailedTo, sentAt: doc.sentAt }}
       payments={payments.map((p) => ({ id: p.id, amount: p.amount, paidOn: p.paidOn, method: p.method ?? "", note: p.note ?? "" }))}
       today={data.today}
       canWrite={canWrite}
       canRevise={revEnabled}
+      canMakeSo={soEnabled}
       base={baseOf(kind)}
     />
   );
@@ -91,7 +100,7 @@ export async function DocDetailPage({ kind, id, revise }: { kind: Kind; id: stri
     <div>
       <Link href={backOf(kind)} className="text-sm text-slate-600 underline dark:text-slate-400">← All {word}s</Link>
       <div className="mt-2 flex flex-wrap items-center gap-3">
-        <h1 className="text-xl font-bold text-slate-900 dark:text-slate-50" data-testid="doc-title">{isInvoice ? `Invoice #${doc.number}` : isPo ? `Purchase order ${doc.number}` : `Quotation ${doc.number}`}</h1>
+        <h1 className="text-xl font-bold text-slate-900 dark:text-slate-50" data-testid="doc-title">{isInvoice ? `Invoice #${doc.number}` : isPo ? `Purchase order ${doc.number}` : kind === "SALES_ORDER" ? `Sales order ${doc.number}` : `Quotation ${doc.number}`}</h1>
         <StatusChip status={status} />
         {!!doc.revision && doc.revision > 0 && <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-800 dark:bg-red-950 dark:text-red-200" data-testid="doc-revision">Revision {doc.revision}</span>}
       </div>
@@ -158,21 +167,21 @@ export async function DocDetailPage({ kind, id, revise }: { kind: Kind; id: stri
         <div className="text-sm">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Details</p>
           <p className="mt-1">Date: {fmtDay(doc.docDate)}</p>
-          {doc.dueDate && <p>{isInvoice ? "Due" : isPo ? "Needed by" : "Valid until"}: {fmtDay(doc.dueDate)}</p>}
-          {isInvoice && doc.terms && <p>Terms: {doc.terms}</p>}
-          {doc.reference && <p>{isPo ? "Buyer's PO #" : "Reference"}: {doc.reference}</p>}
+          {doc.dueDate && <p>{dueLabel(kind).replace(" date", "")}: {fmtDay(doc.dueDate)}</p>}
+          {(isInvoice || kind === "SALES_ORDER") && doc.terms && <p>Terms: {doc.terms}</p>}
+          {doc.reference && <p>{refShort(kind)}: {doc.reference}</p>}
         </div>
       </div>
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
         <table className="w-full text-sm" data-testid="doc-lines">
           <thead className="bg-sky-700 text-left text-xs uppercase tracking-wide text-white">
-            <tr><th className="px-3 py-2">Item</th><th className="px-3 py-2">{isPo ? "NDC" : "Expires"}</th><th className="px-3 py-2">Cond.</th><th className="px-3 py-2 text-right">Qty</th><th className="px-3 py-2 text-right">Unit price</th><th className="px-3 py-2 text-right">Amount</th></tr>
+            <tr><th className="px-3 py-2">Item</th><th className="px-3 py-2">{hasNdcColumn(kind) ? "NDC" : "Expires"}</th><th className="px-3 py-2">Cond.</th><th className="px-3 py-2 text-right">Qty</th><th className="px-3 py-2 text-right">Unit price</th><th className="px-3 py-2 text-right">Amount</th></tr>
           </thead>
           <tbody>
             {lines.map((l) => (
               <tr key={l.id} className="border-t border-slate-100 dark:border-slate-800" data-testid="doc-line">
                 <td className="px-3 py-2">{l.productName}</td>
-                <td className="px-3 py-2 text-slate-500">{isPo ? (l.ndc ?? "") : (l.expiryText ?? l.groupLabel ?? "")}</td>
+                <td className="px-3 py-2 text-slate-500">{hasNdcColumn(kind) ? (l.ndc ?? "") : (l.expiryText ?? l.groupLabel ?? "")}</td>
                 <td className="px-3 py-2 text-slate-500">{l.condition}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{l.quantity}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{fmtMoney(l.unitPrice)}</td>

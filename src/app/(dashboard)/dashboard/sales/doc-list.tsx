@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { type SalesStatus } from "@/lib/sales-rules";
+import { docPlural, dueShort, type DocKind } from "@/lib/sales-doc-ui";
 import { StatusChip, card, field, fmtDay, fmtMoney } from "@/components/sales-ui";
 
 export type DocRow = { id: string; number: string; buyer: string; date: string; due: string; total: number; balance: number; status: SalesStatus | "PAST_DUE"; units: number };
@@ -11,12 +12,12 @@ const ORDER: (SalesStatus | "PAST_DUE")[] = ["PAST_DUE", "PARTIALLY_PAID", "SENT
 
 // Quotations or invoices, grouped under closed headings by where they stand (Past due, Sent, Drafts, Paid ...), each
 // heading showing how many and how much. A search opens the groups that have a match.
-export function DocList({ kind, base, rows }: { kind: "QUOTATION" | "INVOICE" | "PURCHASE_ORDER"; base: string; rows: DocRow[] }) {
+export function DocList({ kind, base, rows }: { kind: DocKind; base: string; rows: DocRow[] }) {
   const [q, setQ] = useState("");
   const needle = q.trim().toLowerCase();
   const shown = rows.filter((r) => !needle || `${r.number} ${r.buyer}`.toLowerCase().includes(needle));
   const groups = ORDER.map((s) => ({ s, rows: shown.filter((r) => r.status === s) })).filter((g) => g.rows.length);
-  const word = kind === "INVOICE" ? "invoices" : kind === "PURCHASE_ORDER" ? "purchase orders" : "quotations";
+  const word = docPlural(kind);
   return (
     <div className="mt-5 space-y-3">
       <div className="flex flex-wrap items-center gap-3">
@@ -49,7 +50,7 @@ export function DocList({ kind, base, rows }: { kind: "QUOTATION" | "INVOICE" | 
                       <span className="font-semibold tabular-nums text-slate-900 dark:text-slate-50">{kind === "INVOICE" ? "#" : ""}{r.number}</span>
                       <span className="truncate">{r.buyer}</span>
                       <span className="text-slate-500">{fmtDay(r.date)}</span>
-                      <span className={g.s === "PAST_DUE" ? "font-medium text-red-700 dark:text-red-300" : "text-slate-500"}>{r.due ? `${kind === "INVOICE" ? "Due" : "Until"} ${fmtDay(r.due)}` : ""}</span>
+                      <span className={g.s === "PAST_DUE" ? "font-medium text-red-700 dark:text-red-300" : "text-slate-500"}>{r.due ? `${dueShort(kind)} ${fmtDay(r.due)}` : ""}</span>
                       <span className="tabular-nums sm:text-right">{fmtMoney(r.total)}</span>
                     </Link>
                   </li>

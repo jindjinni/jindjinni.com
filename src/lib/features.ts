@@ -54,6 +54,24 @@ export const FEATURES: FeatureDef[] = [
     blurb: "A Mail tab in Purchasing, Sales, Receiving, Accounts and Customer Service: each department connects its own company email (shared, plus personal ones), with Inbox, Sent, Drafts and scheduled emails. Works on both the Wholesale and Distribution sides.",
     defaultStage: "mothership",
   },
+  {
+    key: "sales-orders",
+    label: "Sales orders",
+    blurb: "Sales -> Sales Orders: a sent quotation or a received purchase order becomes a sales order that sets its units aside, can be confirmed to the buyer by email, and is then made into the invoice. Quotations, purchase orders and invoices work as before.",
+    defaultStage: "mothership",
+  },
+  {
+    key: "receivables",
+    label: "Money coming in (receivables)",
+    blurb: "Accounts -> To Be Collected: every sent invoice with what is owed and how late it is, where payments are recorded; and Customer Service -> Payments Received with the thank-you email ready to review and send.",
+    defaultStage: "mothership",
+  },
+  {
+    key: "payables",
+    label: "Supplier bills (payables)",
+    blurb: "Accounts -> Supplier Bills: when Receiving confirms a supplier's purchase order has arrived, Accounts gets a bill to pay, marks it paid, and sees what is owed by supplier.",
+    defaultStage: "mothership",
+  },
 ];
 
 export const featureDef = (key: string) => FEATURES.find((f) => f.key === key);

@@ -42,17 +42,35 @@ export function dueDateFor(docDate: string, terms: string | null | undefined): s
   return isDay(docDate) ? addDays(docDate, termsDays(terms)) : docDate;
 }
 
-export type SalesKind = "QUOTATION" | "INVOICE" | "PURCHASE_ORDER";
+export type SalesKind = "QUOTATION" | "INVOICE" | "PURCHASE_ORDER" | "SALES_ORDER";
 
-/** Quotations are numbered Q-1001, invoices 1001, and the purchase orders we receive RPO-1001 (the buyer's own number is kept in Reference). */
+/** Quotations are numbered Q-1001, invoices 1001, the purchase orders we receive RPO-1001 (the buyer's own number is kept in Reference) and our sales orders SO-1001. */
 export function formatNumber(kind: SalesKind, seq: number): string {
-  return kind === "QUOTATION" ? `Q-${seq}` : kind === "PURCHASE_ORDER" ? `RPO-${seq}` : String(seq);
+  return kind === "QUOTATION" ? `Q-${seq}` : kind === "PURCHASE_ORDER" ? `RPO-${seq}` : kind === "SALES_ORDER" ? `SO-${seq}` : String(seq);
 }
 
-/** Quotations and purchase orders are "offers/orders" that can be sent, accepted or declined and made into an invoice. Invoices are different (stock, payments). */
-export const isOrderDoc = (kind: string) => kind === "QUOTATION" || kind === "PURCHASE_ORDER";
+/** Quotations, purchase orders and sales orders are "offers/orders" that can be sent, accepted or declined and made into an invoice (a sales order's next step only). Invoices are different (stock, payments). */
+export const isOrderDoc = (kind: string) => kind === "QUOTATION" || kind === "PURCHASE_ORDER" || kind === "SALES_ORDER";
 
-export const KIND_LABEL: Record<SalesKind, string> = { QUOTATION: "Quotation", INVOICE: "Invoice", PURCHASE_ORDER: "Purchase order" };
+export const KIND_LABEL: Record<SalesKind, string> = { QUOTATION: "Quotation", INVOICE: "Invoice", PURCHASE_ORDER: "Purchase order", SALES_ORDER: "Sales order" };
+
+/** The lower-case word for a kind, for sentences ("this sales order"). */
+export const kindWord = (kind: string) => (KIND_LABEL[kind as SalesKind] ?? "document").toLowerCase();
+
+/** Purchase orders and sales orders list the NDC of each item and carry the buyer's own PO number. */
+export const hasNdcColumn = (kind: string) => kind === "PURCHASE_ORDER" || kind === "SALES_ORDER";
+
+/** Statuses in which a sales order is still open and keeps its units set aside. Made into an invoice, void and declined release them. */
+export const SO_HOLDING_STATUSES = ["DRAFT", "SENT", "ACCEPTED"] as const;
+
+/** Where a sales order can come from: a quotation or a received purchase order that was sent or accepted, never declined, void or already made into something. */
+export function canMakeSalesOrder(from: { kind: string; status: string }): { ok: true } | { ok: false; error: string } {
+  if (from.kind !== "QUOTATION" && from.kind !== "PURCHASE_ORDER") return { ok: false, error: "A sales order is made from a quotation or a received purchase order." };
+  if (from.status === "CONVERTED") return { ok: false, error: `This ${kindWord(from.kind)} was already made into another document.` };
+  if (from.status === "VOID" || from.status === "DECLINED") return { ok: false, error: `A void or declined ${kindWord(from.kind)} can't be made into a sales order.` };
+  if (from.status !== "SENT" && from.status !== "ACCEPTED") return { ok: false, error: `Send the ${kindWord(from.kind)} first.` };
+  return { ok: true };
+}
 
 export type SalesStatus = "DRAFT" | "SENT" | "PARTIALLY_PAID" | "PAID" | "ACCEPTED" | "DECLINED" | "CONVERTED" | "VOID";
 

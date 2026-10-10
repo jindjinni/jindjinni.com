@@ -7,13 +7,17 @@ import { getSavedSidebarMenus } from "@/lib/sidebar-menu-store";
 import { DepartmentSidebar } from "@/components/department-sidebar";
 import { withMailTab } from "@/lib/mail-access";
 import { mailBadges } from "@/lib/mailbox-service";
+import { countNoticeCandidates, receivablesOn } from "@/lib/receivable-service";
 
 // Customer Service is its own department, built like Accounts: a colored sidebar down the left and a workspace beside it.
 // Only the Customer Service role, Admin and Owner can open it. This is the one place customers are emailed about a paid order.
 export default async function CustomerServiceLayout({ children }: { children: React.ReactNode }) {
   const org = await requireOrg();
   if (!canViewCustomerService(org.role, org.access)) notFound();
-  const menu = resolveMenu("customer-service", await getSavedSidebarMenus(org.organizationId), await withMailTab(menuIdsFor("customer-service", { connectors: isAdmin(org.role) }), org.organizationId));
+  const recvOn = await receivablesOn(org.organizationId);
+  const ids = menuIdsFor("customer-service", { connectors: isAdmin(org.role) }).filter((id) => recvOn || id !== "payments-received");
+  const menu = resolveMenu("customer-service", await getSavedSidebarMenus(org.organizationId), await withMailTab(ids, org.organizationId));
+  const waiting = recvOn ? await countNoticeCandidates(org.organizationId) : 0;
 
   return (
     <div className="-my-8 mx-[calc(50%-50vw)] flex min-h-[calc(100vh-3.4rem)] w-screen flex-col md:flex-row print:m-0 print:w-auto">
@@ -26,7 +30,7 @@ export default async function CustomerServiceLayout({ children }: { children: Re
         setupLabel={menu.setupLabel}
         defaultSetupLabel={menu.defaultSetupLabel}
         canEdit={isAdmin(org.role)}
-        badges={await mailBadges(org, "customer-service")}
+        badges={{ ...(await mailBadges(org, "customer-service")), ...(waiting > 0 ? { "payments-received": waiting } : {}) }}
       />
       <div className="min-w-0 flex-1 bg-stone-50 dark:bg-slate-950">
         {!storage.configured() && (

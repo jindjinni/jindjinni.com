@@ -7,6 +7,7 @@ import { tabViewOf } from "@/lib/operations-service";
 import { withoutHidden } from "@/lib/operation-tabs-rules";
 import { auditCenterOn } from "@/lib/audit-access";
 import { reminderCount } from "@/lib/audit-insights-service";
+import { pastDueCount, receivablesOn } from "@/lib/receivable-service";
 import { withMailTab } from "@/lib/mail-access";
 import { mailBadges } from "@/lib/mailbox-service";
 import { getSavedSidebarMenus } from "@/lib/sidebar-menu-store";
@@ -20,14 +21,20 @@ async function auditBadges(organizationId: string): Promise<Record<string, numbe
   return n > 0 ? { "audit-center": n } : {};
 }
 
+async function collectBadges(organizationId: string): Promise<Record<string, number>> {
+  const n = await pastDueCount(organizationId);
+  return n > 0 ? { "to-be-collected": n } : {};
+}
+
 export default async function AccountsLayout({ children }: { children: React.ReactNode }) {
   const org = await requireOrg();
   if (!canViewAccounts(org.role, org.access)) notFound();
   const view = await tabViewOf(org.organizationId);
   // The Audit Center tab appears only in a Distribution operation, and only while its rollout switch is on.
   const ids = withoutHidden(menuIdsFor("accounts", { connectors: false }), view.sides, "accounts", view.showAll);
-  const auditOn = await auditCenterOn(org.organizationId);
-  const menu = resolveMenu("accounts", await getSavedSidebarMenus(org.organizationId), await withMailTab(auditOn ? ids : ids.filter((id) => id !== "audit-center"), org.organizationId));
+  const [auditOn, recvOn] = await Promise.all([auditCenterOn(org.organizationId), receivablesOn(org.organizationId)]);
+  const shown = ids.filter((id) => (auditOn || id !== "audit-center") && (recvOn || id !== "to-be-collected"));
+  const menu = resolveMenu("accounts", await getSavedSidebarMenus(org.organizationId), await withMailTab(shown, org.organizationId));
 
   return (
     <div className="-my-8 mx-[calc(50%-50vw)] flex min-h-[calc(100vh-3.4rem)] w-screen flex-col md:flex-row print:m-0 print:w-auto">
@@ -40,7 +47,7 @@ export default async function AccountsLayout({ children }: { children: React.Rea
         setupLabel={menu.setupLabel}
         defaultSetupLabel={menu.defaultSetupLabel}
         canEdit={isAdmin(org.role)}
-        badges={{ ...(await mailBadges(org, "accounts")), ...(auditOn && canViewAccounts(org.role, org.access) ? await auditBadges(org.organizationId) : {}) }}
+        badges={{ ...(await mailBadges(org, "accounts")), ...(auditOn && canViewAccounts(org.role, org.access) ? await auditBadges(org.organizationId) : {}), ...(recvOn ? await collectBadges(org.organizationId) : {}) }}
       />
       <div className="min-w-0 flex-1 bg-stone-50 dark:bg-slate-950">
         {!storage.configured() && (

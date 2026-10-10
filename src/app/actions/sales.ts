@@ -12,9 +12,10 @@ import { sendDeptEmail } from "@/lib/mail-system";
 import { purchaseOrdersEnabled } from "@/lib/purchase-order-service";
 import { findColumn, parseSpreadsheetFile } from "@/lib/spreadsheet-import";
 import { buyersFromSheet } from "@/lib/sales-import";
-import { cleanText, guessColumns, looksLikeEmail, readSheetRows, TERMS_OPTIONS } from "@/lib/sales-rules";
+import { cleanText, guessColumns, kindWord, looksLikeEmail, readSheetRows, TERMS_OPTIONS } from "@/lib/sales-rules";
 import {
   convertToInvoice,
+  convertToSalesOrder,
   createBuyer,
   deleteDraft,
   deletePriceItem,
@@ -27,6 +28,7 @@ import {
   removePayment,
   reviseDocument,
   saveDocument,
+  salesOrdersOn,
   savePriceSheet,
   sendDocument,
   setQuotationStatus,
@@ -42,6 +44,7 @@ export type SalesResult = { ok: true; id?: string; message?: string } | { ok: fa
 export type SalesFormState = { error?: string; message?: string } | undefined;
 
 const NOT_ALLOWED = "Your role can look at Sales but can't change it.";
+const SALES_ORDERS_OFF = "Sales orders aren't turned on for your company yet.";
 
 async function writer(): Promise<{ org: CurrentOrg } | { error: string }> {
   const org = await requireOrg();
@@ -243,8 +246,9 @@ export async function removePriceSheetAction(buyerId: string): Promise<SalesResu
 export async function saveDocumentAction(input: DocInput): Promise<SalesResult> {
   const w = await writer();
   if ("error" in w) return { ok: false, error: w.error };
-  if (input.kind !== "QUOTATION" && input.kind !== "INVOICE" && input.kind !== "PURCHASE_ORDER") return { ok: false, error: "Something went wrong. Reload the page and try again." };
+  if (input.kind !== "QUOTATION" && input.kind !== "INVOICE" && input.kind !== "PURCHASE_ORDER" && input.kind !== "SALES_ORDER") return { ok: false, error: "Something went wrong. Reload the page and try again." };
   if (input.kind === "PURCHASE_ORDER" && !(await purchaseOrdersEnabled(w.org.organizationId))) return { ok: false, error: "Purchase orders aren't turned on for your company yet." };
+  if (input.kind === "SALES_ORDER" && !(await salesOrdersOn(w.org.organizationId))) return { ok: false, error: SALES_ORDERS_OFF };
   const res = await saveDocument(w.org, { ...input, lines: Array.isArray(input.lines) ? input.lines.map((l) => ({ ...l, quantity: Number(l.quantity), unitPrice: Number(l.unitPrice) })) : [] });
   if (!res.ok) return res;
   refresh();
@@ -267,7 +271,7 @@ export async function sendDocumentAction(id: string, opts: { email: boolean; to?
   if (!res.ok) return res;
   if (before) {
     const isInvoice = before.doc.kind === "INVOICE";
-    const word = isInvoice ? "invoice" : before.doc.kind === "PURCHASE_ORDER" ? "purchase order" : "quotation";
+    const word = kindWord(before.doc.kind);
     await logActivity(w.org, isInvoice ? "INVOICE_SENT" : "QUOTE_SENT", `Sent ${word} ${before.doc.number} to ${before.doc.buyerCompany ?? "a buyer"}`, { type: "sales_document", id });
   }
   revalidatePath("/dashboard/inventory", "layout");
@@ -293,7 +297,7 @@ export async function reviseDocumentAction(
   const res = await reviseDocument(w.org, id, { note: opts?.note, edits, mailer: opts?.email ? mailer(w.org, id) : null, to: to || null, message: opts?.message ? String(opts.message).slice(0, 2000) : null });
   if (!res.ok) return res;
   if (before) {
-    const word = before.doc.kind === "PURCHASE_ORDER" ? "purchase order" : "quotation";
+    const word = kindWord(before.doc.kind);
     await logActivity(w.org, "QUOTE_SENT", `Sent revision ${res.revision} of ${word} ${before.doc.number} to ${before.doc.buyerCompany ?? "a buyer"}`, { type: "sales_document", id });
   }
   refresh();
@@ -326,6 +330,19 @@ export async function convertToInvoiceAction(id: string): Promise<SalesResult> {
   if (!res.ok) return res;
   refresh();
   return { ok: true, id: res.id, message: "Invoice draft made." };
+}
+
+/** Makes a sales order from a sent quotation or a received purchase order. */
+export async function makeSalesOrderAction(id: string): Promise<SalesResult> {
+  const w = await writer();
+  if ("error" in w) return { ok: false, error: w.error };
+  if (!(await salesOrdersOn(w.org.organizationId))) return { ok: false, error: SALES_ORDERS_OFF };
+  const res = await convertToSalesOrder(w.org, id);
+  if (!res.ok) return res;
+  const made = await getDocument(w.org.organizationId, res.id);
+  await logActivity(w.org, "OTHER", `Made sales order ${made?.doc.number ?? ""} for ${made?.doc.buyerCompany ?? "a buyer"}`.replace(/\s+/g, " ").trim(), { type: "sales_document", id: res.id });
+  refresh();
+  return { ok: true, id: res.id, message: "Sales order draft made." };
 }
 
 export async function deleteDraftAction(id: string): Promise<SalesResult> {
