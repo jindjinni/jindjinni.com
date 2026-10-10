@@ -7,6 +7,7 @@ import { getSavedSidebarMenus } from "@/lib/sidebar-menu-store";
 import { DepartmentSidebar } from "@/components/department-sidebar";
 import { tabViewOf } from "@/lib/operations-service";
 import { withoutHidden } from "@/lib/operation-tabs-rules";
+import { withMailTab } from "@/lib/mail-access";
 
 // Receiving is its own department: colored sidebar, full-width workspace. The sidebar's names and order can be
 // changed by an Administrator (Edit menu); see lib/sidebar-menu.ts.
@@ -15,7 +16,7 @@ export default async function ReceivingLayout({ children }: { children: React.Re
   if (!canViewReceiving(org.role, org.access)) notFound();
   const showStorageNote = canWriteReceiving(org.role, org.access) && !storage.configured();
   const view = await tabViewOf(org.organizationId);
-  const menu = resolveMenu("receiving", await getSavedSidebarMenus(org.organizationId), withoutHidden(menuIdsFor("receiving", { connectors: isAdmin(org.role) }), view.sides, "receiving", view.showAll));
+  const menu = resolveMenu("receiving", await getSavedSidebarMenus(org.organizationId), await withMailTab(withoutHidden(menuIdsFor("receiving", { connectors: isAdmin(org.role) }), view.sides, "receiving", view.showAll), org.organizationId));
 
   return (
     <div className="-my-8 mx-[calc(50%-50vw)] flex min-h-[calc(100vh-3.4rem)] w-screen flex-col md:flex-row print:m-0 print:w-auto">

@@ -8,6 +8,7 @@ import { operationTypeOf, purchaseOrdersEnabled } from "@/lib/purchase-order-ser
 import { primaryDocument } from "@/lib/operation-type";
 import { operationsOf } from "@/lib/operations-service";
 import { wordsFor } from "@/lib/operations-rules";
+import { withMailTab } from "@/lib/mail-access";
 
 // Sales is its own department, built like Inventory: a colored sidebar down the left and a workspace beside it.
 // Quotations, invoices, buyers and prices are for the Purchasing roles (the accountant only looks); the company profile
@@ -15,14 +16,14 @@ import { wordsFor } from "@/lib/operations-rules";
 export default async function SalesLayout({ children }: { children: React.ReactNode }) {
   const org = await requireOrg();
   if (!canViewSales(org.role, org.access)) notFound();
-  const everyday = ["quotations", "purchase-orders", "invoices", "buyers", "price-comparison"];
+  const everyday = ["quotations", "purchase-orders", "invoices", "buyers", "price-comparison", "mail"];
   const allowed = menuIdsFor("sales", { connectors: isAdmin(org.role), base: canManageSalesSettings(org.role) ? undefined : everyday });
   // Purchase orders and the document templates come with the "purchase-orders" rollout feature; a Distributor sees Purchase Orders first.
   const [poOn, operation, sides] = await Promise.all([purchaseOrdersEnabled(org.organizationId), operationTypeOf(org.organizationId), operationsOf(org.organizationId)]);
   const menu = resolveMenu(
     "sales",
     await getSavedSidebarMenus(org.organizationId),
-    poOn ? allowed : allowed.filter((id) => id !== "purchase-orders" && id !== "templates"),
+    await withMailTab(poOn ? allowed : allowed.filter((id) => id !== "purchase-orders" && id !== "templates"), org.organizationId),
     { purchaseOrdersFirst: primaryDocument(operation) === "PURCHASE_ORDER", defaultLabels: { buyers: wordsFor(sides).buyers } },
   );
 

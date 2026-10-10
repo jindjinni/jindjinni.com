@@ -45,7 +45,13 @@ export const FEATURES: FeatureDef[] = [
   {
     key: "audit-center",
     label: "Audit Center",
-    blurb: "Accounts → Audit Center in a Distribution operation: pharmacy internal audits and PBM audits (Excel files built from the pharmacy's invoices, PBM files never carry prices or shipping), with a saved case record for each audit.",
+    blurb: "Accounts → Audit Center in a Distribution operation: pharmacy internal audits, PBM audits and State/Federal regulatory audits (Excel files built from the pharmacy's invoices; PBM files never carry prices or shipping), a saved case record for each audit, and sending the files from the company's own mailbox after a review.",
+    defaultStage: "mothership",
+  },
+  {
+    key: "mailboxes",
+    label: "Department mailboxes",
+    blurb: "A Mail tab in Purchasing, Sales, Receiving, Accounts and Customer Service: each department connects its own company email (shared, plus personal ones), with Inbox, Sent, Drafts and scheduled emails. Works on both the Wholesale and Distribution sides.",
     defaultStage: "mothership",
   },
 ];

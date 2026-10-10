@@ -1,7 +1,20 @@
 {
   "crons": [
-    { "path": "/api/cron/purge-closed", "schedule": "17 3 * * *" },
-    { "path": "/api/cron/refresh-tracking", "schedule": "41 4 * * *" },
-    { "path": "/api/cron/end-cancelled", "schedule": "9 5 * * *" }
+    {
+      "path": "/api/cron/purge-closed",
+      "schedule": "17 3 * * *"
+    },
+    {
+      "path": "/api/cron/refresh-tracking",
+      "schedule": "41 4 * * *"
+    },
+    {
+      "path": "/api/cron/end-cancelled",
+      "schedule": "9 5 * * *"
+    },
+    {
+      "path": "/api/cron/mail-tick",
+      "schedule": "23 6 * * *"
+    }
   ]
 }

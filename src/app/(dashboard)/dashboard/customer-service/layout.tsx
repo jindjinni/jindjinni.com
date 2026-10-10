@@ -5,13 +5,14 @@ import { storage } from "@/lib/receiving-storage";
 import { menuIdsFor, resolveMenu } from "@/lib/sidebar-menu";
 import { getSavedSidebarMenus } from "@/lib/sidebar-menu-store";
 import { DepartmentSidebar } from "@/components/department-sidebar";
+import { withMailTab } from "@/lib/mail-access";
 
 // Customer Service is its own department, built like Accounts: a colored sidebar down the left and a workspace beside it.
 // Only the Customer Service role, Admin and Owner can open it. This is the one place customers are emailed about a paid order.
 export default async function CustomerServiceLayout({ children }: { children: React.ReactNode }) {
   const org = await requireOrg();
   if (!canViewCustomerService(org.role, org.access)) notFound();
-  const menu = resolveMenu("customer-service", await getSavedSidebarMenus(org.organizationId), menuIdsFor("customer-service", { connectors: isAdmin(org.role) }));
+  const menu = resolveMenu("customer-service", await getSavedSidebarMenus(org.organizationId), await withMailTab(menuIdsFor("customer-service", { connectors: isAdmin(org.role) }), org.organizationId));
 
   return (
     <div className="-my-8 mx-[calc(50%-50vw)] flex min-h-[calc(100vh-3.4rem)] w-screen flex-col md:flex-row print:m-0 print:w-auto">

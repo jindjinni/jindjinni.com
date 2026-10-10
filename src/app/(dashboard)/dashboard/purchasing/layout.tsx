@@ -9,6 +9,7 @@ import { operationTypeOf, purchaseOrdersEnabled } from "@/lib/purchase-order-ser
 import { primaryDocument } from "@/lib/operation-type";
 import { tabViewOf } from "@/lib/operations-service";
 import { withoutHidden } from "@/lib/operation-tabs-rules";
+import { withMailTab } from "@/lib/mail-access";
 
 // Purchasing is its own department, laid out like Receiving: a colored sidebar down the left, a full-width workspace.
 // The sidebar's names and order can be changed by an Administrator (Edit menu); see lib/sidebar-menu.ts.
@@ -30,7 +31,7 @@ export default async function PurchasingLayout({ children }: { children: React.R
     await getSavedSidebarMenus(org.organizationId),
     // A Wholesale operation does not show Purchase Orders and Suppliers; a Distribution operation does not show Quotations and the tabs that price
     // packages from individuals (lib/operation-tabs-rules.ts). The pages still open by address and an owner can switch every tab on.
-    withoutHidden(poOn ? allowed : allowed.filter((id) => id !== "purchase-orders" && id !== "suppliers" && id !== "templates"), view.sides, "purchasing", view.showAll),
+    await withMailTab(withoutHidden(poOn ? allowed : allowed.filter((id) => id !== "purchase-orders" && id !== "suppliers" && id !== "templates"), view.sides, "purchasing", view.showAll), org.organizationId),
     { purchaseOrdersFirst: primaryDocument(operation) === "PURCHASE_ORDER" },
   );
 

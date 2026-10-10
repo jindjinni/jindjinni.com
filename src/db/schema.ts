@@ -3328,3 +3328,132 @@ export const auditEvents = sqliteTable(
   },
   (t) => [index("audit_events_audit_idx").on(t.auditId, t.createdAt)],
 );
+
+// ---------------------------------------------------------------------------
+// Department mailboxes (Mail tab in Purchasing, Sales, Receiving, Accounts and Customer Service)
+// ---------------------------------------------------------------------------
+
+/**
+ * A mailbox a department works from. A SHARED mailbox belongs to the department (an admin connects the company's address for it);
+ * a PERSONAL one belongs to one person (only they read it). Each connects with the company's own Google, Microsoft or other
+ * account (the secret is encrypted like email_connections) and never falls back to the platform's account. Hidden, never deleted.
+ */
+export const mailboxes = sqliteTable(
+  "mailboxes",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    /** purchasing | sales | receiving | accounts | customer-service (see lib/mail-rules.ts) */
+    department: text("department").notNull(),
+    /** SHARED | PERSONAL */
+    kind: text("kind").notNull().default("SHARED"),
+    name: text("name").notNull(),
+    ownerUserId: text("owner_user_id"),
+    /** GOOGLE | MICROSOFT | SMTP, empty until connected. */
+    provider: text("provider"),
+    accountEmail: text("account_email"),
+    credentialEnc: text("credential_enc"),
+    /** NOT_CONNECTED | ACTIVE | NEEDS_RECONNECT */
+    status: text("status").notNull().default("NOT_CONNECTED"),
+    /** Was the permission to READ the mailbox given (not only to send)? */
+    canRead: integer("can_read", { mode: "boolean" }).notNull().default(false),
+    lastError: text("last_error"),
+    connectedByUserId: text("connected_by_user_id"),
+    connectedAt: text("connected_at"),
+    lastUsedAt: text("last_used_at"),
+    /** Inbox sync bookmark and last check (used by the Inbox refresh). */
+    syncCursor: text("sync_cursor"),
+    lastSyncAt: text("last_sync_at"),
+    lastSyncError: text("last_sync_error"),
+    hiddenAt: text("hidden_at"),
+    createdByUserId: text("created_by_user_id"),
+    createdAt: text("created_at").notNull().default(sql`(current_timestamp)`),
+  },
+  (t) => [index("mailboxes_org_dept_idx").on(t.organizationId, t.department)],
+);
+
+/** Every message that is in a mailbox's Inbox or Sent folder: received (IN), sent from the app or by a department (OUT). */
+export const mailMessages = sqliteTable(
+  "mail_messages",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    mailboxId: text("mailbox_id").notNull().references(() => mailboxes.id, { onDelete: "cascade" }),
+    /** IN | OUT */
+    direction: text("direction").notNull(),
+    /** The provider's own id for the message (Inbox sync; empty for mail sent from the app). */
+    providerMessageId: text("provider_message_id"),
+    threadKey: text("thread_key"),
+    fromName: text("from_name"),
+    fromAddress: text("from_address"),
+    toAddresses: text("to_addresses"),
+    ccAddresses: text("cc_addresses"),
+    subject: text("subject").notNull().default(""),
+    snippet: text("snippet"),
+    bodyText: text("body_text"),
+    bodyHtml: text("body_html"),
+    hasAttachments: integer("has_attachments", { mode: "boolean" }).notNull().default(false),
+    /** When it was sent or received (ISO, UTC). */
+    at: text("at").notNull(),
+    readAt: text("read_at"),
+    sentByUserId: text("sent_by_user_id"),
+    sentByName: text("sent_by_name"),
+    /** COMPOSE (typed in the app) | SYSTEM (the app sent it for a department, e.g. a purchase order) | SYNC (received) */
+    source: text("source").notNull().default("COMPOSE"),
+    relatedKind: text("related_kind"),
+    relatedId: text("related_id"),
+    createdAt: text("created_at").notNull().default(sql`(current_timestamp)`),
+  },
+  (t) => [
+    index("mail_messages_box_idx").on(t.mailboxId, t.direction, t.at),
+    uniqueIndex("mail_messages_provider_idx").on(t.mailboxId, t.providerMessageId),
+    index("mail_messages_org_idx").on(t.organizationId, t.at),
+  ],
+);
+
+/** Drafts and scheduled emails (and the record of what became of them). Sending turns a row into SENT with a mail_messages row. */
+export const mailOutbox = sqliteTable(
+  "mail_outbox",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    mailboxId: text("mailbox_id").notNull().references(() => mailboxes.id, { onDelete: "cascade" }),
+    /** DRAFT | SCHEDULED | SENDING | SENT | FAILED | CANCELLED (a discarded draft) */
+    status: text("status").notNull().default("DRAFT"),
+    toAddresses: text("to_addresses").notNull().default(""),
+    ccAddresses: text("cc_addresses").notNull().default(""),
+    bccAddresses: text("bcc_addresses").notNull().default(""),
+    subject: text("subject").notNull().default(""),
+    bodyText: text("body_text").notNull().default(""),
+    /** When a scheduled email goes out (ISO, UTC) and the time zone it was picked in. */
+    scheduledFor: text("scheduled_for"),
+    scheduleZone: text("schedule_zone"),
+    attempts: integer("attempts").notNull().default(0),
+    lastError: text("last_error"),
+    messageId: text("message_id"),
+    createdByUserId: text("created_by_user_id"),
+    createdByName: text("created_by_name"),
+    sentAt: text("sent_at"),
+    createdAt: text("created_at").notNull().default(sql`(current_timestamp)`),
+    updatedAt: text("updated_at").notNull().default(sql`(current_timestamp)`),
+  },
+  (t) => [index("mail_outbox_box_idx").on(t.mailboxId, t.status), index("mail_outbox_due_idx").on(t.status, t.scheduledFor)],
+);
+
+/** Files on a draft/scheduled email or on a message (kept as base64 like audit files). One of outboxId / messageId (often both after sending). */
+export const mailAttachments = sqliteTable(
+  "mail_attachments",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    mailboxId: text("mailbox_id").notNull().references(() => mailboxes.id, { onDelete: "cascade" }),
+    outboxId: text("outbox_id"),
+    messageId: text("message_id"),
+    filename: text("filename").notNull(),
+    contentType: text("content_type"),
+    bytes: integer("bytes").notNull().default(0),
+    dataB64: text("data_b64").notNull(),
+    createdAt: text("created_at").notNull().default(sql`(current_timestamp)`),
+  },
+  (t) => [index("mail_attachments_outbox_idx").on(t.outboxId), index("mail_attachments_message_idx").on(t.messageId)],
+);

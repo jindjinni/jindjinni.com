@@ -28,13 +28,20 @@ type OAuthProvider = {
   authUrl: () => string;
   tokenUrl: () => string;
   scopes: string[];
+  /** What a department mailbox asks for: sending, and reading the mailbox so its Inbox can show incoming mail. */
+  mailScopes: string[];
   extraAuth: Record<string, string>;
   /** Does the granted-scope text from the token reply include the permission to send? */
   canSend: (scope: string) => boolean;
+  /** ...and the permission to read the mailbox? */
+  canRead: (scope: string) => boolean;
   emailOf: (claims: Record<string, unknown>) => string | null;
 };
 
 export const SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
+export const READ_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
+const MS_SEND = "https://graph.microsoft.com/Mail.Send";
+const MS_READ = "https://graph.microsoft.com/Mail.Read";
 const MS_BASE = "https://login.microsoftonline.com/common/oauth2/v2.0";
 
 export const OAUTH: Record<OAuthProviderKey, OAuthProvider> = {
@@ -48,9 +55,11 @@ export const OAUTH: Record<OAuthProviderKey, OAuthProvider> = {
     authUrl: () => (testBase("GOOGLE_TEST_BASE") ? `${testBase("GOOGLE_TEST_BASE")}/auth` : "https://accounts.google.com/o/oauth2/v2/auth"),
     tokenUrl: () => (testBase("GOOGLE_TEST_BASE") ? `${testBase("GOOGLE_TEST_BASE")}/token` : "https://oauth2.googleapis.com/token"),
     scopes: ["openid", "email", SEND_SCOPE],
+    mailScopes: ["openid", "email", SEND_SCOPE, READ_SCOPE],
     // offline + consent: Google always hands back the long-lived permission we need to send later.
     extraAuth: { access_type: "offline", prompt: "consent select_account" },
     canSend: (s) => s.split(/\s+/).includes(SEND_SCOPE),
+    canRead: (s) => s.split(/\s+/).some((x) => x === READ_SCOPE || x === "https://www.googleapis.com/auth/gmail.modify" || x === "https://mail.google.com/"),
     emailOf: (c) => (c.email_verified === false ? null : typeof c.email === "string" ? c.email : null),
   },
   MICROSOFT: {
@@ -62,15 +71,25 @@ export const OAUTH: Record<OAuthProviderKey, OAuthProvider> = {
     clientSecret: () => process.env.MICROSOFT_CLIENT_SECRET ?? "",
     authUrl: () => (testBase("MICROSOFT_TEST_BASE") ? `${testBase("MICROSOFT_TEST_BASE")}/auth` : `${MS_BASE}/authorize`),
     tokenUrl: () => (testBase("MICROSOFT_TEST_BASE") ? `${testBase("MICROSOFT_TEST_BASE")}/token` : `${MS_BASE}/token`),
-    scopes: ["openid", "email", "profile", "offline_access", "https://graph.microsoft.com/Mail.Send"],
+    scopes: ["openid", "email", "profile", "offline_access", MS_SEND],
+    mailScopes: ["openid", "email", "profile", "offline_access", MS_SEND, MS_READ],
     extraAuth: { prompt: "select_account", response_mode: "query" },
     canSend: (s) => s.split(/\s+/).some((x) => /(^|\/)mail\.send$/i.test(x)),
+    canRead: (s) => s.split(/\s+/).some((x) => /(^|\/)mail\.read(write)?$/i.test(x)),
     emailOf: (c) => {
       const v = typeof c.email === "string" ? c.email : typeof c.preferred_username === "string" ? c.preferred_username : null;
       return v && v.includes("@") ? v : null;
     },
   },
 };
+/**
+ * The permissions a department mailbox asks for. Reading needs Google's review of the app before more than a few test users can
+ * grant it, so MAIL_READ_SCOPES=off asks for sending only until that review is done (the Inbox then says reading isn't allowed).
+ */
+export function mailScopesFor(p: OAuthProvider): string[] {
+  if (process.env.MAIL_READ_SCOPES === "off") return p.scopes;
+  return p.mailScopes;
+}
 export const providerBySlug = (slug: string) => Object.values(OAUTH).find((p) => p.slug === slug) ?? null;
 
 const googleSendUrl = () => (testBase("GOOGLE_TEST_BASE") ? `${testBase("GOOGLE_TEST_BASE")}/gmail/send` : "https://gmail.googleapis.com/gmail/v1/users/me/messages/send");
@@ -85,7 +104,7 @@ export async function getConnection(organizationId: string) {
 }
 
 /** Turns a sign-in code into the mailbox's address and long-lived permission. */
-export async function exchangeCode(p: OAuthProvider, code: string, redirectUri: string): Promise<{ ok: true; email: string; refreshToken: string } | { ok: false; error: string }> {
+export async function exchangeCode(p: OAuthProvider, code: string, redirectUri: string): Promise<{ ok: true; email: string; refreshToken: string; canRead: boolean } | { ok: false; error: string }> {
   try {
     const res = await fetch(p.tokenUrl(), {
       method: "POST",
@@ -100,7 +119,7 @@ export async function exchangeCode(p: OAuthProvider, code: string, redirectUri: 
     const claims = JSON.parse(Buffer.from(j.id_token.split(".")[1] ?? "", "base64url").toString("utf8")) as Record<string, unknown>;
     const email = p.emailOf(claims);
     if (!email) return { ok: false, error: "no_email" };
-    return { ok: true, email: email.toLowerCase(), refreshToken: j.refresh_token };
+    return { ok: true, email: email.toLowerCase(), refreshToken: j.refresh_token, canRead: p.canRead(j.scope ?? "") };
   } catch {
     return { ok: false, error: "exchange" };
   }
@@ -131,24 +150,28 @@ export async function removeConnection(organizationId: string) {
   }
 }
 
-class NeedsReconnect extends Error {}
-type Conn = NonNullable<Awaited<ReturnType<typeof getConnection>>>;
+export class NeedsReconnect extends Error {}
+/** What sending needs to know about a mailbox: who it is and its saved (encrypted) permission. A company connection and a department mailbox both fit. */
+export type MailCred = { provider: string; accountEmail: string; credentialEnc: string };
+/** Saves a replacement permission the provider handed back. */
+type Persist = (credentialEnc: string) => Promise<void>;
+type Conn = MailCred;
 
 /** A fresh short-lived access token from the saved permission. Microsoft may hand back a new permission, which is saved. */
-async function accessToken(conn: Conn): Promise<string> {
+export async function accessTokenFor(conn: MailCred, persist: Persist, scopes?: string[]): Promise<string> {
   const p = OAUTH[conn.provider === "MICROSOFT" ? "MICROSOFT" : "GOOGLE"];
   const refresh = decryptToken(conn.credentialEnc);
   if (!refresh) throw new NeedsReconnect("The saved permission can't be read any more.");
   const res = await fetch(p.tokenUrl(), {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ client_id: p.clientId(), client_secret: p.clientSecret(), refresh_token: refresh, grant_type: "refresh_token", ...(p.key === "MICROSOFT" ? { scope: p.scopes.join(" ") } : {}) }),
+    body: new URLSearchParams({ client_id: p.clientId(), client_secret: p.clientSecret(), refresh_token: refresh, grant_type: "refresh_token", ...(p.key === "MICROSOFT" ? { scope: (scopes ?? p.scopes).join(" ") } : {}) }),
   });
   const j = (await res.json().catch(() => ({}))) as { access_token?: string; refresh_token?: string; error?: string };
   if (j.error === "invalid_grant" || j.error === "interaction_required") throw new NeedsReconnect("The provider says the permission was removed or expired.");
   if (!res.ok || !j.access_token) throw new Error("The email provider didn't accept the sign-in. Try again in a minute.");
   if (j.refresh_token && j.refresh_token !== refresh) {
-    await db.update(emailConnections).set({ credentialEnc: encryptToken(j.refresh_token) }).where(eq(emailConnections.id, conn.id));
+    await persist(encryptToken(j.refresh_token));
   }
   return j.access_token;
 }
@@ -169,8 +192,8 @@ export type SendResult = { ok: true; from: string | null } | { ok: false; error:
 
 const RECONNECT_MESSAGE = "The connected email needs to be reconnected. An admin can do that in Email Settings.";
 
-async function sendViaGoogle(conn: Conn, a: SendArgs) {
-  const token = await accessToken(conn);
+async function sendViaGoogle(conn: Conn, a: SendArgs, persist: Persist) {
+  const token = await accessTokenFor(conn, persist);
   const raw = toRaw(buildMime({ from: { name: a.fromName, address: conn.accountEmail }, to: a.to, cc: a.cc, bcc: a.bcc, replyTo: a.replyTo, subject: a.subject, text: a.text, html: a.html, attachments: a.attachments }));
   const res = await fetch(googleSendUrl(), { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify({ raw }) });
   if (res.status === 401 || res.status === 403) {
@@ -186,8 +209,8 @@ const GRAPH_CHUNK = 3 * 1024 * 1024;
 const contentTypeOf = (name: string) => ({ pdf: "application/pdf", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp" } as Record<string, string>)[name.toLowerCase().split(".").pop() ?? ""] ?? "application/octet-stream";
 
 /** Microsoft sends from the signed-in mailbox under its own display name; the message is built as a draft so large files can be attached, then sent. */
-async function sendViaMicrosoft(conn: Conn, a: SendArgs) {
-  const token = await accessToken(conn);
+async function sendViaMicrosoft(conn: Conn, a: SendArgs, persist: Persist) {
+  const token = await accessTokenFor(conn, persist);
   const h = { authorization: `Bearer ${token}`, "content-type": "application/json" };
   const addr = (x: string) => ({ emailAddress: { address: x } });
   const fail = (status: number, what: string): never => {
@@ -200,7 +223,7 @@ async function sendViaMicrosoft(conn: Conn, a: SendArgs) {
     body: JSON.stringify({
       subject: a.subject,
       body: { contentType: "HTML", content: a.html },
-      toRecipients: [addr(a.to)],
+      toRecipients: a.to.split(",").map((x) => x.trim()).filter(Boolean).map(addr),
       ccRecipients: (a.cc ?? []).map(addr),
       bccRecipients: (a.bcc ?? []).map(addr),
       ...(a.replyTo ? { replyTo: [addr(a.replyTo)] } : {}),
@@ -245,6 +268,15 @@ async function sendViaSmtp(conn: Conn, a: SendArgs) {
   }
 }
 
+/** Sends one email through a saved mailbox permission. Throws NeedsReconnect when the permission is gone, Error (with a plain message) for anything else. */
+export async function sendWithCred(cred: MailCred, args: SendArgs, persist: Persist): Promise<void> {
+  if (cred.provider === "MICROSOFT") await sendViaMicrosoft(cred, args, persist);
+  else if (cred.provider === "SMTP") await sendViaSmtp(cred, args);
+  else await sendViaGoogle(cred, args, persist);
+}
+
+export const RECONNECT_TEXT = RECONNECT_MESSAGE;
+
 /**
  * Sends one customer email for a company: from its connected mailbox when it has one, otherwise from the platform's
  * address. A connected mailbox that stopped working never falls back silently to another sender.
@@ -257,9 +289,9 @@ export async function sendOrgEmail(organizationId: string, args: SendArgs): Prom
   }
   if (conn.status !== "ACTIVE") return { ok: false, error: RECONNECT_MESSAGE };
   try {
-    if (conn.provider === "MICROSOFT") await sendViaMicrosoft(conn, args);
-    else if (conn.provider === "SMTP") await sendViaSmtp(conn, args);
-    else await sendViaGoogle(conn, args);
+    await sendWithCred(conn, args, async (enc) => {
+      await db.update(emailConnections).set({ credentialEnc: enc }).where(eq(emailConnections.id, conn.id));
+    });
     await db.update(emailConnections).set({ lastUsedAt: sql`(current_timestamp)`, lastError: null }).where(eq(emailConnections.id, conn.id));
     return { ok: true, from: conn.accountEmail };
   } catch (e) {

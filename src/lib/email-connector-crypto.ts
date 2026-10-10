@@ -32,7 +32,8 @@ export function decryptToken(enc: string): string | null {
   }
 }
 
-export type OAuthState = { o: string; u: string; n: string; exp: number };
+/** o = company, u = person, n = one-time code; m = the department mailbox being connected (empty for the company's main email). */
+export type OAuthState = { o: string; u: string; n: string; exp: number; m?: string };
 const sign = (payload: string) => createHmac("sha256", key()).update("state:" + payload).digest("base64url");
 
 export function makeState(s: Omit<OAuthState, "exp">, now = Date.now(), ttlMs = 10 * 60 * 1000): string {
@@ -50,6 +51,7 @@ export function readState(raw: string | null | undefined, now = Date.now()): OAu
     if (want.length !== got.length || !timingSafeEqual(want, got)) return null;
     const s = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as OAuthState;
     if (typeof s.o !== "string" || typeof s.u !== "string" || typeof s.n !== "string" || typeof s.exp !== "number" || s.exp < now) return null;
+    if (s.m !== undefined && typeof s.m !== "string") return null;
     return s;
   } catch {
     return null;
