@@ -7,6 +7,8 @@ import { DepartmentSidebar } from "@/components/department-sidebar";
 import { PurchasingContent } from "./purchasing-content";
 import { operationTypeOf, purchaseOrdersEnabled } from "@/lib/purchase-order-service";
 import { primaryDocument } from "@/lib/operation-type";
+import { tabViewOf } from "@/lib/operations-service";
+import { withoutHidden } from "@/lib/operation-tabs-rules";
 
 // Purchasing is its own department, laid out like Receiving: a colored sidebar down the left, a full-width workspace.
 // The sidebar's names and order can be changed by an Administrator (Edit menu); see lib/sidebar-menu.ts.
@@ -22,11 +24,13 @@ export default async function PurchasingLayout({ children }: { children: React.R
   const allowed = menuIdsFor("purchasing", { connectors: isAdmin(org.role), base: isManager ? undefined : everyday });
   // Purchase orders, suppliers and the document templates come with the "purchase-orders" rollout feature, for every company.
   // The sign-up answer only decides which comes first: a Distributor sees Purchase Orders above Quotations.
-  const [poOn, operation] = await Promise.all([purchaseOrdersEnabled(org.organizationId), operationTypeOf(org.organizationId)]);
+  const [poOn, operation, view] = await Promise.all([purchaseOrdersEnabled(org.organizationId), operationTypeOf(org.organizationId), tabViewOf(org.organizationId)]);
   const menu = resolveMenu(
     "purchasing",
     await getSavedSidebarMenus(org.organizationId),
-    poOn ? allowed : allowed.filter((id) => id !== "purchase-orders" && id !== "suppliers" && id !== "templates"),
+    // A Wholesale operation does not show Purchase Orders and Suppliers; a Distribution operation does not show Quotations and the tabs that price
+    // packages from individuals (lib/operation-tabs-rules.ts). The pages still open by address and an owner can switch every tab on.
+    withoutHidden(poOn ? allowed : allowed.filter((id) => id !== "purchase-orders" && id !== "suppliers" && id !== "templates"), view.sides, "purchasing", view.showAll),
     { purchaseOrdersFirst: primaryDocument(operation) === "PURCHASE_ORDER" },
   );
 

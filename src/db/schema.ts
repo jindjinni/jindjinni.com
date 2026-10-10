@@ -118,6 +118,9 @@ export const organizations = sqliteTable("organizations", {
   // null = this row is the main one. Both plain nullable text on purpose -- same drizzle-kit rule as seatLimit.
   operationKind: text("operation_kind"),
   parentOrganizationId: text("parent_organization_id"),
+  // Day-and-time an owner or admin switched on "show every tab" for this operation (see lib/operation-tabs-rules.ts). Empty = the menu hides
+  // the tabs that only belong to the other operation's way of working. Plain nullable text on purpose -- same drizzle-kit rule as seatLimit.
+  allTabsShownAt: text("all_tabs_shown_at"),
   ...timestamps,
 }, (t) => [index("organizations_approval_idx").on(t.approvalStatus, t.createdAt), uniqueIndex("organizations_company_code_unique").on(t.companyCode)]);
 

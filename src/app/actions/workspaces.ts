@@ -7,6 +7,7 @@ import { requireOrg, getSessionUserId } from "@/lib/tenant";
 import { isAdmin } from "@/lib/permissions";
 import { COOKIE_NAME, mayOpen, parseKind } from "@/lib/operation-groups-rules";
 import { addOperation, nameWorkspace, workspacesOfUser } from "@/lib/operation-groups";
+import { setShowAllTabs } from "@/lib/operations-service";
 
 const REMEMBER_FOR_SECONDS = 60 * 60 * 24 * 30;
 
@@ -62,4 +63,15 @@ export async function addOperationAction(_prev: OpsState, fd: FormData): Promise
   await remember(org.organizationId);
   revalidatePath("/dashboard", "layout");
   return { message: `The ${kind === "wholesale" ? "Wholesale" : "Distribution"} operation is ready. It starts empty and separate from this one.`, openId: done.organizationId };
+}
+
+/** Owner or admin: show every tab in this operation's menus (including the ones that belong to the other way of working), or go back to the tailored menus. */
+export async function showAllTabsAction(_prev: OpsState, fd: FormData): Promise<OpsState> {
+  const org = await requireOrg();
+  if (org.viewAs) return { error: "Nothing can be changed while you are only viewing." };
+  if (!isAdmin(org.role)) return { error: "Only an owner or admin can do this." };
+  const on = String(fd.get("on") ?? "") === "1";
+  await setShowAllTabs(org, on);
+  revalidatePath("/dashboard", "layout");
+  return { message: on ? "Every tab is now shown in this operation's menus." : "The menus now show only what this operation uses." };
 }

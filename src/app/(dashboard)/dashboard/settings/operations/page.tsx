@@ -8,6 +8,8 @@ import { operationsEnabled } from "@/lib/operations-service";
 import { groupOf } from "@/lib/operation-groups";
 import { otherKind, parseKind } from "@/lib/operation-groups-rules";
 import { SIDE_INFO } from "@/lib/operations-rules";
+import { SIDE_FLOW } from "@/lib/operation-tabs-rules";
+import { tabViewOf } from "@/lib/operations-service";
 import { OperationsPanel } from "./operations-panel";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +24,7 @@ export default async function OperationsPage() {
   const [row] = await db.select({ kind: organizations.operationKind }).from(organizations).where(eq(organizations.id, org.organizationId)).limit(1);
   const kind = parseKind(row?.kind);
   const group = await groupOf(org.organizationId);
+  const { showAll } = await tabViewOf(org.organizationId);
   const other = kind ? group.find((g) => g.kind === otherKind(kind)) : null;
   return (
     <div className="max-w-3xl" data-testid="operations-page">
@@ -29,7 +32,7 @@ export default async function OperationsPage() {
       <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
         Your company can run Wholesale and Distribution as two separate operations under one sign-in. <strong>Both are free.</strong> Each one keeps its own customers, suppliers, products, orders, stock and payments, so nothing is mixed.
       </p>
-      <OperationsPanel kind={kind} otherId={other?.organizationId ?? null} info={SIDE_INFO} canEdit={!org.viewAs} />
+      <OperationsPanel kind={kind} otherId={other?.organizationId ?? null} info={SIDE_INFO} canEdit={!org.viewAs} flow={SIDE_FLOW} showAll={showAll} />
     </div>
   );
 }

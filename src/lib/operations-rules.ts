@@ -7,6 +7,7 @@
 // side stays on. Documents (Quotations and Purchase Orders) are shared by both sides; a side adds its own tabs, words and defaults.
 
 import { parseOperationType, type OperationType } from "@/lib/operation-type";
+import { SIDE_FLOW } from "@/lib/operation-tabs-rules";
 
 export const SIDES = ["wholesale", "distribution"] as const;
 export type Side = (typeof SIDES)[number];
@@ -129,7 +130,7 @@ export const SIDE_INFO: Record<Side, SideInfo> = {
     buysFrom: "Wholesalers and other suppliers",
     sellsTo: "Pharmacies and other retail outlets",
     turnsOn: [
-      "Purchase orders to suppliers, with NDCs, and revisions when something is wrong",
+      "Purchase orders to suppliers (no quotations needed), with NDCs, and revisions when something is wrong",
       "Suppliers, saved once with their license and expiry",
       "Received purchase orders, invoices and a price list for each buyer",
       "Returns to suppliers with a return label",
@@ -177,6 +178,6 @@ export function wordsFor(sides: Sides): { buyers: string } {
  */
 export function sidesNote(sides: Sides): string {
   const on = SIDES.filter((x) => sides[x]);
-  const lines = on.map((x) => `- ${SIDE_INFO[x].title}: buys from ${SIDE_INFO[x].buysFrom.toLowerCase()}; sells to ${SIDE_INFO[x].sellsTo.toLowerCase()}. First steps: ${SIDE_INFO[x].firstSteps.map((st, i) => `${i + 1}) [${st.text}](${st.href})`).join(" ")}`);
+  const lines = on.map((x) => `- ${SIDE_INFO[x].title}: buys from ${SIDE_INFO[x].buysFrom.toLowerCase()}; sells to ${SIDE_INFO[x].sellsTo.toLowerCase()}. How a day goes: ${SIDE_FLOW[x].map((t, i) => `${i + 1}) ${t}`).join(" ")} First steps: ${SIDE_INFO[x].firstSteps.map((st, i) => `${i + 1}) [${st.text}](${st.href})`).join(" ")}`);
   return `HOW THIS COMPANY OPERATES (both sides are free; an owner or admin can switch a side on or off in [Operations](/dashboard/settings/operations)):\n${lines.join("\n")}\nWhen asked how things work "from A to Z", walk through the flow for the side(s) above.`;
 }

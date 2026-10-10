@@ -63,6 +63,20 @@ export async function operationsOf(organizationId: string): Promise<Sides> {
   return (await getOperations(organizationId)).sides;
 }
 
+/** What a department layout needs to tailor its menu: this workspace's sides, and whether an owner switched on "show every tab". */
+export async function tabViewOf(organizationId: string): Promise<{ sides: Sides; showAll: boolean }> {
+  const sides = await operationsOf(organizationId);
+  const [r] = await db.select({ at: organizations.allTabsShownAt, kind: organizations.operationKind }).from(organizations).where(eq(organizations.id, organizationId)).limit(1);
+  // Menus are tailored only once the workspace is a named operation. A company that has not named its records yet keeps every tab.
+  return { sides: r?.kind ? sides : { ...BOTH_SIDES }, showAll: !!r?.at };
+}
+
+/** Switches "show every tab" on or off for one operation. Owner or admin only (checked by the caller); written to the activity log. */
+export async function setShowAllTabs(org: OpsOrg, on: boolean): Promise<void> {
+  await db.update(organizations).set({ allTabsShownAt: on ? new Date().toISOString() : null }).where(eq(organizations.id, org.organizationId));
+  await logActivity(org, "OTHER", on ? "Switched on: show every tab in the menus" : "Switched off: show every tab (menus tailored to this operation)", { type: "organization", id: org.organizationId });
+}
+
 export async function openWorkOf(organizationId: string): Promise<OpenWork> {
   const [q] = await db
     .select({ n: count() })

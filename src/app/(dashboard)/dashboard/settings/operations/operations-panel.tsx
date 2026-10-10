@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useActionState } from "react";
-import { addOperationAction, nameWorkspaceAction, openWorkspace } from "@/app/actions/workspaces";
+import { addOperationAction, nameWorkspaceAction, openWorkspace, showAllTabsAction } from "@/app/actions/workspaces";
 import { kindLabel, otherKind, type OperationKind } from "@/lib/operation-groups-rules";
 import type { SideInfo } from "@/lib/operations-rules";
 
@@ -16,14 +16,20 @@ type Props = {
   otherId: string | null;
   info: Record<OperationKind, SideInfo>;
   canEdit: boolean;
+  /** The day of this operation, step by step. */
+  flow: Record<OperationKind, string[]>;
+  /** An owner switched on "show every tab" for this operation. */
+  showAll: boolean;
 };
 
-export function OperationsPanel({ kind, otherId, info, canEdit }: Props) {
+export function OperationsPanel({ kind, otherId, info, canEdit, flow, showAll }: Props) {
   const [named, nameAction, naming] = useActionState(nameWorkspaceAction, undefined);
   const [added, addAction, adding] = useActionState(addOperationAction, undefined);
+  const [tabs, tabsAction, switching] = useActionState(showAllTabsAction, undefined);
   const openId = otherId ?? added?.openId ?? null;
-  const msg = named?.message ?? added?.message;
-  const err = named?.error ?? added?.error;
+  const msg = named?.message ?? added?.message ?? tabs?.message;
+  const err = named?.error ?? added?.error ?? tabs?.error;
+  const allShown = tabs?.message ? /Every tab is now/.test(tabs.message) : showAll;
   const other = kind ? otherKind(kind) : null;
 
   return (
@@ -59,12 +65,32 @@ export function OperationsPanel({ kind, otherId, info, canEdit }: Props) {
           </dl>
           <h4 className="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">What this operation gives you</h4>
           <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-slate-800 dark:text-slate-200">{info[kind].turnsOn.map((t) => <li key={t}>{t}</li>)}</ul>
+          <h4 className="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">How a day goes in this operation</h4>
+          <ol className="mt-1 list-decimal space-y-1 pl-5 text-sm text-slate-800 dark:text-slate-200" data-testid="ops-flow">{flow[kind].map((t) => <li key={t}>{t}</li>)}</ol>
           <h4 className="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Your first steps</h4>
           <ol className="mt-1 list-decimal space-y-1 pl-5 text-sm" data-testid="ops-steps">
             {info[kind].firstSteps.map((s) => (
               <li key={s.id}><Link href={s.href} className="text-emerald-800 underline dark:text-emerald-300">{s.text}</Link></li>
             ))}
           </ol>
+        </section>
+      )}
+
+      {kind && (
+        <section className={card} data-testid="ops-tabs" data-all={allShown ? "1" : "0"}>
+          <h3 className="text-base font-bold text-slate-900 dark:text-slate-50">Which tabs show in the menus</h3>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+            {kind === "wholesale"
+              ? "A Wholesale operation buys from individuals, so Purchasing shows Quotations and Customers, and leaves out Purchase Orders and Suppliers."
+              : "A Distribution operation buys from wholesalers with purchase orders, so Purchasing shows Purchase Orders and Suppliers, and leaves out Quotations, Customers and the quotation setup tabs."}{" "}
+            Nothing is deleted, and the pages still open if you have a link to one.
+          </p>
+          {canEdit && (
+            <form action={tabsAction} className="mt-3">
+              <input type="hidden" name="on" value={allShown ? "0" : "1"} />
+              <button disabled={switching} className={primary} data-testid="ops-tabs-toggle">{allShown ? "Go back to the tailored menus" : "Show every tab anyway"}</button>
+            </form>
+          )}
         </section>
       )}
 
@@ -105,8 +131,8 @@ export function OperationsPanel({ kind, otherId, info, canEdit }: Props) {
           Each operation is its own workspace with every department inside it. When you sign in with two operations, you choose which one to open, or look at the overall status of both. You can switch from the menu at the top at any time.
         </p>
         <ul className="mt-3 space-y-2 text-sm text-slate-800 dark:text-slate-200">
-          <li><strong>Wholesale:</strong> buy from an individual with a quotation and a free label, Receiving checks the package, Accounts pays, it goes into Inventory, and you sell it on to a distributor.</li>
-          <li><strong>Distribution:</strong> buy from a wholesaler with a purchase order, Receiving checks it, Accounts pays, it goes into Inventory, and you sell to pharmacies and other outlets.</li>
+          <li><strong>Wholesale:</strong> you send an individual a quotation (with a free label if you offer one), Receiving checks the package, Accounts pays, it goes into Inventory, and you sell it on to distributors.</li>
+          <li><strong>Distribution:</strong> a wholesaler sends you an invoice, you send back a purchase order (no quotation needed), Receiving checks it, Accounts pays, it goes into Inventory, and you sell to pharmacies and other retail outlets.</li>
           <li><strong>Shared by the company:</strong> your legal business details, your plan and bill, and who can sign in. Everything else is kept apart.</li>
         </ul>
         <p className="mt-3 text-sm text-slate-600 dark:text-slate-400">

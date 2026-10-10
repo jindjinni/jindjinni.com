@@ -10,6 +10,11 @@ import { TEST_PREFIX } from "@/lib/test-orders-data";
 import { TestOrdersPanel } from "./test-orders-panel";
 import { chipClass } from "@/lib/receiving-ui";
 import { PILL_BASE, QUOTATION_STATUS_LABELS, QUOTATION_STATUS_PILL, totalPillClass } from "@/lib/purchasing-ui";
+import { tabViewOf } from "@/lib/operations-service";
+import { purchasingBlurb, singleSide } from "@/lib/operation-tabs-rules";
+import { listPurchaseOrders, listSuppliers, orderCounts, purchaseOrdersEnabled } from "@/lib/purchase-order-service";
+import { PO_STATUS_LABEL, isPoStatus } from "@/lib/purchase-order-rules";
+import { DistributionPurchasingHome } from "./distribution-home";
 
 // Loading test orders runs a few orders per request; give each request room.
 export const maxDuration = 60;
@@ -23,6 +28,20 @@ const TILE_COLORS = [
 
 export default async function PurchasingDashboardPage() {
   const org = await requireOrg();
+  // A Distribution operation buys from wholesalers with purchase orders, so its Purchasing home is about orders and suppliers, not quotations.
+  const { sides } = await tabViewOf(org.organizationId);
+  if (singleSide(sides) === "distribution" && (await purchaseOrdersEnabled(org.organizationId))) {
+    const [orders, suppliers, c, products] = await Promise.all([listPurchaseOrders(org.organizationId), listSuppliers(org.organizationId), orderCounts(org.organizationId), getPurchasingDashboardCounts(org.organizationId)]);
+    return (
+      <DistributionPurchasingHome
+        draft={c.DRAFT}
+        waiting={c.SENT + c.CONFIRMED}
+        suppliers={suppliers.length}
+        products={products.products}
+        recent={orders.slice(0, 8).map((o) => ({ id: o.id, number: o.poNumber, supplier: o.supplierName, date: o.issueDate, status: isPoStatus(o.status) ? PO_STATUS_LABEL[o.status] : o.status, total: o.total }))}
+      />
+    );
+  }
   const [counts, recentQuotations] = await Promise.all([
     getPurchasingDashboardCounts(org.organizationId),
     getPurchasingQuotations(org.organizationId),
@@ -58,7 +77,7 @@ export default async function PurchasingDashboardPage() {
         <div>
           <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-50">Purchasing</h1>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Quote customers, manage the product catalog, and track quotations through to the shared Overall Orders record.
+            {purchasingBlurb(sides)}
           </p>
         </div>
         <Link
