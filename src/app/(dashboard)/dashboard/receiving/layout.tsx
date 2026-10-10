@@ -8,6 +8,7 @@ import { DepartmentSidebar } from "@/components/department-sidebar";
 import { tabViewOf } from "@/lib/operations-service";
 import { withoutHidden } from "@/lib/operation-tabs-rules";
 import { withMailTab } from "@/lib/mail-access";
+import { mailBadges } from "@/lib/mailbox-service";
 
 // Receiving is its own department: colored sidebar, full-width workspace. The sidebar's names and order can be
 // changed by an Administrator (Edit menu); see lib/sidebar-menu.ts.
@@ -29,6 +30,7 @@ export default async function ReceivingLayout({ children }: { children: React.Re
         setupLabel={menu.setupLabel}
         defaultSetupLabel={menu.defaultSetupLabel}
         canEdit={isAdmin(org.role)}
+        badges={await mailBadges(org, "receiving")}
       />
       <div className="min-w-0 flex-1 bg-stone-50 dark:bg-slate-950">
         {showStorageNote && (

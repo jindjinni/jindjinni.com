@@ -12,7 +12,7 @@ import {
   afterFailure, checkCompose, checkSchedule, cleanMailboxName, DEPT_LABEL, MAX_ATTEMPTS, MAX_MAIL_BYTES, safeFileName, snippetOf, STUCK_AFTER_MS,
   type ComposeInput, type Folder, type MailDept, type MailKind,
 } from "@/lib/mail-rules";
-import { canAddMailbox, mailRights, type MailRights } from "@/lib/mail-access";
+import { canAddMailbox, mailboxesOn, mailRights, type MailRights } from "@/lib/mail-access";
 import { isHeldBack, type CurrentOrg } from "@/lib/tenant";
 
 export type MailboxRow = typeof mailboxes.$inferSelect;
@@ -661,6 +661,13 @@ export async function unreadFor(org: OrgCtx, dept: MailDept): Promise<number> {
   if (!ids.length) return 0;
   const [r] = await db.select({ n: sql<number>`count(*)` }).from(mailMessages).where(and(eq(mailMessages.organizationId, org.organizationId), inArray(mailMessages.mailboxId, ids), eq(mailMessages.direction, "IN"), isNull(mailMessages.readAt)));
   return Number(r?.n ?? 0);
+}
+
+/** The unread count for a department's Mail tab in the sidebar: `{ mail: n }`, or nothing while the rollout switch is off or nothing is unread. */
+export async function mailBadges(org: OrgCtx, dept: MailDept): Promise<Record<string, number>> {
+  if (!(await mailboxesOn(org.organizationId))) return {};
+  const n = await unreadFor(org, dept);
+  return n > 0 ? { mail: n } : {};
 }
 
 /** "Check connection": sends a short test email from the mailbox to the signed-in person's own address (nothing is stored). */

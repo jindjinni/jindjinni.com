@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireOrg } from "@/lib/tenant";
 import { staffLevelOf } from "@/lib/platform-admin";
+import { featureOn } from "@/lib/features";
 import { LEVEL_LABELS, isFullLevel, mayOpenStaffPage } from "@/lib/mothership-rules";
 import { waitingCount } from "@/lib/company-admin";
 import { inboxCounts } from "@/lib/support-service";
@@ -17,6 +18,7 @@ export default async function LampLayout({ children }: { children: React.ReactNo
   const tabs = [
     { href: "/dashboard/lamp/companies", label: "Companies", badge: waiting },
     { href: "/dashboard/lamp/support", label: "Support", badge: support.needs },
+    ...(isFullLevel(level) && (await featureOn("mailboxes", org.organizationId)) ? [{ href: "/dashboard/lamp/mail", label: "Mail", badge: 0 }] : []),
     ...(isFullLevel(level) ? [{ href: "/dashboard/lamp/pricing", label: "Pricing", badge: 0 }] : []),
     ...(mayOpenStaffPage(level) ? [{ href: "/dashboard/lamp/staff", label: "Staff", badge: 0 }] : []),
   ];

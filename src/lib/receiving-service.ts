@@ -19,7 +19,7 @@ import {
 } from "@/db/schema";
 import { newId } from "@/lib/ids";
 import type { EmailAttachment } from "@/lib/email";
-import { sendOrgEmail } from "@/lib/email-connector";
+import { sendDeptEmail } from "@/lib/mail-system";
 import { getEmailTemplates, getReceivingPackage } from "@/lib/receiving-queries";
 import { buildCustomerEmail, buildPackagingWarning } from "@/lib/receiving-emails";
 import { isRecalledResult, rowRecallState } from "@/lib/receiving-recall";
@@ -252,7 +252,7 @@ export async function deliverCustomerEmail(org: OrgRef, packageId: string, kind:
   }
 
   const bcc = splitEmails(settings.bccEmails);
-  const sent = await sendOrgEmail(org.organizationId, {
+  const sent = await sendDeptEmail(org.organizationId, { dept: "receiving", relatedKind: "receiving_package", relatedId: packageId, by: org.userId ? { userId: org.userId, name: null } : null }, {
     to,
     subject: built.subject,
     text: built.text,

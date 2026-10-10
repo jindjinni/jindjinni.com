@@ -6,6 +6,7 @@ import { menuIdsFor, resolveMenu } from "@/lib/sidebar-menu";
 import { getSavedSidebarMenus } from "@/lib/sidebar-menu-store";
 import { DepartmentSidebar } from "@/components/department-sidebar";
 import { withMailTab } from "@/lib/mail-access";
+import { mailBadges } from "@/lib/mailbox-service";
 
 // Customer Service is its own department, built like Accounts: a colored sidebar down the left and a workspace beside it.
 // Only the Customer Service role, Admin and Owner can open it. This is the one place customers are emailed about a paid order.
@@ -25,6 +26,7 @@ export default async function CustomerServiceLayout({ children }: { children: Re
         setupLabel={menu.setupLabel}
         defaultSetupLabel={menu.defaultSetupLabel}
         canEdit={isAdmin(org.role)}
+        badges={await mailBadges(org, "customer-service")}
       />
       <div className="min-w-0 flex-1 bg-stone-50 dark:bg-slate-950">
         {!storage.configured() && (

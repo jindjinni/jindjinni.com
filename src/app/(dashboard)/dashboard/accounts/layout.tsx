@@ -7,6 +7,7 @@ import { tabViewOf } from "@/lib/operations-service";
 import { withoutHidden } from "@/lib/operation-tabs-rules";
 import { auditCenterOn } from "@/lib/audit-access";
 import { withMailTab } from "@/lib/mail-access";
+import { mailBadges } from "@/lib/mailbox-service";
 import { getSavedSidebarMenus } from "@/lib/sidebar-menu-store";
 import { DepartmentSidebar } from "@/components/department-sidebar";
 
@@ -33,6 +34,7 @@ export default async function AccountsLayout({ children }: { children: React.Rea
         setupLabel={menu.setupLabel}
         defaultSetupLabel={menu.defaultSetupLabel}
         canEdit={isAdmin(org.role)}
+        badges={await mailBadges(org, "accounts")}
       />
       <div className="min-w-0 flex-1 bg-stone-50 dark:bg-slate-950">
         {!storage.configured() && (

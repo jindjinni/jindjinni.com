@@ -10,6 +10,7 @@ import { primaryDocument } from "@/lib/operation-type";
 import { tabViewOf } from "@/lib/operations-service";
 import { withoutHidden } from "@/lib/operation-tabs-rules";
 import { withMailTab } from "@/lib/mail-access";
+import { mailBadges } from "@/lib/mailbox-service";
 
 // Purchasing is its own department, laid out like Receiving: a colored sidebar down the left, a full-width workspace.
 // The sidebar's names and order can be changed by an Administrator (Edit menu); see lib/sidebar-menu.ts.
@@ -46,6 +47,7 @@ export default async function PurchasingLayout({ children }: { children: React.R
         setupLabel={menu.setupLabel}
         defaultSetupLabel={menu.defaultSetupLabel}
         canEdit={isAdmin(org.role)}
+        badges={await mailBadges(org, "purchasing")}
       />
       <div className="min-w-0 flex-1 bg-stone-50 dark:bg-slate-950">
         <PurchasingContent>

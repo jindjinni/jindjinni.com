@@ -8,7 +8,7 @@ import { requireOrg, type CurrentOrg } from "@/lib/tenant";
 import { logActivity } from "@/lib/hr-service";
 import { canManageSalesSettings, canWriteSales } from "@/lib/permissions";
 import { encodeLogoFile } from "@/lib/logo-validation";
-import { sendOrgEmail } from "@/lib/email-connector";
+import { sendDeptEmail } from "@/lib/mail-system";
 import { purchaseOrdersEnabled } from "@/lib/purchase-order-service";
 import { findColumn, parseSpreadsheetFile } from "@/lib/spreadsheet-import";
 import { buyersFromSheet } from "@/lib/sales-import";
@@ -251,8 +251,8 @@ export async function saveDocumentAction(input: DocInput): Promise<SalesResult> 
   return { ok: true, id: res.id, message: "Saved." };
 }
 
-const mailer: (org: CurrentOrg) => Mailer = (org) => async (a) => {
-  const r = await sendOrgEmail(org.organizationId, { to: a.to, subject: a.subject, text: a.text, html: a.html, fromName: a.fromName, replyTo: a.replyTo, attachments: [{ filename: a.fileName, content: Buffer.from(a.pdf) }] });
+const mailer: (org: CurrentOrg, documentId: string) => Mailer = (org, documentId) => async (a) => {
+  const r = await sendDeptEmail(org.organizationId, { dept: "sales", relatedKind: "sales_document", relatedId: documentId, by: { userId: org.userId, name: null } }, { to: a.to, subject: a.subject, text: a.text, html: a.html, fromName: a.fromName, replyTo: a.replyTo, attachments: [{ filename: a.fileName, content: Buffer.from(a.pdf) }] });
   return r.ok ? { ok: true } : { ok: false, error: r.error };
 };
 
@@ -263,7 +263,7 @@ export async function sendDocumentAction(id: string, opts: { email: boolean; to?
   const to = cleanText(opts?.to, 160);
   if (opts?.email && to && !looksLikeEmail(to)) return { ok: false, error: "That email address doesn't look right." };
   const before = await getDocument(w.org.organizationId, id);
-  const res = await sendDocument(w.org, id, { mailer: opts?.email ? mailer(w.org) : null, to: to || null, message: opts?.message ? String(opts.message).slice(0, 2000) : null });
+  const res = await sendDocument(w.org, id, { mailer: opts?.email ? mailer(w.org, id) : null, to: to || null, message: opts?.message ? String(opts.message).slice(0, 2000) : null });
   if (!res.ok) return res;
   if (before) {
     const isInvoice = before.doc.kind === "INVOICE";
@@ -290,7 +290,7 @@ export async function reviseDocumentAction(
     ? { ...opts.edits, lines: Array.isArray(opts.edits.lines) ? opts.edits.lines.map((l) => ({ ...l, quantity: Number(l.quantity), unitPrice: Number(l.unitPrice) })) : [] }
     : null;
   const before = await getDocument(w.org.organizationId, id);
-  const res = await reviseDocument(w.org, id, { note: opts?.note, edits, mailer: opts?.email ? mailer(w.org) : null, to: to || null, message: opts?.message ? String(opts.message).slice(0, 2000) : null });
+  const res = await reviseDocument(w.org, id, { note: opts?.note, edits, mailer: opts?.email ? mailer(w.org, id) : null, to: to || null, message: opts?.message ? String(opts.message).slice(0, 2000) : null });
   if (!res.ok) return res;
   if (before) {
     const word = before.doc.kind === "PURCHASE_ORDER" ? "purchase order" : "quotation";

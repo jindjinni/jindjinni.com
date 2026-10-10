@@ -11,7 +11,8 @@ import { COUNTED_INVOICE_STATUSES, MONEY_KEYS, isClosed, type AuditType, type Co
 import { MAX_EMAIL_BYTES, bodyToHtml, defaultBody, defaultRecipients, defaultSubject, fileIsCurrent, parseAddresses, sendChecks, type CaseForEmail, type FileFilters, type SendCheck } from "@/lib/audit-email";
 import { mergePdfs } from "@/lib/audit-pdf";
 import { addEvent, getAudit, userNameOf, type Actor, type AuditRow } from "@/lib/audit-service";
-import { getConnection, sendOrgEmail } from "@/lib/email-connector";
+import { getConnection } from "@/lib/email-connector";
+import { deptSenderFor, sendDeptEmail } from "@/lib/mail-system";
 import { buildSalesPdf } from "@/lib/sales-pdf";
 import { getDocument, pdfInputFor, resolveFrom } from "@/lib/sales-service";
 
@@ -128,6 +129,10 @@ export async function listSends(organizationId: string, auditId: string): Promis
 
 export type MailboxState = { state: "NONE" | "ACTIVE" | "NEEDS_RECONNECT"; email: string | null };
 export async function mailboxOf(organizationId: string): Promise<MailboxState> {
+  // The Accounts shared mailbox is the sender when the company has connected one; otherwise the company's connected email.
+  const acct = await deptSenderFor(organizationId, "accounts");
+  if (acct.state === "MAILBOX") return { state: "ACTIVE", email: acct.accountEmail };
+  if (acct.state === "RECONNECT") return { state: "NEEDS_RECONNECT", email: null };
   const c = await getConnection(organizationId);
   if (!c) return { state: "NONE", email: null };
   return { state: c.status === "ACTIVE" ? "ACTIVE" : "NEEDS_RECONNECT", email: c.accountEmail };
@@ -308,9 +313,10 @@ export async function sendAudit(a: Actor, isManager: boolean, auditId: string, f
   }
 
   // Only the connected mailbox: there is no fallback to anyone else's address.
+  // That is the Accounts shared mailbox when the company has one connected, otherwise the company's connected email.
   const box = await mailboxOf(a.organizationId);
-  if (box.state !== "ACTIVE") return { ok: false, error: "Connect the company's email in Settings → Connectors first." };
-  const sent = await sendOrgEmail(a.organizationId, {
+  if (box.state !== "ACTIVE") return { ok: false, error: "Connect the company's email in Settings → Connectors (or the Accounts Mail tab) first." };
+  const sent = await sendDeptEmail(a.organizationId, { dept: "accounts", relatedKind: "audit", relatedId: auditId, by: { userId: a.userId, name: null } }, {
     to: p.to[0],
     cc: p.cc,
     subject,

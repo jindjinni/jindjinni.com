@@ -43,6 +43,7 @@ export function DepartmentSidebar({
   setupLabel,
   defaultSetupLabel,
   canEdit,
+  badges = {},
 }: {
   dept: MenuDept;
   tone: Tone;
@@ -52,6 +53,8 @@ export function DepartmentSidebar({
   setupLabel: string;
   defaultSetupLabel: string;
   canEdit: boolean;
+  /** A small count on a tab, by tab id (the Mail tab's unread messages). */
+  badges?: Record<string, number>;
 }) {
   const path = usePathname();
   const router = useRouter();
@@ -148,6 +151,11 @@ export function DepartmentSidebar({
       >
         {i.icon && <span aria-hidden="true">{i.icon}</span>}
         {i.label}
+        {(badges[i.id] ?? 0) > 0 && (
+          <span className={`ml-auto rounded-full ${t.active} px-2 py-0.5 text-xs font-semibold tabular-nums`} data-testid={`badge-${i.id}`} title="Unread">
+            {badges[i.id] > 99 ? "99+" : badges[i.id]}
+          </span>
+        )}
       </Link>
     );
   };

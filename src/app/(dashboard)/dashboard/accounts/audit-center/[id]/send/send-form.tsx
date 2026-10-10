@@ -63,7 +63,7 @@ export function SendAuditForm(p: Props) {
 
       {p.mailbox.state !== "ACTIVE" && (
         <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-100" role="alert" data-testid="no-mailbox">
-          {p.mailbox.state === "NONE" ? "No company email is connected yet." : "The connected company email needs to be reconnected."}{" "}
+          {p.mailbox.state === "NONE" ? "No company email is connected yet (connect one in Settings → Connectors, or the Accounts Mail tab)." : "The connected company email needs to be reconnected."}{" "}
           <Link href="/dashboard/settings/connectors" className="underline">Connect it in Settings → Connectors</Link>. Audit files only go out from your own mailbox, never from ours.
         </p>
       )}

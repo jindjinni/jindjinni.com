@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireOrg, type CurrentOrg } from "@/lib/tenant";
 import { canWritePurchasing } from "@/lib/permissions";
 import { logActivity } from "@/lib/hr-service";
-import { sendOrgEmail } from "@/lib/email-connector";
+import { sendDeptEmail } from "@/lib/mail-system";
 import { getPaymentTerms } from "@/lib/accounts-queries";
 import { todayIn } from "@/lib/payment-due";
 import {
@@ -77,8 +77,8 @@ export async function setStatusAction(id: string, to: string): Promise<PoResult>
   return { ok: true, message: `Now: ${PO_STATUS_LABEL[res.status]}.` };
 }
 
-const mailer: (org: CurrentOrg) => Mailer = (org) => async (a) => {
-  const r = await sendOrgEmail(org.organizationId, { to: a.to, subject: a.subject, text: a.text, html: a.html, fromName: a.fromName, replyTo: a.replyTo, attachments: [{ filename: a.fileName, content: Buffer.from(a.pdf) }] });
+const mailer: (org: CurrentOrg, poId: string) => Mailer = (org, poId) => async (a) => {
+  const r = await sendDeptEmail(org.organizationId, { dept: "purchasing", relatedKind: "purchase_order", relatedId: poId, by: { userId: org.userId, name: null } }, { to: a.to, subject: a.subject, text: a.text, html: a.html, fromName: a.fromName, replyTo: a.replyTo, attachments: [{ filename: a.fileName, content: Buffer.from(a.pdf) }] });
   return r.ok ? { ok: true } : { ok: false, error: r.error };
 };
 
@@ -86,7 +86,7 @@ const mailer: (org: CurrentOrg) => Mailer = (org) => async (a) => {
 export async function sendPurchaseOrderAction(id: string, opts: { email: boolean; to?: string; message?: string }): Promise<PoResult> {
   const w = await writer();
   if ("error" in w) return { ok: false, error: w.error };
-  const res = await sendPurchaseOrder(w.org, id, { mailer: opts?.email ? mailer(w.org) : null, to: opts?.to ? String(opts.to).slice(0, 160) : null, message: opts?.message ? String(opts.message).slice(0, 2000) : null });
+  const res = await sendPurchaseOrder(w.org, id, { mailer: opts?.email ? mailer(w.org, id) : null, to: opts?.to ? String(opts.to).slice(0, 160) : null, message: opts?.message ? String(opts.message).slice(0, 2000) : null });
   if (!res.ok) return res;
   const have = await getPurchaseOrder(w.org.organizationId, id);
   if (have) await logActivity(w.org, "OTHER", `Sent purchase order ${have.po.poNumber} to ${have.po.supplierName}`, { type: "purchase_order", id });
@@ -101,7 +101,7 @@ export async function revisePurchaseOrderAction(id: string, opts: { note: string
   const res = await revisePurchaseOrder(w.org, id, {
     note: opts?.note,
     edits: opts?.edits ?? null,
-    mailer: opts?.email ? mailer(w.org) : null,
+    mailer: opts?.email ? mailer(w.org, id) : null,
     to: opts?.to ? String(opts.to).slice(0, 160) : null,
     message: opts?.message ? String(opts.message).slice(0, 2000) : null,
   });

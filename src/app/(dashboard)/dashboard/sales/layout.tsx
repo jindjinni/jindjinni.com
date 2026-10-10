@@ -9,6 +9,7 @@ import { primaryDocument } from "@/lib/operation-type";
 import { operationsOf } from "@/lib/operations-service";
 import { wordsFor } from "@/lib/operations-rules";
 import { withMailTab } from "@/lib/mail-access";
+import { mailBadges } from "@/lib/mailbox-service";
 
 // Sales is its own department, built like Inventory: a colored sidebar down the left and a workspace beside it.
 // Quotations, invoices, buyers and prices are for the Purchasing roles (the accountant only looks); the company profile
@@ -38,6 +39,7 @@ export default async function SalesLayout({ children }: { children: React.ReactN
         setupLabel={menu.setupLabel}
         defaultSetupLabel={menu.defaultSetupLabel}
         canEdit={isAdmin(org.role)}
+        badges={await mailBadges(org, "sales")}
       />
       <div className="min-w-0 flex-1 bg-stone-50 dark:bg-slate-950">
         <div className="pz px-4 py-6 sm:px-8">{children}</div>
