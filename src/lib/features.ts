@@ -42,6 +42,12 @@ export const FEATURES: FeatureDef[] = [
     blurb: "Separate operations: a company can run Wholesale (buying from individuals) and Distribution (buying from wholesalers, selling to pharmacies) as two separate workspaces under one sign-in, free. Settings -> Operations, the sign-in picker, the top-bar switcher and Overall status come with it.",
     defaultStage: "mothership",
   },
+  {
+    key: "audit-center",
+    label: "Audit Center",
+    blurb: "Accounts → Audit Center in a Distribution operation: pharmacy internal audits and PBM audits (Excel files built from the pharmacy's invoices, PBM files never carry prices or shipping), with a saved case record for each audit.",
+    defaultStage: "mothership",
+  },
 ];
 
 export const featureDef = (key: string) => FEATURES.find((f) => f.key === key);

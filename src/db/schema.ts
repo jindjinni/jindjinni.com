@@ -763,6 +763,8 @@ export const purchasingProducts = sqliteTable(
     // NOT NULL column to this populated table makes drizzle-kit emit
     // `delete from purchasing_products` (see scripts/safe-push.ts).
     ndc: text("ndc"),
+    /** What the Audit Center prints as the product description: package size or device duration ("10-Day", "50ct"). Nullable. */
+    packageDescription: text("package_description"),
     standardPrice: real("standard_price").notNull().default(0),
     notes: text("notes"),
     // Products that never expire (receivers, readers, ...) -- the quotation
@@ -2255,6 +2257,9 @@ export const salesBuyers = sqliteTable(
     taxInfo: text("tax_info"),
     taxExempt: integer("tax_exempt", { mode: "boolean" }).notNull().default(false),
     defaultNotes: text("default_notes"),
+    /** The pharmacy's NCPDP provider number and NPI, used by the Audit Center (PBM audits need the NCPDP). Nullable on purpose. */
+    ncpdp: text("ncpdp"),
+    npi: text("npi"),
     active: integer("active", { mode: "boolean" }).notNull().default(true),
     ...timestamps,
   },
@@ -3164,3 +3169,130 @@ export const trialMemory = sqliteTable("trial_memory", {
   createdAt: text("created_at").notNull().default(sql`(current_timestamp)`),
   updatedAt: text("updated_at").notNull().default(sql`(current_timestamp)`),
 });
+
+/**
+ * The Audit Center (Accounts, Distribution operation only; see audit-rules.ts). One row per audit case. The pharmacy's name and
+ * NCPDP are copied onto the case when it is made, so later edits to the pharmacy never change an old case.
+ */
+export const audits = sqliteTable(
+  "audits",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    caseYear: integer("case_year").notNull(),
+    caseSeq: integer("case_seq").notNull(),
+    /** AUD-2026-00001 */
+    caseNumber: text("case_number").notNull(),
+    /** INTERNAL | PBM | REGULATORY */
+    auditType: text("audit_type").notNull(),
+    auditSubtype: text("audit_subtype"),
+    status: text("status").notNull().default("NEW_REQUEST"),
+    buyerId: text("buyer_id"),
+    pharmacyName: text("pharmacy_name").notNull(),
+    pharmacyNcpdp: text("pharmacy_ncpdp"),
+    pharmacyNpi: text("pharmacy_npi"),
+    pharmacyEmail: text("pharmacy_email"),
+    startDate: text("start_date"),
+    endDate: text("end_date"),
+    /** YES | NO | UNCLEAR (PBM and regulatory audits must answer this). */
+    deviceAnswer: text("device_answer"),
+    /** ALL | SELECTED, with the chosen product keys as a JSON array. */
+    productScope: text("product_scope").notNull().default("ALL"),
+    productKeysJson: text("product_keys_json"),
+    /** Internal and regulatory files: put the pharmacy's name in the sheet. */
+    includePharmacy: integer("include_pharmacy", { mode: "boolean" }).notNull().default(false),
+    auditorName: text("auditor_name"),
+    auditorCompany: text("auditor_company"),
+    auditorEmail: text("auditor_email"),
+    auditorPhone: text("auditor_phone"),
+    pbmName: text("pbm_name"),
+    agency: text("agency"),
+    referenceNumber: text("reference_number"),
+    requestReceivedOn: text("request_received_on"),
+    dueOn: text("due_on"),
+    /** Who the file was sent to, typed when the case is marked sent. */
+    sentTo: text("sent_to"),
+    sentCc: text("sent_cc"),
+    sentSubject: text("sent_subject"),
+    sentAt: text("sent_at"),
+    sentByUserId: text("sent_by_user_id"),
+    completedAt: text("completed_at"),
+    completedByUserId: text("completed_by_user_id"),
+    createdByUserId: text("created_by_user_id"),
+    createdByName: text("created_by_name"),
+    ...timestamps,
+  },
+  (t) => [
+    index("audits_org_idx").on(t.organizationId, t.status),
+    uniqueIndex("audits_case_unique").on(t.organizationId, t.caseYear, t.caseSeq),
+  ],
+);
+
+/**
+ * A generated file for a case. Every generation is a new version and nothing is ever overwritten. The exact Excel bytes that were
+ * made are kept here (base64) together with the rows they were built from, so an old audit can always be shown as it was sent.
+ */
+export const auditVersions = sqliteTable(
+  "audit_versions",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    auditId: text("audit_id").notNull().references(() => audits.id, { onDelete: "cascade" }),
+    version: integer("version").notNull(),
+    templateVersion: text("template_version").notNull(),
+    fileName: text("file_name").notNull(),
+    fileData: text("file_data").notNull(),
+    fileBytes: integer("file_bytes").notNull(),
+    fileHash: text("file_hash").notNull(),
+    rowCount: integer("row_count").notNull(),
+    invoiceCount: integer("invoice_count").notNull().default(0),
+    /** The columns and rows that went into the file (JSON), frozen at the moment of generation. */
+    snapshotJson: text("snapshot_json").notNull(),
+    /** The filters used (dates, products, options), so the case can be explained later. */
+    filtersJson: text("filters_json"),
+    createdByUserId: text("created_by_user_id"),
+    createdByName: text("created_by_name"),
+    /** Set when this is the version that was sent. */
+    sentAt: text("sent_at"),
+    createdAt: text("created_at").notNull().default(sql`(current_timestamp)`),
+  },
+  (t) => [uniqueIndex("audit_versions_unique").on(t.auditId, t.version), index("audit_versions_org_idx").on(t.organizationId)],
+);
+
+/** Documents attached to a case (the auditor's request, a letter, an email). Kept as they came. */
+export const auditAttachments = sqliteTable(
+  "audit_attachments",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    auditId: text("audit_id").notNull().references(() => audits.id, { onDelete: "cascade" }),
+    /** REQUEST | OTHER */
+    kind: text("kind").notNull().default("REQUEST"),
+    fileName: text("file_name").notNull(),
+    contentType: text("content_type").notNull(),
+    fileData: text("file_data").notNull(),
+    fileBytes: integer("file_bytes").notNull(),
+    uploadedByUserId: text("uploaded_by_user_id"),
+    uploadedByName: text("uploaded_by_name"),
+    createdAt: text("created_at").notNull().default(sql`(current_timestamp)`),
+  },
+  (t) => [index("audit_attachments_audit_idx").on(t.auditId)],
+);
+
+/** The case's trail: what was done, by whom, when, and the old and new value. Notes live here too and cannot be deleted. */
+export const auditEvents = sqliteTable(
+  "audit_events",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    auditId: text("audit_id").notNull().references(() => audits.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    detail: text("detail"),
+    oldValue: text("old_value"),
+    newValue: text("new_value"),
+    userId: text("user_id"),
+    userName: text("user_name"),
+    createdAt: text("created_at").notNull().default(sql`(current_timestamp)`),
+  },
+  (t) => [index("audit_events_audit_idx").on(t.auditId, t.createdAt)],
+);

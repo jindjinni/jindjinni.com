@@ -9,6 +9,7 @@ t("distribution hides quotations and individuals' tabs", hiddenTabIds(D, "purcha
 t("distribution keeps purchase orders and suppliers", !hiddenTabIds(D, "purchasing", false).includes("purchase-orders") && !hiddenTabIds(D, "purchasing", false).includes("suppliers"));
 t("both sides or none hide nothing", hiddenTabIds(B, "purchasing", false).length === 0 && !hidesTabs(B) && hidesTabs(W));
 t("show-all hides nothing", hiddenTabIds(D, "purchasing", true).length === 0 && hiddenTabIds(W, "purchasing", true).length === 0);
+t("the Audit Center is a distribution-only tab: gone for Wholesale (even with show-all), present for Distribution, both and unnamed", hiddenTabIds(W, "accounts", false).includes("audit-center") && hiddenTabIds(W, "accounts", true).includes("audit-center") && !hiddenTabIds(D, "accounts", false).includes("audit-center") && !hiddenTabIds(B, "accounts", false).includes("audit-center") && !hiddenTabIds(D, "accounts", true).includes("audit-center"));
 t("withoutHidden", JSON.stringify(withoutHidden(["quotations", "purchase-orders", "products"], D, "purchasing", false)) === '["purchase-orders","products"]');
 // every hidden id is a real tab (a typo would silently hide nothing)
 for (const [name, h] of [["wholesale", WHOLESALE_HIDDEN], ["distribution", DISTRIBUTION_HIDDEN]] as const)

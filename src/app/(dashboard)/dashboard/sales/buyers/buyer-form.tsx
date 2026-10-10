@@ -17,12 +17,15 @@ export type BuyerFormValues = {
   taxInfo: string;
   taxExempt: boolean;
   defaultNotes: string;
+  /** The pharmacy's NCPDP provider number and NPI (the Audit Center needs the NCPDP). */
+  ncpdp: string;
+  npi: string;
   active: boolean;
 };
 
-export const EMPTY_BUYER: BuyerFormValues = { companyName: "", contactName: "", email: "", phone: "", billingAddress: "", shippingAddress: "", paymentTerms: "", taxInfo: "", taxExempt: false, defaultNotes: "", active: true };
+export const EMPTY_BUYER: BuyerFormValues = { companyName: "", contactName: "", email: "", phone: "", billingAddress: "", shippingAddress: "", paymentTerms: "", taxInfo: "", taxExempt: false, defaultNotes: "", ncpdp: "", npi: "", active: true };
 
-export function BuyerForm({ id, initial, readOnly }: { id: string | null; initial: BuyerFormValues; readOnly?: boolean }) {
+export function BuyerForm({ id, initial, readOnly, pharmacyFields }: { id: string | null; initial: BuyerFormValues; readOnly?: boolean; pharmacyFields?: boolean }) {
   const router = useRouter();
   const [v, setV] = useState(initial);
   const [pending, start] = useTransition();
@@ -70,6 +73,8 @@ export function BuyerForm({ id, initial, readOnly }: { id: string | null; initia
         {f("Billing address", "billingAddress", { testid: "by-billing", multi: true })}
         {f("Shipping address (blank = same as billing)", "shippingAddress", { testid: "by-shipping", multi: true })}
         {f("Tax information (resale certificate or ID)", "taxInfo", { testid: "by-tax" })}
+        {pharmacyFields && f("NCPDP number (7 digits, for pharmacies)", "ncpdp", { testid: "by-ncpdp", placeholder: "For example 5746826" })}
+        {pharmacyFields && f("NPI (10 digits, optional)", "npi", { testid: "by-npi" })}
         <label htmlFor="by-exempt" className="flex items-center gap-2 self-end pb-2 text-sm text-slate-800 dark:text-slate-100">
           <input id="by-exempt" type="checkbox" checked={v.taxExempt} disabled={readOnly} onChange={(e) => set("taxExempt", e.target.checked)} data-testid="by-exempt" /> Tax exempt
         </label>

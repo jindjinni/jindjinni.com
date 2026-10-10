@@ -142,6 +142,9 @@ export type BuyerInput = {
   taxInfo?: string | null;
   taxExempt?: boolean;
   defaultNotes?: string | null;
+  /** The pharmacy's NCPDP number (7 digits) and NPI (10 digits); only set from screens in a Distribution operation. */
+  ncpdp?: string | null;
+  npi?: string | null;
   active?: boolean;
 };
 
@@ -156,12 +159,23 @@ const buyerValues = (i: BuyerInput) => ({
   taxInfo: nz(cleanText(i.taxInfo, 120)),
   taxExempt: !!i.taxExempt,
   defaultNotes: nz(cleanText(i.defaultNotes, 1000)),
+  ncpdp: nz(cleanText(i.ncpdp, 20).replace(/\D/g, "")),
+  npi: nz(cleanText(i.npi, 20).replace(/\D/g, "")),
   active: i.active !== false,
 });
+
+/** NCPDP provider numbers are 7 digits and NPIs are 10; blank is fine. Returns a plain-words message or null. */
+export function pharmacyIdProblem(v: { ncpdp: string | null; npi: string | null }): string | null {
+  if (v.ncpdp && v.ncpdp.length !== 7) return "An NCPDP number has 7 digits.";
+  if (v.npi && v.npi.length !== 10) return "An NPI has 10 digits.";
+  return null;
+}
 
 export async function createBuyer(org: Org, input: BuyerInput): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
   const v = buyerValues(input);
   if (!v.companyName) return { ok: false, error: "Enter the buyer's company name." };
+  const idProblem = pharmacyIdProblem(v);
+  if (idProblem) return { ok: false, error: idProblem };
   const dupe = (await listBuyers(org.organizationId)).find((b) => normKey(b.companyName) === normKey(v.companyName));
   if (dupe) return { ok: false, error: `${dupe.companyName} is already in your buyers.` };
   const id = newId("sbuyer");
@@ -172,8 +186,13 @@ export async function createBuyer(org: Org, input: BuyerInput): Promise<{ ok: tr
 export async function updateBuyer(org: Org, id: string, input: BuyerInput): Promise<{ ok: true } | { ok: false; error: string }> {
   const v = buyerValues(input);
   if (!v.companyName) return { ok: false, error: "Enter the buyer's company name." };
+  const idProblem = pharmacyIdProblem(v);
+  if (idProblem) return { ok: false, error: idProblem };
   const have = await getBuyer(org.organizationId, id);
   if (!have) return { ok: false, error: "That buyer wasn't found." };
+  // A screen that does not show the pharmacy numbers (a Wholesale workspace) never wipes numbers saved elsewhere.
+  if (input.ncpdp === undefined) v.ncpdp = have.ncpdp;
+  if (input.npi === undefined) v.npi = have.npi;
   const dupe = (await listBuyers(org.organizationId)).find((b) => b.id !== id && normKey(b.companyName) === normKey(v.companyName));
   if (dupe) return { ok: false, error: `${dupe.companyName} is already in your buyers.` };
   await db.update(salesBuyers).set({ ...v, updatedAt: new Date().toISOString() }).where(and(eq(salesBuyers.organizationId, org.organizationId), eq(salesBuyers.id, id)));

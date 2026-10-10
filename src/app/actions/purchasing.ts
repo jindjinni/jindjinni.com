@@ -345,6 +345,7 @@ export async function createPurchasingProduct(
     name,
     productCode: trimmed(formData, "productCode"),
     ndc: trimmed(formData, "ndc"),
+    packageDescription: trimmed(formData, "packageDescription"),
     standardPrice,
     notes: trimmed(formData, "notes"),
   });
@@ -392,6 +393,7 @@ export async function updatePurchasingProduct(
       name,
       productCode: trimmed(formData, "productCode"),
       ndc: trimmed(formData, "ndc"),
+      packageDescription: trimmed(formData, "packageDescription"),
       standardPrice,
       notes: trimmed(formData, "notes"),
       active,

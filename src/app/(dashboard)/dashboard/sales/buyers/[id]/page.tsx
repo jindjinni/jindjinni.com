@@ -8,6 +8,7 @@ import { todayIn } from "@/lib/payment-due";
 import { shownStatus } from "@/lib/sales-rules";
 import { StatusChip, fmtDay, fmtMoney } from "@/components/sales-ui";
 import { BuyerForm } from "../buyer-form";
+import { tabViewOf } from "@/lib/operations-service";
 import { PriceSheetPanel, type PriceRow } from "./price-sheet-panel";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +19,7 @@ export default async function BuyerPage({ params }: { params: Promise<{ id: stri
   const buyer = await getBuyer(org.organizationId, id);
   if (!buyer) notFound();
   const canWrite = canWriteSales(org.role, org.access);
+  const pharmacyFields = (await tabViewOf(org.organizationId)).sides.distribution;
   const [sheet, items, products, invoices, terms] = await Promise.all([
     getPriceSheet(org.organizationId, id),
     listPriceItems(org.organizationId, id),
@@ -44,6 +46,7 @@ export default async function BuyerPage({ params }: { params: Promise<{ id: stri
       <BuyerForm
         id={buyer.id}
         readOnly={!canWrite}
+        pharmacyFields={pharmacyFields}
         initial={{
           companyName: buyer.companyName,
           contactName: buyer.contactName ?? "",
@@ -55,6 +58,8 @@ export default async function BuyerPage({ params }: { params: Promise<{ id: stri
           taxInfo: buyer.taxInfo ?? "",
           taxExempt: buyer.taxExempt,
           defaultNotes: buyer.defaultNotes ?? "",
+          ncpdp: buyer.ncpdp ?? "",
+          npi: buyer.npi ?? "",
           active: buyer.active,
         }}
       />

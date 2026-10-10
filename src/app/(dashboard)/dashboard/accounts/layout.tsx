@@ -2,7 +2,10 @@ import { notFound } from "next/navigation";
 import { requireOrg } from "@/lib/tenant";
 import { canViewAccounts, isAdmin } from "@/lib/permissions";
 import { storage } from "@/lib/receiving-storage";
-import { resolveMenu } from "@/lib/sidebar-menu";
+import { menuIdsFor, resolveMenu } from "@/lib/sidebar-menu";
+import { tabViewOf } from "@/lib/operations-service";
+import { withoutHidden } from "@/lib/operation-tabs-rules";
+import { auditCenterOn } from "@/lib/audit-access";
 import { getSavedSidebarMenus } from "@/lib/sidebar-menu-store";
 import { DepartmentSidebar } from "@/components/department-sidebar";
 
@@ -12,7 +15,11 @@ import { DepartmentSidebar } from "@/components/department-sidebar";
 export default async function AccountsLayout({ children }: { children: React.ReactNode }) {
   const org = await requireOrg();
   if (!canViewAccounts(org.role, org.access)) notFound();
-  const menu = resolveMenu("accounts", await getSavedSidebarMenus(org.organizationId));
+  const view = await tabViewOf(org.organizationId);
+  // The Audit Center tab appears only in a Distribution operation, and only while its rollout switch is on.
+  const ids = withoutHidden(menuIdsFor("accounts", { connectors: false }), view.sides, "accounts", view.showAll);
+  const auditOn = await auditCenterOn(org.organizationId);
+  const menu = resolveMenu("accounts", await getSavedSidebarMenus(org.organizationId), auditOn ? ids : ids.filter((id) => id !== "audit-center"));
 
   return (
     <div className="-my-8 mx-[calc(50%-50vw)] flex min-h-[calc(100vh-3.4rem)] w-screen flex-col md:flex-row print:m-0 print:w-auto">

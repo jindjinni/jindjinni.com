@@ -14,6 +14,7 @@ type Product = {
   categoryId: string | null;
   productCode: string | null;
   ndc: string | null;
+  packageDescription?: string | null;
   standardPrice: number;
   notes: string | null;
   active: boolean;
@@ -58,6 +59,10 @@ export function EditProductForm({
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-slate-600 dark:text-slate-400">NDC</span>
           <input name="ndc" defaultValue={product.ndc ?? ""} placeholder="e.g. 53885-0245-50" className={inputClass} />
+        </label>
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="text-slate-600 dark:text-slate-400">Package or device duration (printed on audit files)</span>
+          <input name="packageDescription" defaultValue={product.packageDescription ?? ""} placeholder="e.g. 10-Day, 15-Day, 50ct, 100ct" className={inputClass} data-testid="product-package" />
         </label>
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-slate-600 dark:text-slate-400">Standard price ($)</span>

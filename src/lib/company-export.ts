@@ -11,7 +11,7 @@ import { getTeamMembers } from "@/lib/team-queries";
 
 const CHAT_HOUSEKEEPING = new Set(["chatReads", "chatPresence"]);
 /** Columns that are secrets or bulky binary data -- never exported. */
-const SKIP_COLUMNS = new Set(["tokenHash", "logoData", "passwordHash", "codeHash"]);
+const SKIP_COLUMNS = new Set(["tokenHash", "logoData", "passwordHash", "codeHash", "fileData"]);
 const CELL_LIMIT = 32000;
 
 export function orgScopedTables(): { key: string; table: SQLiteTable }[] {

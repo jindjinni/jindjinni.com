@@ -23,6 +23,11 @@ export const DISTRIBUTION_HIDDEN: Hidden = {
   receiving: ["adjustments"],
 };
 
+/** Tab ids that exist only in a Distribution operation (a Wholesale operation never shows them, "show every tab" or not). */
+export const DISTRIBUTION_ONLY: Hidden = {
+  accounts: ["audit-center"],
+};
+
 /** The one side a workspace is, or null when it is both (or has not chosen): then nothing is hidden. */
 export function singleSide(sides: Sides): "wholesale" | "distribution" | null {
   if (sides.wholesale && !sides.distribution) return "wholesale";
@@ -32,10 +37,12 @@ export function singleSide(sides: Sides): "wholesale" | "distribution" | null {
 
 /** The tab ids to leave out of a department's menu for this workspace. */
 export function hiddenTabIds(sides: Sides, dept: MenuDept, showAll: boolean): string[] {
-  if (showAll) return [];
+  // A distribution-only tab is not part of a workspace that has no Distribution side: switching "show every tab" on does not add it.
+  const notHere = sides.distribution ? [] : DISTRIBUTION_ONLY[dept] ?? [];
+  if (showAll) return notHere;
   const side = singleSide(sides);
-  if (!side) return [];
-  return (side === "wholesale" ? WHOLESALE_HIDDEN : DISTRIBUTION_HIDDEN)[dept] ?? [];
+  if (!side) return notHere;
+  return [...((side === "wholesale" ? WHOLESALE_HIDDEN : DISTRIBUTION_HIDDEN)[dept] ?? []), ...notHere];
 }
 
 /** A department's menu ids with the hidden ones taken out (the list is built from `all` when no list was given). */
