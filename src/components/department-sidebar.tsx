@@ -152,7 +152,7 @@ export function DepartmentSidebar({
         {i.icon && <span aria-hidden="true">{i.icon}</span>}
         {i.label}
         {(badges[i.id] ?? 0) > 0 && (
-          <span className={`ml-auto rounded-full ${t.active} px-2 py-0.5 text-xs font-semibold tabular-nums`} data-testid={`badge-${i.id}`} title="Unread">
+          <span className={`ml-auto rounded-full ${t.active} px-2 py-0.5 text-xs font-semibold tabular-nums`} data-testid={`badge-${i.id}`} title={i.id === "mail" ? "Unread" : "Needs attention"}>
             {badges[i.id] > 99 ? "99+" : badges[i.id]}
           </span>
         )}

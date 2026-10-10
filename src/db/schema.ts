@@ -3329,6 +3329,26 @@ export const auditEvents = sqliteTable(
   (t) => [index("audit_events_audit_idx").on(t.auditId, t.createdAt)],
 );
 
+/** The Audit Center's directory of auditors and agencies (a PBM auditor, a state board, a federal agency). Hidden, never deleted. */
+export const auditAuditors = sqliteTable(
+  "audit_auditors",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    /** PBM | STATE | FEDERAL | OTHER */
+    kind: text("kind").notNull().default("OTHER"),
+    name: text("name"),
+    company: text("company"),
+    email: text("email"),
+    phone: text("phone"),
+    notes: text("notes"),
+    hiddenAt: text("hidden_at"),
+    createdByUserId: text("created_by_user_id"),
+    ...timestamps,
+  },
+  (t) => [index("audit_auditors_org_idx").on(t.organizationId, t.hiddenAt)],
+);
+
 // ---------------------------------------------------------------------------
 // Department mailboxes (Mail tab in Purchasing, Sales, Receiving, Accounts and Customer Service)
 // ---------------------------------------------------------------------------

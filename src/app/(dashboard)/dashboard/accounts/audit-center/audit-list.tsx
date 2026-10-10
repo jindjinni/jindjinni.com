@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { STATUS_LABEL, TYPE_LABEL, isAuditStatus, isAuditType, usDate } from "@/lib/audit-rules";
+import { dueInfo, type DueKind } from "@/lib/audit-insights";
 import type { AuditRow } from "@/lib/audit-service";
 
 const TONE: Record<string, string> = {
@@ -20,8 +21,28 @@ export function AuditStatusChip({ status }: { status: string }) {
   );
 }
 
-/** One line per audit; the case number opens the case. */
-export function AuditList({ rows, empty }: { rows: AuditRow[]; empty: string }) {
+const DUE_TONE: Record<DueKind, string> = {
+  OVERDUE: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200",
+  TODAY: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200",
+  SOON: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200",
+  LATER: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200",
+  NONE: "",
+  DONE: "",
+};
+
+/** "Overdue by 2 days", "Due tomorrow", "Due in 5 days"; nothing when there is no due date or the answer has gone out. */
+export function DueBadge({ dueOn, status, today }: { dueOn: string | null; status: string; today: string }) {
+  const d = dueInfo(dueOn, status, today);
+  if (d.kind === "NONE" || d.kind === "DONE") return null;
+  return (
+    <span className={`inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-semibold ${DUE_TONE[d.kind]}`} data-testid="due-badge" data-due={d.kind} title={`Due ${usDate(dueOn)}`}>
+      {d.label}
+    </span>
+  );
+}
+
+/** One line per audit; the case number opens the case. Pass `today` to show how close each due date is. */
+export function AuditList({ rows, empty, today }: { rows: AuditRow[]; empty: string; today?: string }) {
   if (rows.length === 0) return <p className="rounded-lg border border-dashed border-slate-300 p-4 text-sm text-slate-600 dark:border-slate-700 dark:text-slate-400" data-testid="audit-empty">{empty}</p>;
   return (
     <ul className="divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-white dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900" data-testid="audit-list">
@@ -33,7 +54,10 @@ export function AuditList({ rows, empty }: { rows: AuditRow[]; empty: string }) 
             <span className="text-slate-600 dark:text-slate-400">{isAuditType(r.auditType) ? TYPE_LABEL[r.auditType] : r.auditType}</span>
             <span className="text-slate-600 dark:text-slate-400">{usDate(r.startDate)} – {usDate(r.endDate)}</span>
             {r.pharmacyNcpdp && <span className="text-slate-600 dark:text-slate-400">NCPDP {r.pharmacyNcpdp}</span>}
-            <span className="ml-auto"><AuditStatusChip status={r.status} /></span>
+            <span className="ml-auto flex items-center gap-2">
+              {today && <DueBadge dueOn={r.dueOn} status={r.status} today={today} />}
+              <AuditStatusChip status={r.status} />
+            </span>
           </Link>
         </li>
       ))}

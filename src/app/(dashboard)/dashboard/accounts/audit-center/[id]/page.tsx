@@ -6,7 +6,8 @@ import { STATUS_LABEL, TYPE_LABEL, isAuditType, regSubtypeLabel, isClosed, safeg
 import { getAudit, listAttachments, listEvents, listVersions, previewAudit, productsSold, searchPharmacies, suggestedSubject } from "@/lib/audit-service";
 import { listSends } from "@/lib/audit-send";
 import { card, primaryBtn } from "@/components/sales-ui";
-import { AuditStatusChip } from "../audit-list";
+import { AuditStatusChip, DueBadge } from "../audit-list";
+import { todayFor } from "@/lib/audit-insights-service";
 import { AttachForm, EditAuditForm, GenerateButton, MarkSentForm, NoteForm, ReopenForm, StatusButtons } from "./case-forms";
 
 export const dynamic = "force-dynamic";
@@ -58,6 +59,7 @@ export default async function AuditCasePage({ params }: { params: Promise<{ id: 
         <div className="mt-1 flex flex-wrap items-center gap-3">
           <h1 className="font-mono text-xl font-bold text-slate-900 dark:text-slate-50" data-testid="case-number">{audit.caseNumber}</h1>
           <AuditStatusChip status={audit.status} />
+          <DueBadge dueOn={audit.dueOn} status={audit.status} today={await todayFor(org.organizationId)} />
           <span className="text-sm text-slate-600 dark:text-slate-400">{TYPE_LABEL[type]}</span>
         </div>
         <p className="mt-1 text-sm text-slate-800 dark:text-slate-100" data-testid="case-pharmacy">

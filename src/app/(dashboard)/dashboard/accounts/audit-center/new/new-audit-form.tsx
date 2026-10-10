@@ -10,7 +10,21 @@ type Pharmacy = { id: string; name: string; ncpdp: string | null; npi: string | 
 
 const label = "text-xs font-medium text-slate-700 dark:text-slate-300";
 
-export function NewAuditForm({ type, pharmacies, today }: { type: AuditType; pharmacies: Pharmacy[]; today: string }) {
+export type SavedAuditor = { id: string; kind: string; title: string; name: string; company: string; email: string; phone: string };
+
+/** Puts a saved auditor's details into the "Who asked" boxes (they stay editable). */
+function fillFrom(a: SavedAuditor | undefined, type: AuditType) {
+  const set = (id: string, v: string) => { const el = document.getElementById(id) as HTMLInputElement | null; if (el) el.value = v; };
+  if (!a) return;
+  set("auditorName", a.name);
+  set("auditorCompany", a.company);
+  set("auditorEmail", a.email);
+  set("auditorPhone", a.phone);
+  if (type === "PBM") set("pbmName", a.company);
+  if (type === "REGULATORY") set("agency", a.company);
+}
+
+export function NewAuditForm({ type, pharmacies, today, auditors = [] }: { type: AuditType; pharmacies: Pharmacy[]; today: string; auditors?: SavedAuditor[] }) {
   const [state, action, pending] = useActionState(createAuditAction, undefined);
   const [find, setFind] = useState("");
   const [buyerId, setBuyerId] = useState("");
@@ -103,6 +117,16 @@ export function NewAuditForm({ type, pharmacies, today }: { type: AuditType; pha
 
       <section className={`${card} space-y-3`}>
         <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">{internal ? "3" : "4"}. Who asked {internal ? "(optional)" : ""}</h2>
+        {auditors.length > 0 && (
+          <div>
+            <label htmlFor="saved-auditor" className={label}>Saved auditors &amp; agencies</label>
+            <select id="saved-auditor" className={`${field} mt-1`} defaultValue="" onChange={(e) => fillFrom(auditors.find((a) => a.id === e.target.value), type)} data-testid="saved-auditor">
+              <option value="">Pick one to fill in the details below…</option>
+              {auditors.map((a) => <option key={a.id} value={a.id}>{a.title}</option>)}
+            </select>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">You can still change anything below. <Link href="/dashboard/accounts/audit-center/directory" className="underline">Manage the list</Link>.</p>
+          </div>
+        )}
         <div className="grid gap-3 sm:grid-cols-2">
           <div><label htmlFor="auditorName" className={label}>{internal ? "Contact name" : "Auditor name"}</label><input id="auditorName" name="auditorName" className={`${field} mt-1`} data-testid="auditor-name" /></div>
           <div><label htmlFor="auditorCompany" className={label}>{internal ? "Company" : "Auditor company"}</label><input id="auditorCompany" name="auditorCompany" className={`${field} mt-1`} /></div>

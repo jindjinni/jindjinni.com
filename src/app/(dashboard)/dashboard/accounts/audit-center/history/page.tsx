@@ -4,6 +4,7 @@ import { requireOrg } from "@/lib/tenant";
 import { auditAccess } from "@/lib/audit-access";
 import { AUDIT_STATUSES, AUDIT_TYPES, STATUS_LABEL, TYPE_LABEL } from "@/lib/audit-rules";
 import { listAudits } from "@/lib/audit-service";
+import { todayFor } from "@/lib/audit-insights-service";
 import { field, ghostBtn } from "@/components/sales-ui";
 import { AuditList } from "../audit-list";
 
@@ -19,7 +20,7 @@ export default async function AuditHistoryPage({ searchParams }: { searchParams:
   if (!acc.allowed) notFound();
   const sp = await searchParams;
   const f = { q: one(sp.q), type: one(sp.type), status: one(sp.status), from: one(sp.from), to: one(sp.to) };
-  const rows = await listAudits(org.organizationId, f, 300);
+  const [rows, today] = await Promise.all([listAudits(org.organizationId, f, 300), todayFor(org.organizationId)]);
   return (
     <div className="max-w-5xl space-y-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -41,7 +42,7 @@ export default async function AuditHistoryPage({ searchParams }: { searchParams:
         <button className={`${ghostBtn} sm:col-span-6 sm:w-fit`}>Filter</button>
       </form>
       <p className="text-sm text-slate-600 dark:text-slate-400" data-testid="audit-total">{rows.length} audit{rows.length === 1 ? "" : "s"}</p>
-      <AuditList rows={rows} empty="No audits match." />
+      <AuditList today={today} rows={rows} empty="No audits match." />
     </div>
   );
 }

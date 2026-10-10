@@ -6,6 +6,7 @@ import { menuIdsFor, resolveMenu } from "@/lib/sidebar-menu";
 import { tabViewOf } from "@/lib/operations-service";
 import { withoutHidden } from "@/lib/operation-tabs-rules";
 import { auditCenterOn } from "@/lib/audit-access";
+import { reminderCount } from "@/lib/audit-insights-service";
 import { withMailTab } from "@/lib/mail-access";
 import { mailBadges } from "@/lib/mailbox-service";
 import { getSavedSidebarMenus } from "@/lib/sidebar-menu-store";
@@ -14,6 +15,11 @@ import { DepartmentSidebar } from "@/components/department-sidebar";
 // Accounts is its own department, built like Purchasing and Receiving: a colored sidebar down the left and a
 // workspace beside it. Only the accountant, Admin and Owner can open it. The sidebar's names and order can be
 // changed by an Administrator (Edit menu); see lib/sidebar-menu.ts.
+async function auditBadges(organizationId: string): Promise<Record<string, number>> {
+  const n = await reminderCount(organizationId);
+  return n > 0 ? { "audit-center": n } : {};
+}
+
 export default async function AccountsLayout({ children }: { children: React.ReactNode }) {
   const org = await requireOrg();
   if (!canViewAccounts(org.role, org.access)) notFound();
@@ -34,7 +40,7 @@ export default async function AccountsLayout({ children }: { children: React.Rea
         setupLabel={menu.setupLabel}
         defaultSetupLabel={menu.defaultSetupLabel}
         canEdit={isAdmin(org.role)}
-        badges={await mailBadges(org, "accounts")}
+        badges={{ ...(await mailBadges(org, "accounts")), ...(auditOn && canViewAccounts(org.role, org.access) ? await auditBadges(org.organizationId) : {}) }}
       />
       <div className="min-w-0 flex-1 bg-stone-50 dark:bg-slate-950">
         {!storage.configured() && (
