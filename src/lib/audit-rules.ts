@@ -3,7 +3,7 @@
 // A pharmacy that bought from us can be audited in three ways, and each way may show a different set of columns:
 //  - INTERNAL   the pharmacy asks for its own purchase history (prices and shipping included), sent to the pharmacy.
 //  - PBM        a pharmacy-benefit manager's auditor asks for device purchases (NEVER prices or shipping, always the NCPDP).
-//  - REGULATORY a state or federal body asks (prices and shipping included, the pharmacy is not copied). Built in phase 2.
+//  - REGULATORY a state or federal body asks (prices and shipping included, the pharmacy is not named or copied unless staff choose to).
 //
 // The one hard rule: a PBM file is built from an approved list of non-money columns. It is not "hidden columns": the money
 // values are never copied into the workbook at all, and no setting can add them back (see `PBM_COLUMNS` and `assertPbmSafe`).
@@ -11,7 +11,19 @@
 export const AUDIT_TYPES = ["INTERNAL", "PBM", "REGULATORY"] as const;
 export type AuditType = (typeof AUDIT_TYPES)[number];
 /** The audit types the Audit Center can generate today. */
-export const BUILT_TYPES: readonly AuditType[] = ["INTERNAL", "PBM"];
+export const BUILT_TYPES: readonly AuditType[] = ["INTERNAL", "PBM", "REGULATORY"];
+
+/** The kinds of regulator a State / Federal / Regulatory case can be for. */
+export const REG_SUBTYPES = [
+  { value: "STATE_BOARD", label: "State Board of Pharmacy" },
+  { value: "STATE_AG", label: "State Attorney General" },
+  { value: "MEDICAID", label: "Medicaid investigator" },
+  { value: "MEDICARE", label: "Medicare investigator" },
+  { value: "FEDERAL", label: "Federal agency" },
+  { value: "OTHER", label: "Other regulatory body" },
+] as const;
+export const isRegSubtype = (v: unknown): v is (typeof REG_SUBTYPES)[number]["value"] => REG_SUBTYPES.some((x) => x.value === v);
+export const regSubtypeLabel = (v: string | null | undefined) => REG_SUBTYPES.find((x) => x.value === v)?.label ?? null;
 
 export const TYPE_LABEL: Record<AuditType, string> = {
   INTERNAL: "Pharmacy Internal Audit",
@@ -21,7 +33,7 @@ export const TYPE_LABEL: Record<AuditType, string> = {
 export const TYPE_BLURB: Record<AuditType, string> = {
   INTERNAL: "A pharmacy asks for its own purchase records to check its books. Prices and shipping are included. Sent to the pharmacy.",
   PBM: "A pharmacy-benefit manager's auditor asks for device purchases. The file never contains prices or shipping. Sent to the auditor, with the pharmacy copied.",
-  REGULATORY: "A state or federal body asks for device purchases. Prices and shipping are included. The pharmacy is not copied.",
+  REGULATORY: "A state or federal body asks for device purchases. Prices and shipping are included. The pharmacy is not named or copied unless you choose to.",
 };
 
 /** Bump a template's version when its columns change; every generated file remembers the version it used. */
@@ -80,6 +92,7 @@ export type ColumnKey =
   | "ndc"
   | "pharmacyName"
   | "ncpdp"
+  | "pharmacyAddress"
   | "productName"
   | "productDescription"
   | "quantity"
@@ -97,6 +110,7 @@ const C: Record<ColumnKey, ColumnDef> = {
   ndc: { key: "ndc", header: "NDC / NRC", kind: "text" },
   pharmacyName: { key: "pharmacyName", header: "Pharmacy Name", kind: "text" },
   ncpdp: { key: "ncpdp", header: "NCPDP", kind: "text" },
+  pharmacyAddress: { key: "pharmacyAddress", header: "Pharmacy Address", kind: "text" },
   productName: { key: "productName", header: "Product Name / Item", kind: "text" },
   productDescription: { key: "productDescription", header: "Product Description / Box Count / Device Duration", kind: "text" },
   quantity: { key: "quantity", header: "Quantity Sold", kind: "int" },
@@ -130,6 +144,13 @@ export function columnsFor(type: AuditType, opts: ReportOptions = {}): ColumnDef
     assertPbmSafe(PBM_COLUMNS);
     return [...PBM_COLUMNS];
   }
+  if (type === "REGULATORY") {
+    // A regulator's file: transaction type and date first, then (only when staff chose to) who the pharmacy is, then the money.
+    const reg: ColumnDef[] = [C.type, C.date, C.invoiceNumber];
+    if (opts.includePharmacy) reg.push(C.pharmacyName, C.ncpdp, C.pharmacyAddress);
+    reg.push(C.ndc, C.productName, C.productDescription, C.quantity, C.unitPrice, C.lineTotal, C.shipping, { ...C.discount, header: "Financial Adjustments / Discount" });
+    return reg;
+  }
   const cols: ColumnDef[] = [C.invoiceNumber, C.date];
   if (opts.includePharmacy) cols.push(C.pharmacyName, C.ncpdp);
   cols.push(C.ndc, C.productName, C.productDescription, C.quantity, C.unitPrice, C.lineTotal, C.shipping, C.discount);
@@ -161,7 +182,7 @@ export type SourceLine = {
   invoiceDiscount: number;
 };
 
-export type PharmacyInfo = { name: string; ncpdp: string | null };
+export type PharmacyInfo = { name: string; ncpdp: string | null; address?: string | null };
 
 export type ReportRow = Partial<Record<ColumnKey, string | number | null>>;
 
@@ -219,6 +240,7 @@ export function buildRows(type: AuditType, lines: SourceLine[], pharmacy: Pharma
       ndc: text(l.ndc) || null,
       pharmacyName: pharmacy.name,
       ncpdp: pharmacy.ncpdp,
+      pharmacyAddress: text(pharmacy.address) || null,
       productName: text(l.productName),
       productDescription: descriptionOf(l) || null,
       quantity: l.quantity,
@@ -254,6 +276,8 @@ export type AuditInput = {
   auditorName?: string | null;
   auditorEmail?: string | null;
   pbmName?: string | null;
+  agency?: string | null;
+  subtype?: string | null;
 };
 
 const isDay = (s: string | null | undefined) => !!s && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s + "T00:00:00Z"));
@@ -268,6 +292,10 @@ export function blockers(a: AuditInput): string[] {
   if (a.type !== "INTERNAL") {
     if (a.deviceAnswer === "UNCLEAR" || !a.deviceAnswer) out.push("Confirm with the auditor that medical-device purchase records are what they want. Until then, nothing can be generated.");
     else if (a.deviceAnswer === "NO") out.push("The auditor is not asking for device records, so there is nothing to generate from our device sales. Note that on the case and close it.");
+  }
+  if (a.type === "REGULATORY") {
+    if (!isRegSubtype(a.subtype)) out.push("Choose what kind of regulator is asking (State Board of Pharmacy, Medicaid, and so on).");
+    if (!text(a.agency) && !text(a.auditorName)) out.push("Enter who the regulator is (agency or investigator).");
   }
   if (a.type === "PBM") {
     if (!text(a.ncpdp)) out.push("This pharmacy has no NCPDP number on file. Add it to the pharmacy in Sales → Buyers.");
@@ -337,9 +365,11 @@ export function safePart(s: string | null | undefined): string {
 }
 
 /** PharmacyName_NCPDP_PBMAudit_2026-01-01_to_2026-06-30.xlsx (and the internal and regulatory forms). */
-export function fileNameFor(type: AuditType, pharmacyName: string, ncpdp: string | null, start: string, end: string, version = 1): string {
+export function fileNameFor(type: AuditType, pharmacyName: string, ncpdp: string | null, start: string, end: string, version = 1, opts: { includePharmacy?: boolean; caseNumber?: string } = {}): string {
   const kind = type === "PBM" ? "PBMAudit" : type === "REGULATORY" ? "RegulatoryAudit" : "InternalAudit";
-  const parts = [safePart(pharmacyName)];
+  // A regulator's file does not carry the pharmacy's name unless staff chose to name the pharmacy in it: the case number stands in.
+  const nameless = type === "REGULATORY" && !opts.includePharmacy;
+  const parts = [nameless ? safePart(opts.caseNumber || "Audit") : safePart(pharmacyName)];
   if (type === "PBM" && text(ncpdp)) parts.push(safePart(ncpdp));
   parts.push(kind, `${start}_to_${end}`);
   return `${parts.join("_")}${version > 1 ? `_v${version}` : ""}.xlsx`;
@@ -374,6 +404,16 @@ export function presetRange(p: DatePreset, today: string): { start: string; end:
 /** The PBM email subject: "Example Pharmacy LLC Audit – NCPDP #5746826". */
 export const pbmSubject = (pharmacyName: string, ncpdp: string) => `${text(pharmacyName)} Audit – NCPDP #${text(ncpdp)}`;
 
+/** The regulator email subject. It names the pharmacy only when staff chose to name it in the file. */
+export function regulatorySubject(a: { caseNumber: string; agency: string | null; reference: string | null; pharmacyName: string; includePharmacy: boolean; start: string | null; end: string | null }): string {
+  const who = text(a.agency) || "Regulatory";
+  const parts = [`${who} records request`];
+  if (text(a.reference)) parts.push(`Ref ${text(a.reference)}`);
+  if (a.includePharmacy) parts.push(text(a.pharmacyName));
+  else parts.push(a.caseNumber);
+  return parts.join(" – ");
+}
+
 /** Splits a sheet value like "NDC 12345-6789-01" apart is NOT done: NDC/NRC is kept exactly as typed. Only whitespace is trimmed. */
 export const cleanNdc = (s: string | null | undefined) => text(s);
 
@@ -384,5 +424,5 @@ export function usDate(d: string | null | undefined): string {
 }
 
 /** Management-only actions (reopen a closed case, cancel it). */
-export const AUDIT_EVENT_KINDS = ["CREATED", "CHANGED", "DEVICE_ANSWER", "GENERATED", "DOWNLOADED", "SENT", "NOTE", "STATUS", "REOPENED", "FILE_ADDED"] as const;
+export const AUDIT_EVENT_KINDS = ["CREATED", "CHANGED", "DEVICE_ANSWER", "GENERATED", "DOWNLOADED", "SENT", "NOTE", "STATUS", "REOPENED", "FILE_ADDED", "EMAIL_FAILED"] as const;
 export type AuditEventKind = (typeof AUDIT_EVENT_KINDS)[number];

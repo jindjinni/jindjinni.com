@@ -2,9 +2,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireOrg } from "@/lib/tenant";
 import { auditAccess } from "@/lib/audit-access";
-import { STATUS_LABEL, TYPE_LABEL, isAuditType, isClosed, safeguards, usDate, type AuditType, type ColumnDef } from "@/lib/audit-rules";
+import { STATUS_LABEL, TYPE_LABEL, isAuditType, regSubtypeLabel, isClosed, safeguards, usDate, type AuditType, type ColumnDef } from "@/lib/audit-rules";
 import { getAudit, listAttachments, listEvents, listVersions, previewAudit, productsSold, searchPharmacies, suggestedSubject } from "@/lib/audit-service";
-import { card } from "@/components/sales-ui";
+import { listSends } from "@/lib/audit-send";
+import { card, primaryBtn } from "@/components/sales-ui";
 import { AuditStatusChip } from "../audit-list";
 import { AttachForm, EditAuditForm, GenerateButton, MarkSentForm, NoteForm, ReopenForm, StatusButtons } from "./case-forms";
 
@@ -32,12 +33,13 @@ export default async function AuditCasePage({ params }: { params: Promise<{ id: 
   const closed = isClosed(audit.status);
   const editable = acc.canWork && !closed;
 
-  const [preview, versions, attachments, events, pharmacies] = await Promise.all([
+  const [preview, versions, attachments, events, pharmacies, sends] = await Promise.all([
     previewAudit(org.organizationId, audit),
     listVersions(org.organizationId, id),
     listAttachments(org.organizationId, id),
     listEvents(org.organizationId, id),
     searchPharmacies(org.organizationId, ""),
+    listSends(org.organizationId, id),
   ]);
   const products = editable && audit.buyerId && audit.startDate && audit.endDate ? await productsSold(org.organizationId, audit.buyerId, audit.startDate, audit.endDate) : [];
   const guard = safeguards(type);
@@ -63,6 +65,12 @@ export default async function AuditCasePage({ params }: { params: Promise<{ id: 
           {audit.pharmacyNcpdp && <> · NCPDP <strong data-testid="case-ncpdp">{audit.pharmacyNcpdp}</strong></>}
           {" · "}{usDate(audit.startDate)} – {usDate(audit.endDate)}
         </p>
+        {type === "REGULATORY" && (
+          <p className="text-sm text-slate-700 dark:text-slate-300" data-testid="case-regulator">
+            {regSubtypeLabel(audit.auditSubtype) ?? "Regulator not chosen"}{audit.agency ? ` · ${audit.agency}` : ""}{audit.referenceNumber ? ` · Ref ${audit.referenceNumber}` : ""}
+            {" · "}pharmacy {audit.includePharmacy ? "named in the report" : "not named in the report"}, not copied
+          </p>
+        )}
       </div>
 
       {audit.status === "DEVICE_CONFIRMATION_NEEDED" && (
@@ -144,9 +152,47 @@ export default async function AuditCasePage({ params }: { params: Promise<{ id: 
         </section>
       )}
 
+      {sends.length > 0 && (
+        <section className={`${card} space-y-2`} data-testid="send-history">
+          <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Email and sent history ({sends.length})</h2>
+          <p className="text-xs text-slate-600 dark:text-slate-400">Each line is a permanent record of what went out. It can&apos;t be changed or removed.</p>
+          <ul className="space-y-2">
+            {sends.map((s) => {
+              let files: { name: string; bytes: number; sha256: string; kind: string }[] = [];
+              try { files = JSON.parse(s.attachmentsJson ?? "[]"); } catch { files = []; }
+              return (
+                <li key={s.id} className="rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800" data-testid="send-row" data-method={s.method}>
+                  <p>
+                    <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-800 dark:bg-violet-950 dark:text-violet-200">{s.method === "EMAIL" ? "Emailed" : "Sent by hand"}</span>{" "}
+                    <span className="text-slate-600 dark:text-slate-400">{when(s.sentAt)} · {s.sentByName ?? "someone"}{s.fromAddress ? ` · from ${s.fromAddress}` : ""}</span>
+                  </p>
+                  <p>To <strong>{s.toAddresses}</strong>{s.ccAddresses ? <>, CC {s.ccAddresses}</> : null}</p>
+                  <p className="text-slate-700 dark:text-slate-300">“{s.subject}”</p>
+                  <details>
+                    <summary className="cursor-pointer text-xs font-medium text-slate-700 dark:text-slate-300">Files and message</summary>
+                    <ul className="mt-1 space-y-0.5 text-xs">
+                      {files.map((f, i) => <li key={i}>{f.name} · {(f.bytes / 1024).toFixed(0)} KB · <span className="font-mono">{f.sha256.slice(0, 12)}</span></li>)}
+                    </ul>
+                    {s.bodyText && <pre className="mt-2 whitespace-pre-wrap rounded-md bg-slate-50 p-2 text-xs dark:bg-slate-800/40">{s.bodyText}</pre>}
+                  </details>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
+
+      {editable && verList.length > 0 && (
+        <section className={`${card} space-y-2`} data-testid="email-section">
+          <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Email it</h2>
+          <p className="text-sm text-slate-700 dark:text-slate-300">Review the recipients, message and attachments, then send from your company&apos;s own mailbox. Nothing is sent until you press Send.</p>
+          <Link href={`/dashboard/accounts/audit-center/${id}/send`} className={`${primaryBtn} inline-block`} data-testid="open-send">{audit.sentAt ? "Send again — review email & attachments" : "Review email & attachments"}</Link>
+        </section>
+      )}
+
       {showSend && (
         <section className={card}>
-          <h2 className="mb-2 text-sm font-semibold text-slate-900 dark:text-slate-50">Record that it was sent</h2>
+          <h2 className="mb-2 text-sm font-semibold text-slate-900 dark:text-slate-50">Or record that it was sent by hand</h2>
           <MarkSentForm
             auditId={id}
             c={{
@@ -181,7 +227,7 @@ export default async function AuditCasePage({ params }: { params: Promise<{ id: 
                 type, buyerId: audit.buyerId ?? "", startDate: audit.startDate ?? "", endDate: audit.endDate ?? "", deviceAnswer: audit.deviceAnswer ?? "UNCLEAR",
                 productScope: audit.productScope === "SELECTED" ? "SELECTED" : "ALL", productKeys: selectedKeys, includePharmacy: audit.includePharmacy,
                 auditorName: audit.auditorName ?? "", auditorCompany: audit.auditorCompany ?? "", auditorEmail: audit.auditorEmail ?? "", auditorPhone: audit.auditorPhone ?? "",
-                pbmName: audit.pbmName ?? "", agency: audit.agency ?? "", referenceNumber: audit.referenceNumber ?? "", requestReceivedOn: audit.requestReceivedOn ?? "", dueOn: audit.dueOn ?? "",
+                pbmName: audit.pbmName ?? "", agency: audit.agency ?? "", auditSubtype: audit.auditSubtype ?? "", referenceNumber: audit.referenceNumber ?? "", requestReceivedOn: audit.requestReceivedOn ?? "", dueOn: audit.dueOn ?? "",
               }}
             />
           </div>

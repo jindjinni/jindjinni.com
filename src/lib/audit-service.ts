@@ -5,11 +5,11 @@
 import { createHash } from "node:crypto";
 import { and, asc, desc, eq, gte, inArray, like, lte, or, sql } from "drizzle-orm";
 import { db } from "@/db/client";
-import { auditAttachments, auditEvents, auditVersions, audits, purchasingProducts, salesBuyers, salesDocumentLines, salesDocuments, users } from "@/db/schema";
+import { auditAttachments, auditEvents, auditSends, auditVersions, audits, purchasingProducts, salesBuyers, salesDocumentLines, salesDocuments, users } from "@/db/schema";
 import { newId } from "@/lib/ids";
 import { billingDateOf } from "@/lib/billing-schedule";
 import {
-  COUNTED_INVOICE_STATUSES, MONEY_KEYS, TEMPLATE_VERSION, blockers, buildRows, caseNumber, dropBlankColumns, fileNameFor, isClosed, isDay, lineWarnings, pbmSubject,
+  COUNTED_INVOICE_STATUSES, MONEY_KEYS, isRegSubtype, regSubtypeLabel, TEMPLATE_VERSION, blockers, buildRows, caseNumber, dropBlankColumns, fileNameFor, isClosed, isDay, lineWarnings, pbmSubject,
   summarize, workingStatus, type AuditEventKind, type AuditStatus, type AuditType, type ColumnDef, type DeviceAnswer, type LineWarning, type ReportRow, type SourceLine,
 } from "@/lib/audit-rules";
 import { buildAuditWorkbook } from "@/lib/audit-workbook";
@@ -28,7 +28,7 @@ export async function userNameOf(userId: string | null | undefined): Promise<str
   return u?.name || u?.email || null;
 }
 
-async function addEvent(a: Actor, auditId: string, kind: AuditEventKind, detail: string | null, oldValue?: string | null, newValue?: string | null) {
+export async function addEvent(a: Actor, auditId: string, kind: AuditEventKind, detail: string | null, oldValue?: string | null, newValue?: string | null) {
   await db.insert(auditEvents).values({
     id: newId("aev"),
     organizationId: a.organizationId,
@@ -153,6 +153,7 @@ export type AuditInputForm = {
   auditorPhone: string;
   pbmName: string;
   agency: string;
+  auditSubtype: string;
   referenceNumber: string;
   requestReceivedOn: string;
   dueOn: string;
@@ -174,6 +175,7 @@ function formValues(i: AuditInputForm) {
     auditorPhone: nz(clean(i.auditorPhone, 40)),
     pbmName: nz(clean(i.pbmName, 120)),
     agency: nz(clean(i.agency, 120)),
+    auditSubtype: i.type === "REGULATORY" && isRegSubtype(i.auditSubtype) ? i.auditSubtype : null,
     referenceNumber: nz(clean(i.referenceNumber, 80)),
     requestReceivedOn: isDay(i.requestReceivedOn) ? i.requestReceivedOn : null,
     dueOn: isDay(i.dueOn) ? i.dueOn : null,
@@ -218,6 +220,7 @@ export async function createAudit(a: Actor, input: AuditInputForm): Promise<{ ok
         pharmacyNcpdp: buyer.ncpdp,
         pharmacyNpi: buyer.npi,
         pharmacyEmail: buyer.email,
+        pharmacyAddress: buyer.billingAddress,
         createdByUserId: a.userId,
         createdByName: await userNameOf(a.userId),
         ...v,
@@ -241,7 +244,7 @@ export async function getAudit(organizationId: string, id: string): Promise<Audi
 const FIELD_LABEL: Record<string, string> = {
   startDate: "Start date", endDate: "End date", deviceAnswer: "Device records requested", productScope: "Products", includePharmacy: "Pharmacy in the file",
   auditorName: "Auditor name", auditorCompany: "Auditor company", auditorEmail: "Auditor email", auditorPhone: "Auditor phone", pbmName: "PBM", agency: "Agency",
-  referenceNumber: "Reference number", requestReceivedOn: "Request received", dueOn: "Due date", buyerId: "Pharmacy",
+  auditSubtype: "Kind of regulator", referenceNumber: "Reference number", requestReceivedOn: "Request received", dueOn: "Due date", buyerId: "Pharmacy",
 };
 
 /** Changes a case's scope or request details while it is still open, recording each old and new value. */
@@ -260,6 +263,7 @@ export async function updateAudit(a: Actor, id: string, input: AuditInputForm): 
     pharmacyNcpdp: buyer.ncpdp,
     pharmacyNpi: buyer.npi,
     pharmacyEmail: buyer.email,
+    pharmacyAddress: buyer.billingAddress,
   };
   for (const k of Object.keys(FIELD_LABEL)) {
     const before = (cur as Record<string, unknown>)[k] ?? null;
@@ -277,7 +281,7 @@ export async function updateAudit(a: Actor, id: string, input: AuditInputForm): 
 async function withLatestPharmacy(organizationId: string, cur: AuditRow): Promise<AuditRow> {
   if (isClosed(cur.status) || cur.sentAt) return cur;
   const b = await buyerOf(organizationId, cur.buyerId);
-  return b ? { ...cur, pharmacyName: b.companyName, pharmacyNcpdp: b.ncpdp, pharmacyNpi: b.npi, pharmacyEmail: b.email } : cur;
+  return b ? { ...cur, pharmacyName: b.companyName, pharmacyNcpdp: b.ncpdp, pharmacyNpi: b.npi, pharmacyEmail: b.email, pharmacyAddress: b.billingAddress } : cur;
 }
 
 /** Picks up a pharmacy's latest details (for example an NCPDP added after the case was made) while the case is open, and saves them. */
@@ -285,9 +289,9 @@ async function syncPharmacy(a: Actor, cur: AuditRow): Promise<AuditRow> {
   if (isClosed(cur.status) || cur.sentAt) return cur;
   const b = await buyerOf(a.organizationId, cur.buyerId);
   if (!b) return cur;
-  if (b.companyName === cur.pharmacyName && (b.ncpdp ?? null) === (cur.pharmacyNcpdp ?? null) && (b.npi ?? null) === (cur.pharmacyNpi ?? null) && (b.email ?? null) === (cur.pharmacyEmail ?? null)) return cur;
+  if (b.companyName === cur.pharmacyName && (b.ncpdp ?? null) === (cur.pharmacyNcpdp ?? null) && (b.npi ?? null) === (cur.pharmacyNpi ?? null) && (b.email ?? null) === (cur.pharmacyEmail ?? null) && (b.billingAddress ?? null) === (cur.pharmacyAddress ?? null)) return cur;
   if ((b.ncpdp ?? null) !== (cur.pharmacyNcpdp ?? null)) await addEvent(a, cur.id, "CHANGED", "Pharmacy NCPDP (updated from the pharmacy's record)", cur.pharmacyNcpdp, b.ncpdp);
-  await db.update(audits).set({ pharmacyName: b.companyName, pharmacyNcpdp: b.ncpdp, pharmacyNpi: b.npi, pharmacyEmail: b.email, updatedAt: new Date().toISOString() }).where(eq(audits.id, cur.id));
+  await db.update(audits).set({ pharmacyName: b.companyName, pharmacyNcpdp: b.ncpdp, pharmacyNpi: b.npi, pharmacyEmail: b.email, pharmacyAddress: b.billingAddress, updatedAt: new Date().toISOString() }).where(eq(audits.id, cur.id));
   return (await getAudit(a.organizationId, cur.id)) ?? cur;
 }
 
@@ -314,6 +318,8 @@ const inputOf = (c: AuditRow) => ({
   auditorName: c.auditorName,
   auditorEmail: c.auditorEmail,
   pbmName: c.pbmName,
+  agency: c.agency,
+  subtype: c.auditSubtype,
 });
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -334,7 +340,7 @@ export async function previewAudit(organizationId: string, cur: AuditRow): Promi
   const b = blockers(inputOf(c));
   let lines: SourceLine[] = [];
   if (c.buyerId && isDay(c.startDate) && isDay(c.endDate)) lines = await loadSourceLines(organizationId, c.buyerId, c.startDate as string, c.endDate as string, productKeysOf(c));
-  const { columns, rows } = buildRows(c.auditType as AuditType, lines, { name: c.pharmacyName, ncpdp: c.pharmacyNcpdp }, { includePharmacy: c.includePharmacy });
+  const { columns, rows } = buildRows(c.auditType as AuditType, lines, { name: c.pharmacyName, ncpdp: c.pharmacyNcpdp, address: c.pharmacyAddress }, { includePharmacy: c.includePharmacy });
   const shown = dropBlankColumns(columns, rows);
   if (b.length === 0 && rows.length === 0) b.push("NO QUALIFYING TRANSACTIONS FOUND for this pharmacy, date range and product choice.");
   return { blockers: b, warnings: lineWarnings(lines), columns: shown, rows, summary: summarize(rows) };
@@ -363,13 +369,15 @@ export async function generateVersion(a: Actor, id: string): Promise<{ ok: true;
       end: cur.endDate as string,
       auditor: [cur.auditorName, cur.auditorCompany].filter(Boolean).join(", ") || null,
       requestingOrganization: cur.pbmName || cur.agency || cur.auditorCompany || null,
+      subtype: regSubtypeLabel(cur.auditSubtype),
+      reference: cur.referenceNumber,
       generatedOn: today,
       generatedBy: by,
     },
     p.columns,
     p.rows,
   );
-  const fileName = fileNameFor(type, cur.pharmacyName, cur.pharmacyNcpdp, cur.startDate as string, cur.endDate as string, version);
+  const fileName = fileNameFor(type, cur.pharmacyName, cur.pharmacyNcpdp, cur.startDate as string, cur.endDate as string, version, { includePharmacy: cur.includePharmacy, caseNumber: cur.caseNumber });
   const hash = createHash("sha256").update(buf).digest("hex");
   const versionId = newId("aver");
   await db.insert(auditVersions).values({
@@ -493,6 +501,11 @@ export async function markSent(a: Actor, auditId: string, versionId: string, to:
   await db.update(auditVersions).set({ sentAt: now }).where(eq(auditVersions.id, versionId));
   await db.update(audits).set({ status: "SENT", sentTo: toC, sentCc: nz(clean(cc, 300)), sentSubject: nz(clean(subject, 200)), sentAt: now, sentByUserId: a.userId, updatedAt: now }).where(eq(audits.id, auditId));
   await addEvent(a, auditId, "SENT", `Version ${v.version} (${v.fileName}) sent to ${toC}${cc ? `, copy to ${clean(cc, 300)}` : ""}`);
+  await db.insert(auditSends).values({
+    id: newId("asnd"), organizationId: a.organizationId, auditId, versionId, method: "HAND", fromAddress: null, toAddresses: toC, ccAddresses: nz(clean(cc, 300)),
+    subject: clean(subject, 200) || suggestedSubject(cur), bodyText: null,
+    attachmentsJson: JSON.stringify([{ name: v.fileName, bytes: v.fileBytes, sha256: v.fileHash, kind: "EXCEL", refId: v.id }]), checksJson: null, sentByUserId: a.userId, sentByName: await userNameOf(a.userId),
+  });
   return { ok: true };
 }
 

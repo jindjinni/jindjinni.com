@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import {
   MONEY_KEYS, PBM_COLUMNS, assertPbmSafe, blockers, buildRows, caseNumber, columnsFor, dedupeLines, dropBlankColumns, fileNameFor, lineWarnings,
-  pbmSubject, presetRange, safeguards, safePart, sortLines, summarize, usDate, workingStatus, type SourceLine,
+  pbmSubject, regulatorySubject, presetRange, safeguards, safePart, sortLines, summarize, usDate, workingStatus, type SourceLine,
 } from "../src/lib/audit-rules";
 
 const L = (o: Partial<SourceLine> & { lineId: string; invoiceId: string }): SourceLine => ({
@@ -92,4 +92,33 @@ assert.deepEqual(presetRange("current-year", "2026-10-10"), { start: "2026-01-01
 assert.deepEqual(presetRange("previous-year", "2026-10-10"), { start: "2025-01-01", end: "2025-12-31" });
 assert.equal(usDate("2026-01-31"), "01/31/2026");
 
+
+// ---- regulatory (phase 2) ----------------------------------------------------------------------------------------
+{
+  const info = { name: "Example Pharmacy LLC", ncpdp: "5746826", address: "1 Main St\nDallas, TX 75001" };
+  const plain = buildRows("REGULATORY", lines, info, { includePharmacy: false });
+  assert.deepEqual(plain.columns.map((c) => c.key), ["type", "date", "invoiceNumber", "ndc", "productName", "productDescription", "quantity", "unitPrice", "lineTotal", "shipping", "discount"]);
+  assert.ok(plain.rows.every((r) => !("pharmacyName" in r) && !("ncpdp" in r) && !("pharmacyAddress" in r)), "the pharmacy is not named unless chosen");
+  assert.equal(plain.rows[0].unitPrice, 199.5);
+  assert.equal(plain.rows[0].shipping, 25);
+  assert.equal(plain.columns.find((c) => c.key === "discount")?.header, "Financial Adjustments / Discount");
+  const named = buildRows("REGULATORY", lines, info, { includePharmacy: true });
+  assert.deepEqual(named.columns.map((c) => c.key).slice(0, 6), ["type", "date", "invoiceNumber", "pharmacyName", "ncpdp", "pharmacyAddress"]);
+  assert.equal(named.rows[0].pharmacyAddress, "1 Main St\nDallas, TX 75001");
+  // a PBM file is still the same eight columns and never gets an address
+  assert.ok(!columnsFor("PBM", { includePharmacy: true }).some((c) => c.key === "pharmacyAddress"));
+  assert.ok(!pbm.rows.some((r) => "pharmacyAddress" in r));
+  // file name: the case number stands in for the pharmacy unless the pharmacy is named
+  assert.equal(fileNameFor("REGULATORY", "Example Pharmacy LLC", "5746826", "2026-01-01", "2026-06-30", 1, { includePharmacy: false, caseNumber: "AUD-2026-00004" }), "AUD-2026-00004_RegulatoryAudit_2026-01-01_to_2026-06-30.xlsx");
+  assert.equal(fileNameFor("REGULATORY", "Example Pharmacy LLC", "5746826", "2026-01-01", "2026-06-30", 2, { includePharmacy: true, caseNumber: "AUD-2026-00004" }), "Example_Pharmacy_LLC_RegulatoryAudit_2026-01-01_to_2026-06-30_v2.xlsx");
+  // blockers: kind of regulator, who they are, and the device answer
+  const base = { type: "REGULATORY" as const, pharmacyName: "Example Pharmacy LLC", ncpdp: null, startDate: "2026-01-01", endDate: "2026-06-30", deviceAnswer: "YES" as const };
+  assert.equal(blockers({ ...base, subtype: "STATE_BOARD", agency: "TX Board of Pharmacy" }).length, 0);
+  assert.ok(blockers({ ...base, subtype: null, agency: "TX Board" }).some((b) => /kind of regulator/.test(b)));
+  assert.ok(blockers({ ...base, subtype: "FEDERAL", agency: null }).some((b) => /who the regulator is/.test(b)));
+  assert.ok(blockers({ ...base, deviceAnswer: "UNCLEAR", subtype: "FEDERAL", agency: "FDA" }).some((b) => /Confirm with the auditor/.test(b)));
+  // the email subject leaves the pharmacy out unless it is named in the file
+  assert.equal(regulatorySubject({ caseNumber: "AUD-2026-00004", agency: "TX Board of Pharmacy", reference: "R-77", pharmacyName: "Example Pharmacy LLC", includePharmacy: false, start: null, end: null }), "TX Board of Pharmacy records request – Ref R-77 – AUD-2026-00004");
+  assert.ok(regulatorySubject({ caseNumber: "AUD-2026-00004", agency: null, reference: null, pharmacyName: "Example Pharmacy LLC", includePharmacy: true, start: null, end: null }).includes("Example Pharmacy LLC"));
+}
 console.log("audit-rules: all passed");

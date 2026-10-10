@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { requireOrg } from "@/lib/tenant";
 import { auditAccess } from "@/lib/audit-access";
 import { isAuditType, isDeviceAnswer, BUILT_TYPES, type AuditType } from "@/lib/audit-rules";
+import { checkSend, sendAudit, type CheckResult, type InvoiceMode, type SendForm } from "@/lib/audit-send";
 import {
   MAX_ATTACHMENT, addAttachment, addNote, createAudit, generateVersion, markSent, reopenAudit, setStatus, updateAudit, type AuditInputForm,
 } from "@/lib/audit-service";
@@ -39,6 +40,7 @@ function formFrom(fd: FormData, type: AuditType): AuditInputForm {
     auditorPhone: str(fd, "auditorPhone"),
     pbmName: str(fd, "pbmName"),
     agency: str(fd, "agency"),
+    auditSubtype: str(fd, "auditSubtype"),
     referenceNumber: str(fd, "referenceNumber"),
     requestReceivedOn: str(fd, "requestReceivedOn"),
     dueOn: str(fd, "dueOn"),
@@ -146,4 +148,39 @@ export async function reopenAuditAction(auditId: string, _prev: AuditFormState, 
   if (!res.ok) return { error: res.error };
   revalidatePath(`/dashboard/accounts/audit-center/${auditId}`);
   return { message: "Reopened." };
+}
+
+// ---- email: review, check, send ------------------------------------------------------------------------------------
+
+function sendFormFrom(fd: FormData): SendForm {
+  const mode = str(fd, "invoiceMode");
+  return {
+    versionId: str(fd, "versionId"),
+    to: str(fd, "to"),
+    cc: str(fd, "cc"),
+    subject: str(fd, "subject"),
+    body: String(fd.get("body") ?? ""),
+    attachmentIds: fd.getAll("attachmentId").map(String).filter(Boolean),
+    invoiceMode: (mode === "ALL" || mode === "SELECTED" ? mode : "NONE") as InvoiceMode,
+    invoiceNumbers: fd.getAll("invoiceNumber").map(String).filter(Boolean),
+  };
+}
+
+/** Runs the same checks the server runs when SEND is pressed, so the screen can show which are green. Sends nothing. */
+export async function checkSendAction(auditId: string, fd: FormData): Promise<CheckResult> {
+  const w = await worker();
+  if ("error" in w) return { ok: false, error: w.error ?? "Not available." };
+  return checkSend({ organizationId: w.org.organizationId, userId: w.org.userId }, w.acc.isManager, auditId, sendFormFrom(fd));
+}
+
+/** Emails the audit from the company's own mailbox. Needs the confirm box, and every check is run again before anything leaves. */
+export async function sendAuditAction(auditId: string, _prev: AuditFormState, fd: FormData): Promise<AuditFormState> {
+  const w = await worker();
+  if ("error" in w) return { error: w.error };
+  if (fd.get("confirm") !== "yes") return { error: "Tick the box to confirm you reviewed the email and its attachments." };
+  const res = await sendAudit({ organizationId: w.org.organizationId, userId: w.org.userId }, w.acc.isManager, auditId, sendFormFrom(fd));
+  if (!res.ok) return { error: res.error };
+  revalidatePath(`/dashboard/accounts/audit-center/${auditId}`);
+  revalidatePath("/dashboard/accounts/audit-center");
+  return { message: res.warning ? `Sent. ${res.warning}` : "Sent. A record of this email is saved on the case." };
 }

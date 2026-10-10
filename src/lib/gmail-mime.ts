@@ -7,6 +7,7 @@ export type MimeAttachment = { filename: string; content: Buffer };
 export type MimeInput = {
   from: { name?: string | null; address: string };
   to: string;
+  cc?: string[];
   bcc?: string[];
   replyTo?: string | null;
   subject: string;
@@ -60,6 +61,8 @@ export function buildMime(i: MimeInput): string {
     `From: ${address(i.from.name, i.from.address)}`,
     `To: ${address(null, i.to)}`,
   ];
+  const cc = (i.cc ?? []).filter(Boolean).map((b) => address(null, b));
+  if (cc.length) h.push(`Cc: ${cc.join(", ")}`);
   const bcc = (i.bcc ?? []).filter(Boolean).map((b) => address(null, b));
   if (bcc.length) h.push(`Bcc: ${bcc.join(", ")}`);
   if (i.replyTo) h.push(`Reply-To: ${address(null, i.replyTo)}`);

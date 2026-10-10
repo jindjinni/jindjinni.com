@@ -109,12 +109,13 @@ export class SmtpAuthError extends Error {}
 
 export async function smtpSend(
   c: SmtpCredential,
-  a: { from: { name?: string | null; address: string }; to: string; bcc?: string[]; replyTo?: string | null; subject: string; text: string; html: string; attachments?: EmailAttachment[] },
+  a: { from: { name?: string | null; address: string }; to: string; cc?: string[]; bcc?: string[]; replyTo?: string | null; subject: string; text: string; html: string; attachments?: EmailAttachment[] },
 ): Promise<void> {
   try {
     await transportFor(c).sendMail({
       from: a.from.name ? { name: a.from.name, address: a.from.address } : a.from.address,
       to: a.to,
+      cc: a.cc?.length ? a.cc : undefined,
       bcc: a.bcc?.length ? a.bcc : undefined,
       replyTo: a.replyTo || undefined,
       subject: a.subject,

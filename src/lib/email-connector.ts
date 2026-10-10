@@ -160,6 +160,8 @@ export type SendArgs = {
   html: string;
   fromName?: string | null;
   replyTo?: string | null;
+  /** Visible copies (Cc). Hidden copies are `bcc`. */
+  cc?: string[];
   bcc?: string[];
   attachments?: EmailAttachment[];
 };
@@ -169,7 +171,7 @@ const RECONNECT_MESSAGE = "The connected email needs to be reconnected. An admin
 
 async function sendViaGoogle(conn: Conn, a: SendArgs) {
   const token = await accessToken(conn);
-  const raw = toRaw(buildMime({ from: { name: a.fromName, address: conn.accountEmail }, to: a.to, bcc: a.bcc, replyTo: a.replyTo, subject: a.subject, text: a.text, html: a.html, attachments: a.attachments }));
+  const raw = toRaw(buildMime({ from: { name: a.fromName, address: conn.accountEmail }, to: a.to, cc: a.cc, bcc: a.bcc, replyTo: a.replyTo, subject: a.subject, text: a.text, html: a.html, attachments: a.attachments }));
   const res = await fetch(googleSendUrl(), { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify({ raw }) });
   if (res.status === 401 || res.status === 403) {
     const detail = await res.text().catch(() => "");
@@ -199,6 +201,7 @@ async function sendViaMicrosoft(conn: Conn, a: SendArgs) {
       subject: a.subject,
       body: { contentType: "HTML", content: a.html },
       toRecipients: [addr(a.to)],
+      ccRecipients: (a.cc ?? []).map(addr),
       bccRecipients: (a.bcc ?? []).map(addr),
       ...(a.replyTo ? { replyTo: [addr(a.replyTo)] } : {}),
     }),
@@ -235,7 +238,7 @@ async function sendViaSmtp(conn: Conn, a: SendArgs) {
   if (!raw) throw new NeedsReconnect("The saved password can't be read any more.");
   const cred = JSON.parse(raw) as SmtpCredential;
   try {
-    await smtpSend(cred, { from: { name: a.fromName, address: conn.accountEmail }, to: a.to, bcc: a.bcc, replyTo: a.replyTo, subject: a.subject, text: a.text, html: a.html, attachments: a.attachments });
+    await smtpSend(cred, { from: { name: a.fromName, address: conn.accountEmail }, to: a.to, cc: a.cc, bcc: a.bcc, replyTo: a.replyTo, subject: a.subject, text: a.text, html: a.html, attachments: a.attachments });
   } catch (e) {
     if (e instanceof SmtpAuthError) throw new NeedsReconnect(e.message);
     throw new Error("The mail server couldn't send that message. Check the customer's address and try again.");

@@ -3192,6 +3192,8 @@ export const audits = sqliteTable(
     pharmacyNcpdp: text("pharmacy_ncpdp"),
     pharmacyNpi: text("pharmacy_npi"),
     pharmacyEmail: text("pharmacy_email"),
+    /** The pharmacy's billing address (named in a regulatory file only when staff chose to name the pharmacy). */
+    pharmacyAddress: text("pharmacy_address"),
     startDate: text("start_date"),
     endDate: text("end_date"),
     /** YES | NO | UNCLEAR (PBM and regulatory audits must answer this). */
@@ -3266,7 +3268,7 @@ export const auditAttachments = sqliteTable(
     id: text("id").primaryKey(),
     organizationId: text("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
     auditId: text("audit_id").notNull().references(() => audits.id, { onDelete: "cascade" }),
-    /** REQUEST | OTHER */
+    /** REQUEST | OTHER | INVOICE_COPIES (the invoice PDFs that went out with an email, kept as sent) */
     kind: text("kind").notNull().default("REQUEST"),
     fileName: text("file_name").notNull(),
     contentType: text("content_type").notNull(),
@@ -3277,6 +3279,36 @@ export const auditAttachments = sqliteTable(
     createdAt: text("created_at").notNull().default(sql`(current_timestamp)`),
   },
   (t) => [index("audit_attachments_audit_idx").on(t.auditId)],
+);
+
+/**
+ * One row for every time an audit file went out (by email from the company's mailbox, or sent by hand and recorded). Written once and
+ * never changed or deleted: it keeps the recipients, the subject, the exact message and the exact list of files (name, size and
+ * fingerprint) so the company can always show what was sent, to whom and when.
+ */
+export const auditSends = sqliteTable(
+  "audit_sends",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    auditId: text("audit_id").notNull().references(() => audits.id, { onDelete: "cascade" }),
+    versionId: text("version_id"),
+    /** EMAIL | HAND */
+    method: text("method").notNull().default("EMAIL"),
+    fromAddress: text("from_address"),
+    toAddresses: text("to_addresses").notNull(),
+    ccAddresses: text("cc_addresses"),
+    subject: text("subject").notNull(),
+    bodyText: text("body_text"),
+    /** JSON list of { name, bytes, sha256, kind, refId } for every file that went out. */
+    attachmentsJson: text("attachments_json"),
+    /** JSON list of the checks that were green when it was sent. */
+    checksJson: text("checks_json"),
+    sentByUserId: text("sent_by_user_id"),
+    sentByName: text("sent_by_name"),
+    sentAt: text("sent_at").notNull().default(sql`(current_timestamp)`),
+  },
+  (t) => [index("audit_sends_audit_idx").on(t.auditId, t.sentAt)],
 );
 
 /** The case's trail: what was done, by whom, when, and the old and new value. Notes live here too and cannot be deleted. */

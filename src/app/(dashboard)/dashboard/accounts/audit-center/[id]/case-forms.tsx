@@ -6,6 +6,7 @@ import {
   addNoteAction, attachFileAction, generateAuditAction, markSentAction, reopenAuditAction, setAuditStatusAction, updateAuditAction,
   type AuditFormState,
 } from "@/app/actions/audit";
+import { REG_SUBTYPES } from "@/lib/audit-rules";
 import { card, field, ghostBtn, primaryBtn } from "@/components/sales-ui";
 
 const label = "text-xs font-medium text-slate-700 dark:text-slate-300";
@@ -47,6 +48,7 @@ export type EditValues = {
   auditorPhone: string;
   pbmName: string;
   agency: string;
+  auditSubtype: string;
   referenceNumber: string;
   requestReceivedOn: string;
   dueOn: string;
@@ -98,9 +100,24 @@ export function EditAuditForm({ auditId, v, pharmacies, products }: { auditId: s
         <div><label htmlFor="e-aemail" className={label}>Email</label><input id="e-aemail" name="auditorEmail" type="email" defaultValue={v.auditorEmail} className={`${field} mt-1`} data-testid="e-aemail" /></div>
         <div><label htmlFor="e-aphone" className={label}>Phone</label><input id="e-aphone" name="auditorPhone" defaultValue={v.auditorPhone} className={`${field} mt-1`} /></div>
         {pbm && <div><label htmlFor="e-pbm" className={label}>PBM</label><input id="e-pbm" name="pbmName" defaultValue={v.pbmName} className={`${field} mt-1`} /></div>}
+        {v.type === "REGULATORY" && (
+          <>
+            <div>
+              <label htmlFor="e-sub" className={label}>Kind of regulator</label>
+              <select id="e-sub" name="auditSubtype" defaultValue={v.auditSubtype} className={`${field} mt-1`} data-testid="e-subtype">
+                <option value="">Choose…</option>
+                {REG_SUBTYPES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+              </select>
+            </div>
+            <div><label htmlFor="e-agency" className={label}>Agency / office name</label><input id="e-agency" name="agency" defaultValue={v.agency} className={`${field} mt-1`} data-testid="e-agency" /></div>
+          </>
+        )}
         <div><label htmlFor="e-ref" className={label}>Their reference number</label><input id="e-ref" name="referenceNumber" defaultValue={v.referenceNumber} className={`${field} mt-1`} /></div>
         <div><label htmlFor="e-recv" className={label}>Request received</label><input id="e-recv" name="requestReceivedOn" type="date" defaultValue={v.requestReceivedOn} className={`${field} mt-1`} /></div>
         <div><label htmlFor="e-due" className={label}>Due date</label><input id="e-due" name="dueOn" type="date" defaultValue={v.dueOn} className={`${field} mt-1`} /></div>
+        {v.type === "REGULATORY" && (
+          <label htmlFor="e-incl" className="flex items-center gap-2 text-sm text-slate-800 dark:text-slate-100 sm:col-span-2"><input id="e-incl" type="checkbox" name="includePharmacy" value="yes" defaultChecked={v.includePharmacy} data-testid="e-include" /> Name the pharmacy in the report (name, NCPDP and address)</label>
+        )}
         {v.type === "INTERNAL" && (
           <label htmlFor="e-incl" className="flex items-center gap-2 text-sm text-slate-800 dark:text-slate-100 sm:col-span-2"><input id="e-incl" type="checkbox" name="includePharmacy" value="yes" defaultChecked={v.includePharmacy} /> Put the pharmacy&apos;s name and NCPDP in the spreadsheet</label>
         )}

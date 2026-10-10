@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useActionState, useMemo, useState } from "react";
 import { createAuditAction } from "@/app/actions/audit";
-import { DATE_PRESETS, PRESET_LABEL, presetRange, type AuditType } from "@/lib/audit-rules";
+import { DATE_PRESETS, PRESET_LABEL, REG_SUBTYPES, presetRange, type AuditType } from "@/lib/audit-rules";
 import { card, field, ghostBtn, primaryBtn } from "@/components/sales-ui";
 
 type Pharmacy = { id: string; name: string; ncpdp: string | null; npi: string | null; email: string | null };
@@ -24,6 +24,7 @@ export function NewAuditForm({ type, pharmacies, today }: { type: AuditType; pha
   const chosen = pharmacies.find((p) => p.id === buyerId) ?? null;
   const pbm = type === "PBM";
   const internal = type === "INTERNAL";
+  const regulatory = type === "REGULATORY";
 
   if (pharmacies.length === 0) {
     return (
@@ -108,6 +109,18 @@ export function NewAuditForm({ type, pharmacies, today }: { type: AuditType; pha
           <div><label htmlFor="auditorEmail" className={label}>Email</label><input id="auditorEmail" name="auditorEmail" type="email" className={`${field} mt-1`} data-testid="auditor-email" /></div>
           <div><label htmlFor="auditorPhone" className={label}>Phone</label><input id="auditorPhone" name="auditorPhone" className={`${field} mt-1`} /></div>
           {pbm && <div><label htmlFor="pbmName" className={label}>PBM</label><input id="pbmName" name="pbmName" className={`${field} mt-1`} data-testid="pbm-name" /></div>}
+          {regulatory && (
+            <>
+              <div>
+                <label htmlFor="auditSubtype" className={label}>Kind of regulator</label>
+                <select id="auditSubtype" name="auditSubtype" className={`${field} mt-1`} data-testid="reg-subtype" required defaultValue="">
+                  <option value="">Choose…</option>
+                  {REG_SUBTYPES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+                </select>
+              </div>
+              <div><label htmlFor="agency" className={label}>Agency / office name</label><input id="agency" name="agency" className={`${field} mt-1`} data-testid="reg-agency" /></div>
+            </>
+          )}
           <div><label htmlFor="referenceNumber" className={label}>Their reference / case number</label><input id="referenceNumber" name="referenceNumber" className={`${field} mt-1`} /></div>
           <div><label htmlFor="requestReceivedOn" className={label}>Request received</label><input id="requestReceivedOn" name="requestReceivedOn" type="date" defaultValue={today} className={`${field} mt-1`} /></div>
           <div><label htmlFor="dueOn" className={label}>Due date</label><input id="dueOn" name="dueOn" type="date" className={`${field} mt-1`} /></div>
@@ -120,6 +133,14 @@ export function NewAuditForm({ type, pharmacies, today }: { type: AuditType; pha
           <label htmlFor="includePharmacy" className="flex items-center gap-2 text-sm text-slate-800 dark:text-slate-100">
             <input id="includePharmacy" type="checkbox" name="includePharmacy" value="yes" data-testid="include-pharmacy" /> Put the pharmacy&apos;s name and NCPDP in the spreadsheet too
           </label>
+        )}
+        {regulatory && (
+          <div className="space-y-1">
+            <label htmlFor="includePharmacy" className="flex items-center gap-2 text-sm text-slate-800 dark:text-slate-100">
+              <input id="includePharmacy" type="checkbox" name="includePharmacy" value="yes" data-testid="include-pharmacy" /> Name the pharmacy in the report (name, NCPDP and address)
+            </label>
+            <p className="text-xs text-slate-600 dark:text-slate-400">Leave this off unless the regulator asked for it. The pharmacy is also never copied on the email unless an Admin or the Owner adds it.</p>
+          </div>
         )}
       </section>
 
