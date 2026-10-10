@@ -10,7 +10,9 @@ import { billingDateOf } from "@/lib/billing-schedule";
 import { cancellationOutcome } from "@/lib/cancellation";
 import { CANCEL_COMEBACK_TEXT, CANCEL_MONTHLY_TEXT, CANCEL_TRIAL_TEXT, CANCEL_YEARLY_TEXT } from "@/lib/cancellation-copy";
 import { CancelPlanForm, UndoCancelForm } from "./cancel-plan-form";
-import { BILLING_LIVE, usd, MONTHLY_CENTS, YEARLY_CENTS } from "@/lib/billing-config";
+import { BILLING_LIVE, usd } from "@/lib/billing-config";
+import { rootIdOf } from "@/lib/operation-groups";
+import { companyPricing } from "@/lib/pricing-service";
 import { billingCalendar, chargeLine } from "@/lib/account-status";
 import { addDays, longDay } from "@/lib/billing-schedule";
 
@@ -21,10 +23,13 @@ export default async function BillingPage() {
   if (!isAdmin(org.role)) {
     return <p className="text-sm text-slate-500 dark:text-slate-400">This page is limited to owners and admins.</p>;
   }
+  // One plan and one bill for the whole company: it lives on the company's main row, whichever operation is open.
+  const mainId = await rootIdOf(org.organizationId);
+  const priced = await companyPricing(mainId);
   const [row] = await db
     .select({ plan: organizations.plan, createdAt: organizations.createdAt, subscription: organizations.stripeSubscriptionStatus, billingPlan: organizations.billingPlan, trialStartsOn: organizations.trialStartsOn, firstBillableOn: organizations.firstBillableOn, paymentStatus: organizations.paymentStatus, cancelRequestedOn: organizations.cancelRequestedOn, serviceEndsOn: organizations.serviceEndsOn, cancelRefundCents: organizations.cancelRefundCents })
     .from(organizations)
-    .where(eq(organizations.id, org.organizationId))
+    .where(eq(organizations.id, mainId))
     .limit(1);
   const [profile] = await db
     .select({ email: businessProfiles.businessEmail })
@@ -32,7 +37,7 @@ export default async function BillingPage() {
     .where(eq(businessProfiles.organizationId, org.organizationId))
     .limit(1);
   const seats = await getSeatUsage(org.organizationId);
-  const cal = billingCalendar({ billingPlan: row?.billingPlan, trialStartsOn: row?.trialStartsOn, firstBillableOn: row?.firstBillableOn });
+  const cal = billingCalendar({ billingPlan: row?.billingPlan, trialStartsOn: row?.trialStartsOn, firstBillableOn: row?.firstBillableOn }, undefined, { monthlyCents: priced.monthlyCents, yearlyCents: priced.yearlyCents });
 
   return (
     <div className="flex max-w-2xl flex-col gap-6">
@@ -85,10 +90,11 @@ export default async function BillingPage() {
             </p>
             {cal.plan ? (
               <>
-                <p>On the {cal.plan === "monthly" ? `Monthly plan (${usd(MONTHLY_CENTS)}/month)` : `Yearly plan (${usd(YEARLY_CENTS)}/year)`}, the charges are:</p>
+                <p data-testid="plan-price-line">On the {cal.plan === "monthly" ? `Monthly plan (${usd(priced.monthlyCents)}/month` : `Yearly plan (${usd(priced.yearlyCents)}/year`}{priced.ops === 2 ? ", Wholesale and Distribution" : ", one operation"}), the charges are:</p>
                 <ul className="list-disc pl-5" data-testid="charge-list">
                   {cal.charges.map((c) => (<li key={c.date}>{chargeLine(c)}</li>))}
                 </ul>
+                {priced.promo && <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-400" data-testid="promo-line">Promo code {priced.promo.code}: {priced.promo.text}. It comes off your first payment after the free trial; the amounts above are the full prices.</p>}
                 <p className="text-xs">{cal.plan === "monthly" ? "The first charge covers the days left in that month after your free trial; after that the full month is charged on the 1st." : "The yearly price is charged once when the trial ends, then once a year on that date."}</p>
               </>
             ) : (
@@ -124,7 +130,7 @@ export default async function BillingPage() {
           <>
             <p className="mt-3 rounded-md bg-slate-50 p-3 text-sm text-slate-700 dark:bg-slate-800 dark:text-slate-300" data-testid="cancel-preview">
               {(() => {
-                const out = cancellationOutcome({ plan: parseBillingPlan(row?.billingPlan), today: billingDateOf(), firstBillableOn: row?.firstBillableOn ?? null, paid: row?.paymentStatus === "current" });
+                const out = cancellationOutcome({ plan: parseBillingPlan(row?.billingPlan), today: billingDateOf(), firstBillableOn: row?.firstBillableOn ?? null, paid: row?.paymentStatus === "current", yearlyCents: priced.yearlyCents });
                 return (
                   <>
                     If you cancel today ({longDay(billingDateOf())}), you keep the service through <strong>{longDay(out.serviceEndsOn)}</strong>.{" "}

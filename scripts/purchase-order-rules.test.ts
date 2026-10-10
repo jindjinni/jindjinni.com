@@ -29,7 +29,7 @@ assert.equal(parseOperationType(42), null);
 assert.equal(readRequiredOperationType("WHOLESALER").ok, true);
 assert.equal(readRequiredOperationType(undefined).ok, false);
 assert.equal(operationLabel(null), "Not answered yet");
-assert.equal(operationLabel("BOTH"), "Both");
+assert.equal(operationLabel("BOTH"), "Both (we do both)");
 // who gets which document: an unanswered company keeps what it had (quotations) and gets no purchase orders until it answers
 // Everyone gets both documents; the answer only decides which comes first.
 assert.equal(primaryDocument("WHOLESALER"), "QUOTATION");

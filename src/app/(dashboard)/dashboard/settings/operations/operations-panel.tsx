@@ -20,9 +20,11 @@ type Props = {
   flow: Record<OperationKind, string[]>;
   /** An owner switched on "show every tab" for this operation. */
   showAll: boolean;
+  /** What running one or both operations costs this company (its own locked price, in words). */
+  cost: { hasBoth: boolean; percent: number; oneText: string; bothText: string; moreText: string; planNamed: boolean; billingLive: boolean };
 };
 
-export function OperationsPanel({ kind, otherId, info, canEdit, flow, showAll }: Props) {
+export function OperationsPanel({ kind, otherId, info, canEdit, flow, showAll, cost }: Props) {
   const [named, nameAction, naming] = useActionState(nameWorkspaceAction, undefined);
   const [added, addAction, adding] = useActionState(addOperationAction, undefined);
   const [tabs, tabsAction, switching] = useActionState(showAllTabsAction, undefined);
@@ -76,6 +78,13 @@ export function OperationsPanel({ kind, otherId, info, canEdit, flow, showAll }:
         </section>
       )}
 
+      {kind && cost.hasBoth && (
+        <section className={card} data-testid="ops-price">
+          <h3 className="text-base font-bold text-slate-900 dark:text-slate-50">What this costs</h3>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">Your company runs both operations, so your plan is {cost.bothText}. That is {cost.percent}% more than one operation ({cost.oneText}).</p>
+        </section>
+      )}
+
       {kind && (
         <section className={card} data-testid="ops-tabs" data-all={allShown ? "1" : "0"}>
           <h3 className="text-base font-bold text-slate-900 dark:text-slate-50">Which tabs show in the menus</h3>
@@ -110,11 +119,23 @@ export function OperationsPanel({ kind, otherId, info, canEdit, flow, showAll }:
             canEdit && (
               <>
                 <p className="mt-3 text-sm text-slate-700 dark:text-slate-300">
-                  Adding it is free. It starts <strong>empty and separate</strong>: its own customers, suppliers, products, orders, stock, payments, mailboxes and connections. Your owners and admins can open both. Everyone else is added to the operation they work in from Team &amp; access.
+                  It starts <strong>empty and separate</strong>: its own customers, suppliers, products, orders, stock, payments, mailboxes and connections. Your owners and admins can open both. Everyone else is added to the operation they work in from Team &amp; access.
                 </p>
-                <form action={addAction} className="mt-4">
+                <p className="mt-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-200" data-testid="ops-cost">
+                  {cost.planNamed
+                    ? `Running both costs ${cost.percent}% more. Your plan goes from ${cost.oneText} to ${cost.bothText} (${cost.moreText}), starting with your next charge.`
+                    : `Running both costs ${cost.percent}% more than running one.`}
+                  {!cost.billingLive && " Billing is not switched on yet, so nothing is charged now."}
+                </p>
+                <form action={addAction} className="mt-4 flex flex-col gap-3">
                   <input type="hidden" name="kind" value={other} />
-                  <button disabled={adding} className={primary} data-testid={`ops-add-${other}`}>Add the {kindLabel(other)} operation (free)</button>
+                  <label className="flex items-start gap-2 text-sm text-slate-800 dark:text-slate-200">
+                    <input type="checkbox" name="confirmCost" value="yes" className="mt-1" data-testid="ops-confirm-cost" />
+                    <span>I understand the price goes up when I add this operation.</span>
+                  </label>
+                  <div>
+                    <button disabled={adding} className={primary} data-testid={`ops-add-${other}`}>Add the {kindLabel(other)} operation</button>
+                  </div>
                 </form>
               </>
             )

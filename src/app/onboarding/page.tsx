@@ -48,7 +48,7 @@ export default function OnboardingPage() {
           <RequiredLegend />
           <BusinessProfileSignupFields />
 
-          <Section title="How Your Company Operates" description="Everyone gets both Quotations and Purchase Orders, in Purchasing and in Sales. Your answer decides which one comes first. You can change it later in Settings.">
+          <Section title="How Your Company Operates" description="Your answer sets up the right menus for how you work (quotations for Wholesale, purchase orders for Distribution). You can add the second operation later in Settings.">
             <OperationTypeField />
           </Section>
 

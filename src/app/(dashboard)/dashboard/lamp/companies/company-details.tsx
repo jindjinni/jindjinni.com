@@ -64,6 +64,8 @@ export function CompanyDetails({ c, ownOrgId, full }: { c: CompanyRow; ownOrgId:
         </>
       )}
       <dt className={dt}>Operation</dt><dd data-testid="company-sides">{c.sides}</dd>
+      <dt className={dt}>Price</dt><dd data-testid="company-price">{c.price}</dd>
+      {c.codes && (<><dt className={dt}>Codes used</dt><dd data-testid="company-codes">{c.codes}</dd></>)}
       <dt className={dt}>Plan chosen</dt><dd data-testid="plan-chosen">{c.billingPlan === "monthly" ? "Monthly" : c.billingPlan === "yearly" ? "Yearly" : "None yet"} <span className="text-xs text-slate-500">(billing isn&apos;t live)</span></dd>
       <dt className={dt}>People</dt><dd>{c.teamSize} active</dd>
       <dt className={dt}>Last sign-in</dt><dd>{c.lastSignIn ? day(c.lastSignIn) : "Never"}</dd>

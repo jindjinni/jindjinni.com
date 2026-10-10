@@ -4,7 +4,9 @@
 
 import { and, desc, eq, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db/client";
-import { businessProfiles, businessVerifications, companyDecisions, memberships, organizations, users } from "@/db/schema";
+import { businessProfiles, businessVerifications, codeUses, companyDecisions, memberships, organizations, users } from "@/db/schema";
+import { usd } from "@/lib/billing-config";
+import { lockedBook, monthlyPrice, operationsFor, yearlyPrice } from "@/lib/pricing-rules";
 import { ensureCompanyCode } from "@/lib/company-code";
 import { newId } from "@/lib/ids";
 
@@ -121,6 +123,10 @@ export type CompanyRow = {
   lastPaymentAt: string | null;
   /** Which sides the company runs, in words: "Wholesale", "Distribution" or "Wholesale and Distribution" (plus "not confirmed yet"). */
   sides: string;
+  /** What the company pays, from the price it locked at sign-up, in words ("Monthly, $977/month (one operation)"). */
+  price: string;
+  /** The promo or affiliate codes it signed up with, in words (empty when none). */
+  codes: string;
   ein: string | null;
   registeredState: string | null;
   entityType: string | null;
@@ -190,6 +196,9 @@ export async function listCompanies(opts: { q?: string; filter?: CompanyFilter; 
       opDistribution: organizations.distributionActiveAt,
       opChosen: organizations.operationsChosenAt,
       opKind: organizations.operationKind,
+      lockM: organizations.lockedMonthlyCents,
+      lockY: organizations.lockedYearlyCents,
+      lockP: organizations.lockedBothPercent,
       ein: businessVerifications.ein,
       registeredState: businessVerifications.registeredState,
       entityType: businessVerifications.entityType,
@@ -266,6 +275,17 @@ export async function listCompanies(opts: { q?: string; filter?: CompanyFilter; 
   const kidKinds = new Map<string, string[]>();
   for (const k of kids) if (k.parent && k.kind) kidKinds.set(k.parent, [...(kidKinds.get(k.parent) ?? []), k.kind]);
 
+  const useRows = ids.length ? await db.select({ org: codeUses.organizationId, kind: codeUses.kind, code: codeUses.code }).from(codeUses).where(inArray(codeUses.organizationId, ids)) : [];
+  const codesOf = (id: string) => useRows.filter((u) => u.org === id).map((u) => (u.kind === "promo" ? `Promo code ${u.code}` : `Referred by affiliate code ${u.code}`)).join("; ");
+  const priceOf = (b: { id: string; billingPlan: string | null; opType: string | null; lockM: number | null; lockY: number | null; lockP: number | null }) => {
+    const plan = b.billingPlan === "yearly" ? "yearly" : b.billingPlan === "monthly" ? "monthly" : null;
+    if (!plan) return "No plan chosen";
+    const ops = (kidKinds.get(b.id)?.length ?? 0) >= 1 || operationsFor(b.opType) === 2 ? 2 : 1;
+    const book = lockedBook({ lockedMonthlyCents: b.lockM, lockedYearlyCents: b.lockY, lockedBothPercent: b.lockP });
+    const cents = plan === "yearly" ? yearlyPrice(book, ops) : monthlyPrice(book, ops);
+    return `${plan === "yearly" ? "Yearly" : "Monthly"}, ${usd(cents)}/${plan === "yearly" ? "year" : "month"} (${ops === 2 ? "both operations" : "one operation"}${b.lockM == null ? ", original price" : ", price locked at sign-up"})`;
+  };
+
   const rows: CompanyRow[] = base.map((b) => ({
     id: b.id,
     name: b.name,
@@ -285,6 +305,8 @@ export async function listCompanies(opts: { q?: string; filter?: CompanyFilter; 
     paymentGraceEndsAt: b.paymentGraceEndsAt,
     lastPaymentAt: b.lastPaymentAt,
     sides: sidesText({ operationType: b.opType, wholesaleActiveAt: b.opWholesale, distributionActiveAt: b.opDistribution, operationsChosenAt: b.opChosen, operationKind: b.opKind }, kidKinds.get(b.id) ?? []),
+    price: priceOf(b),
+    codes: codesOf(b.id),
     ein: b.ein,
     registeredState: b.registeredState,
     entityType: b.entityType,

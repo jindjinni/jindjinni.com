@@ -2,7 +2,7 @@
 // owner's Companies panel, so both always say the same thing.
 
 import { BILLING_LIVE, usd, type BillingPlan, parseBillingPlan } from "@/lib/billing-config";
-import { billingDateOf, chargeSchedule, longDay, rangeText, trialState, type Charge } from "@/lib/billing-schedule";
+import { billingDateOf, chargeSchedule, longDay, rangeText, trialState, type Charge, type PlanPrices } from "@/lib/billing-schedule";
 
 export type Tone = "good" | "warn" | "bad" | "neutral";
 
@@ -39,11 +39,11 @@ export function chargeLine(c: Charge): string {
 }
 
 /** The free trial and the next charges for a company, in words, or null if its trial hasn't started (not approved yet). */
-export function billingCalendar(o: { billingPlan?: string | null; trialStartsOn?: string | null; firstBillableOn?: string | null }, today: string = billingDateOf()):
+export function billingCalendar(o: { billingPlan?: string | null; trialStartsOn?: string | null; firstBillableOn?: string | null }, today: string = billingDateOf(), prices?: PlanPrices):
   { trial: ReturnType<typeof trialState>; plan: BillingPlan | null; charges: Charge[] } | null {
   if (!o.trialStartsOn || !o.firstBillableOn) return null;
   const plan = parseBillingPlan(o.billingPlan);
-  return { trial: trialState({ startsOn: o.trialStartsOn, firstBillableOn: o.firstBillableOn }, today), plan, charges: plan ? chargeSchedule(plan, o.firstBillableOn, 3) : [] };
+  return { trial: trialState({ startsOn: o.trialStartsOn, firstBillableOn: o.firstBillableOn }, today), plan, charges: plan ? chargeSchedule(plan, o.firstBillableOn, 3, prices) : [] };
 }
 
 /** Payment standing. Billing is not live yet, so a company is either in its free trial or "Not started" until it is. */

@@ -57,6 +57,7 @@ export async function addOperationAction(_prev: OpsState, fd: FormData): Promise
   if (org.viewAs) return { error: "Nothing can be changed while you are only viewing." };
   const kind = parseKind(fd.get("kind"));
   if (!kind) return { error: "Choose Wholesale or Distribution." };
+  if (String(fd.get("confirmCost") ?? "") !== "yes") return { error: "Tick the box to confirm you understand the price goes up when you add the second operation." };
   const done = await addOperation(org, isAdmin(org.role), kind);
   if (!done.ok) return { error: done.error };
   // Stay in the operation you are in: with two operations the page would otherwise ask which to open.

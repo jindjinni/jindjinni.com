@@ -38,6 +38,9 @@ import { columnsForChoice } from "@/lib/operations-rules";
 import { firstKindFor, typeFromKind } from "@/lib/operation-groups-rules";
 import { addOperation } from "@/lib/operation-groups";
 import { featureOn } from "@/lib/features";
+import { cookies } from "next/headers";
+import { lockPriceOn, recordCodes, resolveCode } from "@/lib/pricing-service";
+import { REF_COOKIE } from "@/lib/pricing-rules";
 import { forgetWorkspace } from "@/app/actions/workspaces";
 
 export type ActionState = { error?: string; needCode?: boolean } | undefined;
@@ -135,6 +138,14 @@ export async function signUpOrganization(
   const operation = readRequiredOperationType(formData.get("operationType"));
   if (!operation.ok) return { error: operation.error };
 
+  // A promo code (a discount) or an affiliate's code typed in the box, and the affiliate link they came through. A wrong code is
+  // refused here, before anything is created or a verification code is used up.
+  const chosenPlan = parseBillingPlan(formData.get("billingPlan"));
+  const typedCode = await resolveCode(formData.get("promoCode"), chosenPlan);
+  if (!typedCode.ok) return { error: typedCode.error };
+  const jar = await cookies();
+  const linkCode = await resolveCode(jar.get(REF_COOKIE)?.value, null);
+
   const logoFile = formData.get("logo");
   if (!(logoFile instanceof File) || logoFile.size === 0) {
     return { error: "A company logo is required to sign up." };
@@ -213,6 +224,10 @@ export async function signUpOrganization(
   await db.insert(organizations).values({ id: orgId, name: companyName, slug, approvalStatus: "pending", billingPlan: parseBillingPlan(formData.get("billingPlan")), ...(splitOn ? { ...columnsForChoice(typeFromKind(firstKindFor(operation.type)), new Date(), userId), operationKind: firstKindFor(operation.type) } : columnsForChoice(operation.type, new Date(), userId)) });
   // Every company gets its permanent reference ("JJ-1042") right away, so support always knows who is calling.
   await ensureCompanyCode(orgId).catch(() => {});
+  // The price this company signed up at is locked on it (a later price change never touches it), and any codes are remembered.
+  await lockPriceOn(orgId).catch(() => {});
+  await recordCodes(orgId, [typedCode, linkCode.ok && linkCode.kind === "affiliate" ? linkCode : { ok: true, kind: "none" }], email).catch(() => {});
+  jar.delete(REF_COOKIE);
   await db.insert(memberships).values({
     id: newId("mem"),
     userId,

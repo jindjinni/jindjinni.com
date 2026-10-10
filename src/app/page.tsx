@@ -1,6 +1,11 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { MONTHLY_CENTS, YEARLY_CENTS, YEARLY_REGULAR_CENTS, YEARLY_SAVINGS_CENTS, usd } from "@/lib/billing-config";
+import { usd } from "@/lib/billing-config";
+import { currentBook } from "@/lib/pricing-service";
+import { monthlyPrice, yearlyPrice, yearlyRegular, yearlySavings } from "@/lib/pricing-rules";
+
+// The prices on this page are the newest ones set in the Lamp; saving a new price refreshes the page at once, and it also refreshes by itself every minute.
+export const revalidate = 60;
 import { TRIAL_DAYS } from "@/lib/billing-schedule";
 import { CANCEL_COMEBACK_TEXT, CANCEL_MONTHLY_TEXT, CANCEL_TRIAL_TEXT, CANCEL_YEARLY_TEXT } from "@/lib/cancellation-copy";
 import { BrandLogo, Icon, LogoMark, Sparkle, type IconName } from "@/components/landing/icons";
@@ -149,7 +154,12 @@ function CheckList({ items, columns = false }: { items: string[]; columns?: bool
   );
 }
 
-export default function Home() {
+export default async function Home() {
+  const book = await currentBook();
+  const MONTHLY_CENTS = monthlyPrice(book, 1);
+  const YEARLY_CENTS = yearlyPrice(book, 1);
+  const YEARLY_REGULAR_CENTS = yearlyRegular(book, 1);
+  const YEARLY_SAVINGS_CENTS = yearlySavings(book, 1);
   return (
     <div className="min-h-full overflow-x-clip bg-white text-ink">
       {/* ---------- Nav ---------- */}
@@ -476,15 +486,34 @@ export default function Home() {
               <h2 className="mt-3 text-balance text-4xl font-extrabold tracking-tight sm:text-5xl">
                 {TRIAL_DAYS} days free. Then one simple price.
               </h2>
+              <p className="mt-5 text-lg text-muted" data-testid="home-both-note">
+                Choose what you run. One operation, Wholesale or Distribution, has one price. Running both costs {book.bothPercent}% more, and each keeps its own customers, suppliers, products, orders and payments.
+              </p>
               <p className="mt-5 text-lg text-muted" data-testid="home-trial">
                 Every new company gets a {TRIAL_DAYS}-day free trial that starts the day we approve it. Nothing is charged during the trial, and you can cancel before it ends.
               </p>
             </div>
-            <div className="mt-10 grid gap-4 sm:grid-cols-2">
+            <div className="mt-10 grid gap-4 md:grid-cols-3" data-testid="home-operations">
+              {[
+                { key: "wholesale", title: "Wholesale", body: "Buy supplies from individuals with quotations and free shipping labels, check each package, and sell on to distributors.", ops: 1 as const },
+                { key: "distribution", title: "Distribution", body: "Buy from wholesalers with purchase orders, and sell to pharmacies and other retail outlets.", ops: 1 as const },
+                { key: "both", title: "Both", body: "Run Wholesale and Distribution under one sign-in, each completely separate. Staff can be assigned to one or the other.", ops: 2 as const },
+              ].map((o) => (
+                <article key={o.key} className="rounded-3xl border border-line bg-white p-7" data-testid={`home-op-${o.key}`}>
+                  <h3 className="text-sm font-extrabold uppercase tracking-wider text-muted">{o.title}</h3>
+                  <p className="mt-2 text-[15px] leading-relaxed text-muted">{o.body}</p>
+                  <p className="mt-4 text-2xl font-extrabold tracking-tight">{usd(monthlyPrice(book, o.ops))}<span className="text-base font-bold">/month</span></p>
+                  <p className="text-sm font-semibold text-muted">or {usd(yearlyPrice(book, o.ops))}/year</p>
+                  {o.ops === 2 && <p className="mt-1 text-sm font-bold text-brand-deep">{book.bothPercent}% more than one operation</p>}
+                </article>
+              ))}
+            </div>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <article className="rounded-3xl border border-line bg-white p-7" data-testid="price-monthly">
                 <h3 className="text-sm font-extrabold uppercase tracking-wider text-muted">Monthly</h3>
                 <p className="mt-3 text-4xl font-extrabold tracking-tight">{usd(MONTHLY_CENTS)}<span className="text-lg font-bold">/month</span></p>
-                <p className="mt-1 text-sm font-semibold text-muted">Billed monthly</p>
+                <p className="mt-1 text-sm font-semibold text-muted">Billed monthly &middot; one operation</p>
+                <p className="mt-3 text-sm font-bold text-ink" data-testid="price-monthly-both">Running both: {usd(monthlyPrice(book, 2))}/month</p>
               </article>
               <article className="rounded-3xl border-2 border-brand bg-white p-7" data-testid="price-yearly">
                 <h3 className="flex items-center gap-2 text-sm font-extrabold uppercase tracking-wider text-muted">
@@ -492,7 +521,8 @@ export default function Home() {
                 </h3>
                 <p className="mt-3 text-sm font-semibold text-muted line-through">{usd(YEARLY_REGULAR_CENTS)}/year</p>
                 <p className="text-4xl font-extrabold tracking-tight">{usd(YEARLY_CENTS)}<span className="text-lg font-bold">/year</span></p>
-                <p className="mt-1 text-sm font-bold text-brand-deep">Save {usd(YEARLY_SAVINGS_CENTS)} per year</p>
+                <p className="mt-1 text-sm font-bold text-brand-deep">Save {usd(YEARLY_SAVINGS_CENTS)} per year &middot; one operation</p>
+                <p className="mt-3 text-sm font-bold text-ink" data-testid="price-yearly-both">Running both: {usd(yearlyPrice(book, 2))}/year (save {usd(yearlySavings(book, 2))})</p>
               </article>
             </div>
             <div className="mt-8 grid gap-4 lg:grid-cols-2">
@@ -588,6 +618,7 @@ export default function Home() {
           <div className="flex flex-wrap justify-center gap-x-5 gap-y-2 font-semibold">
             <Link href="/login" className="hover:text-ink">Sign In</Link>
             <Link href="/signup" className="hover:text-ink">Get Started</Link>
+            <Link href="/affiliates" className="hover:text-ink" data-testid="footer-affiliates">Become an affiliate</Link>
             <Link href="/terms" className="hover:text-ink">Terms</Link>
             <Link href="/privacy" className="hover:text-ink">Privacy</Link>
             <Link href="/acceptable-use" className="hover:text-ink">Acceptable Use</Link>

@@ -10,13 +10,14 @@ import { BusinessProfileSignupFields } from "@/components/business-profile-signu
 import { HumanCheck } from "@/components/human-check";
 import { BillingSection } from "@/components/billing-section";
 import { OperationTypeField } from "@/components/operation-type-field";
+import type { PriceBook } from "@/lib/pricing-rules";
 import { RequiredLegend, RequiredMarks } from "@/components/required-marks";
 import { TermsCheckbox } from "@/components/legal/terms-checkbox";
 
 // Field styling comes from the .auth-theme scope in globals.css.
 const inputClass = "";
 
-export function SignupForm({ needsVerification }: { needsVerification: boolean }) {
+export function SignupForm({ needsVerification, book, referred = false }: { needsVerification: boolean; book: PriceBook; referred?: boolean }) {
   // Both server actions are called directly here instead of through
   // <form action={...}>/useActionState -- React 19 resets every
   // UNCONTROLLED field in a form (password, logo file, phone numbers, tax
@@ -34,6 +35,7 @@ export function SignupForm({ needsVerification }: { needsVerification: boolean }
   const [sendPending, startSend] = useTransition();
   const [accountName, setAccountName] = useState("");
   const [accountEmail, setAccountEmail] = useState("");
+  const [operationType, setOperationType] = useState<string | null>(null);
 
   // A code sent for one email shouldn't look "sent" anymore once the person
   // edits the address afterward -- otherwise they could type a code that
@@ -144,12 +146,12 @@ export function SignupForm({ needsVerification }: { needsVerification: boolean }
 
           <Section
             title="How Your Company Operates"
-            description="Everyone gets both Quotations (for buying from individuals) and Purchase Orders (for buying from wholesalers), in Purchasing and in Sales. Your answer decides which one comes first. You can change it later in Settings."
+            description="Your answer sets up the right menus for how you work (quotations and free shipping labels for Wholesale, purchase orders and suppliers for Distribution) and decides your price. You can add the second operation later in Settings."
           >
-            <OperationTypeField />
+            <OperationTypeField onChange={setOperationType} />
           </Section>
 
-          <BillingSection />
+          <BillingSection book={book} operationType={operationType} referred={referred} />
 
           <TermsCheckbox />
 

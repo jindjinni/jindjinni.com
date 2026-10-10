@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MONTHLY_CENTS, YEARLY_CENTS, usd } from "@/lib/billing-config";
+import { usd } from "@/lib/billing-config";
 import { billingDateOf, longDay, scheduleIfTrialStarts, TRIAL_DAYS } from "@/lib/billing-schedule";
 import { chargeLine } from "@/lib/account-status";
 import { CANCEL_COMEBACK_TEXT, CANCEL_MONTHLY_TEXT, CANCEL_TRIAL_TEXT, CANCEL_YEARLY_TEXT } from "@/lib/cancellation-copy";
@@ -10,15 +10,15 @@ import { CANCEL_COMEBACK_TEXT, CANCEL_MONTHLY_TEXT, CANCEL_TRIAL_TEXT, CANCEL_YE
  * The free-trial and proration explanation in the sign-up payment section. The worked example uses today's date in the billing
  * time zone, worked out in the browser after the page loads (so the page itself is the same for everyone and cacheable).
  */
-export function BillingTrialNotice() {
+export function BillingTrialNotice({ monthlyCents, yearlyCents }: { monthlyCents: number; yearlyCents: number }) {
   // Worked out after mount so the server-rendered page is the same for everyone.
   const [today, setToday] = useState<string | null>(null);
   useEffect(() => {
     const id = setTimeout(() => setToday(billingDateOf(new Date())), 0);
     return () => clearTimeout(id);
   }, []);
-  const monthly = today ? scheduleIfTrialStarts("monthly", today, 2) : null;
-  const yearly = today ? scheduleIfTrialStarts("yearly", today, 2) : null;
+  const monthly = today ? scheduleIfTrialStarts("monthly", today, 2, { monthlyCents, yearlyCents }) : null;
+  const yearly = today ? scheduleIfTrialStarts("yearly", today, 2, { monthlyCents, yearlyCents }) : null;
 
   return (
     <div className="rounded-xl border border-mint-line bg-white p-4 text-sm text-ink sm:col-span-2" data-testid="trial-notice">
@@ -29,12 +29,12 @@ export function BillingTrialNotice() {
 
       <p className="mt-3 font-bold">How your first charge works (Monthly plan)</p>
       <p className="mt-1 text-muted" data-testid="proration-notice">
-        We bill on the 1st of every month, prepaid for that month. Your trial usually ends part-way through a month, so the first day after your trial we charge you only for the rest of that month. This is called a prorated charge: the monthly price ({usd(MONTHLY_CENTS)}) &times; the days left in the month &divide; the days in that month. Then on the 1st of every month after that we charge the full {usd(MONTHLY_CENTS)}. If your trial ends on the last day of a month, your first charge is simply the full month on the 1st. The days of your free trial are never charged.
+        We bill on the 1st of every month, prepaid for that month. Your trial usually ends part-way through a month, so the first day after your trial we charge you only for the rest of that month. This is called a prorated charge: the monthly price ({usd(monthlyCents)}) &times; the days left in the month &divide; the days in that month. Then on the 1st of every month after that we charge the full {usd(monthlyCents)}. If your trial ends on the last day of a month, your first charge is simply the full month on the 1st. The days of your free trial are never charged.
       </p>
 
       <p className="mt-3 font-bold">Yearly plan</p>
       <p className="mt-1 text-muted">
-        No proration. The first day after your trial we charge the full {usd(YEARLY_CENTS)} for one year, and again on that same date every year.
+        No proration. The first day after your trial we charge the full {usd(yearlyCents)} for one year, and again on that same date every year.
       </p>
 
       <p className="mt-3 font-bold">Cancelling</p>

@@ -14,7 +14,7 @@ export default async function SettingsLayout({ children }: { children: React.Rea
   // Operations (Wholesale / Distribution sides) is for owners and admins, once the feature is on for the company.
   if (mayOpenSettings(level) && isAdmin(org.role) && (await operationsEnabled(org.organizationId))) {
     const at = sections.findIndex((s) => s.href === "/dashboard/settings/company-profile");
-    const entry = { href: "/dashboard/settings/operations", label: "Operations", blurb: "Switch your Wholesale and Distribution sides on or off. Both are free." };
+    const entry = { href: "/dashboard/settings/operations", label: "Operations", blurb: "See your Wholesale and Distribution operations, and add the second one." };
     sections.splice(at >= 0 ? at + 1 : sections.length, 0, entry);
   }
   // The mothership's own pages (Companies, Support, Staff) are in the Lamp tab. Owner, co-owner and admin also get these two:

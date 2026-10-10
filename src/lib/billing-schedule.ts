@@ -16,6 +16,10 @@
 
 import { MONTHLY_CENTS, YEARLY_CENTS, type BillingPlan } from "@/lib/billing-config";
 
+/** What one full month and one full year cost a company (its own locked price, with both operations counted). Defaults to the original single-operation prices. */
+export type PlanPrices = { monthlyCents: number; yearlyCents: number };
+export const ORIGINAL_PRICES: PlanPrices = { monthlyCents: MONTHLY_CENTS, yearlyCents: YEARLY_CENTS };
+
 export const TRIAL_DAYS = 7;
 /** The time zone that decides what "today" and "the 1st" mean for billing. */
 export const BILLING_TZ = "America/New_York";
@@ -141,14 +145,14 @@ export function trialState(trial: { startsOn: string | null; firstBillableOn: st
  * Monthly: [prorated rest-of-month unless that day is the 1st] then a full month on every 1st.
  * Yearly: the full year on `firstBillableOn`, then again on each anniversary.
  */
-export function chargeSchedule(plan: BillingPlan, firstBillableOn: string, count = 4): Charge[] {
+export function chargeSchedule(plan: BillingPlan, firstBillableOn: string, count = 4, prices: PlanPrices = ORIGINAL_PRICES): Charge[] {
   const out: Charge[] = [];
   if (count <= 0) return out;
   if (plan === "yearly") {
     let from = firstBillableOn;
     while (out.length < count) {
       const next = addYear(from);
-      out.push({ date: from, kind: "yearly", amountCents: YEARLY_CENTS, coversFrom: from, coversTo: addDays(next, -1) });
+      out.push({ date: from, kind: "yearly", amountCents: prices.yearlyCents, coversFrom: from, coversTo: addDays(next, -1) });
       from = next;
     }
     return out;
@@ -161,27 +165,27 @@ export function chargeSchedule(plan: BillingPlan, firstBillableOn: string, count
     const dim = daysInMonth(y, m);
     const days = dim - d + 1;
     out.push({
-      date: firstBillableOn, kind: "prorated", amountCents: prorate(MONTHLY_CENTS, days, dim),
+      date: firstBillableOn, kind: "prorated", amountCents: prorate(prices.monthlyCents, days, dim),
       coversFrom: firstBillableOn, coversTo: fmt(y, m, dim), days, daysInMonth: dim,
     });
     next = firstOfNextMonth(firstBillableOn);
   }
   while (out.length < count) {
-    out.push({ date: next, kind: "monthly", amountCents: MONTHLY_CENTS, coversFrom: next, coversTo: lastDayOfMonth(next) });
+    out.push({ date: next, kind: "monthly", amountCents: prices.monthlyCents, coversFrom: next, coversTo: lastDayOfMonth(next) });
     next = firstOfNextMonth(next);
   }
   return out;
 }
 
 /** Everything about a company's billing calendar if its trial starts on `startsOn`. */
-export function scheduleIfTrialStarts(plan: BillingPlan, startsOn: string, count = 4): { trial: Trial; charges: Charge[] } {
+export function scheduleIfTrialStarts(plan: BillingPlan, startsOn: string, count = 4, prices: PlanPrices = ORIGINAL_PRICES): { trial: Trial; charges: Charge[] } {
   const trial = trialFrom(startsOn);
-  return { trial, charges: chargeSchedule(plan, trial.firstBillableOn, count) };
+  return { trial, charges: chargeSchedule(plan, trial.firstBillableOn, count, prices) };
 }
 
 /** The next charge on or after `today`, or null if the plan has no charges listed (never, in practice). */
-export function nextCharge(plan: BillingPlan, firstBillableOn: string, today: string): Charge | null {
-  const list = chargeSchedule(plan, firstBillableOn, 3);
+export function nextCharge(plan: BillingPlan, firstBillableOn: string, today: string, prices: PlanPrices = ORIGINAL_PRICES): Charge | null {
+  const list = chargeSchedule(plan, firstBillableOn, 3, prices);
   return list.find((c) => c.date >= today) ?? null;
 }
 

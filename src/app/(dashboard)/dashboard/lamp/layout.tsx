@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireOrg } from "@/lib/tenant";
 import { staffLevelOf } from "@/lib/platform-admin";
-import { LEVEL_LABELS, mayOpenStaffPage } from "@/lib/mothership-rules";
+import { LEVEL_LABELS, isFullLevel, mayOpenStaffPage } from "@/lib/mothership-rules";
 import { waitingCount } from "@/lib/company-admin";
 import { inboxCounts } from "@/lib/support-service";
 import { LampTabs } from "./lamp-tabs";
@@ -17,6 +17,7 @@ export default async function LampLayout({ children }: { children: React.ReactNo
   const tabs = [
     { href: "/dashboard/lamp/companies", label: "Companies", badge: waiting },
     { href: "/dashboard/lamp/support", label: "Support", badge: support.needs },
+    ...(isFullLevel(level) ? [{ href: "/dashboard/lamp/pricing", label: "Pricing", badge: 0 }] : []),
     ...(mayOpenStaffPage(level) ? [{ href: "/dashboard/lamp/staff", label: "Staff", badge: 0 }] : []),
   ];
   return (

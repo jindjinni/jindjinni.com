@@ -24,6 +24,8 @@ export type CancelInput = {
   firstBillableOn: string | null;
   /** True only if the current period (month or year) has actually been paid. */
   paid: boolean;
+  /** What a full year costs this company (its own locked price, both operations counted). Defaults to the original single-operation price. */
+  yearlyCents?: number;
 };
 
 export type CancelOutcome = {
@@ -60,7 +62,7 @@ export function cancellationOutcome(i: CancelInput): CancelOutcome {
     const serviceEndsOn = monthEnd < term.to ? monthEnd : term.to;
     const unusedDays = Math.max(0, daysBetween(serviceEndsOn, term.to));
     const termDays = daysBetween(term.from, term.to) + 1;
-    const refundCents = i.paid && unusedDays > 0 ? prorate(YEARLY_CENTS, unusedDays, termDays) : 0;
+    const refundCents = i.paid && unusedDays > 0 ? prorate(i.yearlyCents ?? YEARLY_CENTS, unusedDays, termDays) : 0;
     return { kind: "yearly", serviceEndsOn, refundCents, unusedDays, termDays, termEndsOn: term.to };
   }
   return { kind: "monthly", serviceEndsOn: monthEnd, refundCents: 0, unusedDays: 0, termDays: 0, termEndsOn: null };

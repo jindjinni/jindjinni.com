@@ -121,6 +121,12 @@ export const organizations = sqliteTable("organizations", {
   // Day-and-time an owner or admin switched on "show every tab" for this operation (see lib/operation-tabs-rules.ts). Empty = the menu hides
   // the tabs that only belong to the other operation's way of working. Plain nullable text on purpose -- same drizzle-kit rule as seatLimit.
   allTabsShownAt: text("all_tabs_shown_at"),
+  // The price book this company signed up at (see lib/pricing-rules.ts): one operation's monthly and yearly price in cents, and the extra
+  // percent for running both operations. A later price change never touches it. Empty = a company from before prices could change, which
+  // keeps the original prices. Plain nullable integers on purpose -- same drizzle-kit rule as seatLimit.
+  lockedMonthlyCents: integer("locked_monthly_cents"),
+  lockedYearlyCents: integer("locked_yearly_cents"),
+  lockedBothPercent: integer("locked_both_percent"),
   ...timestamps,
 }, (t) => [index("organizations_approval_idx").on(t.approvalStatus, t.createdAt), uniqueIndex("organizations_company_code_unique").on(t.companyCode)]);
 
@@ -3060,4 +3066,84 @@ export const documentRevisions = sqliteTable(
       .default(sql`(current_timestamp)`),
   },
   (t) => [index("document_revisions_doc_idx").on(t.organizationId, t.source, t.documentId)],
+);
+
+
+// ---------------------------------------------------------------------------
+// Pricing, promo codes and affiliates (platform-wide, owned by the Lamp; see lib/pricing-rules.ts and lib/pricing-service.ts)
+// ---------------------------------------------------------------------------
+
+/** Every price the Lamp has set, oldest to newest. The newest row is the price a NEW company signs up at; companies keep the one they locked. */
+export const priceBooks = sqliteTable("price_books", {
+  id: text("id").primaryKey(),
+  monthlyCents: integer("monthly_cents").notNull(),
+  yearlyCents: integer("yearly_cents").notNull(),
+  bothPercent: integer("both_percent").notNull(),
+  note: text("note"),
+  createdBy: text("created_by"),
+  createdAt: text("created_at").notNull().default(sql`(current_timestamp)`),
+});
+
+/** A promo code (for example BLACKFRIDAY): takes money off the first payment after the free trial. */
+export const promoCodes = sqliteTable(
+  "promo_codes",
+  {
+    id: text("id").primaryKey(),
+    code: text("code").notNull(),
+    /** "percent" or "amount" */
+    kind: text("kind").notNull(),
+    /** Percent (1-100), or whole cents for "amount". */
+    value: integer("value").notNull(),
+    /** "any" | "monthly" | "yearly" */
+    plan: text("plan").notNull().default("any"),
+    maxUses: integer("max_uses"),
+    usedCount: integer("used_count").notNull().default(0),
+    startsOn: text("starts_on"),
+    endsOn: text("ends_on"),
+    active: integer("active", { mode: "boolean" }).notNull().default(true),
+    note: text("note"),
+    createdBy: text("created_by"),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex("promo_codes_code_unique").on(t.code)],
+);
+
+/** Someone who applied to refer companies. Approved by the Lamp, who sets their percent and gets them a code. */
+export const affiliates = sqliteTable(
+  "affiliates",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    email: text("email").notNull(),
+    /** What they told us about how they would refer people. */
+    about: text("about"),
+    /** "pending" | "active" | "paused" | "declined" */
+    status: text("status").notNull().default("pending"),
+    code: text("code"),
+    /** Their one-time cut, as a whole percent of a referred company's first payment. */
+    percent: integer("percent"),
+    approvedAt: text("approved_at"),
+    approvedBy: text("approved_by"),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex("affiliates_code_unique").on(t.code), index("affiliates_email_idx").on(t.email)],
+);
+
+/** Which codes a company signed up with (at most one promo code and one affiliate code). `organizationId` is the company's main row. */
+export const codeUses = sqliteTable(
+  "code_uses",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id").notNull(),
+    /** "promo" | "affiliate" */
+    kind: text("kind").notNull(),
+    codeId: text("code_id").notNull(),
+    code: text("code").notNull(),
+    /** Affiliate only: when the Lamp marked the cut as paid, and the amount that was paid. */
+    paidAt: text("paid_at"),
+    paidCents: integer("paid_cents"),
+    paidNote: text("paid_note"),
+    createdAt: text("created_at").notNull().default(sql`(current_timestamp)`),
+  },
+  (t) => [uniqueIndex("code_uses_org_kind_unique").on(t.organizationId, t.kind), index("code_uses_code_idx").on(t.kind, t.codeId)],
 );

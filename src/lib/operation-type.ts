@@ -31,7 +31,7 @@ export const OPERATION_OPTIONS: OperationOption[] = [
 ];
 
 export const OPERATION_QUESTION = "What type of operation do you run?";
-export const OPERATION_FREE_NOTE = "Both sides are free. You can switch either one on or off later in Settings → Operations.";
+export const OPERATION_FREE_NOTE = "One operation has one price. Running both costs more. You can add the second operation later in Settings → Operations.";
 
 /** The saved value, or null when it is empty or not one of the three. Never throws. */
 export function parseOperationType(value: unknown): OperationType | null {

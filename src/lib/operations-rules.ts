@@ -3,7 +3,7 @@
 //   Wholesale side    -> buys from individuals (quotation, free shipping label), sells to distributors.
 //   Distribution side -> buys from wholesalers (purchase orders to suppliers), sells to pharmacies and other retail outlets.
 //
-// Every company has both sides available, free of charge, and can switch either on or off at any time (owner or admin). At least one
+// A company runs one side, or both (both cost more than one; see lib/pricing-rules.ts). At least one
 // side stays on. Documents (Quotations and Purchase Orders) are shared by both sides; a side adds its own tabs, words and defaults.
 
 import { parseOperationType, type OperationType } from "@/lib/operation-type";
@@ -179,5 +179,5 @@ export function wordsFor(sides: Sides): { buyers: string } {
 export function sidesNote(sides: Sides): string {
   const on = SIDES.filter((x) => sides[x]);
   const lines = on.map((x) => `- ${SIDE_INFO[x].title}: buys from ${SIDE_INFO[x].buysFrom.toLowerCase()}; sells to ${SIDE_INFO[x].sellsTo.toLowerCase()}. How a day goes: ${SIDE_FLOW[x].map((t, i) => `${i + 1}) ${t}`).join(" ")} First steps: ${SIDE_INFO[x].firstSteps.map((st, i) => `${i + 1}) [${st.text}](${st.href})`).join(" ")}`);
-  return `HOW THIS COMPANY OPERATES (both sides are free; an owner or admin can switch a side on or off in [Operations](/dashboard/settings/operations)):\n${lines.join("\n")}\nWhen asked how things work "from A to Z", walk through the flow for the side(s) above.`;
+  return `HOW THIS COMPANY OPERATES (running both operations costs more than one; an owner or admin can see them and add the second in [Operations](/dashboard/settings/operations)):\n${lines.join("\n")}\nWhen asked how things work "from A to Z", walk through the flow for the side(s) above.`;
 }
