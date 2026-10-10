@@ -50,19 +50,19 @@ export const GUIDES: Record<GuideKey, Guide> = {
   shippo: {
     key: "shippo",
     title: "How to connect Shippo",
-    what: "Lets your Purchasing team buy UPS and USPS shipping labels for your customers from any quotation, and follows each package so its status updates by itself. Labels are bought in your own Shippo account.",
+    what: "Lets your Purchasing and Shipping teams buy UPS and USPS shipping labels from any quotation, sales order or shipment, and follows each package so its status updates by itself. Labels are bought in your own Shippo account.",
     cost: "Shippo's account is free to open. You pay Shippo for each label (the postage at your carrier rates, plus any per-label fee Shippo's own price list shows), using the payment method on your Shippo account. We never see your card.",
     steps: [
       "Sign in at goshippo.com, or create your free Shippo account.",
       "In Shippo open Settings, then Carriers, and switch on UPS and USPS. Add your payment method there too.",
       "In Shippo open Settings, then API, and copy your Live token. Use the Test token first if you only want to practise: test labels cost nothing and nothing ships.",
-      "Come back to this page, paste the token in the box, and press Connect Shippo.",
+      "Come back to this page (Purchasing or Shipping, then Connectors; it is one connection that both use), paste the token in the box, and press Connect Shippo.",
       "If you used a Test token and want real labels later, paste your Live token and press Replace token.",
     ],
     check: "We check the token with Shippo the moment you press Connect. You should see Connected, whether it is Test or Live, and which carriers are switched on. Press Check again whenever you want to be sure.",
     ifBroken: "If it says Needs attention, Shippo is not accepting the saved token (it was changed or deleted in Shippo). Copy a current token from Shippo and press Replace token. No labels can be bought until then.",
     share: (c) => `Hi team, ${c} is now connected to Shippo. You can generate UPS and USPS shipping labels from any quotation, and the package status updates by itself. Labels are billed to our own Shippo account, so please only create one when it is really needed.`,
-    help: { subject: "Help connecting Shippo", body: "I'm trying to connect our Shippo token in Purchasing → Settings → Connectors and I'm stuck. Here is what I see on the screen:\n" },
+    help: { subject: "Help connecting Shippo", body: "I'm trying to connect our Shippo token under Connectors (Purchasing or Shipping) and I'm stuck. Here is what I see on the screen:\n" },
   },
   email: {
     key: "email",
