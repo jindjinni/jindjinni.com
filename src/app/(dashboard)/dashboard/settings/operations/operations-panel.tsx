@@ -1,8 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
-import { addOperationAction, nameWorkspaceAction, openWorkspace, showAllTabsAction } from "@/app/actions/workspaces";
+import { useActionState, useRef, useState, useTransition, type FormEvent } from "react";
+import { addOperationAction, makeSeparateBusinessAction, nameWorkspaceAction, openWorkspace, showAllTabsAction, type OpsState } from "@/app/actions/workspaces";
+import { BusinessVerificationFields } from "@/components/business-verification-fields";
+import { SecondBusinessField } from "@/components/second-business-field";
+import { SECOND_PREFIX, secondBusinessStatusText } from "@/lib/second-business-rules";
 import { kindLabel, otherKind, type OperationKind } from "@/lib/operation-groups-rules";
 import type { SideInfo } from "@/lib/operations-rules";
 
@@ -22,15 +25,35 @@ type Props = {
   showAll: boolean;
   /** What running one or both operations costs this company (its own locked price, in words). */
   cost: { hasBoth: boolean; percent: number; oneText: string; bothText: string; moreText: string; planNamed: boolean; billingLive: boolean };
+  /** Whether the company's second operation is the same business (status null) or its own, with where its review stands. */
+  entity: { status: string | null; reason: string | null } | null;
 };
 
-export function OperationsPanel({ kind, otherId, info, canEdit, flow, showAll, cost }: Props) {
+export function OperationsPanel({ kind, otherId, info, canEdit, flow, showAll, cost, entity }: Props) {
   const [named, nameAction, naming] = useActionState(nameWorkspaceAction, undefined);
-  const [added, addAction, adding] = useActionState(addOperationAction, undefined);
+  // The add and "different LLC" forms are sent from onSubmit (not the form's action), so a mistake never wipes the typed fields or the chosen file.
+  const addRef = useRef<HTMLFormElement>(null);
+  const sepRef = useRef<HTMLFormElement>(null);
+  const [added, setAdded] = useState<OpsState>(undefined);
+  const [adding, startAdd] = useTransition();
+  const [sepDone, setSepDone] = useState<OpsState>(undefined);
+  const [separating, startSep] = useTransition();
+  const sendAdd = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!addRef.current) return;
+    const fd = new FormData(addRef.current);
+    startAdd(async () => setAdded(await addOperationAction(undefined, fd)));
+  };
+  const sendSep = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!sepRef.current) return;
+    const fd = new FormData(sepRef.current);
+    startSep(async () => setSepDone(await makeSeparateBusinessAction(undefined, fd)));
+  };
   const [tabs, tabsAction, switching] = useActionState(showAllTabsAction, undefined);
   const openId = otherId ?? added?.openId ?? null;
-  const msg = named?.message ?? added?.message ?? tabs?.message;
-  const err = named?.error ?? added?.error ?? tabs?.error;
+  const msg = named?.message ?? added?.message ?? sepDone?.message ?? tabs?.message;
+  const err = named?.error ?? added?.error ?? sepDone?.error ?? tabs?.error;
   const allShown = tabs?.message ? /Every tab is now/.test(tabs.message) : showAll;
   const other = kind ? otherKind(kind) : null;
 
@@ -127,8 +150,11 @@ export function OperationsPanel({ kind, otherId, info, canEdit, flow, showAll, c
                     : `Running both costs ${cost.percent}% more than running one.`}
                   {!cost.billingLive && " Billing is not switched on yet, so nothing is charged now."}
                 </p>
-                <form action={addAction} className="mt-4 flex flex-col gap-3">
+                <form ref={addRef} onSubmit={sendAdd} className="mt-4 flex flex-col gap-3" data-testid="ops-add-form">
                   <input type="hidden" name="kind" value={other} />
+                  <div className="auth-theme rounded-xl border border-slate-200 bg-white p-4" data-testid="ops-same-business">
+                    <SecondBusinessField secondKindLabel={kindLabel(other)} />
+                  </div>
                   <label className="flex items-start gap-2 text-sm text-slate-800 dark:text-slate-200">
                     <input type="checkbox" name="confirmCost" value="yes" className="mt-1" data-testid="ops-confirm-cost" />
                     <span>I understand the price goes up when I add this operation.</span>
@@ -139,6 +165,30 @@ export function OperationsPanel({ kind, otherId, info, canEdit, flow, showAll, c
                 </form>
               </>
             )
+          )}
+        </section>
+      )}
+
+      {kind && openId && entity && (
+        <section className={card} data-testid="ops-entity" data-status={entity.status ?? "same"}>
+          <h3 className="text-base font-bold text-slate-900 dark:text-slate-50">Is the second operation a different business?</h3>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-400" data-testid="ops-entity-text">
+            <strong>{secondBusinessStatusText(entity.status).label}.</strong> {secondBusinessStatusText(entity.status).text}
+            {entity.status === "rejected" && entity.reason ? ` What we need: ${entity.reason}` : ""}
+          </p>
+          {entity.status === null && canEdit && (
+            <details className="mt-3" data-testid="ops-entity-details">
+              <summary className="cursor-pointer text-sm font-semibold text-emerald-800 underline dark:text-emerald-300">It is a different LLC</summary>
+              <form ref={sepRef} onSubmit={sendSep} className="mt-3 flex flex-col gap-3" data-testid="ops-entity-form">
+                <p className="text-sm text-slate-700 dark:text-slate-300">
+                  Give us the second business&rsquo;s own papers. That operation is locked while we check them, and your other operation keeps working.
+                </p>
+                <div className="auth-theme rounded-xl border border-slate-200 bg-white p-4">
+                  <BusinessVerificationFields prefix={SECOND_PREFIX} title="Verify the second business" description="Its own EIN, state registration and proof document. A person reviews them. Only the platform owner can see them." />
+                </div>
+                <div><button disabled={separating} className={primary} data-testid="ops-entity-send">Send for review</button></div>
+              </form>
+            </details>
           )}
         </section>
       )}

@@ -10,6 +10,8 @@ import { db } from "@/db/client";
 import { businessProfiles, organizations } from "@/db/schema";
 import { getHeldCompanyForUser, getSessionUserId } from "@/lib/tenant";
 import { isOwner } from "@/lib/permissions";
+import { rootIdOf } from "@/lib/operation-groups";
+import { checkSecondBusiness, startSeparateBusiness } from "@/lib/second-business";
 import { readVerification, einInUse, saveVerification, EIN_IN_USE_MESSAGE } from "@/lib/business-verification";
 
 export type ResubmitState = { error?: string } | undefined;
@@ -24,6 +26,14 @@ export async function resubmitVerification(_prev: ResubmitState, formData: FormD
 
   const verification = await readVerification(formData);
   if ("error" in verification) return { error: verification.error };
+  // Only one operation (a different business) was turned down: fix it the same way, keeping the company's other operation as it is.
+  if (held.operationKind) {
+    const problem = await checkSecondBusiness(verification.data, { rootId: await rootIdOf(held.organizationId), childId: held.organizationId });
+    if (problem) return { error: problem };
+    await startSeparateBusiness(held.organizationId, verification.data);
+    after(() => runRegistryCheck(held.organizationId));
+    redirect("/under-review");
+  }
   if (await einInUse(verification.data.ein, held.organizationId)) return { error: EIN_IN_USE_MESSAGE };
 
   await saveVerification(held.organizationId, verification.data);

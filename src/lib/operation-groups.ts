@@ -2,6 +2,8 @@
 // Every operation is its own organization row (linked to the company's main row), so the platform's usual scoping by organizationId
 // keeps its records apart from the other operation's. The company's verification, plan, approval and closing stay on the main row.
 
+import { startSeparateBusiness } from "@/lib/second-business";
+import type { VerificationInput } from "@/lib/business-verification";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db/client";
 import { businessProfiles, conditions, memberships, organizations, purchasingBonusTiers } from "@/db/schema";
@@ -67,7 +69,7 @@ export async function nameWorkspace(who: Who, kind: OperationKind): Promise<{ ok
  * Adds the other operation as a new, empty workspace: its own catalog starter lists, its own business profile (copied once, then
  * edited on its own, so each side can have its own return address and logo), and owner/admin access for the company's owners and admins.
  */
-export async function addOperation(who: Who, canManage: boolean, wanted: OperationKind): Promise<{ ok: true; organizationId: string } | { ok: false; error: string }> {
+export async function addOperation(who: Who, canManage: boolean, wanted: OperationKind, separateBusiness?: VerificationInput): Promise<{ ok: true; organizationId: string } | { ok: false; error: string }> {
   const [me] = await db.select().from(organizations).where(eq(organizations.id, who.organizationId)).limit(1);
   if (!me) return { ok: false, error: "Company not found." };
   const group = await groupOf(who.organizationId);
@@ -122,6 +124,8 @@ export async function addOperation(who: Who, canManage: boolean, wanted: Operati
     void _o;
     await db.insert(businessProfiles).values({ ...rest, id: newId("bizprofile"), organizationId: orgId });
   }
-  await logActivity(who, "OTHER", `Added the ${kindLabel(wanted)} operation`, { type: "organization", id: orgId });
+  // A different LLC: the new operation has its own papers and stays locked until the platform owner approves them.
+  if (separateBusiness) await startSeparateBusiness(orgId, separateBusiness);
+  await logActivity(who, "OTHER", `Added the ${kindLabel(wanted)} operation${separateBusiness ? " (a different business, waiting for review)" : ""}`, { type: "organization", id: orgId });
   return { ok: true, organizationId: orgId };
 }

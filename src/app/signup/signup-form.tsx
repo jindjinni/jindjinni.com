@@ -10,6 +10,7 @@ import { BusinessProfileSignupFields } from "@/components/business-profile-signu
 import { HumanCheck } from "@/components/human-check";
 import { BillingSection } from "@/components/billing-section";
 import { OperationTypeField } from "@/components/operation-type-field";
+import { SecondBusinessField } from "@/components/second-business-field";
 import type { PriceBook } from "@/lib/pricing-rules";
 import { RequiredLegend, RequiredMarks } from "@/components/required-marks";
 import { TermsCheckbox } from "@/components/legal/terms-checkbox";
@@ -17,7 +18,7 @@ import { TermsCheckbox } from "@/components/legal/terms-checkbox";
 // Field styling comes from the .auth-theme scope in globals.css.
 const inputClass = "";
 
-export function SignupForm({ needsVerification, book, referred = false }: { needsVerification: boolean; book: PriceBook; referred?: boolean }) {
+export function SignupForm({ needsVerification, book, referred = false, askSecond = false }: { needsVerification: boolean; book: PriceBook; referred?: boolean; askSecond?: boolean }) {
   // Both server actions are called directly here instead of through
   // <form action={...}>/useActionState -- React 19 resets every
   // UNCONTROLLED field in a form (password, logo file, phone numbers, tax
@@ -150,6 +151,12 @@ export function SignupForm({ needsVerification, book, referred = false }: { need
           >
             <OperationTypeField onChange={setOperationType} />
           </Section>
+
+          {askSecond && operationType === "BOTH" && (
+            <Section title="Your Two Businesses" description="Wholesale and Distribution each keep their own records. Tell us whether they are also two separate businesses.">
+              <SecondBusinessField />
+            </Section>
+          )}
 
           <BillingSection book={book} operationType={operationType} referred={referred} />
 

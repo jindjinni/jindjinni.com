@@ -27,7 +27,9 @@ import { encodeLogoFile } from "@/lib/logo-validation";
 import { consumeSignupVerificationCode } from "@/lib/signup-verification";
 import { signupNeedsEmailVerification } from "@/lib/signup-settings";
 import { TERMS_VERSION } from "@/lib/legal";
-import { readVerification, einInUse, saveVerification, EIN_IN_USE_MESSAGE } from "@/lib/business-verification";
+import { readVerification, einInUse, saveVerification, EIN_IN_USE_MESSAGE, type VerificationInput } from "@/lib/business-verification";
+import { parseSameBusiness, SAME_BUSINESS_REQUIRED, SECOND_PREFIX } from "@/lib/second-business-rules";
+import { checkSecondBusiness } from "@/lib/second-business";
 import { lockMinutesLeft, lockedMessage } from "@/lib/login-throttle";
 import { guardLogin, guardPublicForm, noteFailedLogin } from "@/lib/human-check";
 import { looksLikeUsername } from "@/lib/staff-login";
@@ -159,6 +161,22 @@ export async function signUpOrganization(
   if ("error" in verification) return { error: verification.error };
   if (await einInUse(verification.data.ein)) return { error: EIN_IN_USE_MESSAGE };
 
+  // "Both" with separate workspaces: are Wholesale and Distribution the same LLC? A different LLC brings its own papers, checked here so
+  // nothing is created if they are wrong, and reviewed afterwards like a company.
+  const splitAsked = await featureOn("operations", "__new__").catch(() => false);
+  let secondPapers: VerificationInput | null = null;
+  if (splitAsked && operation.type === "BOTH") {
+    const same = parseSameBusiness(formData.get("sameBusiness"));
+    if (!same) return { error: SAME_BUSINESS_REQUIRED };
+    if (same === "different") {
+      const second = await readVerification(formData, SECOND_PREFIX);
+      if ("error" in second) return { error: second.error };
+      const problem = await checkSecondBusiness(second.data, { first: verification.data });
+      if (problem) return { error: problem };
+      secondPapers = second.data;
+    }
+  }
+
   const profile = extractBusinessProfileIdentityFields(formData);
   if (!profile.businessAddressStreet1 || !profile.businessAddressCity || !profile.businessAddressState || !profile.businessAddressZip) {
     return { error: "Business Address (street, city, state, and ZIP) is required." };
@@ -251,7 +269,11 @@ export async function signUpOrganization(
   });
   await saveVerification(orgId, verification.data);
   // "Both": the second operation is created next to the first, empty and separate, and the owner can open either one.
-  if (splitOn && operation.type === "BOTH") await addOperation({ userId: userId, organizationId: orgId }, true, "distribution");
+  if (splitOn && operation.type === "BOTH") {
+    const second = await addOperation({ userId: userId, organizationId: orgId }, true, "distribution", secondPapers ?? undefined);
+    // The second business's file number is compared with the state's records too (the owner sees the result in the Lamp).
+    if (second.ok && secondPapers) after(() => runRegistryCheck(second.organizationId));
+  }
   // Compare the file number with the state's public records once the response is sent; the owner sees the result in Settings -> Companies.
   after(() => runRegistryCheck(orgId));
 

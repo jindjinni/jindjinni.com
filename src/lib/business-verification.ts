@@ -58,36 +58,40 @@ function sniff(buf: Buffer): "application/pdf" | "image/png" | "image/jpeg" | nu
 }
 
 /** Reads and checks every verification field from a submitted form. Returns the cleaned data, or the first thing to fix. */
-export async function readVerification(fd: FormData): Promise<{ data: VerificationInput } | { error: string }> {
-  const einRes = normalizeEin(text(fd, "ein", 20));
+export async function readVerification(fd: FormData, prefix = ""): Promise<{ data: VerificationInput } | { error: string }> {
+  // `prefix` lets one form carry two sets of papers (the second business uses "second_"); the messages say which one.
+  const t = (k: string, max: number) => text(fd, prefix + k, max);
+  const which = prefix ? " for your second business" : "";
+  const einRes = normalizeEin(t("ein", 20));
+  if ("error" in einRes && prefix) return { error: `${einRes.error.replace(/\.$/, "")}${which}.` };
   if ("error" in einRes) return einRes;
 
-  const registeredState = text(fd, "registeredState", 2).toUpperCase();
-  if (!US_STATES.some((s) => s.code === registeredState)) return { error: "Choose the state your business is registered in." };
+  const registeredState = t("registeredState", 2).toUpperCase();
+  if (!US_STATES.some((s) => s.code === registeredState)) return { error: `Choose the state your business is registered in${which}.` };
 
-  const entityType = text(fd, "entityType", 40);
-  if (!(ENTITY_TYPES as readonly string[]).includes(entityType)) return { error: "Choose your business type (LLC, corporation, and so on)." };
+  const entityType = t("entityType", 40);
+  if (!(ENTITY_TYPES as readonly string[]).includes(entityType)) return { error: `Choose your business type (LLC, corporation, and so on)${which}.` };
 
-  const stateFileNumber = text(fd, "stateFileNumber", 40);
-  if (stateFileNumber.length < 3) return { error: "State registration / file number is required. It's on your state business filing." };
+  const stateFileNumber = t("stateFileNumber", 40);
+  if (stateFileNumber.length < 3) return { error: `State registration / file number is required${which}. It's on your state business filing.` };
 
-  const yearFormed = Number(text(fd, "yearFormed", 4));
+  const yearFormed = Number(t("yearFormed", 4));
   const thisYear = new Date().getFullYear();
   if (!Number.isInteger(yearFormed) || yearFormed < 1900 || yearFormed > thisYear) {
     return { error: `Enter the year your business was formed (1900 to ${thisYear}).` };
   }
 
-  const businessType = text(fd, "businessType", 40);
-  if (!(BUSINESS_TYPES as readonly string[]).includes(businessType)) return { error: "Choose the kind of business you run." };
+  const businessType = t("businessType", 40);
+  if (!(BUSINESS_TYPES as readonly string[]).includes(businessType)) return { error: `Choose the kind of business you run${which}.` };
 
-  const businessDescription = text(fd, "businessDescription", 600);
+  const businessDescription = t("businessDescription", 600);
   if (businessDescription.length < MIN_DESCRIPTION) return { error: `Tell us in a sentence or two what your business does (at least ${MIN_DESCRIPTION} characters).` };
 
-  const proofType = text(fd, "proofType", 80);
-  if (!(PROOF_TYPES as readonly string[]).includes(proofType)) return { error: "Choose which proof document you are uploading." };
+  const proofType = t("proofType", 80);
+  if (!(PROOF_TYPES as readonly string[]).includes(proofType)) return { error: `Choose which proof document you are uploading${which}.` };
 
-  const file = fd.get("proof");
-  if (!(file instanceof File) || file.size === 0) return { error: "Upload one proof document: your IRS EIN letter or your state registration." };
+  const file = fd.get(prefix + "proof");
+  if (!(file instanceof File) || file.size === 0) return { error: `Upload one proof document${which}: your IRS EIN letter or your state registration.` };
   if (file.size > MAX_PROOF_BYTES) return { error: "The proof document must be 4MB or smaller." };
   const buf = Buffer.from(await file.arrayBuffer());
   const kind = sniff(buf);

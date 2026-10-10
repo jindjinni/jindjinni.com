@@ -124,11 +124,12 @@ export default async function CompaniesPage({ searchParams }: { searchParams: Pr
         {list.rows.map((c) => {
           const b = BADGE[c.status];
           return (
-            <details key={c.id} className="rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900" data-testid="company-item" data-status={c.status} open={c.status === "pending"}>
+            <details key={c.id} className="rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900" data-testid="company-item" data-status={c.status} open={c.status === "pending" || c.second?.status === "pending"}>
               <summary className="flex cursor-pointer flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 text-sm text-slate-800 dark:text-slate-100">
                 <strong className="min-w-0 break-words">{c.name}</strong>
                 <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs text-slate-700 dark:bg-slate-800 dark:text-slate-200" data-testid="company-code">{c.code}</span>
                 <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${b.cls}`} data-testid="company-status">{b.label}</span>
+                {c.second && <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${BADGE[c.second.status].cls}`} data-testid="second-badge">Second business: {BADGE[c.second.status].label}</span>}
                 {c.ein && (() => { const rb = REGISTRY_BADGE[c.registryStatus ?? ""]; return rb ? <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${rb.cls}`} data-testid="registry-badge">{rb.label}</span> : <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300" data-testid="registry-badge">Not checked yet</span>; })()}
                 <span className="text-xs text-slate-500">
                   {c.ein ? `EIN ${c.ein}` : "Set up before approvals"}

@@ -50,7 +50,7 @@ export async function decideApprovalAction(_prev: ApprovalState, fd: FormData): 
   if (orgId === org.organizationId) return { error: "You can't change your own company." };
   if (!["approve", "reject", "suspend", "reinstate", "ban", "unban"].includes(decision)) return { error: "Choose what to do." };
 
-  const [target] = await db.select({ id: organizations.id, status: organizations.approvalStatus, trialStartsOn: organizations.trialStartsOn, serviceEndsOn: organizations.serviceEndsOn }).from(organizations).where(eq(organizations.id, orgId)).limit(1);
+  const [target] = await db.select({ id: organizations.id, parent: organizations.parentOrganizationId, status: organizations.approvalStatus, trialStartsOn: organizations.trialStartsOn, serviceEndsOn: organizations.serviceEndsOn }).from(organizations).where(eq(organizations.id, orgId)).limit(1);
   if (!target) return { error: "That company no longer exists." };
 
   const from = normalizeStatus(target.status);
@@ -68,12 +68,12 @@ export async function decideApprovalAction(_prev: ApprovalState, fd: FormData): 
   // What the company itself will read: the note for a turn-down or suspension; nothing after approval or a ban.
   const shown = decision === "reject" || decision === "suspend" || decision === "ban" ? reason : null;
   // The 7-day free trial starts the day the company is first approved (a later reinstatement or lifted ban never restarts it).
-  const trial = decision === "approve" && !target.trialStartsOn ? trialFrom(billingDateOf(new Date())) : null;
+  const trial = decision === "approve" && !target.parent && !target.trialStartsOn ? trialFrom(billingDateOf(new Date())) : null;
   await db
     .update(organizations)
     .set({ approvalStatus: to, approvalReason: shown, approvalDecidedAt: now, updatedAt: now, ...(trial ? { trialStartsOn: trial.startsOn, firstBillableOn: trial.firstBillableOn } : {}),
       // Bringing back a company that cancelled: clear the cancellation and start paying again from today (no second free trial).
-      ...((decision === "reinstate" || decision === "approve") && target.serviceEndsOn ? { cancelRequestedOn: null, serviceEndsOn: null, cancelRefundCents: null, firstBillableOn: billingDateOf(new Date()) } : {}) })
+      ...((decision === "reinstate" || decision === "approve") && !target.parent && target.serviceEndsOn ? { cancelRequestedOn: null, serviceEndsOn: null, cancelRefundCents: null, firstBillableOn: billingDateOf(new Date()) } : {}) })
     .where(eq(organizations.id, orgId));
   await logDecision(orgId, LOG[decision], reason || null, org.userId);
 

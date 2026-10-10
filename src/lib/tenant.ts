@@ -6,6 +6,7 @@
 // param or a client-supplied value. That's the whole multi-tenant
 // guarantee, in one place.
 
+import { operationHeld } from "@/lib/second-business-rules";
 import { billingDateOf } from "@/lib/billing-schedule";
 import { serviceHasEnded } from "@/lib/cancellation";
 import { endPlanIfDue } from "@/lib/plan-end";
@@ -139,6 +140,8 @@ export async function requireOrg(opts: OrgOptions = {}): Promise<CurrentOrg> {
 
   // A new company is locked until the platform owner approves it (and again if they later suspend it).
   if (isHeldBack(found.main!.approvalStatus)) redirect("/under-review");
+  // An operation that is a different LLC has its own review: it stays locked until approved, while the other operation works.
+  if (operationHeld(row!.parent, row!.approvalStatus)) redirect("/under-review");
   // A cancelled plan keeps working through its last day, then the company is switched off (data kept).
   if (found.main!.serviceEndsOn && serviceHasEnded(found.main!.serviceEndsOn, billingDateOf())) {
     await endPlanIfDue(row!.parent ?? row!.organizationId);
@@ -166,7 +169,7 @@ export async function requireOrgApi(opts: OrgOptions = {}): Promise<CurrentOrg |
   if (!userId) return null;
   const found = await workspaceFor(userId);
   const row = found.pick;
-  if (!row || isHeldBack(found.main!.approvalStatus)) return null;
+  if (!row || isHeldBack(found.main!.approvalStatus) || operationHeld(row.parent, row.approvalStatus)) return null;
   if (found.main!.serviceEndsOn && serviceHasEnded(found.main!.serviceEndsOn, billingDateOf())) {
     await endPlanIfDue(row.parent ?? row.organizationId);
     return null;
@@ -232,11 +235,15 @@ export type HeldCompany = {
   cancelRequestedOn: string | null;
   serviceEndsOn: string | null;
   cancelRefundCents: number | null;
+  /** Set when only ONE operation (a different business) is locked: "wholesale" or "distribution". Null when the whole company is held. */
+  operationKind: string | null;
+  /** The company's other operation the person can open meanwhile (only when one operation is locked). */
+  otherOrganizationId: string | null;
 };
 
 /** The signed-in user's company that is waiting for approval (or was turned down), for the /under-review page, or null. */
 export async function getHeldCompanyForUser(userId: string): Promise<HeldCompany | null> {
-  const [row] = await db
+  const rows = await db
     .select({
       organizationId: organizations.id,
       organizationName: organizations.name,
@@ -249,14 +256,21 @@ export async function getHeldCompanyForUser(userId: string): Promise<HeldCompany
       cancelRequestedOn: organizations.cancelRequestedOn,
       serviceEndsOn: organizations.serviceEndsOn,
       cancelRefundCents: organizations.cancelRefundCents,
+      parent: organizations.parentOrganizationId,
+      kind: organizations.operationKind,
     })
     .from(memberships)
     .innerJoin(organizations, eq(memberships.organizationId, organizations.id))
     .where(and(eq(memberships.userId, userId), isNull(memberships.deactivatedAt), isNull(organizations.closedAt)))
-    .orderBy(organizations.parentOrganizationId) // the company's main row first: it carries the approval
-    .limit(1);
-  if (!row || !isHeldBack(row.status)) return null;
-  return { ...row, role: row.role as Role, status: row.status as HeldCompany["status"] };
+    .orderBy(organizations.parentOrganizationId); // the company's main row first: it carries the approval
+  // The whole company held back (waiting, turned down, suspended, banned) comes first.
+  const heldMain = rows.find((r) => !r.parent && isHeldBack(r.status));
+  if (heldMain) return { ...heldMain, role: heldMain.role as Role, status: heldMain.status as HeldCompany["status"], operationKind: null, otherOrganizationId: null };
+  // Otherwise an operation that is a different business and is locked by its own review: the person can still open the other one.
+  const heldOp = rows.find((r) => operationHeld(r.parent, r.status));
+  if (!heldOp) return null;
+  const other = rows.find((r) => r.organizationId !== heldOp.organizationId && (r.organizationId === heldOp.parent || r.parent === heldOp.parent) && !operationHeld(r.parent, r.status)) ?? null;
+  return { ...heldOp, role: heldOp.role as Role, status: heldOp.status as HeldCompany["status"], operationKind: heldOp.kind, otherOrganizationId: other?.organizationId ?? null };
 }
 
 /** Current signed-in user id (no redirect), for pages that must work while the company is closed. */

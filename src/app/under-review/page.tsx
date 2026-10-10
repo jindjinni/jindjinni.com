@@ -7,6 +7,8 @@ import { BILLING_LIVE, usd } from "@/lib/billing-config";
 import { CANCEL_COMEBACK_TEXT } from "@/lib/cancellation-copy";
 import { longDay } from "@/lib/billing-schedule";
 import { ResubmitForm } from "./resubmit-form";
+import { openWorkspace } from "@/app/actions/workspaces";
+import { kindLabel, otherKind, parseKind } from "@/lib/operation-groups-rules";
 
 export const dynamic = "force-dynamic";
 
@@ -24,11 +26,51 @@ export default async function UnderReviewPage() {
   const owner = isOwner(held.role);
   // Only the company's owner and admins are told why a company was suspended; everyone else is pointed to them.
   const sees = isAdmin(held.role);
+  const opKind = parseKind(held.operationKind);
+  const opLabel = opKind ? `Your ${kindLabel(opKind)} operation` : "";
+  const otherLabel = opKind ? kindLabel(otherKind(opKind)) : "";
 
   return (
     <AuthShell>
       <AuthCard className="max-w-3xl p-7 sm:p-10">
-        {held.status === "pending" ? (
+        {held.operationKind ? (
+          <div data-testid="under-review-operation" data-status={held.status}>
+            <p className="inline-flex rounded-full border border-mint-line bg-mint px-3 py-1 text-xs font-extrabold uppercase tracking-wider text-brand-deep">
+              {held.status === "pending" ? "Under review" : held.status === "rejected" ? "Not approved" : held.status === "suspended" ? "Suspended" : "Closed"}
+            </p>
+            <h1 className="mt-4 text-3xl font-extrabold tracking-tight text-ink">
+              {opLabel} is {held.status === "pending" ? "being reviewed" : held.status === "rejected" ? "not approved yet" : held.status === "suspended" ? "suspended" : "closed"}
+            </h1>
+            <p className="mt-3 text-base text-muted">
+              {held.status === "pending"
+                ? `${opLabel} is run by a separate business, so we check its EIN, state registration and proof document the same way we checked the first one. It opens as soon as it is approved. Nothing else is needed from you right now.`
+                : held.status === "rejected"
+                  ? `We could not confirm the business that runs ${opLabel} from the details we have${held.decidedAt ? ` (reviewed ${day(held.decidedAt)})` : ""}.`
+                  : held.status === "suspended"
+                    ? `${opLabel} has been switched off${held.decidedAt ? ` on ${day(held.decidedAt)}` : ""}. Its data is kept safe.`
+                    : `${opLabel} was closed under our Terms and Conditions${held.decidedAt ? ` on ${day(held.decidedAt)}` : ""}.`}
+              {" "}Your other operation is not affected.
+            </p>
+            {sees && held.reason && held.status !== "pending" && (
+              <p className="mt-4 rounded-lg border border-line bg-white p-4 text-sm text-ink" data-testid="operation-reason">
+                <strong>{held.status === "rejected" ? "What we need:" : "Why:"}</strong> {held.reason}
+              </p>
+            )}
+            {held.status === "rejected" && owner && (
+              <>
+                <p className="mt-4 text-base text-muted">Fix what&rsquo;s wrong below and send the details of the business that runs {opLabel} again.</p>
+                <ResubmitForm />
+              </>
+            )}
+            {(held.status === "suspended" || held.status === "banned") && <p className="mt-4 text-base text-muted">Please contact support if you think this is a mistake.</p>}
+            {held.otherOrganizationId && (
+              <form action={openWorkspace} className="mt-6">
+                <input type="hidden" name="organizationId" value={held.otherOrganizationId} />
+                <button type="submit" className={authBtnSecondary} data-testid="open-other-operation">Open your {otherLabel} operation</button>
+              </form>
+            )}
+          </div>
+        ) : held.status === "pending" ? (
           <div data-testid="under-review-pending">
             <p className="inline-flex rounded-full border border-mint-line bg-mint px-3 py-1 text-xs font-extrabold uppercase tracking-wider text-brand-deep">
               Under review

@@ -33,9 +33,12 @@ export function parseFilter(raw: string | undefined): CompanyFilter {
   return FILTERS.some((f) => f.key === raw) ? (raw as CompanyFilter) : "all";
 }
 
+/** A company whose second operation is a different business that is waiting for review. */
+const childWaiting = sql`exists (select 1 from organizations c where c.parent_organization_id = ${organizations.id} and c.approval_status = 'pending')`;
+
 function filterWhere(filter: CompanyFilter): SQL | undefined {
   switch (filter) {
-    case "waiting": return eq(organizations.approvalStatus, "pending");
+    case "waiting": return or(eq(organizations.approvalStatus, "pending"), childWaiting);
     case "active": return or(isNull(organizations.approvalStatus), eq(organizations.approvalStatus, "approved"));
     case "suspended": return eq(organizations.approvalStatus, "suspended");
     case "turned_down": return eq(organizations.approvalStatus, "rejected");
@@ -68,7 +71,8 @@ export async function companyCounts(): Promise<CompanyCounts> {
   const [r] = await db
     .select({
       total: sql<number>`count(*)`,
-      waiting: sql<number>`coalesce(sum(case when ${organizations.approvalStatus} = 'pending' then 1 else 0 end), 0)`,
+      waiting: sql<number>`coalesce(sum(case when ${organizations.approvalStatus} = 'pending' or ${childWaiting} then 1 else 0 end), 0)`,
+      waitingMain: sql<number>`coalesce(sum(case when ${organizations.approvalStatus} = 'pending' then 1 else 0 end), 0)`,
       suspended: sql<number>`coalesce(sum(case when ${organizations.approvalStatus} = 'suspended' then 1 else 0 end), 0)`,
       turnedDown: sql<number>`coalesce(sum(case when ${organizations.approvalStatus} = 'rejected' then 1 else 0 end), 0)`,
       banned: sql<number>`coalesce(sum(case when ${organizations.approvalStatus} = 'banned' then 1 else 0 end), 0)`,
@@ -81,12 +85,14 @@ export async function companyCounts(): Promise<CompanyCounts> {
   const suspended = Number(r?.suspended ?? 0);
   const turnedDown = Number(r?.turnedDown ?? 0);
   const banned = Number(r?.banned ?? 0);
-  return { total, waiting, active: total - waiting - suspended - turnedDown - banned, suspended, turnedDown, banned, newThisWeek: Number(r?.newThisWeek ?? 0) };
+  // A company whose only waiting part is its second business is still active (its first operation works), so "active" uses the main row only.
+  const waitingMain = Number(r?.waitingMain ?? 0);
+  return { total, waiting, active: total - waitingMain - suspended - turnedDown - banned, suspended, turnedDown, banned, newThisWeek: Number(r?.newThisWeek ?? 0) };
 }
 
 /** How many companies are waiting for a decision (the number in the Settings menu). */
 export async function waitingCount(): Promise<number> {
-  const [r] = await db.select({ n: sql<number>`count(*)` }).from(organizations).where(and(eq(organizations.approvalStatus, "pending"), isNull(organizations.parentOrganizationId)));
+  const [r] = await db.select({ n: sql<number>`count(*)` }).from(organizations).where(and(or(eq(organizations.approvalStatus, "pending"), childWaiting), isNull(organizations.parentOrganizationId)));
   return Number(r?.n ?? 0);
 }
 
@@ -101,6 +107,29 @@ function sidesText(row: OperationsRow, otherKinds: string[] = []): string {
   }
   return sidesLabel(sidesFrom(row)) + (needsConfirmation(row) ? " (records not named yet)" : "");
 }
+
+/** The company's second operation when it is a different business with its own review (null when both operations are one business). */
+export type SecondBusinessRow = {
+  id: string;
+  kind: string | null;
+  status: CompanyStatus;
+  reason: string | null;
+  decidedAt: string | null;
+  ein: string | null;
+  registeredState: string | null;
+  entityType: string | null;
+  stateFileNumber: string | null;
+  yearFormed: number | null;
+  businessType: string | null;
+  businessDescription: string | null;
+  proofType: string | null;
+  proofFileName: string | null;
+  submittedAt: string | null;
+  registryStatus: string | null;
+  registryDetail: string | null;
+  registryCheckedAt: string | null;
+  history: DecisionEntry[];
+};
 
 export type CompanyRow = {
   id: string;
@@ -152,6 +181,7 @@ export type CompanyRow = {
   teamSize: number;
   lastSignIn: string | null;
   history: DecisionEntry[];
+  second: SecondBusinessRow | null;
 };
 
 export type CompanyPage = { rows: CompanyRow[]; total: number; page: number; pages: number };
@@ -225,7 +255,7 @@ export async function listCompanies(opts: { q?: string; filter?: CompanyFilter; 
     .leftJoin(businessVerifications, eq(businessVerifications.organizationId, organizations.id))
     .leftJoin(businessProfiles, eq(businessProfiles.organizationId, organizations.id))
     .where(where)
-    .orderBy(sql`case when ${organizations.approvalStatus} = 'pending' then 0 else 1 end`, desc(organizations.createdAt), organizations.id)
+    .orderBy(sql`case when ${organizations.approvalStatus} = 'pending' or ${childWaiting} then 0 else 1 end`, desc(organizations.createdAt), organizations.id)
     .limit(PAGE_SIZE)
     .offset((page - 1) * PAGE_SIZE);
 
@@ -274,6 +304,34 @@ export async function listCompanies(opts: { q?: string; filter?: CompanyFilter; 
   const kids = ids.length ? await db.select({ parent: organizations.parentOrganizationId, kind: organizations.operationKind }).from(organizations).where(inArray(organizations.parentOrganizationId, ids)) : [];
   const kidKinds = new Map<string, string[]>();
   for (const k of kids) if (k.parent && k.kind) kidKinds.set(k.parent, [...(kidKinds.get(k.parent) ?? []), k.kind]);
+
+  // A second operation that is a different business: its own papers and its own history (never the proof document itself).
+  const secondRows = ids.length
+    ? await db
+        .select({
+          parent: organizations.parentOrganizationId, id: organizations.id, kind: organizations.operationKind, status: organizations.approvalStatus, reason: organizations.approvalReason, decidedAt: organizations.approvalDecidedAt,
+          ein: businessVerifications.ein, registeredState: businessVerifications.registeredState, entityType: businessVerifications.entityType, stateFileNumber: businessVerifications.stateFileNumber,
+          yearFormed: businessVerifications.yearFormed, businessType: businessVerifications.businessType, businessDescription: businessVerifications.businessDescription,
+          proofType: businessVerifications.proofType, proofFileName: businessVerifications.proofFileName, submittedAt: businessVerifications.submittedAt,
+          registryStatus: businessVerifications.registryStatus, registryDetail: businessVerifications.registryDetail, registryCheckedAt: businessVerifications.registryCheckedAt,
+        })
+        .from(organizations)
+        .leftJoin(businessVerifications, eq(businessVerifications.organizationId, organizations.id))
+        .where(and(inArray(organizations.parentOrganizationId, ids), sql`${organizations.approvalStatus} is not null`))
+    : [];
+  const secondHist = secondRows.length
+    ? await db.select({ id: companyDecisions.id, orgId: companyDecisions.organizationId, decision: companyDecisions.decision, reason: companyDecisions.reason, createdAt: companyDecisions.createdAt }).from(companyDecisions).where(inArray(companyDecisions.organizationId, secondRows.map((r) => r.id))).orderBy(desc(companyDecisions.createdAt))
+    : [];
+  const secondOf = new Map<string, SecondBusinessRow>();
+  for (const r of secondRows) {
+    if (!r.parent) continue;
+    secondOf.set(r.parent, {
+      id: r.id, kind: r.kind, status: normalizeStatus(r.status), reason: r.reason, decidedAt: r.decidedAt, ein: r.ein, registeredState: r.registeredState, entityType: r.entityType, stateFileNumber: r.stateFileNumber,
+      yearFormed: r.yearFormed, businessType: r.businessType, businessDescription: r.businessDescription, proofType: r.proofType, proofFileName: r.proofFileName, submittedAt: r.submittedAt,
+      registryStatus: r.registryStatus, registryDetail: r.registryDetail, registryCheckedAt: r.registryCheckedAt,
+      history: secondHist.filter((h) => h.orgId === r.id).slice(0, 6).map((h) => ({ id: h.id, decision: h.decision, reason: h.reason, createdAt: h.createdAt })),
+    });
+  }
 
   const useRows = ids.length ? await db.select({ org: codeUses.organizationId, kind: codeUses.kind, code: codeUses.code }).from(codeUses).where(inArray(codeUses.organizationId, ids)) : [];
   const codesOf = (id: string) => useRows.filter((u) => u.org === id).map((u) => (u.kind === "promo" ? `Promo code ${u.code}` : `Referred by affiliate code ${u.code}`)).join("; ");
@@ -332,6 +390,7 @@ export async function listCompanies(opts: { q?: string; filter?: CompanyFilter; 
     teamSize: teamBy.get(b.id) ?? 0,
     lastSignIn: lastBy.get(b.id) ?? null,
     history: histBy.get(b.id) ?? [],
+    second: secondOf.get(b.id) ?? null,
   }));
   return { rows, total, page, pages };
 }
