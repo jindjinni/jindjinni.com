@@ -9,7 +9,7 @@ for (const k of GUIDE_KEYS) {
   assert.ok(g.share("Plantarz").includes("Plantarz"), k);
   assert.ok(g.help.subject.length >= SUBJECT_MIN && g.help.subject.length <= SUBJECT_MAX, k);
 }
-assert.deepEqual(GUIDE_KEYS.sort(), ["ai-anthropic", "ai-openai", "cron-ping", "email", "shippo"]);
+assert.deepEqual(GUIDE_KEYS.sort(), ["ai-anthropic", "ai-openai", "cron-ping", "email", "quickbooks", "quickbooks-desktop", "quickbooks-platform", "shippo"]);
 
 // provider words are filled in correctly
 assert.ok(GUIDES["ai-anthropic"].steps[0].includes("console.anthropic.com"));

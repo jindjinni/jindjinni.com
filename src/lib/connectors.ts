@@ -12,10 +12,11 @@ import { aiConnectionView } from "@/lib/ai-connection";
 import { PROVIDER_LABEL } from "@/lib/ai-provider";
 import { getConnection } from "@/lib/email-connector";
 import type { GuideKey } from "@/lib/connect-guides";
+import { accountingView } from "@/lib/quickbooks";
 import { shippoConnectionView } from "@/lib/shippo-connection";
 import type { MenuDept } from "@/lib/sidebar-menu";
 
-export type ConnectorKey = "shippo" | "email" | "ai" | "text";
+export type ConnectorKey = "shippo" | "email" | "ai" | "text" | "quickbooks";
 
 export type ConnectorInfo = {
   key: ConnectorKey;
@@ -60,6 +61,15 @@ export const CONNECTORS: Record<ConnectorKey, ConnectorInfo> = {
     manageWhere: "Settings → Connectors",
     guide: "ai-anthropic",
   },
+  quickbooks: {
+    key: "quickbooks",
+    title: "QuickBooks",
+    what: "Connect your own QuickBooks Online (read only) so Sales and Accounts can see who has paid, who owes and your profit and loss. QuickBooks Desktop and Enterprise: upload an exported report instead.",
+    scope: "company",
+    manageHref: "/dashboard/settings/connectors",
+    manageWhere: "Settings → Connectors",
+    guide: "quickbooks",
+  },
   text: {
     key: "text",
     title: "Text messages",
@@ -76,12 +86,13 @@ export const DEPT_CONNECTORS: Partial<Record<MenuDept, ConnectorKey[]>> = {
   purchasing: ["shippo"],
   receiving: ["email", "ai"],
   "customer-service": ["email"],
-  sales: ["email"],
+  sales: ["email", "quickbooks"],
+  accounts: ["quickbooks"],
   marketing: ["email", "text"],
 };
 
 /** The connectors that serve the whole company, in the order Settings -> Connectors shows them. */
-export const COMPANY_CONNECTORS: ConnectorKey[] = ["email", "ai", "text"];
+export const COMPANY_CONNECTORS: ConnectorKey[] = ["email", "ai", "quickbooks", "text"];
 
 export type ConnectorState = "connected" | "test" | "attention" | "not_connected" | "platform" | "coming_soon";
 
@@ -101,7 +112,7 @@ export const needsAction = (s: ConnectorState) => s === "attention" || s === "no
 
 /** The live state of each connector for one company. Reads only that company's own rows. */
 export async function connectorStatuses(organizationId: string): Promise<Record<ConnectorKey, ConnectorStatus>> {
-  const [shippo, mail, ai] = await Promise.all([shippoConnectionView(organizationId), getConnection(organizationId), aiConnectionView(organizationId)]);
+  const [shippo, mail, ai, qb] = await Promise.all([shippoConnectionView(organizationId), getConnection(organizationId), aiConnectionView(organizationId), accountingView(organizationId)]);
 
   const shippoStatus: ConnectorStatus =
     shippo.source === "company"
@@ -127,8 +138,15 @@ export async function connectorStatuses(organizationId: string): Promise<Record<
         ? { key: "ai", state: "platform", detail: "Label-photo reading and Jin use the platform's own Claude account." }
         : { key: "ai", state: "not_connected", detail: "Label-photo reading is off. Jin (with a daily limit) and the industry news on Home work without it." };
 
+  const qbStatus: ConnectorStatus = qb.connected
+    ? qb.status === "ACTIVE"
+      ? { key: "quickbooks", state: "connected", detail: `Reading reports from ${qb.companyName ?? "your QuickBooks Online company"}. The platform only reads; it never changes anything in QuickBooks.` }
+      : { key: "quickbooks", state: "attention", detail: qb.lastError ?? "QuickBooks isn't accepting the saved permission. Reconnect it." }
+    : { key: "quickbooks", state: "not_connected", detail: "Not connected. QuickBooks Online can be connected; QuickBooks Desktop and Enterprise users can upload an exported report instead." };
+
   return {
     shippo: shippoStatus,
+    quickbooks: qbStatus,
     email: emailStatus,
     ai: aiStatus,
     text: { key: "text", state: "coming_soon", detail: "Text campaigns can't be sent yet. Texting needs a provider connector that isn't built yet; nothing is sent in the meantime." },

@@ -2452,6 +2452,73 @@ export const paymentNotices = sqliteTable(
 );
 
 // ---------------------------------------------------------------------------
+// QuickBooks: a company's own connection (read only) and the report copies it pulls or uploads
+// ---------------------------------------------------------------------------
+
+/**
+ * A company's QuickBooks Online connection. We keep only the long-lived permission (refresh token), encrypted with the same key
+ * as the mailbox permission, and we only ever READ from QuickBooks (see lib/quickbooks.ts). One per company.
+ */
+export const accountingConnections = sqliteTable(
+  "accounting_connections",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    provider: text("provider", { enum: ["QBO"] }).notNull().default("QBO"),
+    /** QuickBooks' own id for the company file (its "realm"). */
+    realmId: text("realm_id").notNull(),
+    companyName: text("company_name"),
+    credentialEnc: text("credential_enc").notNull(),
+    status: text("status", { enum: ["ACTIVE", "NEEDS_RECONNECT"] }).notNull().default("ACTIVE"),
+    lastError: text("last_error"),
+    /** The version of the "you stay in charge" notice the person accepted before connecting, and when. */
+    termsVersion: text("terms_version").notNull(),
+    termsAcceptedAt: text("terms_accepted_at").notNull(),
+    connectedByUserId: text("connected_by_user_id").references(() => users.id),
+    connectedByName: text("connected_by_name"),
+    connectedAt: text("connected_at")
+      .notNull()
+      .default(sql`(current_timestamp)`),
+    lastUsedAt: text("last_used_at"),
+  },
+  (t) => [uniqueIndex("accounting_connections_org_idx").on(t.organizationId)],
+);
+
+export const QB_REPORT_KINDS = ["PAID", "OWED", "PNL"] as const;
+
+/**
+ * A saved copy of one QuickBooks report (pulled from QuickBooks Online, or uploaded from a QuickBooks Desktop / Enterprise export).
+ * Pages read these copies; only the Refresh and Upload actions write. The table is stored as JSON text: `columns` is a list of
+ * names and `rows` a list of lists of text.
+ */
+export const accountingSnapshots = sqliteTable(
+  "accounting_snapshots",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: QB_REPORT_KINDS }).notNull(),
+    source: text("source", { enum: ["QBO", "FILE"] }).notNull(),
+    title: text("title").notNull(),
+    /** What period the report covers, in words ("Last 90 days", "As of 2026-10-10"). */
+    periodLabel: text("period_label"),
+    /** For an uploaded file, its name. */
+    fileName: text("file_name"),
+    columnsJson: text("columns_json").notNull(),
+    rowsJson: text("rows_json").notNull(),
+    rowCount: integer("row_count").notNull(),
+    takenByUserId: text("taken_by_user_id"),
+    takenByName: text("taken_by_name"),
+    takenAt: text("taken_at").notNull(),
+    ...timestamps,
+  },
+  (t) => [index("accounting_snapshots_org_idx").on(t.organizationId, t.kind, t.takenAt)],
+);
+
+// ---------------------------------------------------------------------------
 // HR: the time clock and the activity log
 // ---------------------------------------------------------------------------
 

@@ -9,6 +9,10 @@ import { aiConnectionView } from "@/lib/ai-connection";
 import { connectorStatuses } from "@/lib/connectors";
 import { ConnectorSummaryCard } from "@/components/connector-card";
 import { ConnectGuide } from "@/components/connect-guide";
+import { accountingView, qboConfigured } from "@/lib/quickbooks";
+import { quickbooksOn } from "@/lib/quickbooks-service";
+import { isPlatformAdmin } from "@/lib/platform-admin";
+import { QuickBooksConnector } from "./quickbooks-connector";
 import { EmailConnectorCard, type ConnectionView } from "./email-connector-card";
 import { SmtpConnectForm } from "./smtp-connect-form";
 import { AiConnector } from "./ai-connector";
@@ -20,12 +24,13 @@ export const dynamic = "force-dynamic";
  * from and the AI key (Claude or ChatGPT) are plugged in here; department-specific ones (Shippo) are in that department's own
  * Settings -> Connectors tab and are listed below with their state. Owner and Admin only.
  */
-export default async function CompanyConnectorsPage({ searchParams }: { searchParams: Promise<{ connected?: string; connect_error?: string }> }) {
+export default async function CompanyConnectorsPage({ searchParams }: { searchParams: Promise<{ connected?: string; connect_error?: string; qb_connected?: string; qb_error?: string }> }) {
   const sp = await searchParams;
   const org = await requireOrg();
   if (!isAdmin(org.role)) notFound();
 
-  const [statuses, conn, ai] = await Promise.all([connectorStatuses(org.organizationId), getConnection(org.organizationId), aiConnectionView(org.organizationId)]);
+  const [statuses, conn, ai, qbOn, qb] = await Promise.all([connectorStatuses(org.organizationId), getConnection(org.organizationId), aiConnectionView(org.organizationId), quickbooksOn(org.organizationId), accountingView(org.organizationId)]);
+  const platformAdmin = qbOn && !qboConfigured() ? await isPlatformAdmin(org) : false;
   let connection: ConnectionView | null = null;
   if (conn) {
     const [by] = conn.connectedByUserId ? await db.select({ name: users.name, email: users.email }).from(users).where(eq(users.id, conn.connectedByUserId)).limit(1) : [];
@@ -68,6 +73,25 @@ export default async function CompanyConnectorsPage({ searchParams }: { searchPa
         <AiConnector source={ai.source} provider={ai.provider} status={ai.status} keyHint={ai.keyHint} lastError={ai.lastError} companyName={org.organizationName} />
         <ConnectGuide guideKey="ai-anthropic" open={(ai.source !== "company" || ai.status !== "ACTIVE") && ai.provider === "anthropic"} />
         <ConnectGuide guideKey="ai-openai" open={(ai.source !== "company" || ai.status !== "ACTIVE") && ai.provider === "openai"} />
+        {qbOn && (
+          <>
+            <QuickBooksConnector
+              connected={qb.connected}
+              status={qb.status}
+              companyName={qb.companyName}
+              connectedByName={qb.connectedByName}
+              connectedAt={qb.connectedAt}
+              lastUsedAt={qb.lastUsedAt}
+              lastError={qb.lastError}
+              configured={qboConfigured()}
+              justConnected={sp.qb_connected === "1"}
+              error={sp.qb_error ?? null}
+            />
+            <ConnectGuide guideKey="quickbooks" open={!qb.connected || qb.status !== "ACTIVE"} />
+            <ConnectGuide guideKey="quickbooks-desktop" />
+            {platformAdmin && <ConnectGuide guideKey="quickbooks-platform" open />}
+          </>
+        )}
         <ConnectorSummaryCard status={statuses.text} canManage />
       </section>
 

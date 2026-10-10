@@ -8,6 +8,7 @@ import { withoutHidden } from "@/lib/operation-tabs-rules";
 import { auditCenterOn } from "@/lib/audit-access";
 import { reminderCount } from "@/lib/audit-insights-service";
 import { pastDueCount, receivablesOn } from "@/lib/receivable-service";
+import { quickbooksOn } from "@/lib/quickbooks-service";
 import { withMailTab } from "@/lib/mail-access";
 import { mailBadges } from "@/lib/mailbox-service";
 import { getSavedSidebarMenus } from "@/lib/sidebar-menu-store";
@@ -31,9 +32,9 @@ export default async function AccountsLayout({ children }: { children: React.Rea
   if (!canViewAccounts(org.role, org.access)) notFound();
   const view = await tabViewOf(org.organizationId);
   // The Audit Center tab appears only in a Distribution operation, and only while its rollout switch is on.
-  const ids = withoutHidden(menuIdsFor("accounts", { connectors: false }), view.sides, "accounts", view.showAll);
-  const [auditOn, recvOn] = await Promise.all([auditCenterOn(org.organizationId), receivablesOn(org.organizationId)]);
-  const shown = ids.filter((id) => (auditOn || id !== "audit-center") && (recvOn || id !== "to-be-collected"));
+  const ids = withoutHidden(menuIdsFor("accounts", { connectors: isAdmin(org.role) }), view.sides, "accounts", view.showAll);
+  const [auditOn, recvOn, qbOn] = await Promise.all([auditCenterOn(org.organizationId), receivablesOn(org.organizationId), quickbooksOn(org.organizationId)]);
+  const shown = ids.filter((id) => (auditOn || id !== "audit-center") && (recvOn || id !== "to-be-collected") && (qbOn || (id !== "quickbooks" && id !== "connectors")));
   const menu = resolveMenu("accounts", await getSavedSidebarMenus(org.organizationId), await withMailTab(shown, org.organizationId));
 
   return (

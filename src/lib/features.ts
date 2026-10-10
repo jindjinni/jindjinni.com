@@ -72,6 +72,12 @@ export const FEATURES: FeatureDef[] = [
     blurb: "Accounts -> Supplier Bills: when Receiving confirms a supplier's purchase order has arrived, Accounts gets a bill to pay, marks it paid, and sees what is owed by supplier.",
     defaultStage: "mothership",
   },
+  {
+    key: "quickbooks",
+    label: "QuickBooks",
+    blurb: "Settings -> Connectors: a company connects its own QuickBooks Online (read only) or uploads a QuickBooks Desktop / Enterprise export, and Sales and Accounts get a QuickBooks tab with who has paid, who owes and profit and loss.",
+    defaultStage: "mothership",
+  },
 ];
 
 export const featureDef = (key: string) => FEATURES.find((f) => f.key === key);

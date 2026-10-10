@@ -15,7 +15,12 @@ import * as XLSX from "xlsx";
 
 export type ParsedSheet = { headers: string[]; rows: Record<string, string>[] };
 
-function parseCsvText(text: string): ParsedSheet {
+/** The non-empty rows of a CSV as plain lists of trimmed text (for files whose first lines are titles, like QuickBooks exports). */
+export function parseCsvGrid(text: string): string[][] {
+  return csvRows(text).filter((r) => r.some((cell) => cell.trim() !== "")).map((r) => r.map((c) => c.trim()));
+}
+
+function csvRows(text: string): string[][] {
   // Minimal RFC4180-style parser: quoted fields, embedded commas/newlines,
   // and "" as an escaped quote. Good enough for exports from Excel/Sheets.
   const rows: string[][] = [];
@@ -55,8 +60,11 @@ function parseCsvText(text: string): ParsedSheet {
     row.push(field);
     rows.push(row);
   }
+  return rows;
+}
 
-  const nonEmpty = rows.filter((r) => r.some((cell) => cell.trim() !== ""));
+function parseCsvText(text: string): ParsedSheet {
+  const nonEmpty = csvRows(text).filter((r) => r.some((cell) => cell.trim() !== ""));
   if (nonEmpty.length === 0) return { headers: [], rows: [] };
 
   const headers = nonEmpty[0].map((h) => h.trim());

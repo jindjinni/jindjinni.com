@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { requireOrg } from "@/lib/tenant";
 import { isAdmin } from "@/lib/permissions";
 import { DEPT_CONNECTORS, connectorStatuses } from "@/lib/connectors";
+import { quickbooksOn } from "@/lib/quickbooks-service";
 import type { MenuDept } from "@/lib/sidebar-menu";
 import { ConnectorSummaryCard } from "@/components/connector-card";
 
@@ -13,7 +14,8 @@ import { ConnectorSummaryCard } from "@/components/connector-card";
 export async function DepartmentConnectors({ dept }: { dept: MenuDept }) {
   const org = await requireOrg();
   if (!isAdmin(org.role)) notFound();
-  const keys = DEPT_CONNECTORS[dept] ?? [];
+  const qbOn = await quickbooksOn(org.organizationId);
+  const keys = (DEPT_CONNECTORS[dept] ?? []).filter((k) => k !== "quickbooks" || qbOn);
   const statuses = await connectorStatuses(org.organizationId);
   return (
     <div className="flex max-w-2xl flex-col gap-5" data-testid={`dept-connectors-${dept}`}>

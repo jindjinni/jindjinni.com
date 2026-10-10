@@ -7,7 +7,7 @@
 
 import { PROVIDER_CONSOLE, PROVIDER_LABEL, PROVIDER_MAKER, type AiProvider } from "@/lib/ai-provider";
 
-export type GuideKey = "shippo" | "email" | "ai-anthropic" | "ai-openai" | "cron-ping";
+export type GuideKey = "shippo" | "email" | "ai-anthropic" | "ai-openai" | "cron-ping" | "quickbooks" | "quickbooks-desktop" | "quickbooks-platform";
 
 export type Guide = {
   key: GuideKey;
@@ -83,6 +83,57 @@ export const GUIDES: Record<GuideKey, Guide> = {
   },
   "ai-anthropic": AI("anthropic"),
   "ai-openai": AI("openai"),
+  quickbooks: {
+    key: "quickbooks",
+    title: "How to connect QuickBooks Online",
+    what: "Lets Sales and Accounts see reports from your own QuickBooks Online here: who has paid, who owes you, and your profit and loss. The platform only reads. It never adds, changes or deletes anything in QuickBooks.",
+    cost: "Nothing from us. It uses the QuickBooks Online account you already pay Intuit for. Intuit does not charge extra for a connected app to read your reports.",
+    steps: [
+      "Sign in to this platform as an owner or admin. Only they can connect QuickBooks.",
+      "Read the notice on this page and tick the box that says you have read it.",
+      "Press Connect QuickBooks. You are taken to QuickBooks' own page. We never see your QuickBooks password.",
+      "Sign in to QuickBooks, choose the company file you want to share, and press Connect. QuickBooks will say the app can read and write. That is QuickBooks' only permission setting; this platform only reads.",
+      "You come back to this page and it says Connected with your company's name. Open Accounts or Sales, then QuickBooks, and press Pull from QuickBooks on a report.",
+    ],
+    check: "After you connect, this page shows Connected and your QuickBooks company name. In Accounts → QuickBooks, press Pull from QuickBooks on Who has paid. The rows should match the payments you see in QuickBooks for the last 90 days.",
+    ifBroken: "If it says Needs attention, QuickBooks took the permission back (a password change, a removed app, or about 100 days without use can do this). Press Connect QuickBooks again. Reports already saved stay here. You can disconnect at any time here, or in QuickBooks under your connected apps.",
+    share: (c) => `Hi team, ${c}'s QuickBooks is now connected for reading only. Accounts and Sales can open the QuickBooks tab to see who has paid and who owes us. Nothing here changes anything in QuickBooks. The reports are copies from when they were pulled, so please check anything important in QuickBooks itself.`,
+    help: { subject: "Help connecting QuickBooks Online", body: "I'm trying to connect our QuickBooks Online in Settings → Connectors and I'm stuck. Here is what I see on the screen:\n" },
+  },
+  "quickbooks-desktop": {
+    key: "quickbooks-desktop",
+    title: "QuickBooks Desktop or Enterprise: upload a report",
+    what: "QuickBooks Desktop and Enterprise live on your own computer, so they cannot be connected directly. Instead you export a report from QuickBooks as a CSV file and upload it here, and Sales and Accounts see it like any other report.",
+    cost: "Nothing. You do not install anything and nothing connects to your computer.",
+    steps: [
+      "In QuickBooks open the report: Reports, then Customers & Receivables (Who has paid: Transaction List by Customer. Who owes: A/R Aging Summary) or Company & Financial (Profit & Loss Standard).",
+      "Choose the dates you want and press Customize Report if you need to.",
+      "Press Excel at the top, then Create New Worksheet, and in the box that opens choose Create a comma separated values (.csv) file. Save it where you can find it.",
+      "In this platform open Accounts or Sales, then QuickBooks. On the report you exported, press Choose file, pick the CSV, and press Upload.",
+      "Repeat whenever you want the numbers refreshed. Each upload is saved as the newest copy.",
+    ],
+    check: "After you upload, the report shows the file's name, who uploaded it and when, and the rows from your file. Compare the totals with the report on your screen in QuickBooks.",
+    ifBroken: "If it says the file does not look like a QuickBooks report, make sure you saved a CSV (not an Excel file) and that the report has at least a heading row and one data row. A file over 5 MB is too large: choose a shorter period.",
+    share: (c) => `Hi team, ${c} uses QuickBooks on a computer, so to see its reports here someone exports a report from QuickBooks as a CSV file and uploads it under Accounts or Sales, then QuickBooks. The numbers are copies from when the file was exported.`,
+    help: { subject: "Help uploading a QuickBooks report", body: "I'm trying to upload a QuickBooks report and I'm stuck. Here is what I see on the screen:\n" },
+  },
+  "quickbooks-platform": {
+    key: "quickbooks-platform",
+    title: "Platform setup for the QuickBooks connection",
+    what: "Before any company can press Connect QuickBooks, the platform needs one registered app with Intuit (the company that makes QuickBooks). This is done once by the platform owner, not by each company.",
+    cost: "Free to register. Intuit reviews an app before it can be used with real companies' data (their production keys), so allow time for that. Until then only a sandbox (practice) company works.",
+    steps: [
+      "Sign in at developer.intuit.com, create an app, and choose the QuickBooks Online Accounting scope.",
+      "Under the app's Keys settings add this redirect address: your website address followed by /api/quickbooks/callback.",
+      "Copy the Client ID and Client Secret for the environment you are using (Development keys for the practice company, Production keys for real companies).",
+      "In your hosting settings add QBO_CLIENT_ID and QBO_CLIENT_SECRET with those values. Add QBO_ENV with the value sandbox while practising; leave it out for production. Then redeploy.",
+      "Switch the QuickBooks feature on for your own company first in the Lamp, try Connect QuickBooks with a practice company, then roll it out.",
+    ],
+    check: "On Settings → Connectors the QuickBooks card shows a Connect QuickBooks button. If it says the platform has not set up QuickBooks yet, the two keys are missing from the hosting settings.",
+    ifBroken: "If QuickBooks shows an error page after sign-in, the redirect address in Intuit's settings does not exactly match your website address. Fix it there. Never share the Client Secret in chat or email.",
+    share: (c) => `Platform note for ${c}: QuickBooks needs QBO_CLIENT_ID and QBO_CLIENT_SECRET in the hosting settings and the redirect address /api/quickbooks/callback registered with Intuit.`,
+    help: { subject: "Help with the platform's QuickBooks setup", body: "I'm registering the platform's QuickBooks app with Intuit and I'm stuck. Here is what I see:\n" },
+  },
   "cron-ping": {
     key: "cron-ping",
     title: "How to make scheduled emails go out on the minute",
