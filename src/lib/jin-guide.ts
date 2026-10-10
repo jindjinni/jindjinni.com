@@ -39,6 +39,8 @@ const WHAT: Record<MenuDept, Record<string, string>> = {
     "to-be-paid": "Orders Receiving sent to Accounts that still need to be paid, soonest due first.",
     "paid-orders": "Orders already marked Paid, with their payment receipts.",
     "monthly-report": "A monthly report of what was paid.",
+    "to-be-collected": "Sent invoices that customers still owe money on, grouped by how late they are; record a payment when the money arrives.",
+    "supplier-bills": "What you owe your suppliers: a bill appears when a supplier's order is received; check it against the supplier's invoice, approve it, record the payment, attach the invoice and email the supplier that you paid.",
     "payment-terms": "How many business days you take to pay, holidays and closure days.",
   },
   "customer-service": {

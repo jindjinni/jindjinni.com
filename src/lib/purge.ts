@@ -8,7 +8,7 @@
 import { and, eq, inArray, isNotNull, lte, lt } from "drizzle-orm";
 import { getTableColumns } from "drizzle-orm";
 import { db } from "@/db/client";
-import { chatAttachments, memberships, organizations, receivingPackagePhotos, shipmentFiles, signInEvents, users } from "@/db/schema";
+import { chatAttachments, memberships, organizations, receivingPackagePhotos, shipmentFiles, signInEvents, supplierBillFiles, users } from "@/db/schema";
 import { storage } from "@/lib/receiving-storage";
 import { orgScopedTables } from "@/lib/company-export";
 import { SIGN_IN_HISTORY_MONTHS } from "@/lib/legal";
@@ -37,6 +37,7 @@ export async function purgeClosedCompanies(now = new Date()): Promise<PurgeResul
         ...(await db.select({ p: receivingPackagePhotos.storagePath }).from(receivingPackagePhotos).where(eq(receivingPackagePhotos.organizationId, id))).map((r) => r.p),
         ...(await db.select({ p: chatAttachments.storagePath }).from(chatAttachments).where(eq(chatAttachments.organizationId, id))).map((r) => r.p),
         ...(await db.select({ p: shipmentFiles.storagePath }).from(shipmentFiles).where(eq(shipmentFiles.organizationId, id))).map((r) => r.p),
+        ...(await db.select({ p: supplierBillFiles.storagePath }).from(supplierBillFiles).where(eq(supplierBillFiles.organizationId, id))).map((r) => r.p),
       ];
       for (const path of paths) await storage.remove(path).catch(() => {});
     }

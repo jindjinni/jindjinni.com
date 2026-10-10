@@ -79,6 +79,7 @@ export const DEPARTMENT_MENUS: Record<MenuDept, DepartmentMenu> = {
       { id: "to-be-paid", href: A, label: "To Be Paid", icon: "💵", exact: true },
       { id: "paid-orders", href: `${A}/paid`, label: "Paid Orders", icon: "✅" },
       { id: "to-be-collected", href: `${A}/collect`, label: "To Be Collected", icon: "🧾" },
+      { id: "supplier-bills", href: `${A}/bills`, label: "Supplier Bills", icon: "📥" },
       { id: "monthly-report", href: `${A}/report`, label: "Monthly Report", icon: "📊" },
       { id: "quickbooks", href: `${A}/quickbooks`, label: "QuickBooks", icon: "📒" },
       { id: "audit-center", href: `${A}/audit-center`, label: "Audit Center", icon: "🔍" },

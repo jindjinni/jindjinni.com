@@ -3748,3 +3748,121 @@ export const mailAttachments = sqliteTable(
   },
   (t) => [index("mail_attachments_outbox_idx").on(t.outboxId), index("mail_attachments_message_idx").on(t.messageId)],
 );
+
+// ---------------------------------------------------------------------------
+// Payables: what the company owes its suppliers (Accounts -> Supplier Bills). A bill starts from a supplier purchase order that has been
+// received, is approved by Accounts, and is paid in one or more recorded payments (a record only: no money moves from the app). The
+// supplier's own invoice is attached as a photo or PDF, and the supplier can be emailed a payment notice after review.
+// ---------------------------------------------------------------------------
+
+export const SUPPLIER_BILL_STATUSES = ["PENDING", "APPROVED", "PARTIALLY_PAID", "PAID", "VOID"] as const;
+export const SUPPLIER_BILL_FILE_KINDS = ["INVOICE", "PROOF", "OTHER"] as const;
+
+export const supplierBills = sqliteTable(
+  "supplier_bills",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    seq: integer("seq").notNull(),
+    billNumber: text("bill_number").notNull(),
+    purchaseOrderId: text("purchase_order_id"),
+    /** Copies, so the bill still reads right if the purchase order or supplier is later changed. */
+    poNumber: text("po_number"),
+    supplierId: text("supplier_id"),
+    supplierName: text("supplier_name").notNull(),
+    supplierContact: text("supplier_contact"),
+    supplierEmail: text("supplier_email"),
+    supplierInvoiceNumber: text("supplier_invoice_number"),
+    invoiceDate: text("invoice_date"),
+    dueDate: text("due_date"),
+    terms: text("terms"),
+    total: real("total").notNull(),
+    amountPaid: real("amount_paid").notNull().default(0),
+    status: text("status", { enum: SUPPLIER_BILL_STATUSES }).notNull().default("PENDING"),
+    note: text("note"),
+    approvedByUserId: text("approved_by_user_id"),
+    approvedByName: text("approved_by_name"),
+    approvedAt: text("approved_at"),
+    voidReason: text("void_reason"),
+    voidedAt: text("voided_at"),
+    createdByUserId: text("created_by_user_id"),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("supplier_bills_seq_unique").on(t.organizationId, t.seq),
+    index("supplier_bills_org_status_idx").on(t.organizationId, t.status),
+    index("supplier_bills_po_idx").on(t.organizationId, t.purchaseOrderId),
+  ],
+);
+
+export const supplierBillPayments = sqliteTable(
+  "supplier_bill_payments",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    billId: text("bill_id")
+      .notNull()
+      .references(() => supplierBills.id, { onDelete: "cascade" }),
+    amount: real("amount").notNull(),
+    paidOn: text("paid_on").notNull(),
+    method: text("method"),
+    reference: text("reference"),
+    note: text("note"),
+    recordedByUserId: text("recorded_by_user_id"),
+    recordedByName: text("recorded_by_name"),
+    ...timestamps,
+  },
+  (t) => [index("supplier_bill_payments_bill_idx").on(t.organizationId, t.billId)],
+);
+
+export const supplierBillFiles = sqliteTable(
+  "supplier_bill_files",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    billId: text("bill_id")
+      .notNull()
+      .references(() => supplierBills.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: SUPPLIER_BILL_FILE_KINDS }).notNull().default("INVOICE"),
+    filename: text("filename").notNull(),
+    contentType: text("content_type").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    storagePath: text("storage_path").notNull(),
+    uploadedByUserId: text("uploaded_by_user_id").references(() => users.id),
+    ...timestamps,
+  },
+  (t) => [index("supplier_bill_files_bill_idx").on(t.organizationId, t.billId)],
+);
+
+/** What Accounts did about telling the supplier of each payment: one row per payment (unique), SENT with the exact email, or SKIPPED. */
+export const supplierBillNotices = sqliteTable(
+  "supplier_bill_notices",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    paymentId: text("payment_id").notNull(),
+    billId: text("bill_id").notNull(),
+    status: text("status", { enum: ["SENT", "SKIPPED"] }).notNull(),
+    billNumber: text("bill_number").notNull(),
+    supplierName: text("supplier_name"),
+    amount: real("amount").notNull(),
+    paidOn: text("paid_on").notNull(),
+    toEmail: text("to_email"),
+    subject: text("subject"),
+    body: text("body"),
+    note: text("note"),
+    handledByUserId: text("handled_by_user_id"),
+    handledByName: text("handled_by_name"),
+    handledAt: text("handled_at").notNull(),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex("supplier_bill_notices_payment_unique").on(t.organizationId, t.paymentId), index("supplier_bill_notices_org_idx").on(t.organizationId, t.handledAt)],
+);

@@ -4,6 +4,7 @@
 
 import { and, asc, desc, eq } from "drizzle-orm";
 import { db } from "@/db/client";
+import { autoBillOnReceived } from "@/lib/payable-service";
 import {
   businessProfiles,
   organizations,
@@ -360,6 +361,8 @@ export async function setStatus(org: Org, id: string, to: string): Promise<{ ok:
   const from = have.po.status as PoStatus;
   if (!canMoveTo(from, to)) return { ok: false, error: "That step isn't available for this order right now." };
   await db.update(purchasingPurchaseOrders).set({ status: to, updatedAt: new Date().toISOString() }).where(and(eq(purchasingPurchaseOrders.id, id), eq(purchasingPurchaseOrders.organizationId, org.organizationId)));
+  // Accounts gets a bill to pay once the supplier's order has arrived (only while supplier bills are switched on for the company).
+  if (to === "RECEIVED") await autoBillOnReceived(org, id);
   return { ok: true, status: to };
 }
 
