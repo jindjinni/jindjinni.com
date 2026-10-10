@@ -81,6 +81,7 @@ export const DEPT_ROOMS: { dept: string; label: string }[] = [
   { dept: "customer-service", label: "Customer Service" },
   { dept: "inventory", label: "Inventory" },
   { dept: "sales", label: "Sales" },
+  { dept: "shipping", label: "Shipping" },
   { dept: "marketing", label: "Marketing" },
   { dept: "hr", label: "HR" },
 ];

@@ -63,6 +63,14 @@ const WHAT: Record<MenuDept, Record<string, string>> = {
     templates: "How your Sales quotations and purchase orders look: logo, name, title and wording, plus one standing notice that prints on every one while it is switched on.",
     connectors: "Your company mailbox (owner or admin only).",
   },
+  shipping: {
+    "to-ship": "Orders that are ready to go out and have no shipment yet; press Start shipment on one.",
+    shipments: "Every shipment with its boxes, tracking numbers, photos and status (In Transit, Out for Delivery, Delivered), and the shipped email you review and send.",
+    "new-shipment": "Send a return or anything else that has no sales order: pick an address, make the label, track it.",
+    addresses: "Saved addresses for your pharmacies, wholesale buyers, sellers and suppliers; bring them over from Sales and Purchasing with one button.",
+    mail: "The Shipping mailbox the shipped emails go out from.",
+    connectors: "Your Shippo account that buys the labels and follows the tracking numbers (owner or admin only).",
+  },
   hr: {
     staff: "Who is clocked in today.",
     activity: "The activity log of the team.",

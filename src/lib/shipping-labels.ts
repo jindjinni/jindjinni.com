@@ -44,6 +44,8 @@ export type BoughtLabel = {
   labelUrl: string;
   trackingNumber: string | null;
   trackingUrl: string | null;
+  /** What the label cost, when Shippo's rate said (dollars). */
+  cost?: number | null;
 };
 
 export type ShippoDeps = {
@@ -82,6 +84,7 @@ async function buyOne(
     labelUrl: tx.label_url,
     trackingNumber: tx.tracking_number ?? null,
     trackingUrl: tx.tracking_url_provider ?? null,
+    cost: Number.isFinite(Number(rate.amount)) ? Number(rate.amount) : null,
   };
 }
 

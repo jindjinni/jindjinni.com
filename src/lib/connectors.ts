@@ -88,6 +88,7 @@ export const DEPT_CONNECTORS: Partial<Record<MenuDept, ConnectorKey[]>> = {
   "customer-service": ["email"],
   sales: ["email", "quickbooks"],
   accounts: ["quickbooks"],
+  shipping: ["shippo", "email"],
   marketing: ["email", "text"],
 };
 

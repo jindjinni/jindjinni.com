@@ -22,7 +22,7 @@ import { waitingCount } from "@/lib/company-admin";
 import { inboxCounts } from "@/lib/support-service";
 import { twoStepOn } from "@/lib/two-step";
 import { minutesLeft } from "@/lib/support-rules";
-import { ROLE_LABELS, canViewAccounts, canViewCustomerService, canViewInventory, canViewPurchasing, canViewReceiving, canViewSales, canViewHr, canViewMarketing } from "@/lib/permissions";
+import { ROLE_LABELS, canViewAccounts, canViewCustomerService, canViewInventory, canViewPurchasing, canViewReceiving, canViewSales, canViewShipping, canViewHr, canViewMarketing } from "@/lib/permissions";
 
 export default async function DashboardLayout({
   children,
@@ -48,6 +48,7 @@ export default async function DashboardLayout({
   const nowIso0 = Date.parse(nowIso);
   const viewing = org.viewAs;
   const showSupport = !viewing && (await featureOn("support-center", org.organizationId));
+  const shippingOn = await featureOn("shipping", org.organizationId);
   // Anyone on the Lamp team should have two-step on: it is required before "View as company" works.
   const level = viewing ? null : await staffLevelOf(org);
   const needsTwoStep = !!level && !(await twoStepOn(org.userId));
@@ -62,6 +63,7 @@ export default async function DashboardLayout({
     ...(canViewCustomerService(org.role, org.access) ? [{ href: "/dashboard/customer-service", label: "Customer Service" }] : []),
     ...(canViewInventory(org.role, org.access) ? [{ href: "/dashboard/inventory", label: "Inventory" }] : []),
     ...(canViewSales(org.role, org.access) ? [{ href: "/dashboard/sales", label: "Sales" }] : []),
+    ...(shippingOn && canViewShipping(org.role, org.access) ? [{ href: "/dashboard/shipping", label: "Shipping" }] : []),
     ...(canViewMarketing(org.role, org.access) ? [{ href: "/dashboard/marketing", label: "Marketing" }] : []),
     ...(canViewHr(org.role) ? [{ href: "/dashboard/hr", label: "HR" }] : []),
     ...(viewing ? [] : [{ href: "/dashboard/chat", label: "Chat" }]),

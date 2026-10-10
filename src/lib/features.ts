@@ -78,6 +78,12 @@ export const FEATURES: FeatureDef[] = [
     blurb: "Settings -> Connectors: a company connects its own QuickBooks Online (read only) or uploads a QuickBooks Desktop / Enterprise export, and Sales and Accounts get a QuickBooks tab with who has paid, who owes and profit and loss.",
     defaultStage: "mothership",
   },
+  {
+    key: "shipping",
+    label: "Shipping department",
+    blurb: "Shipping: orders ready to go out, shipments with their boxes, tracking numbers and photos, the status of every package, and the 'your order has shipped' email you review and send.",
+    defaultStage: "mothership",
+  },
 ];
 
 export const featureDef = (key: string) => FEATURES.find((f) => f.key === key);

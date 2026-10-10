@@ -5,13 +5,14 @@
 import { oneLine } from "@/lib/gmail-mime";
 import { parseAddresses } from "@/lib/audit-email";
 
-export const MAIL_DEPTS = ["purchasing", "sales", "receiving", "accounts", "customer-service"] as const;
+export const MAIL_DEPTS = ["purchasing", "sales", "shipping", "receiving", "accounts", "customer-service"] as const;
 export type MailDept = (typeof MAIL_DEPTS)[number];
 export const isMailDept = (v: unknown): v is MailDept => typeof v === "string" && (MAIL_DEPTS as readonly string[]).includes(v);
 
 export const DEPT_LABEL: Record<MailDept, string> = {
   purchasing: "Purchasing",
   sales: "Sales",
+  shipping: "Shipping",
   receiving: "Receiving",
   accounts: "Accounts",
   "customer-service": "Customer Service",
@@ -21,6 +22,7 @@ export const DEPT_LABEL: Record<MailDept, string> = {
 export const DEPT_MAIL_BLURB: Record<MailDept, string> = {
   purchasing: "Mail with suppliers: purchase orders, quotes and questions about orders.",
   sales: "Mail with the pharmacies and buyers you sell to: quotations, invoices and questions.",
+  shipping: "Mail about the orders you send out: shipped emails with tracking numbers, and replies from buyers and carriers.",
   receiving: "Mail about deliveries: carriers, suppliers and anything that arrives at the dock.",
   accounts: "Mail about money: payment notices, receipts and statements. Works hand in hand with Customer Service.",
   "customer-service": "Mail with customers: telling them they have been paid and answering their questions.",

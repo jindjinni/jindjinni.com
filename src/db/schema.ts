@@ -2452,6 +2452,172 @@ export const paymentNotices = sqliteTable(
 );
 
 // ---------------------------------------------------------------------------
+// Shipping: a shipment of a sales order to a buyer, its boxes (one tracking number each), its photos and the "shipped" email
+// ---------------------------------------------------------------------------
+
+export const SHIPPING_CARRIERS = ["UPS", "USPS", "FedEx", "Other"] as const;
+export const SHIPMENT_FILE_KINDS = ["LABEL", "ORDER_DOC", "OTHER"] as const;
+
+/**
+ * One shipment of an order: the sales order (or invoice) it fills, who it goes to (a copy, so it never changes), its boxes in
+ * `shipment_boxes`, photos in `shipment_files`, and the one "your order has shipped" email. The email is claimed first
+ * (`email_status` SENDING) so it can't go out twice; SENT keeps the exact words, SKIPPED keeps the reason. An order may have many shipments.
+ */
+export const shipments = sqliteTable(
+  "shipments",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    /** The sales order or invoice this ships. null for a return or any other shipment that has no order. */
+    documentId: text("document_id"),
+    /** Which shipment of this order (1, 2, ...). */
+    seq: integer("seq").notNull().default(1),
+    /** SALES_ORDER, INVOICE, or RETURN / OTHER for a shipment with no order. */
+    docKind: text("doc_kind").notNull(),
+    docNumber: text("doc_number").notNull().default(""),
+    /** Why a return or other shipment is going out. */
+    reason: text("reason"),
+    /** The saved address profile it goes to (the address below is a copy made when the shipment was started). */
+    contactId: text("contact_id"),
+    toName: text("to_name"),
+    toCompany: text("to_company"),
+    toStreet1: text("to_street1"),
+    toStreet2: text("to_street2"),
+    toCity: text("to_city"),
+    toState: text("to_state"),
+    toZip: text("to_zip"),
+    toCountry: text("to_country").notNull().default("US"),
+    toPhone: text("to_phone"),
+    toResidential: integer("to_residential", { mode: "boolean" }).notNull().default(false),
+    /** The buyer's own purchase order number, copied from the order's reference. */
+    reference: text("reference"),
+    /** An invoice for this order (attached to the email when the person ticks it). */
+    invoiceDocumentId: text("invoice_document_id"),
+    buyerCompany: text("buyer_company"),
+    buyerContact: text("buyer_contact"),
+    buyerEmail: text("buyer_email"),
+    shipDate: text("ship_date").notNull(),
+    note: text("note"),
+    /** The boxes rolled up into one word (Pre-Transit, In Transit, Out for Delivery, Delivered, Exception, Returned, Unknown), or "Not shipped" while it has none. */
+    status: text("status").notNull().default("Not shipped"),
+    deliveredAt: text("delivered_at"),
+    lastTrackingUpdate: text("last_tracking_update"),
+    /** null = not handled yet, SENDING = claimed, SENT, SKIPPED. */
+    emailStatus: text("email_status", { enum: ["SENDING", "SENT", "SKIPPED"] }),
+    emailTo: text("email_to"),
+    emailSubject: text("email_subject"),
+    emailBody: text("email_body"),
+    emailAttachments: text("email_attachments"),
+    emailNote: text("email_note"),
+    emailByUserId: text("email_by_user_id"),
+    emailByName: text("email_by_name"),
+    emailAt: text("email_at"),
+    createdByUserId: text("created_by_user_id"),
+    ...timestamps,
+  },
+  (t) => [index("shipments_org_idx").on(t.organizationId, t.createdAt), index("shipments_doc_idx").on(t.organizationId, t.documentId)],
+);
+
+/** One box of a shipment: its carrier and tracking number, and what the carrier last said. */
+export const shipmentBoxes = sqliteTable(
+  "shipment_boxes",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    shipmentId: text("shipment_id")
+      .notNull()
+      .references(() => shipments.id, { onDelete: "cascade" }),
+    position: integer("position").notNull().default(0),
+    carrier: text("carrier", { enum: SHIPPING_CARRIERS }).notNull(),
+    trackingNumber: text("tracking_number").notNull(),
+    status: text("status").notNull().default("Unknown"),
+    statusDetails: text("status_details"),
+    location: text("location"),
+    eta: text("eta"),
+    statusAt: text("status_at"),
+    deliveredAt: text("delivered_at"),
+    history: text("history"),
+    lastCheckedAt: text("last_checked_at"),
+    lastError: text("last_error"),
+    /** true = the carrier's news (through Shippo) sets the status; false = a person set it by hand and it stays. */
+    followAuto: integer("follow_auto", { mode: "boolean" }).notNull().default(true),
+    /** A label made here (through the company's own Shippo account): where to open it, which service, what it cost. null = a tracking number typed by hand. */
+    labelUrl: text("label_url"),
+    labelService: text("label_service"),
+    labelCost: real("label_cost"),
+    labelTransactionId: text("label_transaction_id"),
+    parcel: text("parcel"),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("shipment_boxes_unique").on(t.organizationId, t.shipmentId, t.trackingNumber),
+    index("shipment_boxes_number_idx").on(t.trackingNumber),
+    index("shipment_boxes_status_idx").on(t.organizationId, t.status),
+  ],
+);
+
+/** A photo or document kept with a shipment (a label, the invoice or purchase order). `attach` = goes in the shipped email. */
+export const shipmentFiles = sqliteTable(
+  "shipment_files",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    shipmentId: text("shipment_id")
+      .notNull()
+      .references(() => shipments.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: SHIPMENT_FILE_KINDS }).notNull().default("OTHER"),
+    filename: text("filename").notNull(),
+    contentType: text("content_type").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    storagePath: text("storage_path").notNull(),
+    attach: integer("attach", { mode: "boolean" }).notNull().default(true),
+    uploadedByUserId: text("uploaded_by_user_id").references(() => users.id),
+    ...timestamps,
+  },
+  (t) => [index("shipment_files_ship_idx").on(t.organizationId, t.shipmentId)],
+);
+
+/**
+ * An address profile for Shipping: a pharmacy, a wholesale buyer, a seller or a supplier. Made by hand or brought over from Sales
+ * buyers, Purchasing sellers or Purchasing suppliers (the link is kept so a re-import updates instead of duplicating). Hidden, never deleted.
+ */
+export const shippingContacts = sqliteTable(
+  "shipping_contacts",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    /** BUYER (a pharmacy or wholesale buyer), SELLER (an individual who sells to us), SUPPLIER (a wholesaler we buy from), OTHER. */
+    kind: text("kind", { enum: ["BUYER", "SELLER", "SUPPLIER", "OTHER"] }).notNull().default("BUYER"),
+    name: text("name").notNull(),
+    company: text("company"),
+    street1: text("street1"),
+    street2: text("street2"),
+    city: text("city"),
+    state: text("state"),
+    zip: text("zip"),
+    country: text("country").notNull().default("US"),
+    phone: text("phone"),
+    email: text("email"),
+    isResidential: integer("is_residential", { mode: "boolean" }).notNull().default(false),
+    notes: text("notes"),
+    /** Where it was brought from: "sales_buyer", "purchasing_customer" or "purchasing_supplier" (null = typed here). */
+    sourceKind: text("source_kind"),
+    sourceId: text("source_id"),
+    hiddenAt: text("hidden_at"),
+    ...timestamps,
+  },
+  (t) => [index("shipping_contacts_org_idx").on(t.organizationId, t.kind), uniqueIndex("shipping_contacts_source_unique").on(t.organizationId, t.sourceKind, t.sourceId)],
+);
+
+// ---------------------------------------------------------------------------
 // QuickBooks: a company's own connection (read only) and the report copies it pulls or uploads
 // ---------------------------------------------------------------------------
 
@@ -3463,7 +3629,7 @@ export const mailboxes = sqliteTable(
   {
     id: text("id").primaryKey(),
     organizationId: text("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
-    /** purchasing | sales | receiving | accounts | customer-service (see lib/mail-rules.ts) */
+    /** purchasing | sales | shipping | receiving | accounts | customer-service (see lib/mail-rules.ts) */
     department: text("department").notNull(),
     /** SHARED | PERSONAL */
     kind: text("kind").notNull().default("SHARED"),

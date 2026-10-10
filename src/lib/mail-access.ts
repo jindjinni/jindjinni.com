@@ -2,7 +2,7 @@
 // menu only hides links. A platform person looking through "View as company" can never send or change anything.
 
 import { featureOn } from "@/lib/features";
-import { canSendCustomerEmails, canViewAccounts, canViewCustomerService, canViewPurchasing, canViewReceiving, canViewSales, canWritePayment, canWritePurchasing, canWriteReceiving, canWriteSales, isAdmin, type Access } from "@/lib/permissions";
+import { canSendCustomerEmails, canViewAccounts, canViewCustomerService, canViewPurchasing, canViewReceiving, canViewSales, canViewShipping, canWritePayment, canWritePurchasing, canWriteReceiving, canWriteSales, canWriteShipping, isAdmin, type Access } from "@/lib/permissions";
 import type { MailDept } from "@/lib/mail-rules";
 import type { CurrentOrg } from "@/lib/tenant";
 
@@ -21,6 +21,7 @@ export function canViewMailDept(dept: MailDept, w: Who): boolean {
   switch (dept) {
     case "purchasing": return canViewPurchasing(w.role, w.access);
     case "sales": return canViewSales(w.role, w.access);
+    case "shipping": return canViewShipping(w.role, w.access);
     case "receiving": return canViewReceiving(w.role, w.access);
     case "accounts": return canViewAccounts(w.role, w.access);
     case "customer-service": return canViewCustomerService(w.role, w.access);
@@ -32,6 +33,7 @@ export function canSendMailDept(dept: MailDept, w: Who): boolean {
   switch (dept) {
     case "purchasing": return canWritePurchasing(w.role, w.access);
     case "sales": return canWriteSales(w.role, w.access);
+    case "shipping": return canWriteShipping(w.role, w.access);
     case "receiving": return canWriteReceiving(w.role, w.access);
     case "accounts": return canWritePayment(w.role, w.access);
     case "customer-service": return canSendCustomerEmails(w.role, w.access);

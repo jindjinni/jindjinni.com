@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireOrg } from "@/lib/tenant";
-import { canWriteSales } from "@/lib/permissions";
+import { canViewShipping, canWriteSales } from "@/lib/permissions";
+import { shipmentsForDocument, shippingOn } from "@/lib/shipping-service";
+import { canShipFrom, statusLabel } from "@/lib/shipping-rules";
 import { getDocument, salesOrdersOn } from "@/lib/sales-service";
 import { DOC_BACK, DOC_BASE, docWord, dueLabel, refShort, type DocKind } from "@/lib/sales-doc-ui";
 import { listRevisions } from "@/lib/document-revision-service";
@@ -147,11 +149,26 @@ export async function DocDetailPage({ kind, id, revise }: { kind: Kind; id: stri
     );
   }
 
+  // Shipping: shipments already made for an order or invoice, and a way to start one.
+  const shipOn = (kind === "SALES_ORDER" || isInvoice) && canViewShipping(org.role, org.access) && (await shippingOn(org.organizationId));
+  const made = shipOn ? await shipmentsForDocument(org.organizationId, doc.id) : [];
+  const shipStrip = shipOn && (made.length > 0 || canShipFrom(doc.kind, doc.status)) ? (
+    <div className={`${card} flex flex-wrap items-center gap-3 text-sm`} data-testid="doc-shipping">
+      <span className="font-semibold text-slate-900 dark:text-slate-50">Shipping</span>
+      {made.map((m) => (
+        <Link key={m.id} href={`/dashboard/shipping/shipments/${m.id}`} className="underline" data-testid="doc-shipment-link">Shipment {m.seq} ({statusLabel(m.status)})</Link>
+      ))}
+      {made.length === 0 && <span className="text-slate-600 dark:text-slate-400">Not shipped yet.</span>}
+      {canShipFrom(doc.kind, doc.status) && <Link href="/dashboard/shipping" className="ml-auto font-medium text-emerald-800 underline dark:text-emerald-300" data-testid="doc-ship-link">{made.length === 0 ? "Ship this order" : "Ship more"}</Link>}
+    </div>
+  ) : null;
+
   // Sent, paid or void (or a role that can only look): the document as it was made.
   return (
     <div className="max-w-4xl space-y-5">
       {head}
       {actions}
+      {shipStrip}
       <div className={`${card} grid gap-4 sm:grid-cols-3`} data-testid="doc-summary">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Bill to</p>

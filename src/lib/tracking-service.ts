@@ -9,6 +9,7 @@ import { purchasingQuotationLabels, purchasingQuotations, purchasingTracking, sh
 import { newId } from "@/lib/ids";
 import { ShippoRequestError, type ShippoClient } from "@/lib/shippo";
 import { NOT_CONNECTED_MESSAGE, noteShippoFailure, resolveShippo } from "@/lib/shippo-connection";
+import { applyShipmentWebhook, sweepShipmentTracking } from "@/lib/shipping-tracking";
 import { carrierOfLabel, isFinished, isStale, parseTrack, rollUp, shippoCarrier, type ParsedTrack } from "@/lib/tracking-rules";
 
 export type TrackingRow = typeof purchasingTracking.$inferSelect;
@@ -212,7 +213,9 @@ export async function applyWebhook(payload: unknown, organizationId: string | nu
     .from(purchasingTracking)
     .where(organizationId ? and(eq(purchasingTracking.trackingNumber, parsed.trackingNumber), eq(purchasingTracking.organizationId, organizationId)) : eq(purchasingTracking.trackingNumber, parsed.trackingNumber));
   for (const r of rows) await saveParsed(r, parsed);
-  return { updated: rows.length };
+  // The same package may also be a box of a shipment in Shipping.
+  const shipped = await applyShipmentWebhook(payload, organizationId);
+  return { updated: rows.length + shipped.updated };
 }
 
 /** Nightly sweep: start tracking quotations that have a number but no rows, and refresh everything still moving. */
@@ -252,7 +255,9 @@ export async function sweepTracking(limit = 150): Promise<{ added: number; refre
     const results = await Promise.all(usable.slice(i, i + 5).map((r) => refreshTracker(r, clients.get(r.organizationId)!)));
     refreshed += results.filter(Boolean).length;
   }
-  return { added, refreshed };
+  // Boxes of Shipping's shipments are followed the same way.
+  const shipped = await sweepShipmentTracking(limit);
+  return { added, refreshed: refreshed + shipped.refreshed };
 }
 
 /** The address a company's tracking notifications go to: its own, or the platform's for companies on the platform's account. */

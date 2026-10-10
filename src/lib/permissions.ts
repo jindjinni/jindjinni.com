@@ -66,7 +66,7 @@ export function isRole(value: unknown): value is Role {
 // ---------------------------------------------------------------------------
 
 /** The departments an admin can open for someone by hand (HR is always admin-only). */
-export const GRANTABLE_DEPTS = ["purchasing", "receiving", "accounts", "customer-service", "inventory", "sales", "marketing"] as const;
+export const GRANTABLE_DEPTS = ["purchasing", "receiving", "accounts", "customer-service", "inventory", "sales", "shipping", "marketing"] as const;
 export type GrantableDept = (typeof GRANTABLE_DEPTS)[number];
 export type DeptLevel = "view" | "work";
 export type Access = Partial<Record<GrantableDept, DeptLevel>>;
@@ -78,6 +78,7 @@ export const GRANTABLE_DEPT_LABELS: Record<GrantableDept, string> = {
   "customer-service": "Customer Service",
   inventory: "Inventory",
   sales: "Sales",
+  shipping: "Shipping",
   marketing: "Marketing",
 };
 
@@ -221,6 +222,19 @@ export function canWriteSales(role: string, access?: Access): boolean {
   return (rolePurchasing(role) && role !== "accountant") || works(access, "sales");
 }
 
+/**
+ * May open the Shipping department (orders waiting to go out, and the shipments with their boxes, tracking and shipped emails): everyone who can open
+ * Sales or Accounts (they can look), Admin and the Owner, or anyone given Shipping.
+ */
+export function canViewShipping(role: string, access?: Access): boolean {
+  return canViewSales(role, access) || canViewAccounts(role, access) || sees(access, "shipping");
+}
+
+/** May prepare shipments (boxes, tracking numbers, photos) and send the shipped email: those who can write in Sales (not the accountant), or anyone given "work" in Shipping. */
+export function canWriteShipping(role: string, access?: Access): boolean {
+  return canWriteSales(role, access) || works(access, "shipping");
+}
+
 /** May change the company profile invoices come from and its numbering: Purchasing managers, Admin and the Owner. */
 export function canManageSalesSettings(role: string): boolean {
   return isPurchasingManager(role);
@@ -255,6 +269,7 @@ export function departmentsFor(role: string, access?: Access): string[] {
   if (canViewCustomerService(role, access)) out.push("customer-service");
   if (canViewInventory(role, access)) out.push("inventory");
   if (canViewSales(role, access)) out.push("sales");
+  if (canViewShipping(role, access)) out.push("shipping");
   if (canViewHr(role)) out.push("hr");
   if (canViewMarketing(role, access)) out.push("marketing");
   return out;
@@ -275,6 +290,8 @@ export function roleBaseLevel(role: string, dept: GrantableDept): "none" | DeptL
       return canWriteInventory(role) ? "work" : canViewInventory(role) ? "view" : "none";
     case "sales":
       return canWriteSales(role) ? "work" : canViewSales(role) ? "view" : "none";
+    case "shipping":
+      return canWriteShipping(role) ? "work" : canViewShipping(role) ? "view" : "none";
     case "marketing":
       return canViewMarketing(role) ? "work" : "none";
   }

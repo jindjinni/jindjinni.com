@@ -5,7 +5,7 @@
 // To give a new department this sidebar: add it to DEPARTMENT_MENUS below, then render <DepartmentSidebar> in
 // that department's layout (see receiving/layout.tsx). Renaming and re-ordering then work there with no more code.
 
-export type MenuDept = "purchasing" | "receiving" | "accounts" | "customer-service" | "inventory" | "sales" | "hr" | "marketing";
+export type MenuDept = "purchasing" | "receiving" | "accounts" | "customer-service" | "inventory" | "sales" | "shipping" | "hr" | "marketing";
 
 export type MenuItemDef = {
   /** Never changes, even when the tab is renamed: it is how a saved name or position finds its tab. */
@@ -28,6 +28,7 @@ const A = "/dashboard/accounts";
 const C = "/dashboard/customer-service";
 const I = "/dashboard/inventory";
 const S = "/dashboard/sales";
+const G = "/dashboard/shipping";
 const H = "/dashboard/hr";
 const M = "/dashboard/marketing";
 
@@ -123,6 +124,18 @@ export const DEPARTMENT_MENUS: Record<MenuDept, DepartmentMenu> = {
       { id: "company-profile", href: `${S}/company-profile`, label: "Company Profile", setup: true },
       { id: "templates", href: `${S}/templates`, label: "Document Templates", setup: true },
       { id: "connectors", href: `${S}/connectors`, label: "Connectors", setup: true },
+    ],
+  },
+  shipping: {
+    title: "Shipping Department",
+    setupLabel: "Settings",
+    items: [
+      { id: "to-ship", href: G, label: "To Ship", icon: "📦", exact: true },
+      { id: "shipments", href: `${G}/shipments`, label: "Shipments", icon: "🚚" },
+      { id: "new-shipment", href: `${G}/new`, label: "Returns & Labels", icon: "🏷️" },
+      { id: "addresses", href: `${G}/addresses`, label: "Addresses", icon: "📇" },
+      { id: "mail", href: `${G}/mail`, label: "Mail", icon: "✉️" },
+      { id: "connectors", href: `${G}/connectors`, label: "Connectors", setup: true },
     ],
   },
   hr: {
