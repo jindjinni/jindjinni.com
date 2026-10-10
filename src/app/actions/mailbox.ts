@@ -6,8 +6,10 @@
 import { redirect } from "next/navigation";
 import { requireOrg, type CurrentOrg } from "@/lib/tenant";
 import { mailboxesOn } from "@/lib/mail-access";
+import { canViewMailDept } from "@/lib/mail-access";
 import { isMailDept, mailPath, type MailDept } from "@/lib/mail-rules";
-import { createMailbox, disconnectMailbox, discardOutbox, dispatchDue, getMailbox, markMessageRead, renameMailbox, saveAndMaybeSend, saveMailboxConnection, sendMailboxTest, sendOutboxNow, setMailboxHidden, unscheduleOutbox, type NewFile, type Plan } from "@/lib/mailbox-service";
+import { syncDue, syncMailbox, MANUAL_GAP_MS, AUTO_GAP_MS } from "@/lib/mail-sync";
+import { createMailbox, disconnectMailbox, discardOutbox, dispatchDue, getMailbox, listMailboxes, markAllRead, markMessageRead, markMessageUnread, renameMailbox, saveAndMaybeSend, saveMailboxConnection, sendMailboxTest, sendOutboxNow, setMailboxHidden, unscheduleOutbox, type NewFile, type Plan } from "@/lib/mailbox-service";
 import { isEmail } from "@/lib/audit-email";
 import { checkSmtpTarget, detectMail, verifySmtp, type Detected } from "@/lib/email-smtp";
 
@@ -111,7 +113,7 @@ export async function composeAction(_prev: MailState, formData: FormData): Promi
     g.org,
     g.dept,
     boxId,
-    { to: str(formData, "to"), cc: str(formData, "cc"), bcc: str(formData, "bcc"), subject: str(formData, "subject"), body: str(formData, "body"), outboxId: str(formData, "draft") || null, files, removeIds: formData.getAll("remove").map(String) },
+    { to: str(formData, "to"), cc: str(formData, "cc"), bcc: str(formData, "bcc"), subject: str(formData, "subject"), body: str(formData, "body"), outboxId: str(formData, "draft") || null, files, removeIds: formData.getAll("remove").map(String), replyToMessageId: str(formData, "replyTo") || null },
     plan,
   );
   if (!r.ok) return { error: r.error, draftId: r.outboxId };
@@ -140,15 +142,51 @@ export async function discardAction(deptRaw: string, boxId: string, outboxId: st
   return r.ok ? { ok: true, notice: "Discarded." } : { error: r.error };
 }
 
-/** The Mail tab calls this every minute while it is open: it sends this company's scheduled emails that have come due. */
-export async function tickMailAction(): Promise<{ sent: number }> {
+/**
+ * The Mail tab calls this every minute while it is open: it sends this company's scheduled emails that have come due, and checks the
+ * department's mailboxes this person can read for new mail (a mailbox is never asked more often than about once a minute).
+ */
+export async function tickMailAction(deptRaw?: string): Promise<{ sent: number; received: number }> {
   const org = await requireOrg();
-  if (org.viewAs) return { sent: 0 };
-  if (!(await mailboxesOn(org.organizationId))) return { sent: 0 };
+  if (org.viewAs) return { sent: 0, received: 0 };
+  if (!(await mailboxesOn(org.organizationId))) return { sent: 0, received: 0 };
   const r = await dispatchDue({ organizationId: org.organizationId, limit: 10 });
-  return { sent: r.sent };
+  let received = 0;
+  if (isMailDept(deptRaw) && canViewMailDept(deptRaw, org)) {
+    const ids = (await listMailboxes(org, deptRaw)).filter((b) => b.rights.read && b.status === "ACTIVE" && b.canRead && b.provider !== "SMTP").map((b) => b.id);
+    if (ids.length) received = (await syncDue({ organizationId: org.organizationId, mailboxIds: ids, limit: 3, minGapMs: AUTO_GAP_MS })).added;
+  }
+  return { sent: r.sent, received };
 }
 
+/** The Refresh button: checks one mailbox for new mail right now. */
+export async function refreshMailboxAction(deptRaw: string, boxId: string): Promise<MailState & { added?: number }> {
+  const g = await gate(deptRaw);
+  if ("error" in g) return g;
+  if (g.org.viewAs) return { error: "Looking through View as company is read-only." };
+  const box = await getMailbox(g.org, g.dept, boxId);
+  if (!box || !box.view.rights.read) return { error: "You can't open this mailbox." };
+  if (box.view.status !== "ACTIVE") return { error: box.view.status === "NEEDS_RECONNECT" ? "Reconnect this mailbox first." : "Connect this mailbox first." };
+  if (box.view.provider === "SMTP" || !box.view.canRead) return { error: "Reading mail isn't available for this mailbox." };
+  const r = await syncMailbox(g.org.organizationId, boxId, { minGapMs: MANUAL_GAP_MS });
+  if (!r.ok) return { error: r.error };
+  if (r.skipped === "throttled") return { ok: true, added: 0, notice: "Just checked a moment ago. Nothing new." };
+  return { ok: true, added: r.added, notice: r.added ? `${r.added} new ${r.added === 1 ? "email" : "emails"}.` : "Nothing new." };
+}
+
+export async function markUnreadAction(deptRaw: string, boxId: string, messageId: string): Promise<MailState> {
+  const g = await gate(deptRaw);
+  if ("error" in g) return g;
+  const r = await markMessageUnread(g.org, g.dept, boxId, messageId);
+  return r.ok ? { ok: true, notice: "Marked as unread." } : { error: r.error };
+}
+
+export async function markAllReadAction(deptRaw: string, boxId: string): Promise<MailState> {
+  const g = await gate(deptRaw);
+  if ("error" in g) return g;
+  const r = await markAllRead(g.org, g.dept, boxId);
+  return r.ok ? { ok: true, notice: r.n ? `${r.n} marked as read.` : "Everything was already read." } : { error: r.error };
+}
 
 /** Called by the message page when it opens: marks a received message as read (a page view itself never changes anything). */
 export async function markReadAction(deptRaw: string, boxId: string, messageId: string): Promise<void> {

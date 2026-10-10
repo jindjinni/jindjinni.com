@@ -94,7 +94,12 @@ export const providerBySlug = (slug: string) => Object.values(OAUTH).find((p) =>
 
 const googleSendUrl = () => (testBase("GOOGLE_TEST_BASE") ? `${testBase("GOOGLE_TEST_BASE")}/gmail/send` : "https://gmail.googleapis.com/gmail/v1/users/me/messages/send");
 const googleRevokeUrl = () => (testBase("GOOGLE_TEST_BASE") ? `${testBase("GOOGLE_TEST_BASE")}/revoke` : "https://oauth2.googleapis.com/revoke");
-const graphBase = () => (testBase("MICROSOFT_TEST_BASE") ? `${testBase("MICROSOFT_TEST_BASE")}/graph` : "https://graph.microsoft.com/v1.0");
+/** Where Gmail's reading calls go (the sending call above is the same service). */
+export const googleMailApi = () => (testBase("GOOGLE_TEST_BASE") ? `${testBase("GOOGLE_TEST_BASE")}/gmail` : "https://gmail.googleapis.com/gmail/v1/users/me");
+export const graphBase = () => (testBase("MICROSOFT_TEST_BASE") ? `${testBase("MICROSOFT_TEST_BASE")}/graph` : "https://graph.microsoft.com/v1.0");
+
+/** The permissions to ask Microsoft for when reading a mailbox (a refresh token only gives back what the scope text names). */
+export const microsoftReadScopes = () => OAUTH.MICROSOFT.mailScopes;
 
 export const redirectUriFor = (origin: string, p: OAuthProvider) => `${process.env.APP_ORIGIN || origin}/api/email-connect/${p.slug}/callback`;
 
@@ -187,6 +192,9 @@ export type SendArgs = {
   cc?: string[];
   bcc?: string[];
   attachments?: EmailAttachment[];
+  /** For a reply: the Message-ID of the email being answered, and (Gmail) the conversation it belongs to. */
+  inReplyTo?: string | null;
+  threadId?: string | null;
 };
 export type SendResult = { ok: true; from: string | null } | { ok: false; error: string };
 
@@ -194,8 +202,8 @@ const RECONNECT_MESSAGE = "The connected email needs to be reconnected. An admin
 
 async function sendViaGoogle(conn: Conn, a: SendArgs, persist: Persist) {
   const token = await accessTokenFor(conn, persist);
-  const raw = toRaw(buildMime({ from: { name: a.fromName, address: conn.accountEmail }, to: a.to, cc: a.cc, bcc: a.bcc, replyTo: a.replyTo, subject: a.subject, text: a.text, html: a.html, attachments: a.attachments }));
-  const res = await fetch(googleSendUrl(), { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify({ raw }) });
+  const raw = toRaw(buildMime({ from: { name: a.fromName, address: conn.accountEmail }, to: a.to, cc: a.cc, bcc: a.bcc, replyTo: a.replyTo, subject: a.subject, text: a.text, html: a.html, attachments: a.attachments, inReplyTo: a.inReplyTo }));
+  const res = await fetch(googleSendUrl(), { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify({ raw, ...(a.threadId ? { threadId: a.threadId } : {}) }) });
   if (res.status === 401 || res.status === 403) {
     const detail = await res.text().catch(() => "");
     if (res.status === 401 || /insufficient|PERMISSION_DENIED|invalid_grant|unauthenticated/i.test(detail)) throw new NeedsReconnect("Google refused to send: permission missing.");

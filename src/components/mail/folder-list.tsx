@@ -26,9 +26,12 @@ export function FolderList({ dept, boxId, folder, rows }: { dept: MailDept; boxI
         const href = r.kind === "message" ? `${base}/m/${r.id}` : `${base}/o/${r.id}`;
         return (
           <li key={`${r.kind}-${r.id}`}>
-            <Link href={href} className="flex items-start gap-3 px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/60" data-testid="mail-row" data-box={boxId}>
+            <Link href={href} className="flex items-start gap-3 px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/60" data-testid="mail-row" data-box={boxId} data-unread={r.unread ? "1" : "0"}>
               <div className="min-w-0 flex-1">
-                <p className={`truncate text-sm ${r.unread ? "font-bold text-slate-900 dark:text-slate-50" : "text-slate-800 dark:text-slate-200"}`}>{r.who}</p>
+                <p className={`truncate text-sm ${r.unread ? "font-bold text-slate-900 dark:text-slate-50" : "text-slate-800 dark:text-slate-200"}`}>
+                  {r.who}
+                  {r.count > 1 && <span className="ml-2 rounded-full bg-slate-200 px-2 text-xs font-semibold text-slate-700 dark:bg-slate-700 dark:text-slate-100" data-testid="thread-count" title="Emails in this conversation">{r.count}</span>}
+                </p>
                 <p className={`truncate text-sm ${r.unread ? "font-semibold text-slate-900 dark:text-slate-50" : "text-slate-900 dark:text-slate-100"}`}>{r.subject || "(no subject)"}</p>
                 <p className="truncate text-xs text-slate-500 dark:text-slate-400">{r.snippet}</p>
                 {r.status === "FAILED" && <p className="mt-1 text-xs font-medium text-red-700 dark:text-red-400">Not sent: {r.error}</p>}

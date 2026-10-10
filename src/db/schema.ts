@@ -3384,6 +3384,8 @@ export const mailMessages = sqliteTable(
     /** The provider's own id for the message (Inbox sync; empty for mail sent from the app). */
     providerMessageId: text("provider_message_id"),
     threadKey: text("thread_key"),
+    /** The message's own "Message-ID" header, so a reply can say which message it answers. */
+    rfcMessageId: text("rfc_message_id"),
     fromName: text("from_name"),
     fromAddress: text("from_address"),
     toAddresses: text("to_addresses"),
@@ -3407,6 +3409,7 @@ export const mailMessages = sqliteTable(
   (t) => [
     index("mail_messages_box_idx").on(t.mailboxId, t.direction, t.at),
     uniqueIndex("mail_messages_provider_idx").on(t.mailboxId, t.providerMessageId),
+    index("mail_messages_thread_idx").on(t.mailboxId, t.threadKey),
     index("mail_messages_org_idx").on(t.organizationId, t.at),
   ],
 );
@@ -3431,6 +3434,8 @@ export const mailOutbox = sqliteTable(
     attempts: integer("attempts").notNull().default(0),
     lastError: text("last_error"),
     messageId: text("message_id"),
+    /** The received message this email answers (a reply), so it stays in the same conversation. */
+    replyToMessageId: text("reply_to_message_id"),
     createdByUserId: text("created_by_user_id"),
     createdByName: text("created_by_name"),
     sentAt: text("sent_at"),

@@ -39,6 +39,7 @@ export type MailboxView = {
   connectedAt: string | null;
   lastUsedAt: string | null;
   lastSyncAt: string | null;
+  lastSyncError: string | null;
   rights: MailRights;
 };
 
@@ -61,6 +62,7 @@ async function viewOf(org: OrgCtx, dept: MailDept, row: MailboxRow, ownerName: s
     connectedAt: row.connectedAt,
     lastUsedAt: row.lastUsedAt,
     lastSyncAt: row.lastSyncAt,
+    lastSyncError: row.lastSyncError,
     rights: mailRights(row, org, dept),
   };
 }
@@ -217,7 +219,7 @@ async function filesOf(organizationId: string, where: { outboxId?: string; messa
 const EDITABLE = ["DRAFT", "SCHEDULED", "FAILED"] as const;
 
 export type Plan = { mode: "draft" } | { mode: "now" } | { mode: "later"; date: string; time: string; zone: string };
-export type SaveInput = ComposeInput & { outboxId?: string | null; files: NewFile[]; removeIds: string[] };
+export type SaveInput = ComposeInput & { outboxId?: string | null; files: NewFile[]; removeIds: string[]; /** The received email this one answers. */ replyToMessageId?: string | null };
 export type SaveOk = { ok: true; outboxId: string; sent: boolean; scheduledFor: string | null };
 export type SaveFail = { ok: false; error: string; outboxId?: string };
 
@@ -278,7 +280,13 @@ export async function saveAndMaybeSend(org: OrgCtx, dept: MailDept, mailboxId: s
   } else {
     outboxId = newId("mout");
     const [me] = await db.select({ name: users.name, email: users.email }).from(users).where(eq(users.id, org.userId)).limit(1);
-    await db.insert(mailOutbox).values({ id: outboxId, organizationId: org.organizationId, mailboxId, ...fields, createdByUserId: org.userId, createdByName: me?.name || me?.email || null });
+    // A reply must answer an email in this very mailbox.
+    let replyTo: string | null = null;
+    if (input.replyToMessageId) {
+      const [parent] = await db.select({ id: mailMessages.id }).from(mailMessages).where(and(eq(mailMessages.id, input.replyToMessageId), eq(mailMessages.organizationId, org.organizationId), eq(mailMessages.mailboxId, mailboxId))).limit(1);
+      replyTo = parent?.id ?? null;
+    }
+    await db.insert(mailOutbox).values({ id: outboxId, organizationId: org.organizationId, mailboxId, ...fields, replyToMessageId: replyTo, createdByUserId: org.userId, createdByName: me?.name || me?.email || null });
   }
   if (input.removeIds.length) {
     await db.delete(mailAttachments).where(and(eq(mailAttachments.organizationId, org.organizationId), eq(mailAttachments.outboxId, outboxId), inArray(mailAttachments.id, input.removeIds)));
@@ -376,10 +384,16 @@ export async function deliver(organizationId: string, outboxId: string, actor: A
     if (u?.name) fromName = u.name;
   }
   const att = files.map((f) => ({ filename: f.filename, content: Buffer.from(f.dataB64, "base64") }));
+  // A reply keeps the conversation together: it names the email it answers, and goes in the same Gmail conversation.
+  let parent: { threadKey: string | null; rfcMessageId: string | null } | null = null;
+  if (row.replyToMessageId) {
+    const [pm] = await db.select({ threadKey: mailMessages.threadKey, rfcMessageId: mailMessages.rfcMessageId }).from(mailMessages).where(and(eq(mailMessages.id, row.replyToMessageId), eq(mailMessages.organizationId, organizationId), eq(mailMessages.mailboxId, box.id))).limit(1);
+    parent = pm ?? null;
+  }
   try {
     await sendWithCred(
       { provider: box.provider, accountEmail: box.accountEmail, credentialEnc: box.credentialEnc },
-      { to: chk.to.join(", "), cc: chk.cc, bcc: chk.bcc, subject: chk.subject, text: row.bodyText, html: bodyToHtml(row.bodyText), fromName, attachments: att },
+      { to: chk.to.join(", "), cc: chk.cc, bcc: chk.bcc, subject: chk.subject, text: row.bodyText, html: bodyToHtml(row.bodyText), fromName, attachments: att, inReplyTo: parent?.rfcMessageId ?? null, threadId: box.provider === "GOOGLE" && parent?.threadKey?.startsWith("g:") ? parent.threadKey.slice(2) : null },
       async (enc) => {
         await db.update(mailboxes).set({ credentialEnc: enc }).where(and(eq(mailboxes.id, box.id), eq(mailboxes.organizationId, organizationId)));
       },
@@ -405,7 +419,7 @@ export async function deliver(organizationId: string, outboxId: string, actor: A
   const messageId = newId("mmsg");
   await db.insert(mailMessages).values({
     id: messageId, organizationId, mailboxId: box.id, direction: "OUT", fromName, fromAddress: box.accountEmail, toAddresses: chk.to.join(", "), ccAddresses: chk.cc.join(", ") || null,
-    subject: chk.subject, snippet: snippetOf(row.bodyText), bodyText: row.bodyText, hasAttachments: files.length > 0, at, readAt: at,
+    threadKey: parent?.threadKey ?? null, subject: chk.subject, snippet: snippetOf(row.bodyText), bodyText: row.bodyText, hasAttachments: files.length > 0, at, readAt: at,
     sentByUserId: actor?.userId ?? row.createdByUserId, sentByName: actor?.name ?? row.createdByName, source: "COMPOSE",
   });
   await db.update(mailAttachments).set({ messageId }).where(and(eq(mailAttachments.organizationId, organizationId), eq(mailAttachments.outboxId, outboxId)));
@@ -488,17 +502,44 @@ export type ListRow = {
   zone: string | null;
   error: string | null;
   retrying: boolean;
+  /** Inbox only: how many received emails are in this conversation. */
+  count: number;
 };
 
 export const PAGE_SIZE = 30;
 const cleanQ = (q: string | undefined) => (q ?? "").replace(/[%_\\]/g, " ").trim().slice(0, 80);
 
+/** The Inbox: one line per conversation (its newest received email), unread if any of it is unread. */
+async function listInbox(organizationId: string, mailboxId: string, q: string, page: number): Promise<{ rows: ListRow[]; total: number; page: number }> {
+  const offset = (page - 1) * PAGE_SIZE;
+  const needle = q ? `%${q}%` : null;
+  const search = needle ? sql` and (subject like ${needle} or from_address like ${needle} or from_name like ${needle} or to_addresses like ${needle} or snippet like ${needle})` : sql``;
+  const hit = sql`select * from mail_messages where organization_id = ${organizationId} and mailbox_id = ${mailboxId} and direction = 'IN'${search}`;
+  const t = (await db.all(sql`select count(distinct coalesce(thread_key, id)) as n from (${hit})`)) as { n: number }[];
+  const rows = (await db.all(sql`
+    select id, subject, from_name, from_address, snippet, at, read_at, has_attachments, n, unread_n from (
+      select *, row_number() over (partition by coalesce(thread_key, id) order by at desc, id desc) as rn,
+        count(*) over (partition by coalesce(thread_key, id)) as n,
+        sum(case when read_at is null then 1 else 0 end) over (partition by coalesce(thread_key, id)) as unread_n
+      from (${hit})
+    ) where rn = 1 order by at desc, id desc limit ${PAGE_SIZE} offset ${offset}`)) as { id: string; subject: string; from_name: string | null; from_address: string | null; snippet: string | null; at: string; has_attachments: number | boolean; n: number; unread_n: number }[];
+  return {
+    total: Number(t[0]?.n ?? 0),
+    page,
+    rows: rows.map((m) => ({
+      kind: "message" as const, id: m.id, subject: m.subject, who: m.from_name || m.from_address || "", snippet: m.snippet ?? "", at: m.at,
+      unread: Number(m.unread_n) > 0, hasFiles: !!Number(m.has_attachments), status: null, zone: null, error: null, retrying: false, count: Number(m.n),
+    })),
+  };
+}
+
 export async function listFolder(organizationId: string, mailboxId: string, folder: Folder, opts: { q?: string; page?: number } = {}): Promise<{ rows: ListRow[]; total: number; page: number }> {
   const q = cleanQ(opts.q);
   const page = Math.max(1, Math.floor(opts.page ?? 1));
   const offset = (page - 1) * PAGE_SIZE;
-  if (folder === "inbox" || folder === "sent") {
-    const dir = folder === "inbox" ? "IN" : "OUT";
+  if (folder === "inbox") return listInbox(organizationId, mailboxId, q, page);
+  if (folder === "sent") {
+    const dir = "OUT";
     const base = and(eq(mailMessages.organizationId, organizationId), eq(mailMessages.mailboxId, mailboxId), eq(mailMessages.direction, dir));
     const search = q ? or(like(mailMessages.subject, `%${q}%`), like(mailMessages.fromAddress, `%${q}%`), like(mailMessages.fromName, `%${q}%`), like(mailMessages.toAddresses, `%${q}%`), like(mailMessages.snippet, `%${q}%`)) : undefined;
     const where = search ? and(base, search) : base;
@@ -508,8 +549,8 @@ export async function listFolder(organizationId: string, mailboxId: string, fold
       total: Number(t?.n ?? 0),
       page,
       rows: rows.map((m) => ({
-        kind: "message" as const, id: m.id, subject: m.subject, who: folder === "inbox" ? m.fromName || m.fromAddress || "" : `To: ${m.toAddresses ?? ""}`, snippet: m.snippet ?? "", at: m.at,
-        unread: dir === "IN" && !m.readAt, hasFiles: m.hasAttachments, status: null, zone: null, error: null, retrying: false,
+        kind: "message" as const, id: m.id, subject: m.subject, who: `To: ${m.toAddresses ?? ""}`, snippet: m.snippet ?? "", at: m.at,
+        unread: false, hasFiles: m.hasAttachments, status: null, zone: null, error: null, retrying: false, count: 1,
       })),
     };
   }
@@ -530,7 +571,7 @@ export async function listFolder(organizationId: string, mailboxId: string, fold
     page,
     rows: rows.map((r) => ({
       kind: "outbox" as const, id: r.id, subject: r.subject, who: r.toAddresses ? `To: ${r.toAddresses}` : "(no one yet)", snippet: snippetOf(r.bodyText), at: (folder === "drafts" ? r.updatedAt : r.scheduledFor) || r.updatedAt,
-      unread: false, hasFiles: withFiles.has(r.id), status: r.status, zone: r.scheduleZone, error: r.lastError, retrying: r.status === "SCHEDULED" && r.attempts > 0,
+      unread: false, hasFiles: withFiles.has(r.id), status: r.status, zone: r.scheduleZone, error: r.lastError, retrying: r.status === "SCHEDULED" && r.attempts > 0, count: 1,
     })),
   };
 }
@@ -548,12 +589,12 @@ export async function getOutboxItem(organizationId: string, mailboxId: string, i
 }
 
 /** A message by its id, only when it is in this company and the person may read its mailbox (the Mail pages' address carries just the message id). */
-export async function openMessage(org: OrgCtx, dept: MailDept, id: string): Promise<{ box: MailboxView; msg: MessageRow; files: FileInfo[] } | null> {
+export async function openMessage(org: OrgCtx, dept: MailDept, id: string): Promise<{ box: MailboxView; msg: MessageRow; files: FileInfo[]; thread: ThreadItem[] } | null> {
   const [m] = await db.select().from(mailMessages).where(and(eq(mailMessages.id, id), eq(mailMessages.organizationId, org.organizationId))).limit(1);
   if (!m) return null;
   const g = await getMailbox(org, dept, m.mailboxId);
   if (!g || !g.view.rights.read) return null;
-  return { box: g.view, msg: m, files: await filesOf(org.organizationId, { messageId: id }) };
+  return { box: g.view, msg: m, files: await filesOf(org.organizationId, { messageId: id }), thread: await threadOf(org.organizationId, m.mailboxId, m) };
 }
 
 export async function openOutbox(org: OrgCtx, dept: MailDept, id: string): Promise<{ box: MailboxView; item: OutboxRow; files: FileInfo[] } | null> {
@@ -564,12 +605,44 @@ export async function openOutbox(org: OrgCtx, dept: MailDept, id: string): Promi
   return { box: g.view, item: o, files: await filesOf(org.organizationId, { outboxId: id }) };
 }
 
-/** Marks a received message read. */
+export type ThreadItem = { msg: MessageRow; files: FileInfo[] };
+
+/** The whole conversation a received (or sent) email belongs to, oldest first: what we received and what we replied. */
+export async function threadOf(organizationId: string, mailboxId: string, msg: MessageRow): Promise<ThreadItem[]> {
+  if (!msg.threadKey) return [{ msg, files: await filesOf(organizationId, { messageId: msg.id }) }];
+  const rows = await db.select().from(mailMessages).where(and(eq(mailMessages.organizationId, organizationId), eq(mailMessages.mailboxId, mailboxId), eq(mailMessages.threadKey, msg.threadKey))).orderBy(asc(mailMessages.at), asc(mailMessages.id)).limit(50);
+  const out: ThreadItem[] = [];
+  for (const m of rows) out.push({ msg: m, files: await filesOf(organizationId, { messageId: m.id }) });
+  return out;
+}
+
+/** Opening a conversation marks everything received in it as read. */
 export async function markMessageRead(org: OrgCtx, dept: MailDept, mailboxId: string, id: string): Promise<void> {
   if (org.viewAs) return;
   const g = await getMailbox(org, dept, mailboxId);
   if (!g || !g.view.rights.read) return;
-  await db.update(mailMessages).set({ readAt: nowIso() }).where(and(eq(mailMessages.id, id), eq(mailMessages.organizationId, org.organizationId), eq(mailMessages.mailboxId, mailboxId), isNull(mailMessages.readAt)));
+  const [m] = await db.select({ threadKey: mailMessages.threadKey }).from(mailMessages).where(and(eq(mailMessages.id, id), eq(mailMessages.organizationId, org.organizationId), eq(mailMessages.mailboxId, mailboxId))).limit(1);
+  if (!m) return;
+  const same = m.threadKey ? or(eq(mailMessages.id, id), eq(mailMessages.threadKey, m.threadKey)) : eq(mailMessages.id, id);
+  await db.update(mailMessages).set({ readAt: nowIso() }).where(and(same, eq(mailMessages.organizationId, org.organizationId), eq(mailMessages.mailboxId, mailboxId), eq(mailMessages.direction, "IN"), isNull(mailMessages.readAt)));
+}
+
+/** Puts a conversation back to unread so it stands out again. */
+export async function markMessageUnread(org: OrgCtx, dept: MailDept, mailboxId: string, id: string): Promise<Result> {
+  if (org.viewAs) return { ok: false, error: "Looking through View as company is read-only." };
+  const g = await getMailbox(org, dept, mailboxId);
+  if (!g || !g.view.rights.read) return { ok: false, error: "You can't open this mailbox." };
+  const r = await db.update(mailMessages).set({ readAt: null }).where(and(eq(mailMessages.id, id), eq(mailMessages.organizationId, org.organizationId), eq(mailMessages.mailboxId, mailboxId), eq(mailMessages.direction, "IN")));
+  return r.rowsAffected ? { ok: true } : { ok: false, error: "That email wasn't found." };
+}
+
+/** Marks everything in the Inbox as read. */
+export async function markAllRead(org: OrgCtx, dept: MailDept, mailboxId: string): Promise<Result<{ n: number }>> {
+  if (org.viewAs) return { ok: false, error: "Looking through View as company is read-only." };
+  const g = await getMailbox(org, dept, mailboxId);
+  if (!g || !g.view.rights.read) return { ok: false, error: "You can't open this mailbox." };
+  const r = await db.update(mailMessages).set({ readAt: nowIso() }).where(and(eq(mailMessages.organizationId, org.organizationId), eq(mailMessages.mailboxId, mailboxId), eq(mailMessages.direction, "IN"), isNull(mailMessages.readAt)));
+  return { ok: true, n: r.rowsAffected };
 }
 
 /** A file on a draft or a message, with its contents, only when the person may read that mailbox. */

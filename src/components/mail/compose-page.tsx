@@ -3,12 +3,13 @@ import { notFound, redirect } from "next/navigation";
 import { requireOrg } from "@/lib/tenant";
 import { canViewMailDept, mailboxesOn } from "@/lib/mail-access";
 import { mailPath, partsInZone, type MailDept } from "@/lib/mail-rules";
-import { getOutboxItem, listMailboxes } from "@/lib/mailbox-service";
+import { quotedText, replyRecipients, replySubject } from "@/lib/mail-parse";
+import { getMessage, getOutboxItem, listMailboxes } from "@/lib/mailbox-service";
 import { card } from "@/components/sales-ui";
 import { MailChrome } from "@/components/mail/mail-chrome";
 import { ComposeForm, type ComposeDraft } from "@/components/mail/compose-form";
 
-export type ComposeSearch = { box?: string; draft?: string; to?: string; subject?: string; body?: string };
+export type ComposeSearch = { box?: string; draft?: string; to?: string; subject?: string; body?: string; reply?: string; all?: string };
 
 /** The "Write an email" page. Opened with ?draft= it continues a draft or a scheduled email; ?to= ?subject= ?body= start it filled in. */
 export async function ComposePage({ dept, sp }: { dept: MailDept; sp: ComposeSearch }) {
@@ -32,8 +33,16 @@ export async function ComposePage({ dept, sp }: { dept: MailDept; sp: ComposeSea
     );
   }
 
-  let draft: ComposeDraft = { id: null, to: (sp.to ?? "").slice(0, 500), cc: "", bcc: "", subject: (sp.subject ?? "").slice(0, 200), body: (sp.body ?? "").slice(0, 5000), date: "", time: "08:00", zone: null, scheduled: false, files: [] };
+  let draft: ComposeDraft = { id: null, to: (sp.to ?? "").slice(0, 500), cc: "", bcc: "", subject: (sp.subject ?? "").slice(0, 200), body: (sp.body ?? "").slice(0, 5000), date: "", time: "08:00", zone: null, scheduled: false, files: [], replyTo: null };
   let box = current;
+  if (sp.reply && !sp.draft) {
+    // Reply (or Reply all) to a received email in this mailbox: addressed, titled and quoted for the person.
+    const orig = await getMessage(org.organizationId, current.id, sp.reply);
+    if (!orig) notFound();
+    const rr = replyRecipients(orig.msg, current.accountEmail, sp.all === "1");
+    const who = [orig.msg.fromName, orig.msg.fromAddress && `<${orig.msg.fromAddress}>`].filter(Boolean).join(" ") || "the sender";
+    draft = { ...draft, to: rr.to, cc: rr.cc, subject: replySubject(orig.msg.subject), body: quotedText(who, new Date(orig.msg.at).toUTCString().replace(" GMT", " UTC"), orig.msg.bodyText ?? ""), replyTo: orig.msg.id };
+  }
   if (sp.draft) {
     const found = await getOutboxItem(org.organizationId, current.id, sp.draft);
     if (!found) {
@@ -51,7 +60,7 @@ export async function ComposePage({ dept, sp }: { dept: MailDept; sp: ComposeSea
       id: item.item.id, to: item.item.toAddresses, cc: item.item.ccAddresses, bcc: item.item.bccAddresses, subject: item.item.subject, body: item.item.bodyText,
       date: item.item.status === "SCHEDULED" && parts ? parts.date : "", time: item.item.status === "SCHEDULED" && parts ? parts.time : "08:00",
       zone: item.item.status === "SCHEDULED" ? item.item.scheduleZone : null, scheduled: item.item.status === "SCHEDULED",
-      files: item.files.map((f) => ({ id: f.id, filename: f.filename, bytes: f.bytes })),
+      files: item.files.map((f) => ({ id: f.id, filename: f.filename, bytes: f.bytes })), replyTo: item.item.replyToMessageId,
     };
   }
   return (

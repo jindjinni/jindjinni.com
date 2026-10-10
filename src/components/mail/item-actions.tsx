@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { discardAction, sendNowAction, unscheduleAction, type MailState } from "@/app/actions/mailbox";
+import { discardAction, markUnreadAction, sendNowAction, unscheduleAction, type MailState } from "@/app/actions/mailbox";
 import { ghostBtn, primaryBtn } from "@/components/sales-ui";
 
 type Which = "send" | "unschedule" | "discard";
@@ -54,5 +54,35 @@ export function OutboxButtons({ dept, boxId, id, status, canSend }: { dept: stri
         </p>
       )}
     </div>
+  );
+}
+
+/** On a received email: put the conversation back to unread and return to the Inbox. */
+export function MarkUnreadButton({ dept, boxId, id }: { dept: string; boxId: string; id: string }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [error, setError] = useState("");
+  return (
+    <span>
+      <button
+        type="button"
+        className={ghostBtn}
+        disabled={pending}
+        data-testid="mark-unread"
+        onClick={() =>
+          start(async () => {
+            const r = await markUnreadAction(dept, boxId, id);
+            if (r.error) setError(r.error);
+            else {
+              router.push(`/dashboard/${dept}/mail?box=${boxId}&folder=inbox`);
+              router.refresh();
+            }
+          })
+        }
+      >
+        Mark as unread
+      </button>
+      {error && <span className="ml-2 text-sm text-red-700 dark:text-red-400" role="alert">{error}</span>}
+    </span>
   );
 }

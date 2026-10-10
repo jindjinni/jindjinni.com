@@ -14,6 +14,9 @@ export type MimeInput = {
   text: string;
   html: string;
   attachments?: MimeAttachment[];
+  /** For a reply: the Message-ID of the email being answered (and the earlier ones in the conversation). */
+  inReplyTo?: string | null;
+  references?: string | null;
   date?: Date;
   messageIdDomain?: string;
 };
@@ -66,6 +69,11 @@ export function buildMime(i: MimeInput): string {
   const bcc = (i.bcc ?? []).filter(Boolean).map((b) => address(null, b));
   if (bcc.length) h.push(`Bcc: ${bcc.join(", ")}`);
   if (i.replyTo) h.push(`Reply-To: ${address(null, i.replyTo)}`);
+  const refId = (v: string) => oneLine(v).replace(/[<>\s]/g, "");
+  if (i.inReplyTo && refId(i.inReplyTo)) {
+    h.push(`In-Reply-To: <${refId(i.inReplyTo)}>`);
+    h.push(`References: ${[...(i.references ?? "").split(/\s+/).filter(Boolean).map(refId), refId(i.inReplyTo)].filter(Boolean).slice(-10).map((x) => `<${x}>`).join(" ")}`);
+  }
   h.push(
     `Subject: ${encodeText(i.subject)}`,
     `Date: ${(i.date ?? new Date()).toUTCString()}`,

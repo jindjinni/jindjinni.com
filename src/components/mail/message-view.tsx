@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { card, ghostBtn } from "@/components/sales-ui";
 import { MailTime } from "@/components/mail/mail-time";
-import { OutboxButtons } from "@/components/mail/item-actions";
+import { MarkUnreadButton, OutboxButtons } from "@/components/mail/item-actions";
 import { mailPath, type MailDept } from "@/lib/mail-rules";
-import type { FileInfo, MailboxView, MessageRow, OutboxRow } from "@/lib/mailbox-service";
+import type { FileInfo, MailboxView, MessageRow, OutboxRow, ThreadItem } from "@/lib/mailbox-service";
 
 const kb = (n: number) => (n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
 
@@ -34,9 +34,12 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 /** A message in the Inbox or Sent folder: who, when, the text (shown as plain text only) and any files. */
-export function MessageView({ dept, box, msg, files }: { dept: MailDept; box: MailboxView; msg: MessageRow; files: FileInfo[] }) {
+export function MessageView({ dept, box, msg, files, thread = [] }: { dept: MailDept; box: MailboxView; msg: MessageRow; files: FileInfo[]; thread?: ThreadItem[] }) {
   const out = msg.direction === "OUT";
+  const others = thread.filter((t) => t.msg.id !== msg.id);
+  const base = mailPath(dept);
   return (
+    <div className="space-y-4">
     <article className={`${card} space-y-4`} data-testid="message-view">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50" data-testid="message-subject">
@@ -57,7 +60,41 @@ export function MessageView({ dept, box, msg, files }: { dept: MailDept; box: Ma
       <pre className="whitespace-pre-wrap break-words rounded-lg bg-slate-50 p-4 font-sans text-sm text-slate-900 dark:bg-slate-950 dark:text-slate-100" data-testid="message-body">
         {msg.bodyText || "(no text)"}
       </pre>
+      {!out && (
+        <div className="flex flex-wrap items-center gap-2" data-testid="message-actions">
+          {box.rights.send && box.status === "ACTIVE" && (
+            <>
+              <Link href={`${base}/compose?box=${box.id}&reply=${msg.id}`} className={ghostBtn} data-testid="reply">
+                Reply
+              </Link>
+              <Link href={`${base}/compose?box=${box.id}&reply=${msg.id}&all=1`} className={ghostBtn} data-testid="reply-all">
+                Reply all
+              </Link>
+            </>
+          )}
+          {box.rights.read && <MarkUnreadButton dept={dept} boxId={box.id} id={msg.id} />}
+        </div>
+      )}
     </article>
+    {others.length > 0 && (
+      <section className={`${card} space-y-2`} data-testid="thread">
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Rest of this conversation ({others.length} more)</h3>
+        {others.map((t) => (
+          <details key={t.msg.id} className="rounded-lg border border-slate-200 p-3 dark:border-slate-800" data-testid="thread-item" data-direction={t.msg.direction}>
+            <summary className="cursor-pointer text-sm text-slate-800 dark:text-slate-200">
+              <strong>{t.msg.direction === "OUT" ? `You (${t.msg.sentByName || t.msg.fromAddress || "sent"})` : t.msg.fromName || t.msg.fromAddress || "Unknown"}</strong> · <MailTime iso={t.msg.at} mode="short" />
+              <span className="text-slate-500"> · {t.msg.snippet}</span>
+            </summary>
+            <Files dept={dept} files={t.files} />
+            <pre className="mt-2 whitespace-pre-wrap break-words font-sans text-sm text-slate-900 dark:text-slate-100">{t.msg.bodyText || "(no text)"}</pre>
+            <Link href={`${base}/m/${t.msg.id}`} className="mt-2 inline-block text-xs font-semibold underline">
+              Open this one
+            </Link>
+          </details>
+        ))}
+      </section>
+    )}
+    </div>
   );
 }
 

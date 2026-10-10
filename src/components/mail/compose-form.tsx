@@ -17,6 +17,8 @@ export type ComposeDraft = {
   zone: string | null;
   scheduled: boolean;
   files: { id: string; filename: string; bytes: number }[];
+  /** The received email this one answers, if it is a reply. */
+  replyTo: string | null;
 };
 
 const noSubscribe = () => () => {};
@@ -87,6 +89,7 @@ export function ComposeForm({
     <form onSubmit={submit} noValidate className="space-y-4" data-testid="compose-form" encType="multipart/form-data">
       <input type="hidden" name="dept" value={dept} />
       <input type="hidden" name="mailbox" value={boxId} />
+      {draft.replyTo && <input type="hidden" name="replyTo" value={draft.replyTo} />}
       <p className="text-sm text-slate-600 dark:text-slate-400" data-testid="compose-from">
         From: <strong className="text-slate-900 dark:text-slate-100">{fromEmail ?? "not connected yet"}</strong> ({boxName})
       </p>

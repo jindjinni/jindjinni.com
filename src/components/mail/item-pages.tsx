@@ -22,7 +22,7 @@ export async function MessagePage({ dept, id }: { dept: MailDept; id: string }) 
   const unread = r.msg.direction === "IN" && !r.msg.readAt && !org.viewAs;
   return (
     <MailChrome dept={dept} boxes={boxes} current={r.box} counts={counts} folder={r.msg.direction === "IN" ? "inbox" : "sent"}>
-      <MessageView dept={dept} box={r.box} msg={r.msg} files={r.files} />
+      <MessageView dept={dept} box={r.box} msg={r.msg} files={r.files} thread={r.thread} />
       {unread && <MarkRead dept={dept} boxId={r.box.id} id={r.msg.id} />}
     </MailChrome>
   );

@@ -9,6 +9,7 @@ import { MailChrome } from "@/components/mail/mail-chrome";
 import { FolderList } from "@/components/mail/folder-list";
 import { CreateMailboxForm } from "@/components/mail/create-mailbox-form";
 import { MailTick } from "@/components/mail/mail-tick";
+import { InboxBar } from "@/components/mail/inbox-bar";
 
 export type MailSearch = { box?: string; folder?: string; q?: string; page?: string; done?: string };
 
@@ -54,6 +55,7 @@ export async function MailHome({ dept, sp }: { dept: MailDept; sp: MailSearch })
   const page = Math.max(1, Number(sp.page) || 1);
   const [counts, list] = await Promise.all([folderCounts(org.organizationId, current.id), listFolder(org.organizationId, current.id, folder, { q: sp.q, page })]);
   const base = mailPath(dept);
+  const readable = current.status === "ACTIVE" && current.canRead && current.provider !== "SMTP" && current.rights.read && !org.viewAs;
   const pages = Math.max(1, Math.ceil(list.total / PAGE_SIZE));
   const qs = (p: number) => `${base}?box=${current.id}&folder=${folder}${sp.q ? `&q=${encodeURIComponent(sp.q)}` : ""}${p > 1 ? `&page=${p}` : ""}`;
 
@@ -77,6 +79,24 @@ export async function MailHome({ dept, sp }: { dept: MailDept; sp: MailSearch })
             )}
           </div>
         )}
+        {folder === "inbox" && current.status === "ACTIVE" && current.provider === "SMTP" && (
+          <p className="rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-800 dark:bg-slate-800 dark:text-slate-100" data-testid="inbox-send-only">
+            This mailbox can send email, but its Inbox can&apos;t be read here yet (it is connected with a password, not Google or Microsoft). Read its incoming mail in your email program.
+          </p>
+        )}
+        {folder === "inbox" && current.status === "ACTIVE" && current.provider !== "SMTP" && !current.canRead && (
+          <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:bg-amber-950/40 dark:text-amber-100" data-testid="inbox-no-read">
+            This mailbox was connected for sending only, so incoming mail isn&apos;t shown.{" "}
+            {current.rights.connect ? (
+              <Link href={`${base}/settings?box=${current.id}`} className="font-semibold underline">
+                Reconnect it and allow reading
+              </Link>
+            ) : (
+              <span>{current.kind === "PERSONAL" ? "Only its owner can reconnect it." : "An owner or admin can reconnect it."}</span>
+            )}
+          </p>
+        )}
+        {folder === "inbox" && readable && <InboxBar dept={dept} boxId={current.id} lastSyncAt={current.lastSyncAt} lastSyncError={current.lastSyncError} canRefresh unread={counts.inboxUnread} />}
         <form action={base} className="flex flex-wrap gap-2" role="search">
           <input type="hidden" name="box" value={current.id} />
           <input type="hidden" name="folder" value={folder} />
@@ -112,7 +132,7 @@ export async function MailHome({ dept, sp }: { dept: MailDept; sp: MailSearch })
           </div>
         )}
       </div>
-      {current.rights.send && <MailTick />}
+      {current.rights.read && !org.viewAs && <MailTick dept={dept} />}
     </MailChrome>
   );
 }
