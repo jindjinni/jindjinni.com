@@ -14,11 +14,11 @@ t("monthly: no refund, service to the end of the month you cancel in", () => {
   assert.equal(cancellationOutcome({ plan: "monthly", today: "2026-11-01", firstBillableOn: "2026-10-15", paid: true }).serviceEndsOn, "2026-11-30");
   assert.equal(cancellationOutcome({ plan: "monthly", today: "2028-02-03", firstBillableOn: "2026-10-15", paid: true }).serviceEndsOn, "2028-02-29");
 });
-t("cancelling in the free trial: free to the end of the trial, no charge, no refund", () => {
+t("cancelling in the free trial: no charge, no refund, and the service stops that day", () => {
   const tr = trialFrom("2026-10-08");
   for (const plan of ["monthly", "yearly"] as const) {
     const o = cancellationOutcome({ plan, today: "2026-10-10", firstBillableOn: tr.firstBillableOn, paid: false });
-    assert.deepEqual([o.kind, o.serviceEndsOn, o.refundCents], ["trial", "2026-10-14", 0]);
+    assert.deepEqual([o.kind, o.serviceEndsOn, o.refundCents], ["trial", "2026-10-10", 0]);
   }
   assert.equal(cancellationOutcome({ plan: "yearly", today: "2026-10-14", firstBillableOn: "2026-10-15", paid: false }).kind, "trial");
   assert.equal(cancellationOutcome({ plan: "yearly", today: "2026-10-15", firstBillableOn: "2026-10-15", paid: true }).kind, "yearly");

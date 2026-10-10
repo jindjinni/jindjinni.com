@@ -12,17 +12,22 @@ import { chatAttachments, memberships, organizations, receivingPackagePhotos, si
 import { storage } from "@/lib/receiving-storage";
 import { orgScopedTables } from "@/lib/company-export";
 import { SIGN_IN_HISTORY_MONTHS } from "@/lib/legal";
+import { billingDateOf } from "@/lib/billing-schedule";
+import { stopRun } from "@/lib/trial-memory";
 
 export type PurgeResult = { companiesDeleted: number; peopleRemoved: number; signInsDeleted: number };
 
 export async function purgeClosedCompanies(now = new Date()): Promise<PurgeResult> {
   const due = await db
-    .select({ id: organizations.id })
+    .select({ id: organizations.id, closedAt: organizations.closedAt })
     .from(organizations)
     .where(and(isNotNull(organizations.closedAt), isNotNull(organizations.purgeAfter), lte(organizations.purgeAfter, now.toISOString())));
 
   let peopleRemoved = 0;
-  for (const { id } of due) {
+  for (const { id, closedAt } of due) {
+    // Before the company's data goes, make sure the platform remembers how much free trial its business used (for a company closed
+    // before this memory existed, this is where it is first written down).
+    await stopRun(id, billingDateOf(new Date(closedAt ?? now))).catch(() => {});
     const memberRows = await db.select({ userId: memberships.userId }).from(memberships).where(eq(memberships.organizationId, id));
     const userIds = [...new Set(memberRows.map((m) => m.userId))];
 

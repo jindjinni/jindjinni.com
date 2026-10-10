@@ -1,7 +1,7 @@
 // The cancellation and refund policy in plain words, shared by the sign-up page, the Plan & billing page and the Terms so they can
 // never disagree. The rules themselves are in lib/cancellation.ts.
 
-export const CANCEL_TRIAL_TEXT = "Cancel any time during your free trial and you won't be charged. You keep the service until the trial ends.";
+export const CANCEL_TRIAL_TEXT = "Cancel any time during your free trial and you won't be charged. The service stops that day, and the free trial days you have not used are kept for when you come back.";
 export const CANCEL_MONTHLY_TEXT =
   "Monthly plan: there is no refund, it is just a cancellation. You keep the service until the end of the month you cancel in (that month is already paid), then the workspace is switched off.";
 export const CANCEL_YEARLY_TEXT =

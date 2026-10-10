@@ -2,7 +2,8 @@
 // calendar day and the screens, the cancel action and the future billing job all say the same thing.
 //
 // The policy (decided by the platform owner):
-//  - Cancelling during the free trial: no charge. Service runs to the end of the trial.
+//  - Cancelling during the free trial: no charge. Service stops that day (the day counts as used) and the unused trial days are
+//    remembered for when the company comes back (see trial-memory-rules.ts).
 //  - Monthly plan: no refund. It is a cancellation, not a refund. Service continues to the end of the month you cancel in
 //    (that month is already paid), then the workspace is switched off. Data is kept.
 //  - Yearly plan: service continues to the end of the month you cancel in, then the workspace is switched off, and the unused
@@ -52,9 +53,9 @@ export function yearlyTermContaining(firstBillableOn: string, today: string): { 
 }
 
 export function cancellationOutcome(i: CancelInput): CancelOutcome {
-  // Still in the free trial: free until the trial ends, nothing to pay or refund.
+  // Still in the free trial: nothing to pay or refund, and the service stops today (the days not used are kept for a return).
   if (i.firstBillableOn && i.today < i.firstBillableOn) {
-    return { kind: "trial", serviceEndsOn: addDays(i.firstBillableOn, -1), refundCents: 0, unusedDays: 0, termDays: 0, termEndsOn: null };
+    return { kind: "trial", serviceEndsOn: i.today, refundCents: 0, unusedDays: 0, termDays: 0, termEndsOn: null };
   }
   const monthEnd = lastDayOfMonth(i.today);
   if (i.plan === "yearly" && i.firstBillableOn) {

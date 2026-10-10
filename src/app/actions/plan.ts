@@ -4,6 +4,7 @@
 // today: service continues to the last day the policy allows (lib/cancellation.ts), then plan-end.ts switches the company off
 // with its data kept. The refund the policy works out is recorded here; billing pays it out once billing is live.
 
+import { stopRun, undoStopRun } from "@/lib/trial-memory";
 import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db } from "@/db/client";
@@ -42,6 +43,7 @@ export async function cancelPlanAction(_prev: PlanState, fd: FormData): Promise<
     .update(organizations)
     .set({ cancelRequestedOn: today, serviceEndsOn: out.serviceEndsOn, cancelRefundCents: out.refundCents, updatedAt: now })
     .where(eq(organizations.id, mainId));
+  await stopRun(mainId, today); // the trial days used so far are remembered if the company comes back later
   await logDecision(
     org.organizationId,
     "plan_cancelled",
@@ -70,6 +72,7 @@ export async function undoCancelAction(_prev: PlanState, _fd: FormData): Promise
     .update(organizations)
     .set({ cancelRequestedOn: null, serviceEndsOn: null, cancelRefundCents: null, updatedAt: new Date().toISOString() })
     .where(eq(organizations.id, mainId));
+  await undoStopRun(mainId);
   await logDecision(org.organizationId, "cancellation_undone", "Kept the plan", org.userId);
   revalidatePath("/dashboard/settings/billing");
   revalidatePath("/dashboard/settings/company-profile");

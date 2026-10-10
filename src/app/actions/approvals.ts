@@ -12,7 +12,8 @@ import { organizations } from "@/db/schema";
 import { requireOrg } from "@/lib/tenant";
 import { isPlatformAdmin } from "@/lib/platform-admin";
 import { runRegistryCheck } from "@/lib/state-registry";
-import { billingDateOf, trialFrom } from "@/lib/billing-schedule";
+import { billingDateOf } from "@/lib/billing-schedule";
+import { beginRun, planForApproval, resumeRun, stopRun } from "@/lib/trial-memory";
 import { logDecision, normalizeStatus, type CompanyStatus } from "@/lib/company-admin";
 
 export type ApprovalState = { error?: string; message?: string } | undefined;
@@ -67,18 +68,32 @@ export async function decideApprovalAction(_prev: ApprovalState, fd: FormData): 
   const now = new Date().toISOString();
   // What the company itself will read: the note for a turn-down or suspension; nothing after approval or a ban.
   const shown = decision === "reject" || decision === "suspend" || decision === "ban" ? reason : null;
-  // The 7-day free trial starts the day the company is first approved (a later reinstatement or lifted ban never restarts it).
-  const trial = decision === "approve" && !target.parent && !target.trialStartsOn ? trialFrom(billingDateOf(new Date())) : null;
+  // The free trial starts the day the company is first approved. A business the platform has seen before (same EIN, state and file number)
+  // gets only the trial days it has left, or none if it used them all (see trial-memory.ts). A later reinstatement never restarts a full trial.
+  const day = billingDateOf(new Date());
+  const isMain = !target.parent;
+  const firstApproval = decision === "approve" && isMain && !target.trialStartsOn;
+  const approval = firstApproval ? await planForApproval(orgId, day) : null;
+  const comeBack = isMain && (decision === "reinstate" || decision === "unban" || (decision === "approve" && !firstApproval));
   await db
     .update(organizations)
-    .set({ approvalStatus: to, approvalReason: shown, approvalDecidedAt: now, updatedAt: now, ...(trial ? { trialStartsOn: trial.startsOn, firstBillableOn: trial.firstBillableOn } : {}),
-      // Bringing back a company that cancelled: clear the cancellation and start paying again from today (no second free trial).
-      ...((decision === "reinstate" || decision === "approve") && !target.parent && target.serviceEndsOn ? { cancelRequestedOn: null, serviceEndsOn: null, cancelRefundCents: null, firstBillableOn: billingDateOf(new Date()) } : {}) })
+    .set({ approvalStatus: to, approvalReason: shown, approvalDecidedAt: now, updatedAt: now, ...(approval ? { trialStartsOn: approval.startsOn, firstBillableOn: approval.firstBillableOn } : {}),
+      // Bringing back a company that cancelled: clear the cancellation (its trial days, or paying from today, are set just below).
+      ...(comeBack && target.serviceEndsOn ? { cancelRequestedOn: null, serviceEndsOn: null, cancelRefundCents: null } : {}) })
     .where(eq(organizations.id, orgId));
   await logDecision(orgId, LOG[decision], reason || null, org.userId);
+  if (approval) await beginRun(orgId, approval.plan, day);
+  if (isMain && (decision === "suspend" || decision === "ban")) await stopRun(orgId, day);
+  let extra = "";
+  if (comeBack) {
+    const back = await resumeRun(orgId, { cancelled: !!target.serviceEndsOn }, day);
+    if (back.kind === "resume") extra = ` It had ${back.daysLeft} free trial days left, so its trial restarts for ${back.daysLeft} days.`;
+    else if (back.kind === "used_up" && target.serviceEndsOn) extra = " It had used its whole free trial, so it pays from today.";
+  }
+  if (approval) extra = approval.plan.kind === "resume" ? ` Returning company: it gets only its ${approval.plan.daysLeft} remaining free trial days.` : approval.plan.kind === "used_up" ? " Returning company: it already used its whole free trial, so it pays from today with no new trial." : "";
 
   revalidatePath("/dashboard/lamp/companies");
-  return { message: DONE[decision] };
+  return { message: DONE[decision] + extra };
 }
 
 /** Runs the state-records check again for one company (the platform owner presses "Check again"). */

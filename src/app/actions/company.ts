@@ -14,6 +14,7 @@ import { isOwner } from "@/lib/permissions";
 import { rootIdOf } from "@/lib/operation-groups";
 import { newId } from "@/lib/ids";
 import { sendEmail } from "@/lib/email";
+import { resumeRun, stopRun } from "@/lib/trial-memory";
 
 import { CLOSE_GRACE_DAYS } from "@/lib/legal";
 
@@ -44,6 +45,7 @@ export async function closeCompany(_prev: CompanyActionState, formData: FormData
     .update(organizations)
     .set({ closedAt: now.toISOString(), closedByUserId: org.userId, purgeAfter: purgeAfter.toISOString() })
     .where(or(eq(organizations.id, rootId), eq(organizations.parentOrganizationId, rootId))); // the company and all of its operations
+  await stopRun(rootId); // closing stops the free-trial clock; the days used are remembered even after the data is deleted
   // Open invitations can't be used once the company is closed -- cancel them so a reopened company doesn't revive stale links.
   await db
     .update(teamInvitations)
@@ -91,6 +93,8 @@ export async function restoreCompany(): Promise<CompanyActionState> {
     .update(organizations)
     .set({ closedAt: null, closedByUserId: null, purgeAfter: null })
     .where(or(eq(organizations.id, closed.organizationId), eq(organizations.parentOrganizationId, closed.organizationId)));
+  // Reopened: with free trial days left, the company gets only those days from today; if the trial was used up, nothing changes.
+  await resumeRun(closed.organizationId, { cancelled: false });
   await db.insert(purchasingAuditLog).values({
     id: newId("paudit"),
     organizationId: closed.organizationId,

@@ -9,6 +9,7 @@ import { usd } from "@/lib/billing-config";
 import { lockedBook, monthlyPrice, operationsFor, yearlyPrice } from "@/lib/pricing-rules";
 import { ensureCompanyCode } from "@/lib/company-code";
 import { newId } from "@/lib/ids";
+import { returningNotes } from "@/lib/trial-memory";
 
 export const PAGE_SIZE = 25;
 
@@ -182,6 +183,8 @@ export type CompanyRow = {
   lastSignIn: string | null;
   history: DecisionEntry[];
   second: SecondBusinessRow | null;
+  /** For a company waiting for approval whose business has been here before: how much free trial it already used. */
+  returning: string | null;
 };
 
 export type CompanyPage = { rows: CompanyRow[]; total: number; page: number; pages: number };
@@ -333,6 +336,9 @@ export async function listCompanies(opts: { q?: string; filter?: CompanyFilter; 
     });
   }
 
+  // A business that was here before (same EIN, state and file number) is flagged while it waits, with the trial days it would get.
+  const returningBy = await returningNotes(base.filter((b) => normalizeStatus(b.status) === "pending").map((b) => ({ id: b.id, ein: b.ein, registeredState: b.registeredState, stateFileNumber: b.stateFileNumber })));
+
   const useRows = ids.length ? await db.select({ org: codeUses.organizationId, kind: codeUses.kind, code: codeUses.code }).from(codeUses).where(inArray(codeUses.organizationId, ids)) : [];
   const codesOf = (id: string) => useRows.filter((u) => u.org === id).map((u) => (u.kind === "promo" ? `Promo code ${u.code}` : `Referred by affiliate code ${u.code}`)).join("; ");
   const priceOf = (b: { id: string; billingPlan: string | null; opType: string | null; lockM: number | null; lockY: number | null; lockP: number | null }) => {
@@ -391,6 +397,7 @@ export async function listCompanies(opts: { q?: string; filter?: CompanyFilter; 
     lastSignIn: lastBy.get(b.id) ?? null,
     history: histBy.get(b.id) ?? [],
     second: secondOf.get(b.id) ?? null,
+    returning: returningBy.get(b.id) ?? null,
   }));
   return { rows, total, page, pages };
 }

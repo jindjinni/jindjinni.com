@@ -3147,3 +3147,20 @@ export const codeUses = sqliteTable(
   },
   (t) => [uniqueIndex("code_uses_org_kind_unique").on(t.organizationId, t.kind), index("code_uses_code_idx").on(t.kind, t.codeId)],
 );
+
+/**
+ * How much of the free trial a business has used, so a company that leaves and comes back (even after its data was deleted) does not
+ * get a new trial every time. The key is a one-way hash of EIN + state + state file number (see trial-memory-rules.ts); nothing about
+ * the company can be read back from it. Deliberately has no `organization_id` column: it must outlive the company's own data.
+ */
+export const trialMemory = sqliteTable("trial_memory", {
+  key: text("key").primaryKey(),
+  /** The company that last held this business's trial (plain text, no foreign key). */
+  lastOrganizationId: text("last_organization_id"),
+  /** Trial days used before the current run began. */
+  daysBeforeRun: integer("days_before_run").notNull().default(0),
+  runStartedOn: text("run_started_on"),
+  stoppedOn: text("stopped_on"),
+  createdAt: text("created_at").notNull().default(sql`(current_timestamp)`),
+  updatedAt: text("updated_at").notNull().default(sql`(current_timestamp)`),
+});

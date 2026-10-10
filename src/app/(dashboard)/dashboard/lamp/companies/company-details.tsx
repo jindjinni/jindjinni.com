@@ -102,6 +102,7 @@ export function CompanyDetails({ c, ownOrgId, full }: { c: CompanyRow; ownOrgId:
           </dd>
         </>
       )}
+      {c.returning && (<><dt className={dt}>Returning</dt><dd className="font-medium text-amber-800 dark:text-amber-300" data-testid="returning-note">{c.returning}</dd></>)}
       <dt className={dt}>Payment</dt>
       <dd data-testid="payment-line">
         {(() => { const ps = paymentStatusText(c); return (<><span className={`rounded-full px-2 py-0.5 text-xs font-medium ${TONE_CLASS[ps.tone]}`}>{ps.label}</span> <span className="text-slate-600 dark:text-slate-300">{ps.text}</span></>); })()}

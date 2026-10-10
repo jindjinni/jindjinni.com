@@ -15,6 +15,8 @@ import { rootIdOf } from "@/lib/operation-groups";
 import { companyPricing } from "@/lib/pricing-service";
 import { billingCalendar, chargeLine } from "@/lib/account-status";
 import { addDays, longDay } from "@/lib/billing-schedule";
+import { daysUsedBefore } from "@/lib/trial-memory";
+import { welcomeBackNote } from "@/lib/trial-memory-rules";
 
 const PLAN_LABELS: Record<string, string> = { trial: "Free trial", starter: "Starter", pro: "Pro" };
 
@@ -37,6 +39,7 @@ export default async function BillingPage() {
     .where(eq(businessProfiles.organizationId, org.organizationId))
     .limit(1);
   const seats = await getSeatUsage(org.organizationId);
+  const welcomeBack = welcomeBackNote(await daysUsedBefore(await rootIdOf(org.organizationId)).catch(() => 0));
   const cal = billingCalendar({ billingPlan: row?.billingPlan, trialStartsOn: row?.trialStartsOn, firstBillableOn: row?.firstBillableOn }, undefined, { monthlyCents: priced.monthlyCents, yearlyCents: priced.yearlyCents });
 
   return (
@@ -88,6 +91,7 @@ export default async function BillingPage() {
                 ? `Your 7-day free trial is running: ${cal.trial.daysLeft} day${cal.trial.daysLeft === 1 ? "" : "s"} left, free through ${longDay(cal.trial.lastFreeDay)}.`
                 : `Your 7-day free trial ended on ${longDay(addDays(row?.firstBillableOn ?? "", -1))}.`}
             </p>
+            {cal.trial.state === "in_trial" && welcomeBack && <p className="font-semibold text-emerald-800 dark:text-emerald-300" data-testid="welcome-back">{welcomeBack}</p>}
             {cal.plan ? (
               <>
                 <p data-testid="plan-price-line">On the {cal.plan === "monthly" ? `Monthly plan (${usd(priced.monthlyCents)}/month` : `Yearly plan (${usd(priced.yearlyCents)}/year`}{priced.ops === 2 ? ", Wholesale and Distribution" : ", one operation"}), the charges are:</p>
@@ -134,7 +138,7 @@ export default async function BillingPage() {
                 return (
                   <>
                     If you cancel today ({longDay(billingDateOf())}), you keep the service through <strong>{longDay(out.serviceEndsOn)}</strong>.{" "}
-                    {out.kind === "trial" ? "You won't be charged." : out.refundCents > 0 ? `You would be refunded ${usd(out.refundCents)} for the unused part of your year.` : out.kind === "yearly" && row?.paymentStatus !== "current" ? "No payment has been taken, so there is nothing to refund." : "There is no refund."}
+                    {out.kind === "trial" ? "You won't be charged. The service stops today, and the free trial days you have not used are kept for if you come back." : out.refundCents > 0 ? `You would be refunded ${usd(out.refundCents)} for the unused part of your year.` : out.kind === "yearly" && row?.paymentStatus !== "current" ? "No payment has been taken, so there is nothing to refund." : "There is no refund."}
                   </>
                 );
               })()}

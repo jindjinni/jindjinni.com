@@ -129,6 +129,7 @@ export default async function CompaniesPage({ searchParams }: { searchParams: Pr
                 <strong className="min-w-0 break-words">{c.name}</strong>
                 <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs text-slate-700 dark:bg-slate-800 dark:text-slate-200" data-testid="company-code">{c.code}</span>
                 <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${b.cls}`} data-testid="company-status">{b.label}</span>
+                {c.returning && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-200" data-testid="returning-badge">Returning</span>}
                 {c.second && <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${BADGE[c.second.status].cls}`} data-testid="second-badge">Second business: {BADGE[c.second.status].label}</span>}
                 {c.ein && (() => { const rb = REGISTRY_BADGE[c.registryStatus ?? ""]; return rb ? <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${rb.cls}`} data-testid="registry-badge">{rb.label}</span> : <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300" data-testid="registry-badge">Not checked yet</span>; })()}
                 <span className="text-xs text-slate-500">
