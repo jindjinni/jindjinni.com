@@ -117,7 +117,7 @@ export function parseAddressList(header: string | null | undefined): Addr[] {
   }
   if (cur.trim()) parts.push(cur);
   for (const p of parts) {
-    const m = p.match(/^\s*(.*?)\s*<\s*([^<>\s]+@[^<>\s]+)\s*>\s*$/s);
+    const m = p.match(/^\s*([\s\S]*?)\s*<\s*([^<>\s]+@[^<>\s]+)\s*>\s*$/);
     if (m) {
       const name = oneLine(decodeMimeWords(m[1].replace(/^"|"$/g, "").replace(/\\(.)/g, "$1")));
       out.push({ name: name || null, address: m[2].toLowerCase() });
