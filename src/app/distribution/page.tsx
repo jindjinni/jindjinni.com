@@ -5,7 +5,7 @@ import { currentBook } from "@/lib/pricing-service";
 
 export const metadata: Metadata = {
   title: "Distribution | jindjinni",
-  description: "Buy from wholesalers with purchase orders, check every delivery for recalls and counterfeits, sell to pharmacies, and answer audits from one record.",
+  description: "Buy from wholesalers, check every delivery, sell to pharmacies, and answer audits from one record.",
 };
 
 // The prices come from the price book the Lamp sets, never from this file.

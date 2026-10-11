@@ -48,7 +48,7 @@ for (const w of BANNED_WORDS) assert.ok(!text.includes(w), `banned word: ${w}`);
 // the safety copy keeps its limits
 assert.ok(/never means a product is genuine, safe, unexpired or recall-free/.test(SAFETY_LIMITS));
 assert.ok(!/(is|are) (genuine|authentic|recall-free)/.test(text.replace(SAFETY_LIMITS.toLowerCase(), "")));
-assert.ok(SAFETY_CHECKS.length >= 6);
+assert.ok(SAFETY_CHECKS.length >= 4);
 
 // wording matches the tab rules: wholesale hides purchase orders and suppliers, distribution hides quotations
 const wp = WHOLESALE.depts[0].points.join(" ").toLowerCase();

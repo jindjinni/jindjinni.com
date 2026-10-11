@@ -5,7 +5,7 @@ import { currentBook } from "@/lib/pricing-service";
 
 export const metadata: Metadata = {
   title: "Wholesale and Distribution together | jindjinni",
-  description: "Run a Wholesale and a Distribution operation under one sign-in, each with its own customers, suppliers, products, orders and payments.",
+  description: "Run Wholesale and Distribution under one sign-in, each kept completely separate.",
 };
 
 // The "running both costs more" percentage comes from the price book the Lamp sets, never from this file.

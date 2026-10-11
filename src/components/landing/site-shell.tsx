@@ -164,11 +164,11 @@ export function SafetySection({ id = "safety", checks = SAFETY_CHECKS }: { id?: 
             Strict checks, so the wrong product never gets into your business.
           </h2>
           <p className="mt-5 text-lg text-muted">
-            Every item that comes through your door is checked against your recall lists and screened for the signs of a
-            counterfeit. When something looks wrong, jindjinni holds it first and lets a person decide.
+            Every item that comes through your door is checked. When something looks wrong, jindjinni holds it first and
+            lets a person decide.
           </p>
         </div>
-        <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {checks.map((c) => (
             <IconCard key={c.title} icon={c.icon} title={c.title} body={c.body} />
           ))}
