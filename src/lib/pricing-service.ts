@@ -230,7 +230,7 @@ export async function approveAffiliate(by: { userId: string }, id: string): Prom
   const code = a.code ?? (await newAffiliateCode(a.name));
   await db.update(affiliates).set({ status: "active", percent: AFFILIATE_PERCENT, code, approvedAt: new Date().toISOString(), approvedBy: by.userId, updatedAt: sql`(current_timestamp)` }).where(eq(affiliates.id, id));
   const link = affiliateLink(code);
-  const text = `Hi ${a.name},\n\nYou're approved as a Jindjinni affiliate.\n\nYour code: ${code}\nYour link: ${link}\n\nWhen a company signs up through your link (or types your code in the Promo code box) and has been billed on jindjinni for ${AFFILIATE_MONTHS} months, you earn a one-time payout of ${AFFILIATE_PERCENT}% of one month's subscription for the plan that company picked. It is paid once for each company you refer. It is not ongoing, and if the company cancels or is suspended before the ${AFFILIATE_MONTHS} months, no payout is earned.\n\nThank you for spreading the word.`;
+  const text = `Hi ${a.name},\n\nYou're approved as a Jindjinni affiliate.\n\nYour code: ${code}\nYour link: ${link}\n\nWhen a company signs up through your link (or types your code in the Promo code box) and has been billed on jindjinni for ${AFFILIATE_MONTHS} months, you earn a one-time payout of ${AFFILIATE_PERCENT}% of one month's subscription for the plan that company picked. It is paid once for each company you refer, by direct deposit only. It is not ongoing, and if the company cancels or is suspended before the ${AFFILIATE_MONTHS} months, no payout is earned.\n\nYour private affiliate portal is at ${appUrl()}/affiliate : sign in with this email address and we send you a one-time link. We will also send you a full details email shortly.\n\nThank you for spreading the word.`;
   const sent = await sendEmail({ to: a.email, subject: "You're approved as a Jindjinni affiliate", html: text.split("\n").map((l) => `<p>${l.replace(/&/g, "&amp;").replace(/</g, "&lt;") || "&nbsp;"}</p>`).join(""), text });
   return { ok: true, code, emailed: sent.ok };
 }
@@ -251,6 +251,8 @@ export type ReferralRow = {
   /** The first day the referral can count as earned, and how many of the 3 months the company has completed. */
   qualifiesOn: string | null;
   monthsDone: number;
+  /** The day the company was approved and started (its free trial began), or null while it waits for approval. */
+  activeSince: string | null;
   status: ReferralStatus;
   paidAt: string | null;
   paidCents: number | null;
@@ -261,8 +263,8 @@ export type ReferralRow = {
  * own locked price. It is earned once the company has been billed for 3 months (affiliateQualifiesOn) and its payments are current;
  * it is not earned if the company cancelled or was suspended before that.
  */
-export async function referralRows(): Promise<ReferralRow[]> {
-  const uses = await db.select().from(codeUses).where(eq(codeUses.kind, "affiliate")).orderBy(desc(codeUses.createdAt));
+export async function referralRows(onlyAffiliateId?: string): Promise<ReferralRow[]> {
+  const uses = await db.select().from(codeUses).where(onlyAffiliateId ? and(eq(codeUses.kind, "affiliate"), eq(codeUses.codeId, onlyAffiliateId)) : eq(codeUses.kind, "affiliate")).orderBy(desc(codeUses.createdAt));
   const out: ReferralRow[] = [];
   const today = billingDateOf();
   for (const u of uses) {
@@ -281,7 +283,7 @@ export async function referralRows(): Promise<ReferralRow[]> {
     const qualified = BILLING_LIVE && org.paymentStatus === "current" && !!qualifiesOn && today >= qualifiesOn;
     out.push({
       useId: u.id, affiliateId: aff.id, affiliateName: aff.name, code: u.code, company: org.name, plan, monthlyCents: monthly,
-      cutCents: u.paidCents ?? cut, qualifiesOn, monthsDone, status: referralStatus({ paidAt: u.paidAt, endedBeforeQualifying, qualified }), paidAt: u.paidAt, paidCents: u.paidCents,
+      cutCents: u.paidCents ?? cut, qualifiesOn, monthsDone, activeSince: org.trialStartsOn ?? null, status: referralStatus({ paidAt: u.paidAt, endedBeforeQualifying, qualified }), paidAt: u.paidAt, paidCents: u.paidCents,
     });
   }
   return out;

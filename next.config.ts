@@ -25,7 +25,8 @@ const nextConfig: NextConfig = {
       { source: "/:path*", headers: baseHeaders },
       // The reset link carries a secret: never pass the address on to another site.
       { source: "/reset-password/:path*", headers: [{ key: "Referrer-Policy", value: "no-referrer" }] },
-      ...["/dashboard/:path*", "/api/:path*", "/invite/:path*", "/forgot-password", "/reset-password/:path*", "/accept-terms", "/onboarding", "/closed", "/no-access", "/unsubscribe/:path*"].map((source) => ({ source, headers: appHeaders })),
+      { source: "/affiliate/signin/:path*", headers: [{ key: "Referrer-Policy", value: "no-referrer" }] },
+      ...["/dashboard/:path*", "/api/:path*", "/invite/:path*", "/forgot-password", "/reset-password/:path*", "/affiliate", "/affiliate/:path*", "/accept-terms", "/onboarding", "/closed", "/no-access", "/unsubscribe/:path*"].map((source) => ({ source, headers: appHeaders })),
     ];
   },
   // Archive, Audit log and Database moved under Settings; old bookmarks still land in the right place.

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { AffiliateProgramSection, Eyebrow, SiteFooter, SiteHeader } from "@/components/landing/site-shell";
 import { affiliateExample } from "@/lib/affiliate-program";
 import { usd } from "@/lib/billing-config";
@@ -27,6 +28,7 @@ export default async function AffiliatesPage() {
             <Eyebrow>Apply</Eyebrow>
             <h2 className="mt-3 text-balance text-3xl font-extrabold tracking-tight sm:text-4xl">Tell us a little about yourself.</h2>
             <p className="mt-3 text-base text-muted">We review every request and email you our answer. If we approve it, the email has your code and your link.</p>
+            <p className="mt-2 text-sm text-muted">Already approved? <Link href="/affiliate" className="font-bold text-brand-deep underline" data-testid="affiliate-signin-link">Sign in to your affiliate portal</Link>.</p>
             <div className="auth-theme mt-6 rounded-[28px] border border-line bg-white p-6 shadow-[0_30px_80px_-40px_rgba(12,31,52,0.35)] sm:p-8">
               <AffiliateForm />
             </div>

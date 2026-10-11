@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { approveAffiliateAction, createPromoAction, markPaidAction, savePriceAction, type PricingState } from "@/app/actions/pricing-admin";
+import { approveAffiliateAction, createPromoAction, markPaidAction, savePriceAction, sendAffiliateDetailsAction, type PricingState } from "@/app/actions/pricing-admin";
 import { usd } from "@/lib/billing-config";
 import { monthlyPrice, validateBook, yearlyPrice, yearlyRegular, yearlySavings } from "@/lib/pricing-rules";
 
@@ -143,9 +143,31 @@ export function PaidForm({ id }: { id: string }) {
   return (
     <form action={action} className="flex flex-wrap items-center gap-2" data-testid="paid-form">
       <input type="hidden" name="id" value={id} />
-      <input name="note" placeholder="How you paid (optional)" maxLength={200} className={`${input} w-56`} aria-label="How you paid" />
+      <input name="note" placeholder="Direct deposit reference (optional)" maxLength={200} className={`${input} w-56`} aria-label="Direct deposit reference" />
       <button disabled={pending} className={btn} data-testid="mark-paid">Mark paid</button>
       <Notice s={state} id="paid" />
     </form>
+  );
+}
+
+/** Preview of the follow-up email, and the button that sends it. `lastSent` is when it last went out, if ever. */
+export function SendDetailsForm({ id, lastSent, preview }: { id: string; lastSent: string | null; preview: { subject: string; text: string } }) {
+  const [state, action, pending] = useActionState(sendAffiliateDetailsAction, undefined);
+  return (
+    <div className="flex flex-col gap-2" data-testid="details-box">
+      <details>
+        <summary className="cursor-pointer text-xs font-medium text-slate-600 dark:text-slate-400" data-testid="details-preview-toggle">See the email</summary>
+        <div className="mt-2 max-w-xl rounded-md border border-slate-200 p-3 text-xs dark:border-slate-700" data-testid="details-preview">
+          <p className="font-semibold">{preview.subject}</p>
+          <pre className="mt-2 whitespace-pre-wrap font-sans text-slate-600 dark:text-slate-300">{preview.text}</pre>
+        </div>
+      </details>
+      <form action={action} className="flex flex-wrap items-center gap-2">
+        <input type="hidden" name="id" value={id} />
+        <button disabled={pending} className={btn} data-testid="send-details">{lastSent ? "Send the details email again" : "Send the details email"}</button>
+        <span className="text-xs text-slate-500" data-testid="details-last">{lastSent ? `Last sent ${lastSent.slice(0, 10)}` : "Not sent yet"}</span>
+        <Notice s={state} id="details" />
+      </form>
+    </div>
   );
 }

@@ -6,6 +6,9 @@
 //  - It is earned only once the company has been billed on the platform for 3 months. Monthly plan: its third full monthly payment
 //    has gone through. Yearly plan: it paid the year up front and has been on the platform for 3 months.
 //  - If the company cancels or is suspended before that, nothing is owed. It is not ongoing.
+//  - Affiliates are paid by DIRECT DEPOSIT only.
+//  - An approved affiliate has a private portal (/affiliate) showing only the companies still working toward their 3 months. Once a
+//    company's payout has been paid it disappears from the portal for good (see affiliate-portal-rules.ts).
 // No prices are written here: the example on the Affiliates page is worked out from the price book.
 
 export const AFFILIATE_PERCENT = 50;
@@ -23,9 +26,9 @@ export const AFFILIATE_PROGRAM = {
   ],
   steps: [
     { title: "Apply", body: "Tell us a little about yourself. We review every request and email you our answer." },
-    { title: "Share your link", body: "Once approved, you get your own code and link. A company signs up through the link or types your code at sign-up." },
+    { title: "Share your link", body: "Once approved, you get your own code, your link and a private portal. A company signs up through the link or types your code at sign-up." },
     { title: "They stay", body: `The company is billed on jindjinni for ${AFFILIATE_MONTHS} months. That is what qualifies you.` },
-    { title: "You get paid", body: `You receive your one-time ${AFFILIATE_PERCENT}% payout. It is not ongoing.` },
+    { title: "You get paid", body: `You receive your one-time ${AFFILIATE_PERCENT}% payout by direct deposit. It is not ongoing.` },
   ],
   rules: [
     `There is one kind of affiliate and one rate: ${AFFILIATE_PERCENT}%.`,
@@ -34,7 +37,8 @@ export const AFFILIATE_PROGRAM = {
     "If the company cancels or is suspended before then, no payout is earned.",
     "It is a one-time payout for each company. It is not a continuing commission.",
     "The company you refer gets no discount from an affiliate code, and pays the normal price.",
-    "We pay you after the qualifying payment has been received.",
+    "We pay you after the qualifying payment has been received, by direct deposit only.",
+    `Once you are approved you get a private affiliate portal to follow the companies you referred. A company drops off your list for good once your payout for it has been paid.`,
   ],
 };
 

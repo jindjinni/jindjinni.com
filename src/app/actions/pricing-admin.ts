@@ -8,6 +8,7 @@ import { requireOrg } from "@/lib/tenant";
 import { staffLevelOf } from "@/lib/platform-admin";
 import { isFullLevel } from "@/lib/mothership-rules";
 import { usd } from "@/lib/billing-config";
+import { sendAffiliateDetails } from "@/lib/affiliate-portal";
 import { approveAffiliate, createPromo, markReferralPaid, savePriceBook, setAffiliateStatus, setPromoActive } from "@/lib/pricing-service";
 
 export type PricingState = { error?: string; message?: string } | undefined;
@@ -65,6 +66,15 @@ export async function affiliateStatusAction(fd: FormData): Promise<void> {
   const status = String(fd.get("status") ?? "");
   if (status === "active" || status === "paused" || status === "declined") await setAffiliateStatus(String(fd.get("id") ?? ""), status);
   refresh();
+}
+
+/** The owner presses "Send details email": the affiliate gets the full terms, how payment works (direct deposit only) and the portal link. */
+export async function sendAffiliateDetailsAction(_p: PricingState, fd: FormData): Promise<PricingState> {
+  const org = await actor();
+  const r = await sendAffiliateDetails({ userId: org.userId }, String(fd.get("id") ?? ""));
+  if (!r.ok) return { error: r.error };
+  refresh();
+  return { message: `Sent to ${r.to}. A copy of the exact email is kept on file.` };
 }
 
 export async function markPaidAction(_p: PricingState, fd: FormData): Promise<PricingState> {

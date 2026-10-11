@@ -10,7 +10,7 @@ import {
 } from "@/lib/password-reset-rules";
 
 /** The address the emailed link points to. Never taken from the visitor's request (that could be faked); from our own settings. */
-function appUrl(): string {
+export function appUrl(): string {
   const set = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL;
   if (set) return set;
   const vercel = process.env.VERCEL_PROJECT_PRODUCTION_URL;

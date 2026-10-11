@@ -65,10 +65,10 @@ export function resetStatus(row: { expiresAt: string; usedAt: string | null } | 
 }
 
 /** True when a new link may be sent: the last one for this person was sent long enough ago. */
-export function cooldownOver(lastCreatedAt: string | null | undefined, nowMs: number): boolean {
+export function cooldownOver(lastCreatedAt: string | null | undefined, nowMs: number, cooldownSec: number = RESET_COOLDOWN_SEC): boolean {
   if (!lastCreatedAt) return true;
   const t = Date.parse(lastCreatedAt);
-  return !Number.isFinite(t) || nowMs - t >= RESET_COOLDOWN_SEC * 1000;
+  return !Number.isFinite(t) || nowMs - t >= cooldownSec * 1000;
 }
 
 export function resetUrl(base: string, token: string): string {

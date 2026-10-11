@@ -89,6 +89,8 @@ assert.ok(/one kind of affiliate/i.test(aff) && /not (a )?(ongoing|continuing)/i
 assert.ok(!/\$\s?\d/.test(aff), "no price in the affiliate words");
 for (const w of BANNED_WORDS) assert.ok(!aff.toLowerCase().includes(w), `affiliate banned word: ${w}`);
 assert.equal(AFFILIATE_PROGRAM.steps.length, 4);
+assert.ok(/direct deposit/i.test(aff), "paid by direct deposit");
+assert.ok(/portal/i.test(aff), "the portal is mentioned");
 assert.ok(/\$488\.50/.test(affiliateExample(97700, 48850, (c) => `$${(c / 100).toFixed(2)}`)), "the example is worked out from the numbers it is given");
 
 console.log("landing-content: ok");

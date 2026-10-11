@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { notFound } from "next/navigation";
 import { requireOrg } from "@/lib/tenant";
 import { staffLevelOf } from "@/lib/platform-admin";
@@ -6,7 +7,8 @@ import { usd } from "@/lib/billing-config";
 import { REFERRAL_LABEL } from "@/lib/pricing-rules";
 import { affiliateLink, currentBook, listAffiliates, listPromos, priceHistory, referralRows } from "@/lib/pricing-service";
 import { affiliateStatusAction, togglePromoAction } from "@/app/actions/pricing-admin";
-import { ApproveForm, PaidForm, PriceForm, PromoForm } from "./pricing-forms";
+import { detailsEmailFor, detailsSentMap } from "@/lib/affiliate-portal";
+import { ApproveForm, PaidForm, PriceForm, PromoForm, SendDetailsForm } from "./pricing-forms";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +20,7 @@ const dollars = (cents: number) => (cents % 100 === 0 ? String(cents / 100) : (c
 export default async function PricingPage() {
   const org = await requireOrg({ real: true });
   if (!isFullLevel(await staffLevelOf(org))) notFound();
-  const [book, history, promos, affiliates, referrals] = await Promise.all([currentBook(), priceHistory(), listPromos(), listAffiliates(), referralRows()]);
+  const [book, history, promos, affiliates, referrals, sentMap] = await Promise.all([currentBook(), priceHistory(), listPromos(), listAffiliates(), referralRows(), detailsSentMap()]);
   const pending = affiliates.filter((a) => a.status === "pending");
   const people = affiliates.filter((a) => a.status !== "pending");
   const owed = referrals.filter((r) => r.status === "owed");
@@ -87,7 +89,7 @@ export default async function PricingPage() {
           Affiliates <span className="ml-2 text-sm font-normal text-slate-500">{pending.length} waiting for approval · {owed.length} cut{owed.length === 1 ? "" : "s"} owed{owed.length ? ` (${usd(owedTotal)})` : ""}</span>
         </summary>
         <div className="flex flex-col gap-5 border-t border-slate-100 p-4 dark:border-slate-800">
-          <p className="text-sm text-slate-600 dark:text-slate-300">People apply on the public page <strong>/affiliates</strong>. There is one kind of affiliate: a one-time 50% of one month&rsquo;s subscription (whichever plan the company picked), earned once the company they brought in has been billed for 3 months. If the company cancels or is suspended before then, nothing is earned. The new company pays the normal price. You pay them yourself and mark it paid here.</p>
+          <p className="text-sm text-slate-600 dark:text-slate-300">People apply on the public page <strong>/affiliates</strong>. There is one kind of affiliate: a one-time 50% of one month&rsquo;s subscription (whichever plan the company picked), earned once the company they brought in has been billed for 3 months. If the company cancels or is suspended before then, nothing is earned. The new company pays the normal price. Affiliates are paid by direct deposit only: arrange it with them privately (never by email or text), then mark it paid here. Once approved, an affiliate signs in at <strong>/affiliate</strong> with an emailed one-time link and sees the companies they referred and how long each has been active. A company drops off their list for good once their payout for it is marked paid. Use <strong>Send the details email</strong> to send a new affiliate the full terms and what to look out for.</p>
 
           <div>
             <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Waiting for approval</h3>
@@ -114,7 +116,8 @@ export default async function PricingPage() {
                 <thead className="text-xs text-slate-500"><tr><th className="py-1 font-medium">Name</th><th className="py-1 font-medium">Code and link</th><th className="py-1 font-medium">Cut</th><th className="py-1 font-medium">Status</th><th className="py-1 font-medium"></th></tr></thead>
                 <tbody>
                   {people.map((a) => (
-                    <tr key={a.id} className="border-t border-slate-100 align-top dark:border-slate-800" data-testid="affiliate-row" data-email={a.email}>
+                    <Fragment key={a.id}>
+                    <tr className="border-t border-slate-100 align-top dark:border-slate-800" data-testid="affiliate-row" data-email={a.email}>
                       <td className="py-2">{a.name}<br /><span className="text-xs text-slate-500">{a.email}</span></td>
                       <td className="py-2">{a.code ? <><span className="font-mono font-semibold">{a.code}</span><br /><span className="break-all text-xs text-slate-500">{affiliateLink(a.code)}</span></> : "-"}</td>
                       <td className="py-2 tabular-nums">{a.percent ? `${a.percent}%` : "-"}</td>
@@ -125,6 +128,12 @@ export default async function PricingPage() {
                         )}
                       </td>
                     </tr>
+                    {a.status === "active" && a.code && (
+                      <tr data-testid="affiliate-details-row" data-email={a.email}>
+                        <td colSpan={5} className="pb-3"><SendDetailsForm id={a.id} lastSent={sentMap.get(a.id) ?? null} preview={detailsEmailFor(a)} /></td>
+                      </tr>
+                    )}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>

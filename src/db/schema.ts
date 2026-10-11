@@ -3421,6 +3421,44 @@ export const affiliates = sqliteTable(
   (t) => [uniqueIndex("affiliates_code_unique").on(t.code), index("affiliates_email_idx").on(t.email)],
 );
 
+/**
+ * The affiliate portal's sign-in links (see lib/affiliate-portal-rules.ts). An approved affiliate types their email and we send a
+ * one-time link that works for a short time; only a one-way hash of the link's token is kept. No passwords.
+ */
+export const affiliateLogins = sqliteTable(
+  "affiliate_logins",
+  {
+    id: text("id").primaryKey(),
+    affiliateId: text("affiliate_id")
+      .notNull()
+      .references(() => affiliates.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull().unique(),
+    expiresAt: text("expires_at").notNull(),
+    usedAt: text("used_at"),
+    ...timestamps,
+  },
+  (t) => [index("affiliate_logins_aff_idx").on(t.affiliateId, t.createdAt)],
+);
+
+/** Every email the platform owner sent an affiliate by pressing Send in the Lamp (the details / terms follow-up), kept exactly as sent. */
+export const affiliateEmails = sqliteTable(
+  "affiliate_emails",
+  {
+    id: text("id").primaryKey(),
+    affiliateId: text("affiliate_id")
+      .notNull()
+      .references(() => affiliates.id, { onDelete: "cascade" }),
+    /** "details" */
+    kind: text("kind").notNull(),
+    toEmail: text("to_email").notNull(),
+    subject: text("subject").notNull(),
+    body: text("body").notNull(),
+    sentBy: text("sent_by"),
+    ...timestamps,
+  },
+  (t) => [index("affiliate_emails_aff_idx").on(t.affiliateId, t.createdAt)],
+);
+
 /** Which codes a company signed up with (at most one promo code and one affiliate code). `organizationId` is the company's main row. */
 export const codeUses = sqliteTable(
   "code_uses",
