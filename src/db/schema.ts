@@ -3925,3 +3925,67 @@ export const supplierBillNotices = sqliteTable(
   },
   (t) => [uniqueIndex("supplier_bill_notices_payment_unique").on(t.organizationId, t.paymentId), index("supplier_bill_notices_org_idx").on(t.organizationId, t.handledAt)],
 );
+
+// ---------------------------------------------------------------------------
+// Company storefronts (public pages that feed the company's own records). See src/lib/storefront-rules.ts.
+// ---------------------------------------------------------------------------
+
+/**
+ * One storefront per workspace (unique organizationId): the public address handle the company chose (unique, never the internal
+ * workspace name), the name and welcome words visitors see, and which doors are open. Hidden, never deleted.
+ */
+export const storefronts = sqliteTable(
+  "storefronts",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    handle: text("handle").notNull(),
+    displayName: text("display_name").notNull(),
+    welcomeText: text("welcome_text"),
+    /** Wholesale: the "sell to us" page is open to visitors. */
+    sellOpen: integer("sell_open", { mode: "boolean" }).notNull().default(false),
+    hiddenAt: text("hidden_at"),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex("storefronts_org_unique").on(t.organizationId), uniqueIndex("storefronts_handle_unique").on(t.handle)],
+);
+
+/**
+ * What a visitor sent through a company's "sell to us" page. It belongs to the company the storefront belongs to (the organization
+ * is found from the storefront, never from anything the visitor typed). Staff turn it into a quotation, decline it, or hide it.
+ */
+export const websiteRequests = sqliteTable(
+  "website_requests",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    storefrontId: text("storefront_id").notNull(),
+    /** The short code shown to the visitor, like WEB-7KQ2MX. */
+    reference: text("reference").notNull(),
+    status: text("status", { enum: ["NEW", "QUOTED", "DECLINED"] }).notNull().default("NEW"),
+    businessName: text("business_name").notNull(),
+    contactName: text("contact_name").notNull(),
+    email: text("email").notNull(),
+    phone: text("phone"),
+    street1: text("street1").notNull(),
+    street2: text("street2"),
+    city: text("city").notNull(),
+    state: text("state").notNull(),
+    zip: text("zip").notNull(),
+    itemsText: text("items_text").notNull(),
+    notes: text("notes"),
+    quotationId: text("quotation_id"),
+    handledByUserId: text("handled_by_user_id"),
+    handledAt: text("handled_at"),
+    hiddenAt: text("hidden_at"),
+    ...timestamps,
+  },
+  (t) => [
+    index("website_requests_org_idx").on(t.organizationId, t.createdAt),
+    uniqueIndex("website_requests_reference_unique").on(t.organizationId, t.reference),
+  ],
+);

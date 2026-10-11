@@ -11,6 +11,7 @@ import { tabViewOf } from "@/lib/operations-service";
 import { withoutHidden } from "@/lib/operation-tabs-rules";
 import { withMailTab } from "@/lib/mail-access";
 import { mailBadges } from "@/lib/mailbox-service";
+import { featureOn } from "@/lib/features";
 
 // Purchasing is its own department, laid out like Receiving: a colored sidebar down the left, a full-width workspace.
 // The sidebar's names and order can be changed by an Administrator (Edit menu); see lib/sidebar-menu.ts.
@@ -26,13 +27,14 @@ export default async function PurchasingLayout({ children }: { children: React.R
   const allowed = menuIdsFor("purchasing", { connectors: isAdmin(org.role), base: isManager ? undefined : everyday });
   // Purchase orders, suppliers and the document templates come with the "purchase-orders" rollout feature, for every company.
   // The sign-up answer only decides which comes first: a Distributor sees Purchase Orders above Quotations.
-  const [poOn, operation, view] = await Promise.all([purchaseOrdersEnabled(org.organizationId), operationTypeOf(org.organizationId), tabViewOf(org.organizationId)]);
+  const [poOn, operation, view, storefrontsOn] = await Promise.all([purchaseOrdersEnabled(org.organizationId), operationTypeOf(org.organizationId), tabViewOf(org.organizationId), featureOn("storefronts", org.organizationId)]);
   const menu = resolveMenu(
     "purchasing",
     await getSavedSidebarMenus(org.organizationId),
     // A Wholesale operation does not show Purchase Orders and Suppliers; a Distribution operation does not show Quotations and the tabs that price
     // packages from sellers (lib/operation-tabs-rules.ts). The pages still open by address and an owner can switch every tab on.
-    await withMailTab(withoutHidden(poOn ? allowed : allowed.filter((id) => id !== "purchase-orders" && id !== "suppliers" && id !== "templates"), view.sides, "purchasing", view.showAll), org.organizationId),
+    // "Website requests" comes with the storefronts feature; until it is on for the company the tab isn't there.
+    await withMailTab(withoutHidden((poOn ? allowed : allowed.filter((id) => id !== "purchase-orders" && id !== "suppliers" && id !== "templates")).filter((id) => storefrontsOn || id !== "website-requests"), view.sides, "purchasing", view.showAll), org.organizationId),
     { purchaseOrdersFirst: primaryDocument(operation) === "PURCHASE_ORDER" },
   );
 

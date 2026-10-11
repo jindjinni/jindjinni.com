@@ -3,6 +3,7 @@ import { isAdmin, settingsSectionsFor } from "@/lib/permissions";
 import { staffLevelOf } from "@/lib/platform-admin";
 import { isFullLevel, mayOpenSettings } from "@/lib/mothership-rules";
 import { operationsEnabled } from "@/lib/operations-service";
+import { featureOn } from "@/lib/features";
 import { SettingsNav } from "./settings-nav";
 
 export default async function SettingsLayout({ children }: { children: React.ReactNode }) {
@@ -16,6 +17,11 @@ export default async function SettingsLayout({ children }: { children: React.Rea
     const at = sections.findIndex((s) => s.href === "/dashboard/settings/company-profile");
     const entry = { href: "/dashboard/settings/operations", label: "Operations", blurb: "See your Wholesale and Distribution operations, and add the second one." };
     sections.splice(at >= 0 ? at + 1 : sections.length, 0, entry);
+  }
+  // Storefront (the company's public pages) is for owners and admins, once the feature is on for the company.
+  if (mayOpenSettings(level) && isAdmin(org.role) && (await featureOn("storefronts", org.organizationId))) {
+    const at = sections.findIndex((s) => s.href === "/dashboard/settings/connectors");
+    sections.splice(at >= 0 ? at + 1 : sections.length, 0, { href: "/dashboard/settings/storefront", label: "Storefront", blurb: "Your company's public pages, such as the 'sell to us' page." });
   }
   // The mothership's own pages (Companies, Support, Staff) are in the Lamp tab. Owner, co-owner and admin also get these two:
   if (isFullLevel(level)) {

@@ -79,6 +79,12 @@ export const FEATURES: FeatureDef[] = [
     defaultStage: "mothership",
   },
   {
+    key: "storefronts",
+    label: "Company storefronts",
+    blurb: "Public pages a company can switch on for its own website visitors: the Wholesale 'sell to us' page (requests land in Purchasing -> Website requests, ready to become a quotation) and, later, the Distribution pharmacy ordering page. Settings -> Storefront.",
+    defaultStage: "mothership",
+  },
+  {
     key: "shipping",
     label: "Shipping department",
     blurb: "Shipping: orders ready to go out, shipments with their boxes, tracking numbers and photos, the status of every package, and the 'your order has shipped' email you review and send.",

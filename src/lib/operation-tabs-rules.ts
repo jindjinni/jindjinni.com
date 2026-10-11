@@ -19,7 +19,7 @@ export const WHOLESALE_HIDDEN: Hidden = {
 
 /** Tab ids a Distribution operation does not need: quoting sellers and everything that prices a package from a seller. */
 export const DISTRIBUTION_HIDDEN: Hidden = {
-  purchasing: ["quotations", "customers", "conditions", "month-range", "product-multipliers", "bonus-tiers", "quotation-profile", "receipt-layout"],
+  purchasing: ["quotations", "website-requests", "customers", "conditions", "month-range", "product-multipliers", "bonus-tiers", "quotation-profile", "receipt-layout"],
   receiving: ["adjustments"],
 };
 

@@ -154,6 +154,13 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
           >
             <TrackingPanel quotationId={quotation.id} trackers={trackers} summary={trackingSummary} hasNumber={hasTrackingNumber} needsRefresh={needsTrackingRefresh} />
           </QuotationHeaderForm>
+          {/* A quotation made from a "sell to us" request: the seller's own list, readable without opening Edit. */}
+          {quotation.source === "WEBSITE" && quotation.notes && (
+            <div className="mt-3 max-w-2xl rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950 dark:border-sky-900 dark:bg-sky-950 dark:text-sky-100" data-testid="from-website">
+              <p className="font-medium">Sent from your website</p>
+              <p className="mt-1 whitespace-pre-wrap">{quotation.notes}</p>
+            </div>
+          )}
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2">
           <div className="flex items-center gap-2">
