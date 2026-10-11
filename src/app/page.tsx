@@ -6,6 +6,7 @@ import { monthlyPrice, yearlyPrice, yearlyRegular, yearlySavings } from "@/lib/p
 // The prices on this page are the newest ones set in the Lamp; saving a new price refreshes the page at once, and it also refreshes by itself every minute.
 export const revalidate = 60;
 import { TRIAL_DAYS } from "@/lib/billing-schedule";
+import { signupHref } from "@/lib/operation-type";
 import { CANCEL_COMEBACK_TEXT, CANCEL_MONTHLY_TEXT, CANCEL_TRIAL_TEXT, CANCEL_YEARLY_TEXT } from "@/lib/cancellation-copy";
 import { Icon, LogoMark, Sparkle, type IconName } from "@/components/landing/icons";
 import { AudienceSection, CheckList, DirectSourcingSection, Eyebrow, SafetySection, SiteFooter, SiteHeader, btnPrimary, btnSecondary } from "@/components/landing/site-shell";
@@ -508,6 +509,11 @@ export default async function Home() {
                   <p className="mt-4 text-2xl font-extrabold tracking-tight">{usd(monthlyPrice(book, o.ops))}<span className="text-base font-bold">/month</span></p>
                   <p className="text-sm font-semibold text-muted">or {usd(yearlyPrice(book, o.ops))}/year</p>
                   {o.ops === 2 && <p className="mt-1 text-sm font-bold text-brand-deep">{book.bothPercent}% more than one operation</p>}
+                  {/* Each button opens sign-up with this operation and plan already chosen. */}
+                  <div className="mt-5 flex flex-wrap gap-2">
+                    <Link href={signupHref(o.key as "wholesale" | "distribution" | "both", "monthly")} data-testid={`choose-${o.key}-monthly`} className="inline-flex items-center justify-center rounded-full bg-ink px-5 py-2.5 text-sm font-bold text-white transition hover:bg-black focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink">Choose Monthly</Link>
+                    <Link href={signupHref(o.key as "wholesale" | "distribution" | "both", "yearly")} data-testid={`choose-${o.key}-yearly`} className="inline-flex items-center justify-center rounded-full bg-brand px-5 py-2.5 text-sm font-bold text-ink transition hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink">Choose Yearly</Link>
+                  </div>
                 </article>
               ))}
             </div>
@@ -517,6 +523,7 @@ export default async function Home() {
                 <p className="mt-3 text-4xl font-extrabold tracking-tight">{usd(MONTHLY_CENTS)}<span className="text-lg font-bold">/month</span></p>
                 <p className="mt-1 text-sm font-semibold text-muted">Billed monthly &middot; one operation</p>
                 <p className="mt-3 text-sm font-bold text-ink" data-testid="price-monthly-both">Running both: {usd(monthlyPrice(book, 2))}/month</p>
+                <Link href="/signup?plan=monthly" data-testid="choose-monthly" className="mt-4 inline-flex items-center justify-center rounded-full bg-ink px-5 py-2.5 text-sm font-bold text-white transition hover:bg-black focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink">Choose Monthly</Link>
               </article>
               <article className="rounded-3xl border-2 border-brand bg-white p-7" data-testid="price-yearly">
                 <h3 className="flex items-center gap-2 text-sm font-extrabold uppercase tracking-wider text-muted">
@@ -526,6 +533,7 @@ export default async function Home() {
                 <p className="text-4xl font-extrabold tracking-tight">{usd(YEARLY_CENTS)}<span className="text-lg font-bold">/year</span></p>
                 <p className="mt-1 text-sm font-bold text-brand-deep">Save {usd(YEARLY_SAVINGS_CENTS)} per year &middot; one operation</p>
                 <p className="mt-3 text-sm font-bold text-ink" data-testid="price-yearly-both">Running both: {usd(yearlyPrice(book, 2))}/year (save {usd(yearlySavings(book, 2))})</p>
+                <Link href="/signup?plan=yearly" data-testid="choose-yearly" className="mt-4 inline-flex items-center justify-center rounded-full bg-brand px-5 py-2.5 text-sm font-bold text-ink transition hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink">Choose Yearly</Link>
               </article>
             </div>
             <div className="mt-8 grid gap-4 lg:grid-cols-2">

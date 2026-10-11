@@ -16,8 +16,8 @@ const card =
  * (along with the price book it signed up at), but billing is not live yet: no card or bank details are asked for, and nothing is charged.
  * The Promo code box checks a code without using it up; the code itself is used when the account is created.
  */
-export function BillingSection({ book, operationType, referred = false }: { book: PriceBook; operationType: string | null; referred?: boolean }) {
-  const [plan, setPlan] = useState<PlanKind | null>(null);
+export function BillingSection({ book, operationType, referred = false, initialPlan = null }: { book: PriceBook; operationType: string | null; referred?: boolean; initialPlan?: PlanKind | null }) {
+  const [plan, setPlan] = useState<PlanKind | null>(initialPlan);
   const [code, setCode] = useState("");
   const [result, setResult] = useState<PromoCheck>(undefined);
   const [busy, startCheck] = useTransition();

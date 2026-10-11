@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { AUDIENCES, BANNED_WORDS, BOTH, BOTH_POINTS, DIRECT_SOURCING, DISTRIBUTION, OPERATIONS, SAFETY_CHECKS, SAFETY_LIMITS, WHOLESALE } from "../src/lib/landing-content";
 import { DEPARTMENT_MENUS } from "../src/lib/sidebar-menu";
-import { OPERATION_OPTIONS } from "../src/lib/operation-type";
+import { OPERATION_OPTIONS, readSignupChoice, signupHref } from "../src/lib/operation-type";
 
 const all = (): string[] => {
   const out: string[] = [];
@@ -68,5 +68,15 @@ for (const o of OPERATION_OPTIONS) {
 }
 assert.ok(!OPERATION_OPTIONS[0].details.join(" ").includes("Audit Center"), "Audit Center is Distribution only");
 assert.ok(OPERATION_OPTIONS[1].details.join(" ").includes("Audit Center"));
+
+// pricing buttons open sign-up with the operation (and plan) already chosen
+assert.equal(signupHref("wholesale", "monthly"), "/signup?operation=wholesale&plan=monthly");
+assert.equal(signupHref("both"), "/signup?operation=both");
+assert.deepEqual(readSignupChoice("wholesale", "yearly"), { operationType: "WHOLESALER", plan: "yearly" });
+assert.deepEqual(readSignupChoice("Distribution", "MONTHLY"), { operationType: "DISTRIBUTOR", plan: "monthly" });
+assert.deepEqual(readSignupChoice("both", undefined), { operationType: "BOTH", plan: null });
+assert.deepEqual(readSignupChoice("BOTH", null), { operationType: "BOTH", plan: null });
+assert.deepEqual(readSignupChoice("nonsense", "weekly"), { operationType: null, plan: null });
+assert.deepEqual(readSignupChoice(["x"], 5), { operationType: null, plan: null });
 
 console.log("landing-content: ok");

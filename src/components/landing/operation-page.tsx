@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { Icon } from "@/components/landing/icons";
 import { DirectSourcingSection, SafetySection, SiteFooter, SiteHeader, Eyebrow, btnPrimary, btnSecondary } from "@/components/landing/site-shell";
+import { signupHref } from "@/lib/operation-type";
+import { PricingChoice } from "@/components/landing/pricing-choice";
+import type { PriceBook } from "@/lib/pricing-rules";
 import { BOTH_POINTS, DISTRIBUTION, WHOLESALE, type DeptBlock, type OperationContent, type OperationSlug } from "@/lib/landing-content";
 
 const SWITCH: { slug: OperationSlug; label: string }[] = [
@@ -159,7 +162,7 @@ function Together() {
   );
 }
 
-export function OperationPage({ content, priceNote }: { content: OperationContent; priceNote?: string }) {
+export function OperationPage({ content, priceNote, book }: { content: OperationContent; priceNote?: string; book: PriceBook }) {
   const c = content;
   return (
     <div className="min-h-full overflow-x-clip bg-white text-ink" data-testid={`op-page-${c.slug}`}>
@@ -172,11 +175,11 @@ export function OperationPage({ content, priceNote }: { content: OperationConten
             <p className="mt-6 max-w-3xl text-lg text-muted">{c.intro}</p>
             <p className="mt-3 max-w-3xl text-base font-bold text-ink">{c.forWhom}</p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <Link href="/signup" className={btnPrimary}>
+              <Link href={signupHref(c.slug)} className={btnPrimary}>
                 Get Started
                 <Icon name="arrow" className="h-5 w-5" />
               </Link>
-              <Link href="/#pricing" className={btnSecondary}>See pricing</Link>
+              <Link href="#pricing" className={btnSecondary}>See pricing</Link>
             </div>
             {priceNote && <p className="mt-4 max-w-2xl text-sm font-semibold text-muted" data-testid="op-price-note">{priceNote}</p>}
             <Switcher current={c.slug} />
@@ -187,6 +190,7 @@ export function OperationPage({ content, priceNote }: { content: OperationConten
         <Day c={c} />
         {c.slug === "both" ? <Together /> : <SingleSide c={c} />}
         <SafetySection />
+        <div id="pricing" className="scroll-mt-20"><PricingChoice slug={c.slug} book={book} /></div>
 
         <section className="px-4 py-16 sm:px-6 sm:py-24">
           <div className="mx-auto max-w-6xl rounded-[2.5rem] bg-brand px-6 py-14 text-center sm:px-12 sm:py-20">
@@ -194,7 +198,7 @@ export function OperationPage({ content, priceNote }: { content: OperationConten
               Ready to run {c.slug === "both" ? "both sides" : c.name} from one place?
             </h2>
             <div className="mt-8 flex flex-col items-center gap-4">
-              <Link href="/signup" className="inline-flex items-center justify-center gap-2 rounded-full bg-ink px-8 py-4 text-base font-bold text-white transition hover:bg-black focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink">
+              <Link href={signupHref(c.slug)} className="inline-flex items-center justify-center gap-2 rounded-full bg-ink px-8 py-4 text-base font-bold text-white transition hover:bg-black focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink">
                 Get Started
                 <Icon name="arrow" className="h-5 w-5" />
               </Link>

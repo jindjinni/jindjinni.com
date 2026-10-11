@@ -13,5 +13,5 @@ export const revalidate = 60;
 
 export default async function BothPage() {
   const book = await currentBook();
-  return <OperationPage content={BOTH} priceNote={`Running both costs ${book.bothPercent}% more than running one operation. Each side keeps its own records.`} />;
+  return <OperationPage content={BOTH} book={book} priceNote={`Running both costs ${book.bothPercent}% more than running one operation. Each side keeps its own records.`} />;
 }

@@ -11,14 +11,15 @@ import { HumanCheck } from "@/components/human-check";
 import { BillingSection } from "@/components/billing-section";
 import { OperationTypeField } from "@/components/operation-type-field";
 import { SecondBusinessField } from "@/components/second-business-field";
-import type { PriceBook } from "@/lib/pricing-rules";
+import type { PlanKind, PriceBook } from "@/lib/pricing-rules";
+import type { OperationType } from "@/lib/operation-type";
 import { RequiredLegend, RequiredMarks } from "@/components/required-marks";
 import { TermsCheckbox } from "@/components/legal/terms-checkbox";
 
 // Field styling comes from the .auth-theme scope in globals.css.
 const inputClass = "";
 
-export function SignupForm({ needsVerification, book, referred = false, askSecond = false }: { needsVerification: boolean; book: PriceBook; referred?: boolean; askSecond?: boolean }) {
+export function SignupForm({ needsVerification, book, referred = false, askSecond = false, initialOperation = null, initialPlan = null }: { needsVerification: boolean; book: PriceBook; referred?: boolean; askSecond?: boolean; initialOperation?: OperationType | null; initialPlan?: PlanKind | null }) {
   // Both server actions are called directly here instead of through
   // <form action={...}>/useActionState -- React 19 resets every
   // UNCONTROLLED field in a form (password, logo file, phone numbers, tax
@@ -36,7 +37,7 @@ export function SignupForm({ needsVerification, book, referred = false, askSecon
   const [sendPending, startSend] = useTransition();
   const [accountName, setAccountName] = useState("");
   const [accountEmail, setAccountEmail] = useState("");
-  const [operationType, setOperationType] = useState<string | null>(null);
+  const [operationType, setOperationType] = useState<string | null>(initialOperation);
 
   // A code sent for one email shouldn't look "sent" anymore once the person
   // edits the address afterward -- otherwise they could type a code that
@@ -155,7 +156,7 @@ export function SignupForm({ needsVerification, book, referred = false, askSecon
             title="How Your Company Operates"
             description="Your answer sets up the right menus for how you work (quotations and free shipping labels for Wholesale, purchase orders and suppliers for Distribution) and decides your price. You can add the second operation later in Settings."
           >
-            <OperationTypeField onChange={setOperationType} />
+            <OperationTypeField initial={initialOperation} onChange={setOperationType} />
           </Section>
 
           {askSecond && operationType === "BOTH" && (
@@ -164,7 +165,7 @@ export function SignupForm({ needsVerification, book, referred = false, askSecon
             </Section>
           )}
 
-          <BillingSection book={book} operationType={operationType} referred={referred} />
+          <BillingSection book={book} operationType={operationType} referred={referred} initialPlan={initialPlan} />
 
           <TermsCheckbox />
 

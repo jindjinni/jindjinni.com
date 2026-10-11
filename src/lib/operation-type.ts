@@ -71,6 +71,21 @@ export function parseOperationType(value: unknown): OperationType | null {
   return (OPERATION_TYPES as readonly string[]).includes(v) ? (v as OperationType) : null;
 }
 
+const SLUG_TYPE: Record<string, OperationType> = { wholesale: "WHOLESALER", distribution: "DISTRIBUTOR", both: "BOTH" };
+
+/** The sign-up link a public pricing button uses: it arrives with the operation (and the plan, when one was pressed) already chosen. */
+export function signupHref(slug: "wholesale" | "distribution" | "both", plan?: "monthly" | "yearly"): string {
+  return `/signup?operation=${slug}${plan ? `&plan=${plan}` : ""}`;
+}
+
+/** What /signup?operation=...&plan=... asks for. Anything it does not recognise is ignored (nothing is chosen), never an error. */
+export function readSignupChoice(operation: unknown, plan: unknown): { operationType: OperationType | null; plan: "monthly" | "yearly" | null } {
+  const op = typeof operation === "string" ? operation.trim().toLowerCase() : "";
+  const operationType = SLUG_TYPE[op] ?? parseOperationType(op);
+  const p = typeof plan === "string" ? plan.trim().toLowerCase() : "";
+  return { operationType, plan: p === "monthly" || p === "yearly" ? p : null };
+}
+
 export function operationLabel(type: OperationType | null | undefined): string {
   return OPERATION_OPTIONS.find((o) => o.value === type)?.label ?? "Not answered yet";
 }
