@@ -24,52 +24,52 @@ const departments: { icon: IconName; title: string; body: string }[] = [
   {
     icon: "purchasing",
     title: "Purchasing",
-    body: "Price lists, customers, automatic quotations with free shipping labels for Wholesale, purchase orders and suppliers for Distribution, and live shipment tracking, with every price change on the record.",
+    body: "Quotes for Wholesale, purchase orders for Distribution, and every shipment followed until it arrives.",
   },
   {
     icon: "receiving",
     title: "Receiving",
-    body: "Check every incoming package against its quotation or purchase order, with photos, lot and serial number checks, recall and counterfeit holds, and order adjustments.",
+    body: "Every package checked before anything is paid, with anything doubtful held.",
   },
   {
     icon: "accounts",
     title: "Accounts",
-    body: "See what is ready to pay, what suppliers bill you, what customers owe you and what is overdue, with monthly reports and an Audit Center for Distribution.",
+    body: "What to pay, what you are owed and what is overdue, in one view. Distribution adds an Audit Center.",
   },
   {
     icon: "support",
     title: "Customer Service",
-    body: "Send customers clear payment and adjustment emails from one controlled place, with a record of everything sent.",
+    body: "One careful place for what you tell customers, with a record of it.",
   },
   {
     icon: "inventory",
     title: "Inventory",
-    body: "Live stock by product, condition and expiration, with a full history of every item that came in or went out.",
+    body: "Stock you can actually sell, with a history of every item in and out.",
   },
   {
     icon: "tag",
     title: "Sales",
-    body: "Take purchase orders, turn them into sales orders and invoices, compare prices and sell only from the stock you actually hold.",
+    body: "Orders in, invoices out, sold only from stock you hold.",
   },
   {
     icon: "distribution",
     title: "Shipping",
-    body: "Ship what you sold with labels from your own shipping account, several boxes per shipment, live tracking and one reviewed shipped email.",
+    body: "Labels from your own shipping account, tracking, and a reviewed notice to your buyer.",
   },
   {
     icon: "megaphone",
     title: "Marketing",
-    body: "Build contact lists and run email and text campaigns with opt-outs respected automatically.",
+    body: "Reach your contacts by email and text, respectfully.",
   },
   {
     icon: "clock",
     title: "HR",
-    body: "Clock in and out, see who is working today and keep time sheets and an activity log for the whole team.",
+    body: "Time, attendance and a clear record of who did what.",
   },
   {
     icon: "chat",
     title: "Company Chat",
-    body: "A built-in chat room for everyone, one for each department, and private messages, with file sharing and live status.",
+    body: "One room for everyone, one for each department, and private messages.",
   },
 ];
 

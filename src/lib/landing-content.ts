@@ -40,24 +40,21 @@ const wholesaleDepts: DeptBlock[] = [
   {
     dept: "Purchasing",
     icon: "purchasing",
-    line: "Source supplies directly from sellers with automatic quotations and a free shipping label.",
+    line: "Turn a seller's offer into a clear quote, fast.",
     points: [
-      "Quotations priced from your own product list, with condition, expiration, product multiplier and bonus-tier rules applied for you",
-      "A free prepaid shipping label on a quotation, bought from your own shipping account",
-      "Customer list, product catalog, quotation receipt layout and document templates in your own wording",
-      "Shipment tracking that follows every package until it arrives",
-      "A quick recall look-up before you quote",
+      "Quotations built from your own price list",
+      "A free shipping label, if you choose to offer one",
+      "Every package followed until it lands",
     ],
   },
   {
     dept: "Receiving",
     icon: "receiving",
-    line: "Open every package against its quotation and record what was really inside.",
+    line: "Know what is really in the box.",
     points: [
-      "Photos taken right in the intake form, with lot and serial numbers read from them and confirmed by your receiver",
-      "Recall, repeated-number and made-up-number checks on every item, with holds you can trace",
-      "Order adjustments: a corrected quotation sent as a clear PDF when the contents differ",
-      "Lot & Serial Tracker: see which customer sent every lot and serial number",
+      "Every package checked against its quote",
+      "Anything that looks wrong is held, never waved through",
+      "Corrections put to the seller in writing",
     ],
   },
   {
@@ -65,49 +62,48 @@ const wholesaleDepts: DeptBlock[] = [
     icon: "accounts",
     line: "Pay sellers for what you accepted, and collect from distributors.",
     points: [
-      "To Be Paid and Paid Orders: only what is ready, due or overdue, with payment records kept organized",
-      "To Be Collected: what your distributors owe you, with payments recorded against invoices",
-      "Monthly Report for the month-end",
+      "See what is ready to pay and what is overdue",
+      "See what your distributors owe you",
+      "A report when the month closes",
     ],
   },
   {
     dept: "Customer Service",
     icon: "support",
-    line: "Tell customers what happened to their order, from one controlled place.",
+    line: "One calm place for everything you tell customers.",
     points: [
-      "Payment and adjustment emails written for review, sent only when a person presses Send",
-      "A record of every email sent, with its exact wording",
-      "Payments Received, so nobody is told twice",
+      "Messages are written for review and sent only when a person says so",
+      "A record of what went out",
+      "Nobody is told twice",
     ],
   },
   {
     dept: "Inventory",
     icon: "inventory",
-    line: "Stock that only counts items you can actually sell.",
+    line: "Only what you can really sell counts as stock.",
     points: [
-      "Live stock by product, condition and expiration date",
-      "Recalled items, suspect items and items going back are kept out of sellable stock",
-      "Stock History for every item in and out, and Estimated Prices for what you hold",
+      "Live stock by product, condition and expiry",
+      "Held items stay out of sellable stock",
+      "A history of everything in and out",
     ],
   },
   {
     dept: "Sales",
     icon: "tag",
-    line: "Sell on to distributors from the stock you really hold.",
+    line: "Sell on to distributors from stock you really hold.",
     points: [
-      "Receive a distributor's purchase order, turn it into a sales order, then send the invoice",
-      "Quotations and invoices from the same product and stock data, with buyer records and price comparison",
-      "Sending an invoice is what takes items out of stock; a draft never does",
+      "Orders in, invoices out, one record",
+      "Compare prices before you commit",
     ],
   },
   {
     dept: "Shipping",
     icon: "distribution",
-    line: "Ship what you sold, with labels and tracking.",
+    line: "Ship what you sold and watch it arrive.",
     points: [
-      "Several shipments per order and several boxes per shipment",
-      "UPS Ground or USPS Priority Mail labels from your own shipping account, or a tracking number typed by hand",
-      "One shipped email per shipment, reviewed before it goes out, with items and no prices",
+      "Labels from your own shipping account",
+      "Tracking in one place",
+      "A shipped notice to your buyer, reviewed first",
     ],
   },
   {
@@ -115,9 +111,9 @@ const wholesaleDepts: DeptBlock[] = [
     icon: "chat",
     line: "Run the team around the work.",
     points: [
-      "Contact lists plus email and text campaigns, with opt-outs respected automatically",
-      "Clock in and out, time sheets and an activity log",
-      "Company chat with a room for each department, and private messages",
+      "Reach your contacts by email and text",
+      "Time and attendance, kept simple",
+      "Company chat, with a room for every department",
     ],
   },
 ];
@@ -128,10 +124,9 @@ const distributionDepts: DeptBlock[] = [
     icon: "purchasing",
     line: "Buy from wholesalers with purchase orders.",
     points: [
-      "A purchase order to each supplier, corrected by a numbered revision (never edited after it is sent), with the earlier version kept",
-      "Supplier list and product catalog; each order keeps its own copy of the supplier and addresses",
-      "Document templates with your logo, wording and one standing notice per document type",
-      "Shipment tracking for what is on its way",
+      "Purchase orders to each supplier, with every change on the record",
+      "Supplier list and product catalog in one place",
+      "Shipments followed until they arrive",
     ],
   },
   {
@@ -139,20 +134,19 @@ const distributionDepts: DeptBlock[] = [
     icon: "receiving",
     line: "Check what arrives against the order before you pay.",
     points: [
-      "Package and product photos, with lot and serial numbers read and confirmed by your receiver",
-      "Recall lists checked on every scan and every save; a shipment can't be submitted until each product's recall check is recorded",
-      "Repeated, made-up and wrong-shaped serial numbers flagged, with a hold only an Owner or Admin can release",
-      "Lot & Serial Tracker: see which lots and serial numbers came from which sender, so a recalled lot can be traced back",
+      "Every delivery checked against its order",
+      "Doubtful or recalled items are held, never waved through",
+      "Trace any lot back to whoever sent it",
     ],
   },
   {
     dept: "Accounts",
     icon: "accounts",
-    line: "Know what you owe suppliers and what pharmacies owe you.",
+    line: "Know what you owe and what you are owed.",
     points: [
-      "Supplier Bills: made automatically when a purchase order is received, and approved before any payment can be recorded",
-      "To Be Collected: payments recorded against each invoice, with what is due or overdue",
-      "Audit Center: answer pharmacy, PBM and State or Federal audits from the invoices you issued, with a review checklist before anything is emailed and every file kept exactly as sent",
+      "Supplier Bills approved before they are paid",
+      "What pharmacies owe you, and what is overdue",
+      "Audit Center: answer pharmacy, PBM and regulatory audits from your own invoices",
     ],
   },
   {
@@ -160,8 +154,8 @@ const distributionDepts: DeptBlock[] = [
     icon: "support",
     line: "Keep pharmacies informed, once and in writing.",
     points: [
-      "Payment notices written for review and sent only when a person presses Send",
-      "A record of every email sent",
+      "Notices written for review and sent only when a person says so",
+      "A record of every message sent",
     ],
   },
   {
@@ -169,9 +163,9 @@ const distributionDepts: DeptBlock[] = [
     icon: "inventory",
     line: "Stock you can stand behind.",
     points: [
-      "Live stock by product, condition and expiration date, built from what Receiving accepted",
-      "Recalled, suspect and returning items stay out of sellable stock",
-      "Stock History and Estimated Prices",
+      "Live stock by product, condition and expiry",
+      "Held items stay out of sellable stock",
+      "A history of everything in and out",
     ],
   },
   {
@@ -179,19 +173,19 @@ const distributionDepts: DeptBlock[] = [
     icon: "tag",
     line: "Sell to pharmacies and other retail outlets.",
     points: [
-      "A pharmacy's purchase order becomes a sales order, then your invoice",
-      "Buyer records for every pharmacy, and price comparison",
-      "Invoices draw only from stock you hold; sending one takes the items out",
+      "Orders in, invoices out, one record",
+      "A record for every buyer",
+      "Sell only from the stock you hold",
     ],
   },
   {
     dept: "Shipping",
     icon: "distribution",
-    line: "Get orders out with labels, tracking and a clear record.",
+    line: "Get orders out with a clear record.",
     points: [
       "Shipments, boxes and returns in one place",
-      "Labels from your own shipping account, or tracking typed by hand",
-      "A reviewed shipped email per shipment, with items and NDCs but no prices",
+      "Labels from your own shipping account",
+      "A reviewed shipped notice for each shipment",
     ],
   },
   {
@@ -199,9 +193,9 @@ const distributionDepts: DeptBlock[] = [
     icon: "chat",
     line: "Run the team around the work.",
     points: [
-      "Contact lists plus email and text campaigns, with opt-outs respected automatically",
-      "Clock in and out, time sheets and an activity log",
-      "Company chat with a room for each department, and private messages",
+      "Reach your contacts by email and text",
+      "Time and attendance, kept simple",
+      "Company chat, with a room for every department",
     ],
   },
 ];
@@ -236,10 +230,10 @@ export const DIRECT_SOURCING = {
   body:
     "Direct sourcing means you deal with the seller yourself, with no middleman in between. A seller offers supplies, you quote a price from your own list, the package comes to you, and your team checks it before anything is paid.",
   steps: [
-    { title: "Quote the seller", body: "A quotation priced from your own product list, with condition, expiration and bonus rules applied for you, and a free prepaid shipping label if you offer one." },
-    { title: "Check every package", body: "Receiving opens it against the quotation, photographs it and runs recall and counterfeit checks, so a person can hold anything that looks wrong." },
-    { title: "Pay the seller", body: "Accounts pays only what you accepted, and keeps the payment records organized." },
-    { title: "Sell on to distributors", body: "What you collect goes into your own stock, and you sell it on with sales orders and invoices." },
+    { title: "Quote the seller", body: "A quotation built from your own price list, with a free shipping label if you offer one." },
+    { title: "Check every package", body: "Receiving opens it against the quotation, and anything that looks wrong is held for a person to decide." },
+    { title: "Pay the seller", body: "Accounts pays what you accepted and keeps the records tidy." },
+    { title: "Sell on to distributors", body: "What you collect goes into your own stock, and you sell it on with an invoice." },
   ],
 };
 
@@ -357,28 +351,28 @@ export type Check = { icon: IconName; title: string; body: string };
 export const SAFETY_CHECKS: Check[] = [
   {
     icon: "bell",
-    title: "Recall lists checked on every scan and every save",
-    body: "Your admin loads each product's recall lot and serial lists. Every number is checked against them, including look-alike characters such as O and 0, and an exact hit marks the item for return at once.",
+    title: "Recall lists checked as items come in",
+    body: "Your admin loads each product's recall lists, and every number is checked against them. A match marks the item for return at once.",
   },
   {
     icon: "check",
     title: "A shipment can't be submitted until the recall check is done",
-    body: "Each product needs its recall check recorded before the shipment can be closed. Where no list exists, your team looks the number up on the maker's own page and records the answer.",
+    body: "Each product needs its recall check recorded before the shipment can be closed. Where there is no list, your team checks the maker's own page and records the answer.",
   },
   {
     icon: "shield",
     title: "Suspicious serial numbers are held, not waved through",
-    body: "Repeated numbers anywhere in your history (both units are flagged), made-up numbers, bad barcode check digits and wrong formats where the maker's format is known all put the item on hold. Only an Owner or Admin can release it.",
+    body: "Repeated, made-up or wrongly formed numbers put the item on hold until a senior person reviews it.",
   },
   {
     icon: "inventory",
     title: "Held items never become sellable stock",
-    body: "Items from Receiving that are recalled, suspect or going back are kept out of Inventory's live stock, and Sales sells only from live stock.",
+    body: "Recalled, suspect or returning items stay out of live stock, and Sales sells only from live stock.",
   },
   {
     icon: "megaphone",
     title: "A new recall list re-checks everything you already received",
-    body: "When your admin loads a new list, every lot and serial number you ever received is compared with it, and you get the items and order numbers that match. Lot & Serial Tracker shows who sent each lot.",
+    body: "When a new list is loaded, everything you have ever received is compared with it, and you get the matches.",
   },
   {
     icon: "home",
