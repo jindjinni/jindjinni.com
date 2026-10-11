@@ -126,15 +126,12 @@ export function PromoForm() {
   );
 }
 
-export function ApproveForm({ id, name }: { id: string; name: string }) {
+export function ApproveForm({ id }: { id: string; name?: string }) {
   const [state, action, pending] = useActionState(approveAffiliateAction, undefined);
   return (
     <form action={action} className="flex flex-wrap items-end gap-2" data-testid="approve-form">
       <input type="hidden" name="id" value={id} />
-      <div className="flex flex-col gap-1">
-        <label htmlFor={`ap-${id}`} className={label}>Their cut of each first payment (%)</label>
-        <input id={`ap-${id}`} name="percent" inputMode="numeric" defaultValue="10" className={`${input} w-28`} data-testid="ap-percent" aria-label={`Percent for ${name}`} />
-      </div>
+      <p className="text-xs text-slate-500" data-testid="ap-rule">One kind of affiliate: 50% of one month, one time, after 3 months billed.</p>
       <button disabled={pending} className={btn} data-testid="ap-approve">Approve and email the code</button>
       <Notice s={state} id="ap" />
     </form>

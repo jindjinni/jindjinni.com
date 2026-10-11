@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { AUDIENCES, BANNED_WORDS, BOTH, BOTH_POINTS, DIRECT_SOURCING, DISTRIBUTION, OPERATIONS, SAFETY_CHECKS, SAFETY_LIMITS, WHOLESALE } from "../src/lib/landing-content";
 import { DEPARTMENT_MENUS } from "../src/lib/sidebar-menu";
+import { AFFILIATE_MONTHS, AFFILIATE_PERCENT, AFFILIATE_PROGRAM, affiliateExample } from "../src/lib/affiliate-program";
 import { OPERATION_OPTIONS, readSignupChoice, signupHref } from "../src/lib/operation-type";
 
 const all = (): string[] => {
@@ -78,5 +79,16 @@ assert.deepEqual(readSignupChoice("both", undefined), { operationType: "BOTH", p
 assert.deepEqual(readSignupChoice("BOTH", null), { operationType: "BOTH", plan: null });
 assert.deepEqual(readSignupChoice("nonsense", "weekly"), { operationType: null, plan: null });
 assert.deepEqual(readSignupChoice(["x"], 5), { operationType: null, plan: null });
+
+// the affiliate program: one kind, 50%, one time, after 3 months billed; no price typed into the words
+assert.equal(AFFILIATE_PERCENT, 50);
+assert.equal(AFFILIATE_MONTHS, 3);
+const aff = [AFFILIATE_PROGRAM.title, AFFILIATE_PROGRAM.summary, ...AFFILIATE_PROGRAM.facts.flatMap((f) => [f.value, f.label]), ...AFFILIATE_PROGRAM.steps.flatMap((s) => [s.title, s.body]), ...AFFILIATE_PROGRAM.rules].join(" ");
+assert.ok(/50%/.test(aff) && /one-time|one time/i.test(aff) && /3 months/.test(aff), "50%, one time, 3 months");
+assert.ok(/one kind of affiliate/i.test(aff) && /not (a )?(ongoing|continuing)/i.test(aff));
+assert.ok(!/\$\s?\d/.test(aff), "no price in the affiliate words");
+for (const w of BANNED_WORDS) assert.ok(!aff.toLowerCase().includes(w), `affiliate banned word: ${w}`);
+assert.equal(AFFILIATE_PROGRAM.steps.length, 4);
+assert.ok(/\$488\.50/.test(affiliateExample(97700, 48850, (c) => `$${(c / 100).toFixed(2)}`)), "the example is worked out from the numbers it is given");
 
 console.log("landing-content: ok");

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { BrandLogo, Icon, type IconName } from "@/components/landing/icons";
 import type { Audience, Check } from "@/lib/landing-content";
 import { DIRECT_SOURCING, SAFETY_CHECKS, SAFETY_LIMITS } from "@/lib/landing-content";
+import { AFFILIATE_PERCENT, AFFILIATE_PROGRAM } from "@/lib/affiliate-program";
 
 export const btnPrimary =
   "inline-flex items-center justify-center gap-2 rounded-full bg-brand px-7 py-3.5 text-base font-bold text-ink shadow-[0_10px_30px_-10px_rgba(31,209,107,0.8)] transition hover:bg-brand-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink";
@@ -35,11 +36,20 @@ const NAV: { href: string; label: string }[] = [
   { href: "/#who", label: "Who it's for" },
   { href: "/#security", label: "Security" },
   { href: "/#pricing", label: "Pricing" },
+  { href: "/affiliates", label: "Affiliates" },
 ];
 
 /** The sticky top bar shared by the home page and the Wholesale / Distribution / Both pages. */
 export function SiteHeader() {
   return (
+    <>
+    {/* A slim bar above everything, on every size of screen, so the affiliate program is the first thing seen. */}
+    <div className="bg-ink text-white" data-testid="affiliate-bar">
+      <Link href="/affiliates" className="mx-auto flex max-w-6xl items-center justify-center gap-2 px-4 py-2 text-center text-xs font-bold hover:underline sm:text-sm">
+        <span>Refer a company and earn {AFFILIATE_PERCENT}%.</span>
+        <span className="rounded-full bg-brand px-3 py-0.5 text-ink">Become an affiliate</span>
+      </Link>
+    </div>
     <header className="sticky top-0 z-40 border-b border-line/70 bg-white/85 backdrop-blur">
       <div className="mx-auto flex h-[72px] max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
         <Link href="/" className="flex items-center" aria-label="jindjinni home">
@@ -62,6 +72,7 @@ export function SiteHeader() {
         </div>
       </div>
     </header>
+    </>
   );
 }
 
@@ -69,10 +80,10 @@ export function SiteFooter() {
   return (
     <footer className="border-t border-line">
       <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-4 py-8 text-sm text-muted sm:flex-row sm:px-6">
-        <Link href="/" aria-label="jindjinni home">
+        <Link href="/" aria-label="jindjinni home" className="shrink-0">
           <BrandLogo markClass="h-11 w-auto" wordClass="h-6 w-auto" />
         </Link>
-        <p className="max-w-md text-center">
+        <p className="min-w-0 max-w-md text-center sm:flex-1">
           Your business wishes, our command.
           <span className="block text-xs">© 2026 Plantarz Property Solutions LLC. All rights reserved. jindjinni, its software, design and content are proprietary and may not be copied, scraped or used to train AI. jindjinni is business software. It does not provide legal, tax, accounting or medical advice.</span>
         </p>
@@ -124,6 +135,67 @@ export function DirectSourcingSection({ id, white }: { id?: string; white?: bool
             </li>
           ))}
         </ol>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * The affiliate program in full: the three headline facts, the four steps and the rules, with a button to apply. The words live in
+ * affiliate-program.ts. `exampleText` is worked out from the price book by the page (never typed here), so it follows the real price.
+ */
+export function AffiliateProgramSection({ id, exampleText, asPage = false }: { id?: string; exampleText?: string; asPage?: boolean }) {
+  const A = AFFILIATE_PROGRAM;
+  const Heading = asPage ? "h1" : "h2";
+  return (
+    <section id={id} className="scroll-mt-20 bg-white py-16 sm:py-24" data-testid="affiliate-program">
+      <div className="mx-auto max-w-6xl px-4 sm:px-6">
+        <Eyebrow>{A.eyebrow}</Eyebrow>
+        <Heading className="mt-3 max-w-4xl text-balance text-3xl font-extrabold tracking-tight sm:text-5xl">{A.title}</Heading>
+        <p className="mt-4 max-w-3xl text-lg text-muted" data-testid="affiliate-summary">{A.summary}</p>
+
+        <dl className="mt-8 grid gap-4 sm:grid-cols-3" data-testid="affiliate-facts">
+          {A.facts.map((f) => (
+            <div key={f.value} className="rounded-3xl border-2 border-brand bg-mint p-6">
+              <dt className="text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">{f.value}</dt>
+              <dd className="mt-1 text-sm font-bold text-ink/80">{f.label}</dd>
+            </div>
+          ))}
+        </dl>
+
+        {/* A real sequence: order matters, so it is numbered. */}
+        <ol className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-4" data-testid="affiliate-steps">
+          {A.steps.map((st, i) => (
+            <li key={st.title} className="rounded-3xl border border-line bg-white p-5">
+              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand text-sm font-extrabold text-ink">{i + 1}</span>
+              <h3 className="mt-3 text-lg font-extrabold tracking-tight">{st.title}</h3>
+              <p className="mt-2 text-[15px] leading-relaxed text-muted">{st.body}</p>
+            </li>
+          ))}
+        </ol>
+
+        <div className="mt-8 grid gap-4 lg:grid-cols-[1.4fr_1fr]">
+          <div className="rounded-3xl border border-line bg-slate-50 p-6" data-testid="affiliate-rules">
+            <h3 className="text-lg font-extrabold tracking-tight">The rules, in plain words</h3>
+            <ul className="mt-3 space-y-2.5 text-[15px] leading-relaxed text-muted">
+              {A.rules.map((r) => (
+                <li key={r} className="flex items-start gap-2.5">
+                  <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-brand" />
+                  {r}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="flex flex-col justify-between gap-4 rounded-3xl bg-brand p-6">
+            <div>
+              <h3 className="text-lg font-extrabold tracking-tight text-ink">What it looks like</h3>
+              {exampleText && <p className="mt-2 text-[15px] font-semibold leading-relaxed text-ink" data-testid="affiliate-example">{exampleText}</p>}
+            </div>
+            <Link href={asPage ? "#apply" : "/affiliates#apply"} className="inline-flex items-center justify-center rounded-full bg-ink px-6 py-3 text-sm font-bold text-white transition hover:bg-black focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink" data-testid="affiliate-apply-link">
+              {asPage ? "Apply to become an affiliate" : "Become an affiliate"}
+            </Link>
+          </div>
+        </div>
       </div>
     </section>
   );

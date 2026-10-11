@@ -5,14 +5,16 @@
 //  - The owner can change the prices at any time. A company keeps the price book it signed up at (it is "locked" on the company);
 //    a new price only applies to new sign-ups.
 //  - A promo code takes money off the FIRST payment after the free trial, and nothing after that.
-//  - An affiliate earns a one-time percent of the first payment of each company they brought in. The new company gets no discount
-//    from an affiliate code.
+//  - There is ONE kind of affiliate. They earn a one-time 50% of one month's subscription price for each company they brought in,
+//    once that company has been billed for 3 months (see affiliate-program.ts). The new company gets no discount from an affiliate code.
 // Money is whole cents (integers), never floating point.
 
 /** The cookie an affiliate link (/r/CODE) leaves, so the sign-up page remembers who sent the visitor. */
 export const REF_COOKIE = "jj_ref";
 
 import { parseOperationType, type OperationType } from "@/lib/operation-type";
+import { AFFILIATE_MONTHS, AFFILIATE_PERCENT } from "@/lib/affiliate-program";
+import { addMonths, chargeSchedule } from "@/lib/billing-schedule";
 
 export type PlanKind = "monthly" | "yearly";
 export type OperationCount = 1 | 2;
@@ -177,10 +179,10 @@ export function validatePromo(i: PromoInput): { ok: true; promo: Omit<Promo, "us
 
 // ---- affiliates ----------------------------------------------------------------------------------------------------
 
-/** The affiliate's one-time cut: a percent of what the referred company actually pays on its first payment (after any promo). */
-export function affiliateCut(firstPaymentAfterPromoCents: number, percent: number): number {
-  if (firstPaymentAfterPromoCents <= 0 || percent <= 0) return 0;
-  return Math.round((firstPaymentAfterPromoCents * Math.min(percent, 100)) / 100);
+/** The affiliate's one-time cut: 50% of ONE month's subscription price (the company's own locked price), whichever plan it picked. */
+export function affiliateCut(monthlyCents: number, percent: number = AFFILIATE_PERCENT): number {
+  if (monthlyCents <= 0 || percent <= 0) return 0;
+  return Math.round((monthlyCents * Math.min(percent, 100)) / 100);
 }
 
 export const validPercent = (v: unknown): number | null => {
@@ -188,21 +190,45 @@ export const validPercent = (v: unknown): number | null => {
   return Number.isInteger(n) && n >= 1 && n <= 100 ? n : null;
 };
 
+/**
+ * The first day a referral can count as earned. Monthly plan: the day of the company's THIRD full monthly payment (a prorated first
+ * part-month is not a month). Yearly plan: the company pays the whole year up front, so it is earned once the company has been on the
+ * platform for 3 months from its first billing day.
+ */
+export function affiliateQualifiesOn(plan: PlanKind, firstBillableOn: string): string {
+  if (plan === "yearly") return addMonths(firstBillableOn, AFFILIATE_MONTHS);
+  const full = chargeSchedule("monthly", firstBillableOn, AFFILIATE_MONTHS + 1).filter((c) => c.kind === "monthly");
+  return full[AFFILIATE_MONTHS - 1].date;
+}
+
+/** How many of the 3 months the company has completed by `today` (0 to 3), for "1 of 3 months". */
+export function affiliateMonthsDone(plan: PlanKind, firstBillableOn: string, today: string): number {
+  if (today < firstBillableOn) return 0;
+  if (plan === "yearly") {
+    let n = 0;
+    while (n < AFFILIATE_MONTHS && addMonths(firstBillableOn, n + 1) <= today) n++;
+    return n;
+  }
+  const done = chargeSchedule("monthly", firstBillableOn, AFFILIATE_MONTHS + 1).filter((c) => c.kind === "monthly" && c.date <= today).length;
+  return Math.min(done, AFFILIATE_MONTHS);
+}
+
 export type ReferralStatus = "waiting" | "owed" | "paid" | "void";
 
 export const REFERRAL_LABEL: Record<ReferralStatus, string> = {
-  waiting: "Waiting for the first payment",
+  waiting: "Waiting for 3 months of billing",
   owed: "Owed to the affiliate",
   paid: "Paid",
   void: "Not earned",
 };
 
 /**
- * Where one referral stands. Not earned if the company cancelled before its free trial ended; owed once its first payment has really
- * gone through (only possible while billing is live); paid once the owner marked it paid; otherwise still waiting.
+ * Where one referral stands. Paid once the owner marked it paid; not earned if the company stopped (cancelled, closed or suspended)
+ * before its third month; owed once the company has been billed for 3 months and its payments are current (only possible while billing
+ * is live); otherwise still waiting.
  */
-export function referralStatus(i: { paidAt: string | null; cancelledInTrial: boolean; firstPaymentMade: boolean }): ReferralStatus {
+export function referralStatus(i: { paidAt: string | null; endedBeforeQualifying: boolean; qualified: boolean }): ReferralStatus {
   if (i.paidAt) return "paid";
-  if (i.cancelledInTrial) return "void";
-  return i.firstPaymentMade ? "owed" : "waiting";
+  if (i.endedBeforeQualifying) return "void";
+  return i.qualified ? "owed" : "waiting";
 }

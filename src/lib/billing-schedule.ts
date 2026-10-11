@@ -92,6 +92,15 @@ export function addYear(date: string): string {
   return fmt(y + 1, m, Math.min(d, daysInMonth(y + 1, m)));
 }
 
+/** Same day `n` months later; a day that month does not have (the 31st) falls back to that month's last day. */
+export function addMonths(date: string, n: number): string {
+  const { y, m, d } = parts(date);
+  const idx = y * 12 + (m - 1) + n;
+  const ny = Math.floor(idx / 12);
+  const nm = (idx % 12) + 1;
+  return fmt(ny, nm, Math.min(d, daysInMonth(ny, nm)));
+}
+
 /** The billing-time-zone calendar day of an instant. */
 export function billingDateOf(instant: Date = new Date()): string {
   const p = new Intl.DateTimeFormat("en-CA", { timeZone: BILLING_TZ, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(instant);

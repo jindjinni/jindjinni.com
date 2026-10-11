@@ -1,26 +1,39 @@
 import type { Metadata } from "next";
-import { AuthCard, AuthShell } from "@/components/auth/auth-ui";
+import { AffiliateProgramSection, Eyebrow, SiteFooter, SiteHeader } from "@/components/landing/site-shell";
+import { affiliateExample } from "@/lib/affiliate-program";
+import { usd } from "@/lib/billing-config";
+import { currentBook } from "@/lib/pricing-service";
+import { affiliateCut, monthlyPrice } from "@/lib/pricing-rules";
 import { AffiliateForm } from "./affiliate-form";
 
-export const metadata: Metadata = { title: "Become an affiliate | jindjinni", description: "Refer companies to jindjinni and earn a one-time cut of each company's first payment." };
+export const metadata: Metadata = {
+  title: "Become an affiliate | jindjinni",
+  description: "Refer a company to jindjinni and earn a one-time payout of 50% of one month's subscription once they have been billed for 3 months.",
+};
 
-export default function AffiliatesPage() {
+// The example comes from the price book the Lamp sets, never from this file.
+export const revalidate = 60;
+
+export default async function AffiliatesPage() {
+  const book = await currentBook();
+  const monthly = monthlyPrice(book, 1);
   return (
-    <AuthShell headerLink={{ prompt: "Already have an account?", label: "Sign in", href: "/login" }}>
-      <AuthCard className="max-w-2xl">
-        <div className="p-7 sm:p-10" data-testid="affiliate-page">
-          <h1 className="text-3xl font-extrabold tracking-tight text-ink">Become an affiliate</h1>
-          <p className="mt-2 text-base text-muted">
-            Know a wholesaler or distributor who would like to run their business in one place? Refer them and earn a cut of what they pay.
-          </p>
-          <ol className="mt-5 list-decimal space-y-2 pl-5 text-sm text-ink">
-            <li>Tell us a little about yourself below.</li>
-            <li>We review your request. If we approve it, we email you your own code and link and tell you your cut.</li>
-            <li>When a company signs up through your link, or types your code in the Promo code box, and makes its first payment, you earn your cut. It is one time for each company you refer, not ongoing.</li>
-          </ol>
-          <AffiliateForm />
-        </div>
-      </AuthCard>
-    </AuthShell>
+    <div className="min-h-full overflow-x-clip bg-white text-ink" data-testid="affiliate-page">
+      <SiteHeader />
+      <main>
+        <AffiliateProgramSection asPage exampleText={affiliateExample(monthly, affiliateCut(monthly), usd)} />
+        <section id="apply" className="scroll-mt-20 bg-slate-50 py-16 sm:py-24">
+          <div className="mx-auto max-w-2xl px-4 sm:px-6">
+            <Eyebrow>Apply</Eyebrow>
+            <h2 className="mt-3 text-balance text-3xl font-extrabold tracking-tight sm:text-4xl">Tell us a little about yourself.</h2>
+            <p className="mt-3 text-base text-muted">We review every request and email you our answer. If we approve it, the email has your code and your link.</p>
+            <div className="auth-theme mt-6 rounded-[28px] border border-line bg-white p-6 shadow-[0_30px_80px_-40px_rgba(12,31,52,0.35)] sm:p-8">
+              <AffiliateForm />
+            </div>
+          </div>
+        </section>
+      </main>
+      <SiteFooter />
+    </div>
   );
 }

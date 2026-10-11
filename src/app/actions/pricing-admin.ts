@@ -54,7 +54,7 @@ export async function togglePromoAction(fd: FormData): Promise<void> {
 
 export async function approveAffiliateAction(_p: PricingState, fd: FormData): Promise<PricingState> {
   const org = await actor();
-  const r = await approveAffiliate({ userId: org.userId }, String(fd.get("id") ?? ""), fd.get("percent"));
+  const r = await approveAffiliate({ userId: org.userId }, String(fd.get("id") ?? ""));
   if (!r.ok) return { error: r.error };
   refresh();
   return { message: `Approved. Their code is ${r.code}. ${r.emailed ? "We emailed them the code and their link." : "The email could not be sent, so send them the code and link yourself."}` };

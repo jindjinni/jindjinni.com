@@ -1,6 +1,6 @@
-import { DEFAULT_BOOK, affiliateCut, describePromo, discountFor, lockedBook, monthlyPrice, normalizeCode, operationsFor, parseDollars, planAmount, promoProblem, referralStatus, sameBook, validateBook, validatePromo, validPercent, yearlyPrice, yearlyRegular, yearlySavings, type Promo } from "../src/lib/pricing-rules";
+import { DEFAULT_BOOK, affiliateCut, affiliateMonthsDone, affiliateQualifiesOn, describePromo, discountFor, lockedBook, monthlyPrice, normalizeCode, operationsFor, parseDollars, planAmount, promoProblem, referralStatus, sameBook, validateBook, validatePromo, validPercent, yearlyPrice, yearlyRegular, yearlySavings, type Promo } from "../src/lib/pricing-rules";
 import { usd } from "../src/lib/billing-config";
-import { chargeSchedule } from "../src/lib/billing-schedule";
+import { addMonths, chargeSchedule } from "../src/lib/billing-schedule";
 import { cancellationOutcome } from "../src/lib/cancellation";
 let f = 0; const t = (n: string, c: boolean) => { if (!c) { f++; console.log("FAIL", n); } };
 const B = DEFAULT_BOOK;
@@ -38,10 +38,17 @@ const va = validatePromo({ code: "Save100", kind: "amount", value: "$100", plan:
 t("validatePromo amount in cents", va.ok && va.promo.value === 10000 && va.promo.maxUses === 50 && va.promo.plan === "yearly");
 t("validatePromo refuses bad input", !validatePromo({ code: "a", kind: "percent", value: "5", plan: "any", maxUses: "", startsOn: "", endsOn: "" }).ok && !validatePromo({ code: "GOOD", kind: "percent", value: "0", plan: "any", maxUses: "", startsOn: "", endsOn: "" }).ok && !validatePromo({ code: "GOOD", kind: "percent", value: "101", plan: "any", maxUses: "", startsOn: "", endsOn: "" }).ok && !validatePromo({ code: "GOOD", kind: "x", value: "5", plan: "any", maxUses: "", startsOn: "", endsOn: "" }).ok && !validatePromo({ code: "GOOD", kind: "percent", value: "5", plan: "any", maxUses: "0", startsOn: "", endsOn: "" }).ok && !validatePromo({ code: "GOOD", kind: "percent", value: "5", plan: "any", maxUses: "", startsOn: "2026-12-01", endsOn: "2026-11-01" }).ok && !validatePromo({ code: "GOOD", kind: "amount", value: "0.50", plan: "any", maxUses: "", startsOn: "", endsOn: "" }).ok);
 // affiliates
-t("affiliateCut", affiliateCut(1049900, 10) === 104990 && affiliateCut(0, 10) === 0 && affiliateCut(1000, 0) === 0 && affiliateCut(1000, 200) === 1000);
-t("cut is on what was really paid, after a promo", affiliateCut(1049900 - discountFor({ kind: "percent", value: 25 }, 1049900), 10) === 78743);
+t("affiliateCut is 50% of one month", affiliateCut(97700) === 48850 && affiliateCut(0) === 0 && affiliateCut(136780) === 68390 && affiliateCut(1000, 200) === 1000);
+t("the cut ignores a promo and the plan: always half a month", affiliateCut(monthlyPrice(B, 1)) === 48850 && affiliateCut(monthlyPrice(B, 2)) === 68390);
 t("validPercent", validPercent("10") === 10 && validPercent("0") === null && validPercent("101") === null && validPercent("2.5") === null && validPercent("") === null);
-t("referralStatus", referralStatus({ paidAt: null, cancelledInTrial: false, firstPaymentMade: false }) === "waiting" && referralStatus({ paidAt: null, cancelledInTrial: false, firstPaymentMade: true }) === "owed" && referralStatus({ paidAt: null, cancelledInTrial: true, firstPaymentMade: false }) === "void" && referralStatus({ paidAt: "2026-12-01", cancelledInTrial: false, firstPaymentMade: true }) === "paid");
+t("referralStatus", referralStatus({ paidAt: null, endedBeforeQualifying: false, qualified: false }) === "waiting" && referralStatus({ paidAt: null, endedBeforeQualifying: false, qualified: true }) === "owed" && referralStatus({ paidAt: null, endedBeforeQualifying: true, qualified: false }) === "void" && referralStatus({ paidAt: "2026-12-01", endedBeforeQualifying: true, qualified: true }) === "paid");
+// 3 months billed: monthly = the third FULL monthly payment; yearly = 3 months on the platform from the first billing day
+t("monthly qualifies on the 3rd full payment (starting on the 1st)", affiliateQualifiesOn("monthly", "2026-11-01") === "2027-01-01");
+t("a prorated first part-month does not count as a month", affiliateQualifiesOn("monthly", "2026-11-16") === "2027-02-01");
+t("yearly qualifies after 3 months on the platform", affiliateQualifiesOn("yearly", "2026-11-16") === "2027-02-16" && affiliateQualifiesOn("yearly", "2026-11-30") === "2027-02-28");
+t("months done, monthly", affiliateMonthsDone("monthly", "2026-11-01", "2026-10-31") === 0 && affiliateMonthsDone("monthly", "2026-11-01", "2026-11-01") === 1 && affiliateMonthsDone("monthly", "2026-11-01", "2027-01-01") === 3 && affiliateMonthsDone("monthly", "2026-11-01", "2030-01-01") === 3);
+t("months done, yearly", affiliateMonthsDone("yearly", "2026-11-16", "2026-12-15") === 0 && affiliateMonthsDone("yearly", "2026-11-16", "2026-12-16") === 1 && affiliateMonthsDone("yearly", "2026-11-16", "2027-02-16") === 3);
+t("addMonths clamps to the month's last day", addMonths("2026-11-30", 3) === "2027-02-28" && addMonths("2027-01-31", 1) === "2027-02-28" && addMonths("2026-12-15", 1) === "2027-01-15" && addMonths("2026-01-31", 13) === "2027-02-28");
 // the billing calendar and refunds follow a company's own price
 const both = { monthlyCents: monthlyPrice(B, 2), yearlyCents: yearlyPrice(B, 2) };
 t("monthly charges use the company's price", chargeSchedule("monthly", "2026-11-01", 2, both).every((c) => c.amountCents === 136780));

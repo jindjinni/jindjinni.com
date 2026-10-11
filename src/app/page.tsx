@@ -9,7 +9,9 @@ import { TRIAL_DAYS } from "@/lib/billing-schedule";
 import { signupHref } from "@/lib/operation-type";
 import { CANCEL_COMEBACK_TEXT, CANCEL_MONTHLY_TEXT, CANCEL_TRIAL_TEXT, CANCEL_YEARLY_TEXT } from "@/lib/cancellation-copy";
 import { Icon, LogoMark, Sparkle, type IconName } from "@/components/landing/icons";
-import { AudienceSection, DirectSourcingSection, Eyebrow, SafetySection, SiteFooter, SiteHeader, btnPrimary, btnSecondary } from "@/components/landing/site-shell";
+import { AffiliateProgramSection, AudienceSection, DirectSourcingSection, Eyebrow, SafetySection, SiteFooter, SiteHeader, btnPrimary, btnSecondary } from "@/components/landing/site-shell";
+import { affiliateExample } from "@/lib/affiliate-program";
+import { affiliateCut } from "@/lib/pricing-rules";
 import { AUDIENCES, BOTH, DISTRIBUTION, HOW_SECTION, WHOLESALE } from "@/lib/landing-content";
 import { HeroDashboard } from "@/components/landing/mocks";
 
@@ -332,6 +334,9 @@ export default async function Home() {
             </p>
           </div>
         </section>
+
+        {/* ---------- Affiliate program ---------- */}
+        <AffiliateProgramSection id="affiliates" exampleText={affiliateExample(MONTHLY_CENTS, affiliateCut(MONTHLY_CENTS), usd)} />
 
         {/* ---------- Final CTA ---------- */}
         <section className="px-4 pb-20 sm:px-6 sm:pb-28">

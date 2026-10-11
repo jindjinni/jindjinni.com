@@ -8,14 +8,14 @@ import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { affiliates, codeUses, organizations, priceBooks, promoCodes } from "@/db/schema";
 import { BILLING_LIVE, parseBillingPlan, usd } from "@/lib/billing-config";
-import { billingDateOf, chargeSchedule } from "@/lib/billing-schedule";
+import { billingDateOf } from "@/lib/billing-schedule";
+import { AFFILIATE_MONTHS, AFFILIATE_PERCENT } from "@/lib/affiliate-program";
 import { newId } from "@/lib/ids";
 import { sendEmail } from "@/lib/email";
 import {
   DEFAULT_BOOK,
   affiliateCut,
   describePromo,
-  discountFor,
   lockedBook,
   monthlyPrice,
   normalizeCode,
@@ -23,8 +23,9 @@ import {
   planAmount,
   promoProblem,
   referralStatus,
+  affiliateMonthsDone,
+  affiliateQualifiesOn,
   sameBook,
-  validPercent,
   validateBook,
   validatePromo,
   yearlyPrice,
@@ -222,16 +223,14 @@ export async function newAffiliateCode(name: string): Promise<string> {
 
 export const affiliateLink = (code: string) => `${appUrl()}/r/${code}`;
 
-/** Approves an applicant: sets their percent, makes their code, and emails them the code and link. */
-export async function approveAffiliate(by: { userId: string }, id: string, percentRaw: unknown): Promise<Result<{ code: string; emailed: boolean }>> {
-  const percent = validPercent(percentRaw);
-  if (percent === null) return { ok: false, error: "Type their cut as a whole percent from 1 to 100, for example 10." };
+/** Approves an applicant: there is one kind of affiliate (50%, see affiliate-program.ts), so only their code is made. Emails them the code and link. */
+export async function approveAffiliate(by: { userId: string }, id: string): Promise<Result<{ code: string; emailed: boolean }>> {
   const [a] = await db.select().from(affiliates).where(eq(affiliates.id, id)).limit(1);
   if (!a) return { ok: false, error: "That applicant was not found." };
   const code = a.code ?? (await newAffiliateCode(a.name));
-  await db.update(affiliates).set({ status: "active", percent, code, approvedAt: new Date().toISOString(), approvedBy: by.userId, updatedAt: sql`(current_timestamp)` }).where(eq(affiliates.id, id));
+  await db.update(affiliates).set({ status: "active", percent: AFFILIATE_PERCENT, code, approvedAt: new Date().toISOString(), approvedBy: by.userId, updatedAt: sql`(current_timestamp)` }).where(eq(affiliates.id, id));
   const link = affiliateLink(code);
-  const text = `Hi ${a.name},\n\nYou're approved as a Jindjinni affiliate.\n\nYour code: ${code}\nYour link: ${link}\n\nWhen a company signs up through your link (or types your code in the Promo code box) and makes its first payment, you earn ${percent}% of that first payment, one time per company.\n\nThank you for spreading the word.`;
+  const text = `Hi ${a.name},\n\nYou're approved as a Jindjinni affiliate.\n\nYour code: ${code}\nYour link: ${link}\n\nWhen a company signs up through your link (or types your code in the Promo code box) and has been billed on jindjinni for ${AFFILIATE_MONTHS} months, you earn a one-time payout of ${AFFILIATE_PERCENT}% of one month's subscription for the plan that company picked. It is paid once for each company you refer. It is not ongoing, and if the company cancels or is suspended before the ${AFFILIATE_MONTHS} months, no payout is earned.\n\nThank you for spreading the word.`;
   const sent = await sendEmail({ to: a.email, subject: "You're approved as a Jindjinni affiliate", html: text.split("\n").map((l) => `<p>${l.replace(/&/g, "&amp;").replace(/</g, "&lt;") || "&nbsp;"}</p>`).join(""), text });
   return { ok: true, code, emailed: sent.ok };
 }
@@ -247,16 +246,21 @@ export type ReferralRow = {
   code: string;
   company: string;
   plan: PlanKind | null;
-  firstPaymentCents: number | null;
-  promoOffCents: number;
+  monthlyCents: number | null;
   cutCents: number | null;
-  percent: number | null;
+  /** The first day the referral can count as earned, and how many of the 3 months the company has completed. */
+  qualifiesOn: string | null;
+  monthsDone: number;
   status: ReferralStatus;
   paidAt: string | null;
   paidCents: number | null;
 };
 
-/** Every company an affiliate brought in, with what is owed. The cut is a percent of what the company really pays on its first payment. */
+/**
+ * Every company an affiliate brought in, with what is owed. The cut is a one-time 50% of one month's subscription at the company's
+ * own locked price. It is earned once the company has been billed for 3 months (affiliateQualifiesOn) and its payments are current;
+ * it is not earned if the company cancelled or was suspended before that.
+ */
 export async function referralRows(): Promise<ReferralRow[]> {
   const uses = await db.select().from(codeUses).where(eq(codeUses.kind, "affiliate")).orderBy(desc(codeUses.createdAt));
   const out: ReferralRow[] = [];
@@ -268,20 +272,16 @@ export async function referralRows(): Promise<ReferralRow[]> {
     const plan = parseBillingPlan(org.billingPlan);
     const book = lockedBook({ lockedMonthlyCents: org.lockedMonthlyCents, lockedYearlyCents: org.lockedYearlyCents, lockedBothPercent: org.lockedBothPercent });
     const ops = await operationCountOf(org.id);
-    let first: number | null = null;
-    if (plan && org.firstBillableOn) first = chargeSchedule(plan, org.firstBillableOn, 1, { monthlyCents: monthlyPrice(book, ops), yearlyCents: yearlyPrice(book, ops) })[0]?.amountCents ?? null;
-    let off = 0;
-    const [pu] = await db.select().from(codeUses).where(and(eq(codeUses.organizationId, org.id), eq(codeUses.kind, "promo"))).limit(1);
-    if (pu && first !== null) {
-      const [p] = await db.select().from(promoCodes).where(eq(promoCodes.id, pu.codeId)).limit(1);
-      if (p) off = discountFor({ kind: p.kind === "amount" ? "amount" : "percent", value: p.value }, first);
-    }
-    const cut = first !== null && aff.percent ? affiliateCut(first - off, aff.percent) : null;
-    const cancelledInTrial = !!org.cancelRequestedOn && !!org.serviceEndsOn && !!org.firstBillableOn && org.serviceEndsOn < org.firstBillableOn;
-    const firstPaymentMade = BILLING_LIVE && org.paymentStatus === "current" && !!org.firstBillableOn && today >= org.firstBillableOn;
+    const monthly = monthlyPrice(book, ops);
+    const cut = affiliateCut(monthly);
+    const qualifiesOn = plan && org.firstBillableOn ? affiliateQualifiesOn(plan, org.firstBillableOn) : null;
+    const monthsDone = plan && org.firstBillableOn ? affiliateMonthsDone(plan, org.firstBillableOn, today) : 0;
+    // The company stopped (cancelled, closed or suspended) before it reached its 3rd month.
+    const endedBeforeQualifying = !!org.serviceEndsOn && (qualifiesOn ? org.serviceEndsOn < qualifiesOn : !!org.firstBillableOn && org.serviceEndsOn < org.firstBillableOn);
+    const qualified = BILLING_LIVE && org.paymentStatus === "current" && !!qualifiesOn && today >= qualifiesOn;
     out.push({
-      useId: u.id, affiliateId: aff.id, affiliateName: aff.name, code: u.code, company: org.name, plan, firstPaymentCents: first, promoOffCents: off,
-      cutCents: u.paidCents ?? cut, percent: aff.percent, status: referralStatus({ paidAt: u.paidAt, cancelledInTrial, firstPaymentMade }), paidAt: u.paidAt, paidCents: u.paidCents,
+      useId: u.id, affiliateId: aff.id, affiliateName: aff.name, code: u.code, company: org.name, plan, monthlyCents: monthly,
+      cutCents: u.paidCents ?? cut, qualifiesOn, monthsDone, status: referralStatus({ paidAt: u.paidAt, endedBeforeQualifying, qualified }), paidAt: u.paidAt, paidCents: u.paidCents,
     });
   }
   return out;
@@ -292,7 +292,7 @@ export async function markReferralPaid(useId: string, note?: string | null): Pro
   const rows = await referralRows();
   const r = rows.find((x) => x.useId === useId);
   if (!r) return { ok: false, error: "That referral was not found." };
-  if (r.status !== "owed") return { ok: false, error: r.status === "paid" ? "That one is already marked paid." : "That cut is not owed yet. It becomes owed once the company's first payment has gone through." };
+  if (r.status !== "owed") return { ok: false, error: r.status === "paid" ? "That one is already marked paid." : "That cut is not owed yet. It becomes owed once the company has been billed for 3 months." };
   await db.update(codeUses).set({ paidAt: new Date().toISOString(), paidCents: r.cutCents ?? 0, paidNote: (note ?? "").trim().slice(0, 200) || null }).where(eq(codeUses.id, useId));
   return { ok: true };
 }

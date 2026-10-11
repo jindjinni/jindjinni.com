@@ -87,7 +87,7 @@ export default async function PricingPage() {
           Affiliates <span className="ml-2 text-sm font-normal text-slate-500">{pending.length} waiting for approval · {owed.length} cut{owed.length === 1 ? "" : "s"} owed{owed.length ? ` (${usd(owedTotal)})` : ""}</span>
         </summary>
         <div className="flex flex-col gap-5 border-t border-slate-100 p-4 dark:border-slate-800">
-          <p className="text-sm text-slate-600 dark:text-slate-300">People apply on the public page <strong>/affiliates</strong>. You set each person&rsquo;s cut. They earn it once, as a percent of the first payment of each company they bring in. The new company pays the normal price. You pay them yourself and mark it paid here.</p>
+          <p className="text-sm text-slate-600 dark:text-slate-300">People apply on the public page <strong>/affiliates</strong>. There is one kind of affiliate: a one-time 50% of one month&rsquo;s subscription (whichever plan the company picked), earned once the company they brought in has been billed for 3 months. If the company cancels or is suspended before then, nothing is earned. The new company pays the normal price. You pay them yourself and mark it paid here.</p>
 
           <div>
             <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Waiting for approval</h3>
@@ -135,14 +135,14 @@ export default async function PricingPage() {
             <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Companies they brought in</h3>
             {referrals.length === 0 ? <p className="mt-1 text-sm text-slate-500" data-testid="no-referrals">None yet.</p> : (
               <table className="mt-2 w-full text-left text-sm" data-testid="referral-list">
-                <thead className="text-xs text-slate-500"><tr><th className="py-1 font-medium">Company</th><th className="py-1 font-medium">Affiliate</th><th className="py-1 font-medium">First payment</th><th className="py-1 font-medium">Their cut</th><th className="py-1 font-medium">Status</th></tr></thead>
+                <thead className="text-xs text-slate-500"><tr><th className="py-1 font-medium">Company</th><th className="py-1 font-medium">Affiliate</th><th className="py-1 font-medium">Billed so far</th><th className="py-1 font-medium">Their cut</th><th className="py-1 font-medium">Status</th></tr></thead>
                 <tbody className="tabular-nums">
                   {referrals.map((r) => (
                     <tr key={r.useId} className="border-t border-slate-100 align-top dark:border-slate-800" data-testid="referral-row" data-status={r.status}>
                       <td className="py-2">{r.company}</td>
                       <td className="py-2">{r.affiliateName}<br /><span className="font-mono text-xs text-slate-500">{r.code}</span></td>
-                      <td className="py-2">{r.firstPaymentCents === null ? "after approval" : usd(r.firstPaymentCents)}{r.promoOffCents > 0 && <span className="block text-xs text-slate-500">{usd(r.promoOffCents)} promo off</span>}</td>
-                      <td className="py-2" data-testid="referral-cut">{r.cutCents === null ? "-" : usd(r.cutCents)}{r.percent ? <span className="block text-xs text-slate-500">{r.percent}% of what they pay</span> : null}</td>
+                      <td className="py-2" data-testid="referral-progress">{r.qualifiesOn === null ? "after approval" : `${r.monthsDone} of 3 months`}{r.qualifiesOn && <span className="block text-xs text-slate-500">earned from {r.qualifiesOn}</span>}</td>
+                      <td className="py-2" data-testid="referral-cut">{r.cutCents === null ? "-" : usd(r.cutCents)}<span className="block text-xs text-slate-500">50% of one month</span></td>
                       <td className="py-2 font-sans">
                         <span data-testid="referral-status">{REFERRAL_LABEL[r.status]}</span>
                         {r.status === "owed" && <div className="mt-1"><PaidForm id={r.useId} /></div>}
