@@ -7,7 +7,7 @@ export function GET() {
   const body = [
     "# jindjinni",
     "",
-    "> Proprietary business software (purchasing, receiving, accounts, customer service, inventory, sales, marketing, HR, chat). The signed-in product is private. Nothing here is offered for AI training, copying or reproduction.",
+    "> Proprietary business software (purchasing, receiving, accounts, customer service, inventory, sales, shipping, marketing, HR, chat) for Wholesale and Distribution companies. The signed-in product is private. Nothing here is offered for AI training, copying or reproduction.",
     "",
     aiPolicyText(),
   ].join("\n");

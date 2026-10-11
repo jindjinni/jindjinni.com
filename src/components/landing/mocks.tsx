@@ -31,6 +31,7 @@ const sidebar: { icon: IconName; label: string }[] = [
   { icon: "support", label: "Customer Service" },
   { icon: "inventory", label: "Inventory" },
   { icon: "tag", label: "Sales" },
+  { icon: "distribution", label: "Shipping" },
   { icon: "megaphone", label: "Marketing" },
   { icon: "clock", label: "HR" },
   { icon: "chat", label: "Chat" },

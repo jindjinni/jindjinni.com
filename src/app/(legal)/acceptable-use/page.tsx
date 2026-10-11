@@ -14,7 +14,7 @@ const sections: LegalSection[] = [
   {
     heading: "Use the Service for legitimate business",
     items: [
-      "Use it to run lawful business operations, such as purchasing, receiving, accounting, customer service, inventory, sales, marketing, HR and team communication.",
+      "Use it to run lawful business operations, such as purchasing, receiving, accounting, customer service, inventory, sales, shipping, marketing, HR and team communication.",
       "Give accurate information about yourself, your company and the people you invite, and never pretend to be someone else or another company.",
       "Make sure you have the right to enter the information you put in, including the details of your customers, contacts and employees.",
       "Follow every law and rule that applies to your business, including those for the products you buy and sell.",
@@ -35,7 +35,7 @@ const sections: LegalSection[] = [
     items: [
       "Protected health information, such as patient names linked to conditions, prescriptions or medical records. The Service is not built to hold it.",
       "Payment card numbers, bank login details, full government ID numbers (such as Social Security numbers) or passport details of customers or staff.",
-      "Passwords or secret keys for other services.",
+      "Passwords or secret keys for other services, except in the Connectors screens made for connecting your own accounts.",
       "Information about children under 13.",
     ],
     after: ["Product, price and contact information needed for a business purchase are fine."],
@@ -64,6 +64,7 @@ const sections: LegalSection[] = [
       "Don't share a login or give people more access than they need. Turn off access when someone leaves.",
       "Don't use invitations to send unwanted messages, or invite people who haven't agreed to be on your team.",
       "Don't create accounts automatically, in bulk, or with false details.",
+      "Connect only mailboxes and accounts that belong to your company or that you have the right to use, and never use a connected mailbox to send unwanted messages.",
     ],
   },
   {

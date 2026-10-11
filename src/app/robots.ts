@@ -44,7 +44,7 @@ export default function robots(): MetadataRoute.Robots {
   return {
     rules: [
       { userAgent: AI_CRAWLERS, disallow: "/" },
-      { userAgent: "*", allow: ["/", "/terms", "/privacy", "/acceptable-use", "/security"], disallow: ["/dashboard", "/api/", "/invite/", "/accept-terms", "/onboarding", "/under-review", "/closed", "/no-access", "/unsubscribe/"] },
+      { userAgent: "*", allow: ["/", "/wholesale", "/distribution", "/both", "/terms", "/privacy", "/acceptable-use", "/security"], disallow: ["/dashboard", "/api/", "/invite/", "/accept-terms", "/onboarding", "/under-review", "/closed", "/no-access", "/unsubscribe/"] },
     ],
   };
 }

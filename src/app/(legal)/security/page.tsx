@@ -26,10 +26,18 @@ const sections: LegalSection[] = [
     items: [
       "Passwords are stored only as one-way hashes. We can't read them, and we will never ask you for yours.",
       "When email verification is turned on for new accounts, the owner's email address is checked with a one-time code before the account is created.",
+      "Forgot password sends a one-time link to the account's email address. It works once, expires in 60 minutes, only the newest link works, and we store only a fingerprint of it. The page answers the same whether or not an account exists, so it can't be used to find out who has one. Staff logins without an email are reset by their admin.",
+      "Too many wrong passwords in a row pauses sign-in for that account for 15 minutes.",
       "Invitation links are long, random and single-purpose. They expire after 7 days, only work for the invited email address, and can be cancelled by an admin. We store only a fingerprint of each link, not the link itself.",
       "Each sign-in is recorded, and you can review your own on the Security & activity page. Admins can also see each team member's last sign-in.",
       "Anyone can turn on two-step sign-in (a 6-digit code from an authenticator app, with one-time backup codes) under Settings, My account. Our own platform login uses it.",
       "We look inside a company's workspace for support only when an Owner or Admin allows it on a support request. The look is read-only, limited to 30 minutes at a time, closed to team chat, employee records and downloads, emailed to the requester and listed in the company's Support access log.",
+    ],
+  },
+  {
+    heading: "Connected accounts and mailboxes",
+    paras: [
+      "When a company connects its own mailbox, shipping account, accounting software or AI account, the key or token is stored encrypted, used only for that company, and shown back only as its last few characters. Incoming mail is read only: we never change or delete anything in the real mailbox, and mail is never shown to anyone outside the company, including us. A mailbox that needs reconnecting stops the email instead of sending from another address. Wholesale and Distribution operations of one company are separate workspaces, and the only thing visible across them is a read-only page of totals for the Owners and Admins of both.",
     ],
   },
   {

@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import Link from "next/link";
 import { usd } from "@/lib/billing-config";
 import { currentBook } from "@/lib/pricing-service";
@@ -8,7 +7,9 @@ import { monthlyPrice, yearlyPrice, yearlyRegular, yearlySavings } from "@/lib/p
 export const revalidate = 60;
 import { TRIAL_DAYS } from "@/lib/billing-schedule";
 import { CANCEL_COMEBACK_TEXT, CANCEL_MONTHLY_TEXT, CANCEL_TRIAL_TEXT, CANCEL_YEARLY_TEXT } from "@/lib/cancellation-copy";
-import { BrandLogo, Icon, LogoMark, Sparkle, type IconName } from "@/components/landing/icons";
+import { Icon, LogoMark, Sparkle, type IconName } from "@/components/landing/icons";
+import { AudienceSection, CheckList, Eyebrow, SafetySection, SiteFooter, SiteHeader, btnPrimary, btnSecondary } from "@/components/landing/site-shell";
+import { AUDIENCES, BOTH, DISTRIBUTION, HOW_SECTION, WHOLESALE } from "@/lib/landing-content";
 import {
   ChatMock,
   CommandCenterMock,
@@ -18,26 +19,21 @@ import {
   TeamMock,
 } from "@/components/landing/mocks";
 
-const btnPrimary =
-  "inline-flex items-center justify-center gap-2 rounded-full bg-brand px-7 py-3.5 text-base font-bold text-ink shadow-[0_10px_30px_-10px_rgba(31,209,107,0.8)] transition hover:bg-brand-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink";
-const btnSecondary =
-  "inline-flex items-center justify-center gap-2 rounded-full border border-line bg-white px-7 py-3.5 text-base font-bold text-ink transition hover:border-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink";
-
 const departments: { icon: IconName; title: string; body: string }[] = [
   {
     icon: "purchasing",
     title: "Purchasing",
-    body: "Price lists, customers, automatic quotations, shipping labels and live shipment tracking, with every price change on the record.",
+    body: "Price lists, customers, automatic quotations with free shipping labels for Wholesale, purchase orders and suppliers for Distribution, and live shipment tracking, with every price change on the record.",
   },
   {
     icon: "receiving",
     title: "Receiving",
-    body: "Check every incoming package against its quotation, with photos, lot and serial number checks, recall checks and order adjustments.",
+    body: "Check every incoming package against its quotation or purchase order, with photos, lot and serial number checks, recall and counterfeit holds, and order adjustments.",
   },
   {
     icon: "accounts",
     title: "Accounts",
-    body: "See exactly which orders are ready to pay, what is due or overdue, and keep paid orders and monthly reports organized.",
+    body: "See what is ready to pay, what suppliers bill you, what customers owe you and what is overdue, with monthly reports and an Audit Center for Distribution.",
   },
   {
     icon: "support",
@@ -52,7 +48,12 @@ const departments: { icon: IconName; title: string; body: string }[] = [
   {
     icon: "tag",
     title: "Sales",
-    body: "Quote and invoice your own buyers, compare prices and keep your selling side connected to the stock you actually hold.",
+    body: "Take purchase orders, turn them into sales orders and invoices, compare prices and sell only from the stock you actually hold.",
+  },
+  {
+    icon: "distribution",
+    title: "Shipping",
+    body: "Ship what you sold with labels from your own shipping account, several boxes per shipment, live tracking and one reviewed shipped email.",
   },
   {
     icon: "megaphone",
@@ -78,10 +79,11 @@ const flow: { icon: IconName; title: string; note: string }[] = [
   { icon: "support", title: "Customer Service", note: "Customer is notified" },
   { icon: "inventory", title: "Inventory", note: "Stock updates" },
   { icon: "tag", title: "Sales", note: "Invoice goes out" },
+  { icon: "distribution", title: "Shipping", note: "Order ships with tracking" },
 ];
 
 const stats: { value: string; label: string }[] = [
-  { value: "9", label: "connected departments" },
+  { value: "10", label: "connected departments" },
   { value: "1", label: "shared record for every order" },
   { value: "100", label: "team members per company, built for growing businesses" },
   { value: "Private", label: "workspace for every company" },
@@ -131,28 +133,7 @@ const trustPoints = [
   { icon: "building" as IconName, title: "Your data, your exit", body: "Download everything as one spreadsheet at any time. You stay in control of your records." },
 ];
 
-const stack = ["Purchasing", "Receiving", "Accounts", "Customer Service", "Inventory", "Sales", "Marketing", "HR", "Chat"];
-
-function Eyebrow({ children }: { children: ReactNode }) {
-  return (
-    <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-brand-deep">{children}</p>
-  );
-}
-
-function CheckList({ items, columns = false }: { items: string[]; columns?: boolean }) {
-  return (
-    <ul className={`mt-6 grid gap-3 ${columns ? "sm:grid-cols-2" : ""}`}>
-      {items.map((t) => (
-        <li key={t} className="flex items-start gap-3 text-base font-medium text-ink">
-          <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand text-ink">
-            <Icon name="check" className="h-3.5 w-3.5" />
-          </span>
-          {t}
-        </li>
-      ))}
-    </ul>
-  );
-}
+const stack = ["Purchasing", "Receiving", "Accounts", "Customer Service", "Inventory", "Sales", "Shipping", "Marketing", "HR", "Chat"];
 
 export default async function Home() {
   const book = await currentBook();
@@ -162,33 +143,7 @@ export default async function Home() {
   const YEARLY_SAVINGS_CENTS = yearlySavings(book, 1);
   return (
     <div className="min-h-full overflow-x-clip bg-white text-ink">
-      {/* ---------- Nav ---------- */}
-      <header className="sticky top-0 z-40 border-b border-line/70 bg-white/85 backdrop-blur">
-        <div className="mx-auto flex h-[72px] max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
-          <Link href="/" className="flex items-center" aria-label="jindjinni home">
-            <BrandLogo markClass="h-12 w-auto" wordClass="h-5 w-auto sm:h-7" priority />
-          </Link>
-          <nav className="hidden items-center gap-7 text-sm font-semibold text-muted md:flex" aria-label="Sections">
-            <a href="#platform" className="hover:text-ink">Departments</a>
-            <a href="#command" className="hover:text-ink">Command center</a>
-            <a href="#receiving" className="hover:text-ink">Receiving</a>
-            <a href="#team" className="hover:text-ink">Team + Chat</a>
-            <a href="#security" className="hover:text-ink">Security</a>
-            <a href="#pricing" className="hover:text-ink">Pricing</a>
-          </nav>
-          <div className="flex items-center gap-2 sm:gap-3">
-            <Link href="/login" className="whitespace-nowrap rounded-full px-3 py-2 text-sm font-bold text-ink hover:bg-slate-100">
-              Sign In
-            </Link>
-            <Link
-              href="/signup"
-              className="whitespace-nowrap rounded-full bg-brand px-4 py-2.5 text-sm font-bold text-ink transition hover:bg-brand-hover sm:px-5"
-            >
-              Get Started
-            </Link>
-          </div>
-        </div>
-      </header>
+      <SiteHeader />
 
       <main>
         {/* ---------- Hero ---------- */}
@@ -206,11 +161,10 @@ export default async function Home() {
                 <Sparkle className="absolute right-10 top-0 hidden h-4 w-4 sm:block" />
               </h1>
               <p className="mt-6 text-lg font-bold text-ink sm:text-xl">
-                Purchasing. Receiving. Accounts. Customer Service. Inventory. Sales. Marketing. HR. Chat.
+                Purchasing. Receiving. Accounts. Customer Service. Inventory. Sales. Shipping. Marketing. HR. Chat.
               </p>
               <p className="mt-4 max-w-xl text-lg text-muted">
-                jindjinni is enterprise software that puts every department of your company on one connected record,
-                with a team chat built right in. Enter information once, and every department sees it. Built to
+                jindjinni is enterprise software for companies that buy and sell medical supplies. It puts every department on one connected record, checks every incoming item for recalls and counterfeits, and has a team chat built right in. Enter information once, and every department sees it. Built to
                 grow with you, from your first employee to a team of up to 100 people.
               </p>
               <div className="mt-9 flex flex-wrap gap-3">
@@ -222,7 +176,13 @@ export default async function Home() {
                   Sign In
                 </Link>
               </div>
-              <p className="mt-5 max-w-xl text-sm font-semibold text-muted" data-testid="active-only">
+              <p className="mt-5 text-sm font-bold text-ink" data-testid="hero-sides">
+                See how it works for{" "}
+                <Link href="/wholesale" className="underline decoration-brand decoration-2 underline-offset-4 hover:decoration-ink">Wholesale</Link>,{" "}
+                <Link href="/distribution" className="underline decoration-brand decoration-2 underline-offset-4 hover:decoration-ink">Distribution</Link> or{" "}
+                <Link href="/both" className="underline decoration-brand decoration-2 underline-offset-4 hover:decoration-ink">both together</Link>.
+              </p>
+              <p className="mt-3 max-w-xl text-sm font-semibold text-muted" data-testid="active-only">
                 For active businesses only. Your company must be active and in good standing with its state&rsquo;s Secretary of State. We check, and an inactive company can be suspended until it is active again.
               </p>
             </div>
@@ -242,8 +202,46 @@ export default async function Home() {
           </dl>
         </section>
 
+        {/* ---------- How you work: Wholesale, Distribution, Both ---------- */}
+        <section id="how" className="scroll-mt-20 bg-white py-20 sm:py-28" data-testid="how-section">
+          <div className="mx-auto max-w-6xl px-4 sm:px-6">
+            <div className="max-w-3xl">
+              <Eyebrow>{HOW_SECTION.eyebrow}</Eyebrow>
+              <h2 className="mt-3 text-balance text-4xl font-extrabold tracking-tight sm:text-5xl">{HOW_SECTION.title}</h2>
+              <p className="mt-5 text-lg text-muted">{HOW_SECTION.body}</p>
+            </div>
+            <div className="mt-12 grid gap-4 md:grid-cols-3">
+              {[WHOLESALE, DISTRIBUTION, BOTH].map((c) => (
+                <Link
+                  key={c.slug}
+                  href={`/${c.slug}`}
+                  data-testid={`how-card-${c.slug}`}
+                  className="group flex flex-col rounded-3xl border border-line bg-white p-7 transition motion-safe:hover:-translate-y-1 hover:border-brand hover:shadow-[0_24px_50px_-28px_rgba(10,122,58,0.45)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+                >
+                  <h3 className="text-2xl font-extrabold tracking-tight">{c.name}</h3>
+                  <p className="mt-2 text-[15px] font-semibold leading-snug text-ink">{c.tagline}</p>
+                  <ul className="mt-4 flex-1 space-y-2 text-[15px] leading-relaxed text-muted">
+                    {c.cardPoints.map((p) => (
+                      <li key={p} className="flex items-start gap-2.5">
+                        <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand" />
+                        {p}
+                      </li>
+                    ))}
+                  </ul>
+                  <span className="mt-6 inline-flex items-center gap-2 text-sm font-extrabold text-ink">
+                    See every department
+                    <Icon name="arrow" className="h-4 w-4 transition group-hover:translate-x-1" />
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <AudienceSection items={AUDIENCES} />
+
         {/* ---------- Every department ---------- */}
-        <section id="platform" className="scroll-mt-20 bg-white py-20 sm:py-28">
+        <section id="platform" className="scroll-mt-20 bg-white py-20 sm:py-28" data-testid="departments">
           <div className="mx-auto max-w-6xl px-4 sm:px-6">
             <div className="max-w-3xl">
               <Eyebrow>Every department, built in</Eyebrow>
@@ -305,10 +303,10 @@ export default async function Home() {
               </p>
             </div>
 
-            <ol className="relative mt-16 grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
+            <ol className="relative mt-16 grid gap-4 sm:grid-cols-2 lg:grid-cols-7">
               <span
                 aria-hidden="true"
-                className="absolute left-[8.33%] right-[8.33%] top-8 hidden h-0.5 bg-[repeating-linear-gradient(90deg,#1fd16b_0_8px,transparent_8px_16px)] lg:block"
+                className="absolute left-[7.14%] right-[7.14%] top-8 hidden h-0.5 bg-[repeating-linear-gradient(90deg,#1fd16b_0_8px,transparent_8px_16px)] lg:block"
               />
               {flow.map((s, i) => (
                 <li key={s.title} className="relative flex items-center gap-4 lg:flex-col lg:gap-3 lg:text-center">
@@ -365,6 +363,8 @@ export default async function Home() {
             </div>
           </div>
         </section>
+
+        <SafetySection />
 
         {/* ---------- Inventory + sales ---------- */}
         <section id="inventory" className="scroll-mt-20 bg-slate-50 py-20 sm:py-28">
@@ -502,6 +502,7 @@ export default async function Home() {
                 <article key={o.key} className="rounded-3xl border border-line bg-white p-7" data-testid={`home-op-${o.key}`}>
                   <h3 className="text-sm font-extrabold uppercase tracking-wider text-muted">{o.title}</h3>
                   <p className="mt-2 text-[15px] leading-relaxed text-muted">{o.body}</p>
+                  <Link href={`/${o.key}`} className="mt-2 inline-block text-sm font-extrabold text-ink underline decoration-brand decoration-2 underline-offset-4">See what {o.key === "both" ? "both" : o.title} includes</Link>
                   <p className="mt-4 text-2xl font-extrabold tracking-tight">{usd(monthlyPrice(book, o.ops))}<span className="text-base font-bold">/month</span></p>
                   <p className="text-sm font-semibold text-muted">or {usd(yearlyPrice(book, o.ops))}/year</p>
                   {o.ops === 2 && <p className="mt-1 text-sm font-bold text-brand-deep">{book.bothPercent}% more than one operation</p>}
@@ -605,27 +606,7 @@ export default async function Home() {
         </section>
       </main>
 
-      {/* ---------- Footer ---------- */}
-      <footer className="border-t border-line">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-4 py-8 text-sm text-muted sm:flex-row sm:px-6">
-          <Link href="/" aria-label="jindjinni home">
-            <BrandLogo markClass="h-11 w-auto" wordClass="h-6 w-auto" />
-          </Link>
-          <p className="max-w-md text-center">
-            Your business wishes, our command.
-            <span className="block text-xs">© 2026 Plantarz Property Solutions LLC. All rights reserved. jindjinni, its software, design and content are proprietary and may not be copied, scraped or used to train AI. jindjinni is business software. It does not provide legal, tax, accounting or medical advice.</span>
-          </p>
-          <div className="flex flex-wrap justify-center gap-x-5 gap-y-2 font-semibold">
-            <Link href="/login" className="hover:text-ink">Sign In</Link>
-            <Link href="/signup" className="hover:text-ink">Get Started</Link>
-            <Link href="/affiliates" className="hover:text-ink" data-testid="footer-affiliates">Become an affiliate</Link>
-            <Link href="/terms" className="hover:text-ink">Terms</Link>
-            <Link href="/privacy" className="hover:text-ink">Privacy</Link>
-            <Link href="/acceptable-use" className="hover:text-ink">Acceptable Use</Link>
-            <Link href="/security" className="hover:text-ink">Security</Link>
-          </div>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

@@ -13,7 +13,7 @@ import { OPERATOR_NAME } from "@/lib/legal";
 export const metadata: Metadata = {
   title: "jindjinni | Enterprise software for your entire business",
   description:
-    "jindjinni is premium enterprise software that connects purchasing, receiving, accounts, customer service, inventory, sales, marketing, HR and team chat on one platform, built for growing companies of up to 100 people.",
+    "jindjinni is enterprise software for wholesalers and distributors of medical supplies. It connects purchasing, receiving, accounts, customer service, inventory, sales, shipping, marketing, HR and team chat on one platform, with recall and counterfeit checks on every item received, for growing companies of up to 100 people.",
   creator: OPERATOR_NAME,
   // Read by crawlers and AI agents that look at a page's metadata.
   other: { "ai-notice": NOTICE_SHORT, copyright: `${OPERATOR_NAME}. All rights reserved.` },
