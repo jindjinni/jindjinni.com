@@ -3,7 +3,7 @@ import Link from "next/link";
 import { BrandLogo, Icon, type IconName } from "@/components/landing/icons";
 import type { Audience, Check } from "@/lib/landing-content";
 import { DIRECT_SOURCING, SAFETY_CHECKS, SAFETY_LIMITS } from "@/lib/landing-content";
-import { AFFILIATE_PERCENT, AFFILIATE_PROGRAM } from "@/lib/affiliate-program";
+import { AFFILIATE_PROGRAM, REFERRED_DISCOUNT_PERCENT } from "@/lib/affiliate-program";
 
 export const btnPrimary =
   "inline-flex items-center justify-center gap-2 rounded-full bg-brand px-7 py-3.5 text-base font-bold text-ink shadow-[0_10px_30px_-10px_rgba(31,209,107,0.8)] transition hover:bg-brand-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink";
@@ -46,7 +46,7 @@ export function SiteHeader() {
     {/* A slim bar above everything, on every size of screen, so the affiliate program is the first thing seen. */}
     <div className="bg-ink text-white" data-testid="affiliate-bar">
       <Link href="/affiliates" className="mx-auto flex max-w-6xl items-center justify-center gap-2 px-4 py-2 text-center text-xs font-bold hover:underline sm:text-sm">
-        <span>Refer a company and earn {AFFILIATE_PERCENT}%.</span>
+        <span>Refer a company: they save {REFERRED_DISCOUNT_PERCENT}% and you get paid.</span>
         <span className="rounded-full bg-brand px-3 py-0.5 text-ink">Become an affiliate</span>
       </Link>
     </div>

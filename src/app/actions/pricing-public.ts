@@ -4,7 +4,7 @@ import { headers } from "next/headers";
 import { guardPublicForm } from "@/lib/human-check";
 import { rateHit, waitMessage } from "@/lib/rate-limit";
 import { applyAsAffiliate, currentBook, resolveCode } from "@/lib/pricing-service";
-import { monthlyPrice, normalizeCode, yearlyPrice, discountFor, type OperationCount, type PlanKind } from "@/lib/pricing-rules";
+import { monthlyPrice, normalizeCode, yearlyPrice, discountFor, referredDiscount, type OperationCount, type PlanKind } from "@/lib/pricing-rules";
 import { operationsFor } from "@/lib/pricing-rules";
 import { usd } from "@/lib/billing-config";
 
@@ -34,6 +34,13 @@ export async function checkPromoAction(rawCode: string, plan: string | null, ope
     const ops: OperationCount = operationsFor(operationType);
     const full = monthlyPrice(book, ops);
     return { ok: true, text: r.text, example: `The first charge after your free trial is reduced. A full month would be ${usd(full)}.` };
+  }
+  if (r.kind === "affiliate" && p) {
+    const book = await currentBook();
+    const ops: OperationCount = operationsFor(operationType);
+    const price = p === "yearly" ? yearlyPrice(book, ops) : monthlyPrice(book, ops);
+    const d = referredDiscount(p, price);
+    return { ok: true, text: r.text, example: p === "yearly" ? `Your yearly payment: ${usd(price - d.perPaymentCents)} instead of ${usd(price)}.` : `Your first ${d.payments} full monthly payments: ${usd(price - d.perPaymentCents)} instead of ${usd(price)}. A promo code and an affiliate code do not stack; you get whichever saves more.` };
   }
   return { ok: true, text: r.text };
 }

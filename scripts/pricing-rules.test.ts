@@ -1,4 +1,4 @@
-import { DEFAULT_BOOK, affiliateCut, affiliateMonthsDone, affiliateQualifiesOn, describePromo, discountFor, lockedBook, monthlyPrice, normalizeCode, operationsFor, parseDollars, planAmount, promoProblem, referralStatus, sameBook, validateBook, validatePromo, validPercent, yearlyPrice, yearlyRegular, yearlySavings, type Promo } from "../src/lib/pricing-rules";
+import { DEFAULT_BOOK, affiliateCut, affiliateExampleNumbers, affiliateWorstCase, bestOffer, referredDiscount, affiliateMonthsDone, affiliateQualifiesOn, describePromo, discountFor, lockedBook, monthlyPrice, normalizeCode, operationsFor, parseDollars, planAmount, promoProblem, referralStatus, sameBook, validateBook, validatePromo, validPercent, yearlyPrice, yearlyRegular, yearlySavings, type Promo } from "../src/lib/pricing-rules";
 import { usd } from "../src/lib/billing-config";
 import { addMonths, chargeSchedule } from "../src/lib/billing-schedule";
 import { cancellationOutcome } from "../src/lib/cancellation";
@@ -38,8 +38,24 @@ const va = validatePromo({ code: "Save100", kind: "amount", value: "$100", plan:
 t("validatePromo amount in cents", va.ok && va.promo.value === 10000 && va.promo.maxUses === 50 && va.promo.plan === "yearly");
 t("validatePromo refuses bad input", !validatePromo({ code: "a", kind: "percent", value: "5", plan: "any", maxUses: "", startsOn: "", endsOn: "" }).ok && !validatePromo({ code: "GOOD", kind: "percent", value: "0", plan: "any", maxUses: "", startsOn: "", endsOn: "" }).ok && !validatePromo({ code: "GOOD", kind: "percent", value: "101", plan: "any", maxUses: "", startsOn: "", endsOn: "" }).ok && !validatePromo({ code: "GOOD", kind: "x", value: "5", plan: "any", maxUses: "", startsOn: "", endsOn: "" }).ok && !validatePromo({ code: "GOOD", kind: "percent", value: "5", plan: "any", maxUses: "0", startsOn: "", endsOn: "" }).ok && !validatePromo({ code: "GOOD", kind: "percent", value: "5", plan: "any", maxUses: "", startsOn: "2026-12-01", endsOn: "2026-11-01" }).ok && !validatePromo({ code: "GOOD", kind: "amount", value: "0.50", plan: "any", maxUses: "", startsOn: "", endsOn: "" }).ok);
 // affiliates
-t("affiliateCut is 50% of one month", affiliateCut(97700) === 48850 && affiliateCut(0) === 0 && affiliateCut(136780) === 68390 && affiliateCut(1000, 200) === 1000);
-t("the cut ignores a promo and the plan: always half a month", affiliateCut(monthlyPrice(B, 1)) === 48850 && affiliateCut(monthlyPrice(B, 2)) === 68390);
+t("affiliateCut: 40% of one month on a monthly plan", affiliateCut("monthly", 97700) === 39080 && affiliateCut("monthly", 0) === 0 && affiliateCut("monthly", 136780) === 54712);
+t("affiliateCut: 15% of the year on a yearly plan", affiliateCut("yearly", 1049900) === 157485 && affiliateCut("yearly", 0) === 0 && affiliateCut("yearly", yearlyPrice(B, 2)) === Math.round(yearlyPrice(B, 2) * 0.15));
+t("the cut is worked on the regular price, not the discounted one", affiliateCut("monthly", monthlyPrice(B, 1)) === 39080 && affiliateCut("yearly", yearlyPrice(B, 1)) === 157485);
+const dm = referredDiscount("monthly", 97700), dy = referredDiscount("yearly", 1049900);
+t("referred company: 10% off each of the first 3 monthly payments", dm.perPaymentCents === 9770 && dm.payments === 3 && dm.totalCents === 29310);
+t("referred company: 10% off the yearly payment", dy.perPaymentCents === 104990 && dy.payments === 1 && dy.totalCents === 104990);
+t("a promo and an affiliate never stack: the bigger one wins", bestOffer("monthly", 97700, null, true).source === "affiliate" && bestOffer("monthly", 97700, 50000, true).source === "promo" && bestOffer("monthly", 97700, 50000, true).totalCents === 50000 && bestOffer("yearly", 1049900, 5000, true).totalCents === 104990 && bestOffer("monthly", 97700, 5000, false).source === "promo" && bestOffer("monthly", 97700, null, false).source === "none");
+// we must not lose money: the worst case is the company cancelling the moment its affiliate qualifies
+for (const ops of [1, 2] as const) {
+  const m = affiliateWorstCase("monthly", monthlyPrice(B, ops)), y = affiliateWorstCase("yearly", yearlyPrice(B, ops));
+  t(`worst case stays above zero (${ops} operation${ops === 2 ? "s" : ""})`, m.netCents > 0 && y.netCents > 0);
+}
+const wy = affiliateWorstCase("yearly", 1049900), wm = affiliateWorstCase("monthly", 97700);
+t("worst case, yearly: keep 3/12 of the discounted year, pay 15%, card fees", wy.keptCents === 236228 && wy.cutCents === 157485 && wy.netCents === 236228 - 157485 - wy.feesCents && wy.netCents > 50000);
+t("worst case, monthly: three discounted payments kept, pay 40% of a month", wm.keptCents === 263790 && wm.cutCents === 39080 && wm.netCents > 200000);
+t("a 20% yearly payout would NOT be safe at 3 months (why it is 15%)", (() => { const k = wy.keptCents, fees = wy.feesCents; return k - Math.round(1049900 * 0.20) - fees < 0; })());
+const ex = affiliateExampleNumbers(B, 1);
+t("example numbers come from the book", ex.monthlyCents === 97700 && ex.yearlyCents === 1049900 && ex.monthlyCutCents === 39080 && ex.yearlyCutCents === 157485 && ex.monthlyOffCents === 9770 && ex.yearlyOffCents === 104990);
 t("validPercent", validPercent("10") === 10 && validPercent("0") === null && validPercent("101") === null && validPercent("2.5") === null && validPercent("") === null);
 t("referralStatus", referralStatus({ paidAt: null, endedBeforeQualifying: false, qualified: false }) === "waiting" && referralStatus({ paidAt: null, endedBeforeQualifying: false, qualified: true }) === "owed" && referralStatus({ paidAt: null, endedBeforeQualifying: true, qualified: false }) === "void" && referralStatus({ paidAt: "2026-12-01", endedBeforeQualifying: true, qualified: true }) === "paid");
 // 3 months billed: monthly = the third FULL monthly payment; yearly = 3 months on the platform from the first billing day

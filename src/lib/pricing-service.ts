@@ -1,7 +1,8 @@
 // Prices, promo codes and affiliates, for the Lamp (admin) and the sign-up and billing pages. Every price a NEW company sees comes
 // from the newest row of price_books; a company keeps the book it locked at sign-up (organizations.locked_*). Promo codes take money off
-// the first payment; affiliates earn a one-time percent of the first payment of each company they refer. Nothing here moves money:
-// billing is not live, and affiliates are paid by the owner, who marks them paid.
+// the first payment; a company that comes through an affiliate gets 10% off, and the affiliate earns a one-time 40% of a month (monthly
+// plan) or 15% of the year (yearly plan) once the company has been billed for 3 months. Nothing here moves money: billing is not live,
+// and affiliates are paid by the owner, who marks them paid.
 
 import { randomInt } from "node:crypto";
 import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm";
@@ -9,12 +10,15 @@ import { db } from "@/db/client";
 import { affiliates, codeUses, organizations, priceBooks, promoCodes } from "@/db/schema";
 import { BILLING_LIVE, parseBillingPlan, usd } from "@/lib/billing-config";
 import { billingDateOf } from "@/lib/billing-schedule";
-import { AFFILIATE_MONTHS, AFFILIATE_PERCENT } from "@/lib/affiliate-program";
+import { AFFILIATE_MONTHLY_PERCENT, AFFILIATE_MONTHS, AFFILIATE_YEARLY_PERCENT, REFERRED_DISCOUNT_PERCENT } from "@/lib/affiliate-program";
 import { newId } from "@/lib/ids";
 import { sendEmail } from "@/lib/email";
 import {
   DEFAULT_BOOK,
   affiliateCut,
+  bestOffer,
+  discountFor,
+  referredDiscount,
   describePromo,
   lockedBook,
   monthlyPrice,
@@ -89,6 +93,8 @@ export type CompanyPricing = {
   /** What a full period of the chosen plan costs (null when no plan was chosen). */
   planCents: number | null;
   promo: { code: string; text: string } | null;
+  /** Set when the company came through an affiliate and that saves it more than any promo code (they never stack). */
+  affiliateOff: { text: string; totalCents: number } | null;
 };
 
 /** The company's own price, from the book it locked. `mainOrganizationId` is the company's main row. */
@@ -103,11 +109,26 @@ export async function companyPricing(mainOrganizationId: string): Promise<Compan
   const ops = await operationCountOf(mainOrganizationId);
   const [use] = await db.select().from(codeUses).where(and(eq(codeUses.organizationId, mainOrganizationId), eq(codeUses.kind, "promo"))).limit(1);
   let promo: CompanyPricing["promo"] = null;
+  let promoOff = 0;
   if (use) {
     const [p] = await db.select().from(promoCodes).where(eq(promoCodes.id, use.codeId)).limit(1);
-    if (p) promo = { code: p.code, text: describePromo({ kind: p.kind as Promo["kind"], value: p.value, plan: p.plan as Promo["plan"] }, usd) };
+    if (p) {
+      promo = { code: p.code, text: describePromo({ kind: p.kind as Promo["kind"], value: p.value, plan: p.plan as Promo["plan"] }, usd) };
+      promoOff = plan ? discountFor({ kind: p.kind as Promo["kind"], value: p.value }, planAmount(book, plan, ops)) : 0;
+    }
   }
-  return { book, plan, ops, monthlyCents: monthlyPrice(book, ops), yearlyCents: yearlyPrice(book, ops), planCents: plan ? planAmount(book, plan, ops) : null, promo };
+  const [aff] = await db.select({ id: codeUses.id }).from(codeUses).where(and(eq(codeUses.organizationId, mainOrganizationId), eq(codeUses.kind, "affiliate"))).limit(1);
+  let affiliateOff: CompanyPricing["affiliateOff"] = null;
+  if (aff && plan) {
+    const price = planAmount(book, plan, ops);
+    const best = bestOffer(plan, price, promoOff, true);
+    if (best.source === "affiliate") {
+      const d = referredDiscount(plan, price);
+      affiliateOff = { totalCents: d.totalCents, text: plan === "yearly" ? `${REFERRED_DISCOUNT_PERCENT}% off your yearly payment (${usd(d.perPaymentCents)} off)` : `${REFERRED_DISCOUNT_PERCENT}% off each of your first ${d.payments} full monthly payments (${usd(d.perPaymentCents)} off each)` };
+      promo = null; // the larger offer applies; they do not stack
+    }
+  }
+  return { book, plan, ops, monthlyCents: monthlyPrice(book, ops), yearlyCents: yearlyPrice(book, ops), planCents: plan ? planAmount(book, plan, ops) : null, promo, affiliateOff };
 }
 
 // ---- promo and affiliate codes at sign-up ------------------------------------------------------------------------
@@ -125,7 +146,7 @@ export type ResolvedCode =
 
 /**
  * What a code typed in the sign-up box is: a promo code (a discount), or an affiliate's code (the affiliate is credited; the new
- * company pays the normal price). Empty means no code. A promo code is checked for dates, use limits and the plan.
+ * company gets 10% off). Empty means no code. A promo code is checked for dates, use limits and the plan.
  */
 export async function resolveCode(raw: unknown, plan: PlanKind | null, today: string = billingDateOf()): Promise<ResolvedCode> {
   const code = normalizeCode(raw);
@@ -138,7 +159,7 @@ export async function resolveCode(raw: unknown, plan: PlanKind | null, today: st
     return { ok: true, kind: "promo", id: p.id, code: p.code, text: describePromo(promo, usd), promo };
   }
   const [a] = await db.select().from(affiliates).where(and(eq(affiliates.code, code), eq(affiliates.status, "active"))).limit(1);
-  if (a) return { ok: true, kind: "affiliate", id: a.id, code: code, text: "Thank you. This code credits the person who told you about us. Your price stays the same." };
+  if (a) return { ok: true, kind: "affiliate", id: a.id, code: code, text: `Thank you. This code credits the person who told you about us, and you save ${REFERRED_DISCOUNT_PERCENT}%` };
   return { ok: false, error: "We could not find that promo code. Check the spelling, or clear the box to sign up without one." };
 }
 
@@ -223,14 +244,14 @@ export async function newAffiliateCode(name: string): Promise<string> {
 
 export const affiliateLink = (code: string) => `${appUrl()}/r/${code}`;
 
-/** Approves an applicant: there is one kind of affiliate (50%, see affiliate-program.ts), so only their code is made. Emails them the code and link. */
+/** Approves an applicant: there is one kind of affiliate (see affiliate-program.ts), so only their code is made (the stored percent is just the monthly-plan rate; the real rates live in affiliate-program.ts). Emails them the code and link. */
 export async function approveAffiliate(by: { userId: string }, id: string): Promise<Result<{ code: string; emailed: boolean }>> {
   const [a] = await db.select().from(affiliates).where(eq(affiliates.id, id)).limit(1);
   if (!a) return { ok: false, error: "That applicant was not found." };
   const code = a.code ?? (await newAffiliateCode(a.name));
-  await db.update(affiliates).set({ status: "active", percent: AFFILIATE_PERCENT, code, approvedAt: new Date().toISOString(), approvedBy: by.userId, updatedAt: sql`(current_timestamp)` }).where(eq(affiliates.id, id));
+  await db.update(affiliates).set({ status: "active", percent: AFFILIATE_MONTHLY_PERCENT, code, approvedAt: new Date().toISOString(), approvedBy: by.userId, updatedAt: sql`(current_timestamp)` }).where(eq(affiliates.id, id));
   const link = affiliateLink(code);
-  const text = `Hi ${a.name},\n\nYou're approved as a Jindjinni affiliate.\n\nYour code: ${code}\nYour link: ${link}\n\nWhen a company signs up through your link (or types your code in the Promo code box) and has been billed on jindjinni for ${AFFILIATE_MONTHS} months, you earn a one-time payout of ${AFFILIATE_PERCENT}% of one month's subscription for the plan that company picked. It is paid once for each company you refer, by direct deposit only. It is not ongoing, and if the company cancels or is suspended before the ${AFFILIATE_MONTHS} months, no payout is earned.\n\nYour private affiliate portal is at ${appUrl()}/affiliate : sign in with this email address and we send you a one-time link. We will also send you a full details email shortly.\n\nThank you for spreading the word.`;
+  const text = `Hi ${a.name},\n\nYou're approved as a Jindjinni affiliate.\n\nYour code: ${code}\nYour link: ${link}\n\nWhen a company signs up through your link (or types your code in the Promo code box), it saves ${REFERRED_DISCOUNT_PERCENT}%. Once it has been billed on jindjinni for ${AFFILIATE_MONTHS} months, you earn a one-time payout: ${AFFILIATE_MONTHLY_PERCENT}% of one month's subscription if it pays monthly, or ${AFFILIATE_YEARLY_PERCENT}% of the yearly subscription if it pays yearly. It is paid once for each company you refer, by direct deposit only. It is not ongoing, and if the company cancels, is suspended or has a payment reversed before the ${AFFILIATE_MONTHS} months, no payout is earned.\n\nYour private affiliate portal is at ${appUrl()}/affiliate : sign in with this email address and we send you a one-time link. We will also send you a full details email shortly.\n\nThank you for spreading the word.`;
   const sent = await sendEmail({ to: a.email, subject: "You're approved as a Jindjinni affiliate", html: text.split("\n").map((l) => `<p>${l.replace(/&/g, "&amp;").replace(/</g, "&lt;") || "&nbsp;"}</p>`).join(""), text });
   return { ok: true, code, emailed: sent.ok };
 }
@@ -246,7 +267,8 @@ export type ReferralRow = {
   code: string;
   company: string;
   plan: PlanKind | null;
-  monthlyCents: number | null;
+  /** The company's own regular price for the plan it picked (a month for monthly, the year for yearly), at the price it locked. */
+  planPriceCents: number | null;
   cutCents: number | null;
   /** The first day the referral can count as earned, and how many of the 3 months the company has completed. */
   qualifiesOn: string | null;
@@ -259,8 +281,8 @@ export type ReferralRow = {
 };
 
 /**
- * Every company an affiliate brought in, with what is owed. The cut is a one-time 50% of one month's subscription at the company's
- * own locked price. It is earned once the company has been billed for 3 months (affiliateQualifiesOn) and its payments are current;
+ * Every company an affiliate brought in, with what is owed. The cut is a one-time 40% of one month (monthly plan) or 15% of the year
+ * (yearly plan) at the company's own locked price. It is earned once the company has been billed for 3 months (affiliateQualifiesOn) and its payments are current;
  * it is not earned if the company cancelled or was suspended before that.
  */
 export async function referralRows(onlyAffiliateId?: string): Promise<ReferralRow[]> {
@@ -274,15 +296,15 @@ export async function referralRows(onlyAffiliateId?: string): Promise<ReferralRo
     const plan = parseBillingPlan(org.billingPlan);
     const book = lockedBook({ lockedMonthlyCents: org.lockedMonthlyCents, lockedYearlyCents: org.lockedYearlyCents, lockedBothPercent: org.lockedBothPercent });
     const ops = await operationCountOf(org.id);
-    const monthly = monthlyPrice(book, ops);
-    const cut = affiliateCut(monthly);
+    const price = plan === "yearly" ? yearlyPrice(book, ops) : monthlyPrice(book, ops);
+    const cut = affiliateCut(plan ?? "monthly", price);
     const qualifiesOn = plan && org.firstBillableOn ? affiliateQualifiesOn(plan, org.firstBillableOn) : null;
     const monthsDone = plan && org.firstBillableOn ? affiliateMonthsDone(plan, org.firstBillableOn, today) : 0;
     // The company stopped (cancelled, closed or suspended) before it reached its 3rd month.
     const endedBeforeQualifying = !!org.serviceEndsOn && (qualifiesOn ? org.serviceEndsOn < qualifiesOn : !!org.firstBillableOn && org.serviceEndsOn < org.firstBillableOn);
     const qualified = BILLING_LIVE && org.paymentStatus === "current" && !!qualifiesOn && today >= qualifiesOn;
     out.push({
-      useId: u.id, affiliateId: aff.id, affiliateName: aff.name, code: u.code, company: org.name, plan, monthlyCents: monthly,
+      useId: u.id, affiliateId: aff.id, affiliateName: aff.name, code: u.code, company: org.name, plan, planPriceCents: price,
       cutCents: u.paidCents ?? cut, qualifiesOn, monthsDone, activeSince: org.trialStartsOn ?? null, status: referralStatus({ paidAt: u.paidAt, endedBeforeQualifying, qualified }), paidAt: u.paidAt, paidCents: u.paidCents,
     });
   }

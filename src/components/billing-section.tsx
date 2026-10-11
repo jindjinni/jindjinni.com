@@ -86,7 +86,7 @@ export function BillingSection({ book, operationType, referred = false, initialP
           </p>
         )}
         {result && !result.ok && <p role="alert" className="text-sm font-bold text-red-700" data-testid="promo-error">{result.error}</p>}
-        {referred && <p className="text-xs text-muted" data-testid="referred-note">You came here through a friend&rsquo;s link. Thank you for joining through them. Until their referral payout is done, they can see your company name and how long you have been active. Nothing else.</p>}
+        {referred && <p className="text-xs text-muted" data-testid="referred-note">You came here through a friend&rsquo;s link. Thank you for joining through them: you save 10% (on the monthly plan, off each of your first 3 full monthly payments; on the yearly plan, off the year), and it is applied when billing starts. A promo code and an affiliate code do not stack; you get whichever saves more. Until their referral payout is done, they can see your company name and how long you have been active. Nothing else.</p>}
         <p className="text-xs text-muted">A promo code takes money off your first payment after the free trial. It is checked again when you create your account.</p>
       </div>
 

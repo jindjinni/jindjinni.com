@@ -1,6 +1,6 @@
 // The emails an affiliate receives: the sign-in link for the portal, and the details / terms follow-up the platform owner sends by
 // pressing Send in the Lamp. Pure (no database, no sending), so the exact words can be tested and shown to the owner before they send.
-import { AFFILIATE_MONTHS, AFFILIATE_PERCENT } from "@/lib/affiliate-program";
+import { AFFILIATE_MONTHLY_PERCENT, AFFILIATE_MONTHS, AFFILIATE_YEARLY_PERCENT, REFERRED_DISCOUNT_PERCENT } from "@/lib/affiliate-program";
 import { LOGIN_VALID_MINUTES } from "@/lib/affiliate-portal-rules";
 
 const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -22,12 +22,13 @@ export function affiliateDetailsEmail(i: { name: string; code: string | null; li
     "",
     ...(i.code && i.link ? [`Your code: ${i.code}`, `Your link: ${i.link}`, ""] : []),
     "HOW YOU EARN",
-    `- There is one kind of affiliate and one rate: ${AFFILIATE_PERCENT}%.`,
-    `- For each company you refer, you earn a one-time payout of ${AFFILIATE_PERCENT}% of one month's subscription for the plan that company picked. For a yearly plan it is ${AFFILIATE_PERCENT}% of one month's price.`,
+    "- There is one kind of affiliate and one rate for each plan.",
+    `- The company you refer gets ${REFERRED_DISCOUNT_PERCENT}% off. On a monthly plan, that is off each of its first ${AFFILIATE_MONTHS} full monthly payments. On a yearly plan, it is off the year's payment. A promo code and an affiliate code do not stack: the company gets whichever is bigger.`,
+    `- For each company you refer, you earn a one-time payout: ${AFFILIATE_MONTHLY_PERCENT}% of one month's subscription if the company pays monthly, or ${AFFILIATE_YEARLY_PERCENT}% of the yearly subscription if it pays yearly. Both are worked out on the plan's regular price, before the company's ${REFERRED_DISCOUNT_PERCENT}% off.`,
     `- It is earned only after the company has been billed on Jindjinni for ${AFFILIATE_MONTHS} months. On a monthly plan, that means its third full monthly payment has gone through. On a yearly plan, it has paid for the year and stayed ${AFFILIATE_MONTHS} months.`,
-    `- If the company cancels or is suspended before then, no payout is earned.`,
+    "- If the company cancels or is suspended before then, or its payment is reversed or charged back, no payout is earned. If a payout was already paid for a payment that is later reversed, we may take it off a future payout.",
     "- It is paid once for each company. It is not ongoing.",
-    "- The company you refer gets no discount from your code and pays the normal price.",
+    "- You cannot refer your own company.",
     "",
     "HOW YOU GET PAID",
     "- We pay by direct deposit only. No checks, no cards, no other methods.",

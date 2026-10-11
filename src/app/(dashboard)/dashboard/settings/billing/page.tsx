@@ -98,6 +98,7 @@ export default async function BillingPage() {
                 <ul className="list-disc pl-5" data-testid="charge-list">
                   {cal.charges.map((c) => (<li key={c.date}>{chargeLine(c)}</li>))}
                 </ul>
+                {priced.affiliateOff && <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-400" data-testid="affiliate-offer-line">You came through a friend&rsquo;s link: {priced.affiliateOff.text}. The amounts above are the regular prices.</p>}
                 {priced.promo && <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-400" data-testid="promo-line">Promo code {priced.promo.code}: {priced.promo.text}. It comes off your first payment after the free trial; the amounts above are the full prices.</p>}
                 <p className="text-xs">{cal.plan === "monthly" ? "The first charge covers the days left in that month after your free trial; after that the full month is charged on the 1st." : "The yearly price is charged once when the trial ends, then once a year on that date."}</p>
               </>

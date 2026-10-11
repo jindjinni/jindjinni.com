@@ -11,7 +11,7 @@ import { CANCEL_COMEBACK_TEXT, CANCEL_MONTHLY_TEXT, CANCEL_TRIAL_TEXT, CANCEL_YE
 import { Icon, LogoMark, Sparkle, type IconName } from "@/components/landing/icons";
 import { AffiliateProgramSection, AudienceSection, DirectSourcingSection, Eyebrow, SafetySection, SiteFooter, SiteHeader, btnPrimary, btnSecondary } from "@/components/landing/site-shell";
 import { affiliateExample } from "@/lib/affiliate-program";
-import { affiliateCut } from "@/lib/pricing-rules";
+import { affiliateExampleNumbers } from "@/lib/pricing-rules";
 import { AUDIENCES, BOTH, DISTRIBUTION, HOW_SECTION, WHOLESALE } from "@/lib/landing-content";
 import { HeroDashboard } from "@/components/landing/mocks";
 
@@ -336,7 +336,7 @@ export default async function Home() {
         </section>
 
         {/* ---------- Affiliate program ---------- */}
-        <AffiliateProgramSection id="affiliates" exampleText={affiliateExample(MONTHLY_CENTS, affiliateCut(MONTHLY_CENTS), usd)} />
+        <AffiliateProgramSection id="affiliates" exampleText={affiliateExample(affiliateExampleNumbers(book, 1), usd)} />
 
         {/* ---------- Final CTA ---------- */}
         <section className="px-4 pb-20 sm:px-6 sm:pb-28">

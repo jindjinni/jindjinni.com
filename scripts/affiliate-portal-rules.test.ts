@@ -61,7 +61,7 @@ assert.deepEqual(portalReferrals([]), []);
 const login = affiliateLoginEmail("https://jindjinni.com/affiliate/signin/abc");
 assert.ok(login.text.includes("https://jindjinni.com/affiliate/signin/abc") && login.html.includes("https://jindjinni.com/affiliate/signin/abc"));
 const d = affiliateDetailsEmail({ name: "Ann", code: "ANN10", link: "https://jindjinni.com/?ref=ANN10", portalUrl: "https://jindjinni.com/affiliate", termsUrl: "https://jindjinni.com/terms" });
-for (const need of [/ANN10/, /direct deposit/i, /50%/, /3 months/, /\/affiliate/, /\/terms/, /never send/i]) assert.ok(need.test(d.text), String(need));
+for (const need of [/ANN10/, /direct deposit/i, /40%/, /15%/, /10% off/, /do not stack/i, /3 months/, /\/affiliate/, /\/terms/, /never send/i]) assert.ok(need.test(d.text), String(need));
 assert.ok(!/<script/i.test(d.html));
 const xss = affiliateDetailsEmail({ name: "<img src=x onerror=1>", code: "A", link: null, portalUrl: "https://x/affiliate", termsUrl: "https://x/terms" });
 assert.ok(!xss.html.includes("<img src=x"), "name is escaped in html");

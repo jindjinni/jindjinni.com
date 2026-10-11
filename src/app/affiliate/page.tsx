@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { AFFILIATE_MONTHS, AFFILIATE_PERCENT } from "@/lib/affiliate-program";
+import { AFFILIATE_MONTHLY_PERCENT, AFFILIATE_MONTHS, AFFILIATE_YEARLY_PERCENT } from "@/lib/affiliate-program";
 import { usd } from "@/lib/billing-config";
 import { currentAffiliate, portalFor } from "@/lib/affiliate-portal";
 import { affiliateSignOut } from "@/app/actions/affiliate-portal";
@@ -43,7 +43,7 @@ export default async function AffiliatePortalPage() {
 
           <h2 className="mt-8 text-xl font-extrabold tracking-tight text-ink">Companies you referred</h2>
           <p className="mt-1 text-sm text-muted">
-            You earn a one-time {AFFILIATE_PERCENT}% of one month&rsquo;s subscription for each company, once it has been billed for {AFFILIATE_MONTHS} months. We pay by direct deposit. When your payout for a company has been paid, it leaves this list.
+            You earn a one-time payout for each company, once it has been billed for {AFFILIATE_MONTHS} months: {AFFILIATE_MONTHLY_PERCENT}% of one month if it pays monthly, or {AFFILIATE_YEARLY_PERCENT}% of the year if it pays yearly. We pay by direct deposit. When your payout for a company has been paid, it leaves this list.
           </p>
           {referrals.length === 0 ? (
             <p className="mt-4 rounded-2xl border border-dashed border-line p-5 text-sm font-semibold text-muted" data-testid="aff-none">Nobody on your list right now. Share your link or code, and companies appear here when they sign up.</p>

@@ -4,7 +4,8 @@ import { requireOrg } from "@/lib/tenant";
 import { staffLevelOf } from "@/lib/platform-admin";
 import { isFullLevel } from "@/lib/mothership-rules";
 import { usd } from "@/lib/billing-config";
-import { REFERRAL_LABEL } from "@/lib/pricing-rules";
+import { AFFILIATE_MONTHLY_PERCENT, AFFILIATE_YEARLY_PERCENT, REFERRED_DISCOUNT_PERCENT } from "@/lib/affiliate-program";
+import { CARD_FEE_FIXED_CENTS, CARD_FEE_PERCENT, REFERRAL_LABEL, affiliateWorstCase, monthlyPrice, referredDiscount, yearlyPrice } from "@/lib/pricing-rules";
 import { affiliateLink, currentBook, listAffiliates, listPromos, priceHistory, referralRows } from "@/lib/pricing-service";
 import { affiliateStatusAction, togglePromoAction } from "@/app/actions/pricing-admin";
 import { detailsEmailFor, detailsSentMap } from "@/lib/affiliate-portal";
@@ -24,6 +25,10 @@ export default async function PricingPage() {
   const pending = affiliates.filter((a) => a.status === "pending");
   const people = affiliates.filter((a) => a.status !== "pending");
   const owed = referrals.filter((r) => r.status === "owed");
+  const worst = (["monthly", "yearly"] as const).map((plan) => {
+    const price = plan === "yearly" ? yearlyPrice(book, 1) : monthlyPrice(book, 1);
+    return { plan, paid: price - referredDiscount(plan, price).perPaymentCents, r: affiliateWorstCase(plan, price) };
+  });
   const owedTotal = owed.reduce((n, r) => n + (r.cutCents ?? 0), 0);
 
   return (
@@ -89,7 +94,27 @@ export default async function PricingPage() {
           Affiliates <span className="ml-2 text-sm font-normal text-slate-500">{pending.length} waiting for approval · {owed.length} cut{owed.length === 1 ? "" : "s"} owed{owed.length ? ` (${usd(owedTotal)})` : ""}</span>
         </summary>
         <div className="flex flex-col gap-5 border-t border-slate-100 p-4 dark:border-slate-800">
-          <p className="text-sm text-slate-600 dark:text-slate-300">People apply on the public page <strong>/affiliates</strong>. There is one kind of affiliate: a one-time 50% of one month&rsquo;s subscription (whichever plan the company picked), earned once the company they brought in has been billed for 3 months. If the company cancels or is suspended before then, nothing is earned. The new company pays the normal price. Affiliates are paid by direct deposit only: arrange it with them privately (never by email or text), then mark it paid here. Once approved, an affiliate signs in at <strong>/affiliate</strong> with an emailed one-time link and sees the companies they referred and how long each has been active. A company drops off their list for good once their payout for it is marked paid. Use <strong>Send the details email</strong> to send a new affiliate the full terms and what to look out for.</p>
+          <p className="text-sm text-slate-600 dark:text-slate-300">People apply on the public page <strong>/affiliates</strong>. There is one kind of affiliate. A company that comes through their link or code gets <strong>{REFERRED_DISCOUNT_PERCENT}% off</strong> (monthly plan: off each of its first 3 full monthly payments; yearly plan: off the year). The affiliate earns a one-time <strong>{AFFILIATE_MONTHLY_PERCENT}% of one month</strong> if the company pays monthly, or <strong>{AFFILIATE_YEARLY_PERCENT}% of the year</strong> if it pays yearly, earned once the company has been billed for 3 months. If the company cancels, is suspended or has a payment reversed before then, nothing is earned. A promo code and an affiliate code never stack: the company gets the bigger one. Affiliates are paid by direct deposit only: arrange it with them privately (never by email or text), then mark it paid here. Once approved, an affiliate signs in at <strong>/affiliate</strong> with an emailed one-time link and sees the companies they referred and how long each has been active. A company drops off their list for good once their payout for it is marked paid. Use <strong>Send the details email</strong> to send a new affiliate the full terms and what to look out for.</p>
+
+          <div className="rounded-md border border-slate-200 p-3 text-sm dark:border-slate-700" data-testid="affiliate-safety">
+            <p className="font-medium text-slate-900 dark:text-slate-50">At today&rsquo;s prices (one operation), the worst case for us is still a gain</p>
+            <p className="mt-1 text-xs text-slate-500">The worst case is a company cancelling the moment its affiliate qualifies. A yearly company gets the unused part of the year refunded, so we have kept only 3 of 12 months; card fees ({CARD_FEE_PERCENT}% + {usd(CARD_FEE_FIXED_CENTS)}) are not refunded.</p>
+            <table className="mt-2 w-full text-left text-xs">
+              <thead className="text-slate-500"><tr><th className="py-1 font-medium">Plan</th><th className="py-1 font-medium">Company pays</th><th className="py-1 font-medium">We keep</th><th className="py-1 font-medium">Affiliate cut</th><th className="py-1 font-medium">Card fees</th><th className="py-1 font-medium">We are left with</th></tr></thead>
+              <tbody>
+                {worst.map((w) => (
+                  <tr key={w.plan} className="border-t border-slate-100 dark:border-slate-800" data-testid={`worst-${w.plan}`} data-ok={w.r.netCents > 0}>
+                    <td className="py-1 capitalize">{w.plan}</td>
+                    <td className="py-1">{usd(w.paid)}{w.plan === "monthly" ? " a month, 3 months" : ""}</td>
+                    <td className="py-1">{usd(w.r.keptCents)}</td>
+                    <td className="py-1">{usd(w.r.cutCents)}</td>
+                    <td className="py-1">{usd(w.r.feesCents)}</td>
+                    <td className={`py-1 font-medium ${w.r.netCents > 0 ? "text-emerald-700 dark:text-emerald-400" : "text-red-700 dark:text-red-400"}`}>{usd(w.r.netCents)}{w.r.netCents <= 0 ? " (a loss: lower the payout or raise the wait)" : ""}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
           <div>
             <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Waiting for approval</h3>
@@ -120,7 +145,7 @@ export default async function PricingPage() {
                     <tr className="border-t border-slate-100 align-top dark:border-slate-800" data-testid="affiliate-row" data-email={a.email}>
                       <td className="py-2">{a.name}<br /><span className="text-xs text-slate-500">{a.email}</span></td>
                       <td className="py-2">{a.code ? <><span className="font-mono font-semibold">{a.code}</span><br /><span className="break-all text-xs text-slate-500">{affiliateLink(a.code)}</span></> : "-"}</td>
-                      <td className="py-2 tabular-nums">{a.percent ? `${a.percent}%` : "-"}</td>
+                      <td className="py-2 text-xs">{a.status === "active" || a.status === "paused" ? `${AFFILIATE_MONTHLY_PERCENT}% of a month (monthly) or ${AFFILIATE_YEARLY_PERCENT}% of a year (yearly)` : "-"}</td>
                       <td className="py-2 capitalize">{a.status}</td>
                       <td className="py-2 text-right">
                         {a.status !== "declined" && (
@@ -151,7 +176,7 @@ export default async function PricingPage() {
                       <td className="py-2">{r.company}</td>
                       <td className="py-2">{r.affiliateName}<br /><span className="font-mono text-xs text-slate-500">{r.code}</span></td>
                       <td className="py-2" data-testid="referral-progress">{r.qualifiesOn === null ? "after approval" : `${r.monthsDone} of 3 months`}{r.qualifiesOn && <span className="block text-xs text-slate-500">earned from {r.qualifiesOn}</span>}</td>
-                      <td className="py-2" data-testid="referral-cut">{r.cutCents === null ? "-" : usd(r.cutCents)}<span className="block text-xs text-slate-500">50% of one month</span></td>
+                      <td className="py-2" data-testid="referral-cut">{r.cutCents === null ? "-" : usd(r.cutCents)}<span className="block text-xs text-slate-500">{r.paidAt ? "amount paid" : r.plan === "yearly" ? `${AFFILIATE_YEARLY_PERCENT}% of the year` : `${AFFILIATE_MONTHLY_PERCENT}% of one month`}</span></td>
                       <td className="py-2 font-sans">
                         <span data-testid="referral-status">{REFERRAL_LABEL[r.status]}</span>
                         {r.status === "owed" && <div className="mt-1"><PaidForm id={r.useId} /></div>}

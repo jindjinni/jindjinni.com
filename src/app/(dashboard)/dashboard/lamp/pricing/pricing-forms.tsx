@@ -131,7 +131,7 @@ export function ApproveForm({ id }: { id: string; name?: string }) {
   return (
     <form action={action} className="flex flex-wrap items-end gap-2" data-testid="approve-form">
       <input type="hidden" name="id" value={id} />
-      <p className="text-xs text-slate-500" data-testid="ap-rule">One kind of affiliate: 50% of one month, one time, after 3 months billed.</p>
+      <p className="text-xs text-slate-500" data-testid="ap-rule">One kind of affiliate: the company saves 10%; the affiliate earns 40% of a month (monthly plan) or 15% of the year (yearly plan), one time, after 3 months billed.</p>
       <button disabled={pending} className={btn} data-testid="ap-approve">Approve and email the code</button>
       <Notice s={state} id="ap" />
     </form>

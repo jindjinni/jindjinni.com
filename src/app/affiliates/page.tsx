@@ -4,12 +4,12 @@ import { AffiliateProgramSection, Eyebrow, SiteFooter, SiteHeader } from "@/comp
 import { affiliateExample } from "@/lib/affiliate-program";
 import { usd } from "@/lib/billing-config";
 import { currentBook } from "@/lib/pricing-service";
-import { affiliateCut, monthlyPrice } from "@/lib/pricing-rules";
+import { affiliateExampleNumbers } from "@/lib/pricing-rules";
 import { AffiliateForm } from "./affiliate-form";
 
 export const metadata: Metadata = {
   title: "Become an affiliate | jindjinni",
-  description: "Refer a company to jindjinni and earn a one-time payout of 50% of one month's subscription once they have been billed for 3 months.",
+  description: "Refer a company to jindjinni. They save 10%, and you earn a one-time payout once they have been billed for 3 months.",
 };
 
 // The example comes from the price book the Lamp sets, never from this file.
@@ -17,12 +17,11 @@ export const revalidate = 60;
 
 export default async function AffiliatesPage() {
   const book = await currentBook();
-  const monthly = monthlyPrice(book, 1);
   return (
     <div className="min-h-full overflow-x-clip bg-white text-ink" data-testid="affiliate-page">
       <SiteHeader />
       <main>
-        <AffiliateProgramSection asPage exampleText={affiliateExample(monthly, affiliateCut(monthly), usd)} />
+        <AffiliateProgramSection asPage exampleText={affiliateExample(affiliateExampleNumbers(book, 1), usd)} />
         <section id="apply" className="scroll-mt-20 bg-slate-50 py-16 sm:py-24">
           <div className="mx-auto max-w-2xl px-4 sm:px-6">
             <Eyebrow>Apply</Eyebrow>

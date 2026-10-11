@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { AUDIENCES, BANNED_WORDS, BOTH, BOTH_POINTS, DIRECT_SOURCING, DISTRIBUTION, OPERATIONS, SAFETY_CHECKS, SAFETY_LIMITS, WHOLESALE } from "../src/lib/landing-content";
 import { DEPARTMENT_MENUS } from "../src/lib/sidebar-menu";
-import { AFFILIATE_MONTHS, AFFILIATE_PERCENT, AFFILIATE_PROGRAM, affiliateExample } from "../src/lib/affiliate-program";
+import { AFFILIATE_MONTHLY_PERCENT, AFFILIATE_MONTHS, AFFILIATE_PROGRAM, AFFILIATE_YEARLY_PERCENT, REFERRED_DISCOUNT_PERCENT, affiliateExample } from "../src/lib/affiliate-program";
 import { OPERATION_OPTIONS, readSignupChoice, signupHref } from "../src/lib/operation-type";
 
 const all = (): string[] => {
@@ -80,17 +80,22 @@ assert.deepEqual(readSignupChoice("BOTH", null), { operationType: "BOTH", plan: 
 assert.deepEqual(readSignupChoice("nonsense", "weekly"), { operationType: null, plan: null });
 assert.deepEqual(readSignupChoice(["x"], 5), { operationType: null, plan: null });
 
-// the affiliate program: one kind, 50%, one time, after 3 months billed; no price typed into the words
-assert.equal(AFFILIATE_PERCENT, 50);
+// the affiliate program: one kind; the company saves 10%; the affiliate earns 40% of a month (monthly) or 15% of the year (yearly), one time, after 3 months billed; no price typed into the words
+assert.equal(REFERRED_DISCOUNT_PERCENT, 10);
+assert.equal(AFFILIATE_MONTHLY_PERCENT, 40);
+assert.equal(AFFILIATE_YEARLY_PERCENT, 15);
 assert.equal(AFFILIATE_MONTHS, 3);
 const aff = [AFFILIATE_PROGRAM.title, AFFILIATE_PROGRAM.summary, ...AFFILIATE_PROGRAM.facts.flatMap((f) => [f.value, f.label]), ...AFFILIATE_PROGRAM.steps.flatMap((s) => [s.title, s.body]), ...AFFILIATE_PROGRAM.rules].join(" ");
-assert.ok(/50%/.test(aff) && /one-time|one time/i.test(aff) && /3 months/.test(aff), "50%, one time, 3 months");
+assert.ok(/10%/.test(aff) && /40%/.test(aff) && /15%/.test(aff) && /one-time|one time/i.test(aff) && /3 months/.test(aff), "10%, 40%, 15%, one time, 3 months");
+assert.ok(!/50%|no discount/i.test(aff), "the old 50% / no-discount wording is gone");
+assert.ok(/do not stack/i.test(aff) && /own company/i.test(aff) && /reversed/i.test(aff), "no stacking, no self-referral, reversals");
 assert.ok(/one kind of affiliate/i.test(aff) && /not (a )?(ongoing|continuing)/i.test(aff));
 assert.ok(!/\$\s?\d/.test(aff), "no price in the affiliate words");
 for (const w of BANNED_WORDS) assert.ok(!aff.toLowerCase().includes(w), `affiliate banned word: ${w}`);
 assert.equal(AFFILIATE_PROGRAM.steps.length, 4);
 assert.ok(/direct deposit/i.test(aff), "paid by direct deposit");
 assert.ok(/portal/i.test(aff), "the portal is mentioned");
-assert.ok(/\$488\.50/.test(affiliateExample(97700, 48850, (c) => `$${(c / 100).toFixed(2)}`)), "the example is worked out from the numbers it is given");
+const exText = affiliateExample({ monthlyCents: 97700, yearlyCents: 1049900, monthlyCutCents: 39080, yearlyCutCents: 157485, monthlyOffCents: 9770, yearlyOffCents: 104990 }, (c) => `$${(c / 100).toFixed(2)}`);
+assert.ok(/\$390\.80/.test(exText) && /\$1574\.85/.test(exText) && /\$97\.70/.test(exText) && /\$1049\.90/.test(exText), "the example is worked out from the numbers it is given");
 
 console.log("landing-content: ok");

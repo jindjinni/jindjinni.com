@@ -5,15 +5,16 @@
 //  - The owner can change the prices at any time. A company keeps the price book it signed up at (it is "locked" on the company);
 //    a new price only applies to new sign-ups.
 //  - A promo code takes money off the FIRST payment after the free trial, and nothing after that.
-//  - There is ONE kind of affiliate. They earn a one-time 50% of one month's subscription price for each company they brought in,
-//    once that company has been billed for 3 months (see affiliate-program.ts). The new company gets no discount from an affiliate code.
+//  - There is ONE kind of affiliate. A company that comes through their link or code gets 10% off (monthly plan: off each of its first 3
+//    payments; yearly plan: off the year). The affiliate earns a one-time 40% of one month (monthly plan) or 15% of the year (yearly
+//    plan) once that company has been billed for 3 months (see affiliate-program.ts). A promo and an affiliate code never stack.
 // Money is whole cents (integers), never floating point.
 
 /** The cookie an affiliate link (/r/CODE) leaves, so the sign-up page remembers who sent the visitor. */
 export const REF_COOKIE = "jj_ref";
 
 import { parseOperationType, type OperationType } from "@/lib/operation-type";
-import { AFFILIATE_MONTHS, AFFILIATE_PERCENT } from "@/lib/affiliate-program";
+import { AFFILIATE_MONTHLY_PERCENT, AFFILIATE_MONTHS, AFFILIATE_YEARLY_PERCENT, REFERRED_DISCOUNT_PERCENT } from "@/lib/affiliate-program";
 import { addMonths, chargeSchedule } from "@/lib/billing-schedule";
 
 export type PlanKind = "monthly" | "yearly";
@@ -179,10 +180,69 @@ export function validatePromo(i: PromoInput): { ok: true; promo: Omit<Promo, "us
 
 // ---- affiliates ----------------------------------------------------------------------------------------------------
 
-/** The affiliate's one-time cut: 50% of ONE month's subscription price (the company's own locked price), whichever plan it picked. */
-export function affiliateCut(monthlyCents: number, percent: number = AFFILIATE_PERCENT): number {
-  if (monthlyCents <= 0 || percent <= 0) return 0;
-  return Math.round((monthlyCents * Math.min(percent, 100)) / 100);
+/**
+ * The affiliate's one-time cut, from the company's own plan and locked price: 40% of ONE month's price on a monthly plan, 15% of the
+ * YEAR's price on a yearly plan. `priceCents` is that plan's regular price (before the company's 10% off).
+ */
+export function affiliateCut(plan: PlanKind, priceCents: number): number {
+  if (priceCents <= 0) return 0;
+  const percent = plan === "yearly" ? AFFILIATE_YEARLY_PERCENT : AFFILIATE_MONTHLY_PERCENT;
+  return Math.round((priceCents * percent) / 100);
+}
+
+/**
+ * What a company referred by an affiliate saves: 10% off the plan's regular price. `payments` is how many payments carry it: the
+ * first 3 monthly payments, or the one yearly payment. `totalCents` is the whole saving.
+ */
+export function referredDiscount(plan: PlanKind, priceCents: number): { perPaymentCents: number; payments: number; totalCents: number } {
+  const perPaymentCents = priceCents > 0 ? Math.round((priceCents * REFERRED_DISCOUNT_PERCENT) / 100) : 0;
+  const payments = plan === "yearly" ? 1 : AFFILIATE_MONTHS;
+  return { perPaymentCents, payments, totalCents: perPaymentCents * payments };
+}
+
+/**
+ * A promo code and an affiliate code never stack: the company gets whichever saves it more. `promoFirstPaymentOffCents` is what the
+ * promo takes off the first payment. Returns which one applies and how much it saves in total.
+ */
+export function bestOffer(plan: PlanKind, priceCents: number, promoFirstPaymentOffCents: number | null, hasAffiliate: boolean): { source: "none" | "promo" | "affiliate"; totalCents: number } {
+  const promo = promoFirstPaymentOffCents && promoFirstPaymentOffCents > 0 ? promoFirstPaymentOffCents : 0;
+  const aff = hasAffiliate ? referredDiscount(plan, priceCents).totalCents : 0;
+  if (aff > 0 && aff >= promo) return { source: "affiliate", totalCents: aff };
+  if (promo > 0) return { source: "promo", totalCents: promo };
+  return { source: "none", totalCents: 0 };
+}
+
+/** The numbers for the public worked example, from a price book (never typed on a page). */
+export function affiliateExampleNumbers(book: PriceBook, ops: OperationCount = 1) {
+  const monthlyCents = monthlyPrice(book, ops);
+  const yearlyCents = yearlyPrice(book, ops);
+  return {
+    monthlyCents,
+    yearlyCents,
+    monthlyCutCents: affiliateCut("monthly", monthlyCents),
+    yearlyCutCents: affiliateCut("yearly", yearlyCents),
+    monthlyOffCents: referredDiscount("monthly", monthlyCents).perPaymentCents,
+    yearlyOffCents: referredDiscount("yearly", yearlyCents).perPaymentCents,
+  };
+}
+
+/** The card fee we assume when checking that a payout is safe: 2.9% plus 30 cents per payment (not returned when a payment is refunded). */
+export const CARD_FEE_PERCENT = 2.9;
+export const CARD_FEE_FIXED_CENTS = 30;
+
+/**
+ * The worst case for us on one referral, in cents: the company cancels the moment its affiliate qualifies. Monthly plan: we have
+ * received 3 payments (each 10% off), no refund; yearly plan: the company paid the year at 10% off and gets the unused 9 of 12 months
+ * refunded, so we keep only 3/12. Result = what we keep, minus the affiliate's cut, minus card fees. It should stay above zero.
+ */
+export function affiliateWorstCase(plan: PlanKind, priceCents: number): { keptCents: number; cutCents: number; feesCents: number; netCents: number } {
+  const off = referredDiscount(plan, priceCents);
+  const paid = priceCents - off.perPaymentCents;
+  const fee = (amount: number) => Math.round((amount * CARD_FEE_PERCENT) / 100) + CARD_FEE_FIXED_CENTS;
+  const keptCents = plan === "yearly" ? Math.round((paid * AFFILIATE_MONTHS) / 12) : paid * AFFILIATE_MONTHS;
+  const feesCents = plan === "yearly" ? fee(paid) : fee(paid) * AFFILIATE_MONTHS;
+  const cutCents = affiliateCut(plan, priceCents);
+  return { keptCents, cutCents, feesCents, netCents: keptCents - cutCents - feesCents };
 }
 
 export const validPercent = (v: unknown): number | null => {
