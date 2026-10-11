@@ -1,7 +1,7 @@
 // How a company operates in the medical-supply trade. Asked once at sign-up (required) and changeable later by the owner or an
 // admin in Settings -> Company profile. Every company gets Quotations and Purchase Orders in both Purchasing and Sales; the
 // answer sets which comes first:
-//   Wholesaler  -> buys from individuals and sells on to distributors: quotations (and often a free shipping label) first.
+//   Wholesaler  -> sources directly from sellers and sells on to distributors: quotations (and often a free shipping label) first.
 //   Distributor -> buys from wholesalers and sells to pharmacies and other established retailers: purchase orders first.
 //   Both        -> both, quotations first.
 // A company that existed before this question was added has no answer saved (null). We never guess for it: it keeps
@@ -26,10 +26,10 @@ export const OPERATION_OPTIONS: OperationOption[] = [
   {
     value: "WHOLESALER",
     label: "Wholesale",
-    description: "You buy supplies, such as unused test strips, pumps and sensors, directly from individuals, and sell what you collect on to distribution companies.",
+    description: "You source supplies directly from sellers, such as unused test strips, pumps and sensors, with no middleman, and sell what you collect on to distribution companies.",
     details: [
-      "You send each person a quotation priced from your own list, and can include a free prepaid shipping label.",
-      "Every package is opened, photographed and checked for recalls and counterfeits before you pay the person.",
+      "You send each seller a quotation priced from your own list, and can include a free prepaid shipping label.",
+      "Every package is opened, photographed and checked for recalls and counterfeits before you pay the seller.",
       "You then sell on to distributors with sales orders and invoices, from the stock you actually hold.",
     ],
     learnHref: "/wholesale",
@@ -50,7 +50,7 @@ export const OPERATION_OPTIONS: OperationOption[] = [
   {
     value: "BOTH",
     label: "Both (we do both)",
-    description: "You buy from individuals and from wholesalers, and sell on to distributors and to pharmacies. Each side runs as its own workspace under one sign-in.",
+    description: "You source directly from sellers and also buy from wholesalers, and sell on to distributors and to pharmacies. Each side runs as its own workspace under one sign-in.",
     details: [
       "Wholesale and Distribution keep their own customers, suppliers, products, orders, stock and payments, so nothing gets mixed up.",
       "They can be one company or two LLCs: a different LLC gives its own business details and is approved on its own.",

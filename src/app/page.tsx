@@ -8,7 +8,7 @@ export const revalidate = 60;
 import { TRIAL_DAYS } from "@/lib/billing-schedule";
 import { CANCEL_COMEBACK_TEXT, CANCEL_MONTHLY_TEXT, CANCEL_TRIAL_TEXT, CANCEL_YEARLY_TEXT } from "@/lib/cancellation-copy";
 import { Icon, LogoMark, Sparkle, type IconName } from "@/components/landing/icons";
-import { AudienceSection, CheckList, Eyebrow, SafetySection, SiteFooter, SiteHeader, btnPrimary, btnSecondary } from "@/components/landing/site-shell";
+import { AudienceSection, CheckList, DirectSourcingSection, Eyebrow, SafetySection, SiteFooter, SiteHeader, btnPrimary, btnSecondary } from "@/components/landing/site-shell";
 import { AUDIENCES, BOTH, DISTRIBUTION, HOW_SECTION, WHOLESALE } from "@/lib/landing-content";
 import {
   ChatMock,
@@ -237,6 +237,8 @@ export default async function Home() {
             </div>
           </div>
         </section>
+
+        <DirectSourcingSection id="direct-sourcing" />
 
         <AudienceSection items={AUDIENCES} />
 
@@ -495,7 +497,7 @@ export default async function Home() {
             </div>
             <div className="mt-10 grid gap-4 md:grid-cols-3" data-testid="home-operations">
               {[
-                { key: "wholesale", title: "Wholesale", body: "Buy supplies from individuals with quotations and free shipping labels, check each package, and sell on to distributors.", ops: 1 as const },
+                { key: "wholesale", title: "Wholesale", body: "Source supplies directly from sellers with quotations and free shipping labels, check each package, and sell on to distributors.", ops: 1 as const },
                 { key: "distribution", title: "Distribution", body: "Buy from wholesalers with purchase orders, and sell to pharmacies and other retail outlets.", ops: 1 as const },
                 { key: "both", title: "Both", body: "Run Wholesale and Distribution under one sign-in, each completely separate. Staff can be assigned to one or the other.", ops: 2 as const },
               ].map((o) => (

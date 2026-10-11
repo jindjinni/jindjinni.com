@@ -113,7 +113,7 @@ export function OperationsPanel({ kind, otherId, info, canEdit, flow, showAll, c
           <h3 className="text-base font-bold text-slate-900 dark:text-slate-50">Which tabs show in the menus</h3>
           <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
             {kind === "wholesale"
-              ? "A Wholesale operation buys from individuals, so Purchasing shows Quotations and Customers, and leaves out Purchase Orders and Suppliers."
+              ? "A Wholesale operation sources directly from sellers, so Purchasing shows Quotations and Customers, and leaves out Purchase Orders and Suppliers."
               : "A Distribution operation buys from wholesalers with purchase orders, so Purchasing shows Purchase Orders and Suppliers, and leaves out Quotations, Customers and the quotation setup tabs."}{" "}
             Nothing is deleted, and the pages still open if you have a link to one.
           </p>
@@ -202,7 +202,7 @@ export function OperationsPanel({ kind, otherId, info, canEdit, flow, showAll, c
           Each operation is its own workspace with every department inside it. When you sign in with two operations, you choose which one to open, or look at the overall status of both. You can switch from the menu at the top at any time.
         </p>
         <ul className="mt-3 space-y-2 text-sm text-slate-800 dark:text-slate-200">
-          <li><strong>Wholesale:</strong> you send an individual a quotation (with a free label if you offer one), Receiving checks the package, Accounts pays, it goes into Inventory, and you sell it on to distributors.</li>
+          <li><strong>Wholesale:</strong> you send a seller a quotation (with a free label if you offer one), Receiving checks the package, Accounts pays, it goes into Inventory, and you sell it on to distributors.</li>
           <li><strong>Distribution:</strong> a wholesaler sends you an invoice, you send back a purchase order (no quotation needed), Receiving checks it, Accounts pays, it goes into Inventory, and you sell to pharmacies and other retail outlets.</li>
           <li><strong>Shared by the company:</strong> your legal business details, your plan and bill, and who can sign in. Everything else is kept apart.</li>
         </ul>

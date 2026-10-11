@@ -1,7 +1,7 @@
 # Purchasing department — foundation
 
 Status snapshot as of 2026-10-04. This is the department where the business
-buys product back from individual customers (diabetic test strips, sensors,
+sources product directly from sellers (diabetic test strips, sensors,
 etc.), the same basic shape as the existing Buyback module but modeled on a
 separate Airtable base ("USA Test Strips Center / Plantarz Medical
 Exchange — Purchasing") and kept as its own set of tables/routes rather than

@@ -27,7 +27,7 @@ assert.ok(validateSides({ wholesale: true, distribution: false }).ok && validate
 // ---- switching off is blocked only by that side's own open work
 assert.equal(turnOffBlocker("wholesale", { openQuotations: 0, openPurchaseOrders: 5 }), null);
 assert.equal(turnOffBlocker("distribution", { openQuotations: 5, openPurchaseOrders: 0 }), null);
-assert.match(turnOffBlocker("wholesale", { openQuotations: 1, openPurchaseOrders: 0 })!, /1 open quotation for individuals/);
+assert.match(turnOffBlocker("wholesale", { openQuotations: 1, openPurchaseOrders: 0 })!, /1 open quotation for sellers/);
 assert.match(turnOffBlocker("wholesale", { openQuotations: 3, openPurchaseOrders: 0 })!, /3 open quotations/);
 assert.match(turnOffBlocker("distribution", { openQuotations: 0, openPurchaseOrders: 2 })!, /2 purchase orders waiting on a supplier/);
 // ---- labels and the guide text

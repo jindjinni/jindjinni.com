@@ -40,7 +40,7 @@ const wholesaleDepts: DeptBlock[] = [
   {
     dept: "Purchasing",
     icon: "purchasing",
-    line: "Buy supplies from individuals with automatic quotations and a free shipping label.",
+    line: "Source supplies directly from sellers with automatic quotations and a free shipping label.",
     points: [
       "Quotations priced from your own product list, with condition, expiration, product multiplier and bonus-tier rules applied for you",
       "A free prepaid shipping label on a quotation, bought from your own shipping account",
@@ -63,7 +63,7 @@ const wholesaleDepts: DeptBlock[] = [
   {
     dept: "Accounts",
     icon: "accounts",
-    line: "Pay individuals for what you accepted, and collect from distributors.",
+    line: "Pay sellers for what you accepted, and collect from distributors.",
     points: [
       "To Be Paid and Paid Orders: only what is ready, due or overdue, with payment records kept organized",
       "To Be Collected: what your distributors owe you, with payments recorded against invoices",
@@ -210,22 +210,36 @@ export const WHOLESALE: OperationContent = {
   slug: "wholesale",
   name: "Wholesale",
   label: "Wholesale",
-  tagline: "Buy from individuals. Check every package. Sell on to distributors.",
+  tagline: "Source directly. Check every package. Sell on to distributors.",
   intro:
-    "For companies that buy supplies from individuals, such as unused test strips, pumps and sensors, and sell them on to distributors. Everything from the first quotation to the last payment lives in one record.",
-  forWhom: "You quote individuals, receive their packages and sell what you collect to distributors.",
+    "For companies that source supplies directly from sellers, such as unused test strips, pumps and sensors, and sell them on to distributors. Everything from the first quotation to the last payment lives in one record.",
+  forWhom: "You quote sellers, receive their packages and sell what you collect to distributors.",
   day: [
-    "An individual wants to sell supplies: you send a quotation, with a free shipping label if you offer one.",
+    "A seller offers supplies: you send a quotation, with a free shipping label if you offer one.",
     "The package arrives. Receiving checks it and records what was really inside.",
-    "If something differs, you send a corrected (adjustment) quotation. Then Accounts pays the individual.",
+    "If something differs, you send a corrected (adjustment) quotation. Then Accounts pays the seller.",
     "You sell on to distributors: they send you a purchase order, you send them an invoice.",
   ],
   depts: wholesaleDepts,
   cardPoints: [
-    "Automatic quotations with a free shipping label",
+    "Direct sourcing from sellers, with automatic quotations and a free shipping label",
     "Every package checked against its quotation, with recall and counterfeit holds",
-    "Pay individuals once an order is accepted",
+    "Pay sellers once an order is accepted",
     "Sell on to distributors from stock you actually hold",
+  ],
+};
+
+/** The Wholesale sourcing model, told once and shown on the home page, /wholesale and /both. Describes only what the software does today. */
+export const DIRECT_SOURCING = {
+  eyebrow: "Direct sourcing",
+  title: "Source supplies directly from sellers, then sell on to distributors.",
+  body:
+    "Direct sourcing means you deal with the seller yourself, with no middleman in between. A seller offers supplies, you quote a price from your own list, the package comes to you, and your team checks it before anything is paid.",
+  steps: [
+    { title: "Quote the seller", body: "A quotation priced from your own product list, with condition, expiration and bonus rules applied for you, and a free prepaid shipping label if you offer one." },
+    { title: "Check every package", body: "Receiving opens it against the quotation, photographs it and runs recall and counterfeit checks, so a person can hold anything that looks wrong." },
+    { title: "Pay the seller", body: "Accounts pays only what you accepted, and keeps the payment records organized." },
+    { title: "Sell on to distributors", body: "What you collect goes into your own stock, and you sell it on with sales orders and invoices." },
   ],
 };
 
@@ -258,7 +272,7 @@ export const BOTH: OperationContent = {
   label: "Both",
   tagline: "Run Wholesale and Distribution under one sign-in, each completely separate.",
   intro:
-    "Some companies buy from individuals and also distribute to pharmacies. Run both in one place: each side has its own customers, suppliers, products, orders, stock and payments, and your people switch between them with a click.",
+    "Some companies source directly from sellers and also distribute to pharmacies. Run both in one place: each side has its own customers, suppliers, products, orders, stock and payments, and your people switch between them with a click.",
   forWhom: "You do both, whether as one company or as two separate LLCs.",
   day: [
     "Pick the side you are working in. Each side only shows the tabs that fit how it works.",
@@ -322,8 +336,8 @@ export const AUDIENCES: Audience[] = [
   },
   {
     icon: "receiving",
-    title: "Wholesalers who buy from individuals",
-    body: "Packages from people you don't know are where problems start. Every one is opened against its quotation, photographed and checked before you pay.",
+    title: "Wholesalers who source directly",
+    body: "Packages from sellers you have never met are where problems start. Every one is opened against its quotation, photographed and checked before you pay the seller.",
   },
   {
     icon: "distribution",

@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { BrandLogo, Icon, type IconName } from "@/components/landing/icons";
 import type { Audience, Check } from "@/lib/landing-content";
-import { SAFETY_CHECKS, SAFETY_LIMITS } from "@/lib/landing-content";
+import { DIRECT_SOURCING, SAFETY_CHECKS, SAFETY_LIMITS } from "@/lib/landing-content";
 
 export const btnPrimary =
   "inline-flex items-center justify-center gap-2 rounded-full bg-brand px-7 py-3.5 text-base font-bold text-ink shadow-[0_10px_30px_-10px_rgba(31,209,107,0.8)] transition hover:bg-brand-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink";
@@ -106,6 +106,29 @@ function IconCard({ icon, title, body }: { icon: IconName; title: string; body: 
 }
 
 /** "Who benefits from jindjinni": the kinds of company it is built for. */
+/** The Wholesale sourcing model, in four steps. Shown on the home page and on the Wholesale and Both pages. */
+export function DirectSourcingSection({ id, white }: { id?: string; white?: boolean }) {
+  return (
+    <section id={id} className={`scroll-mt-20 py-16 sm:py-24 ${white ? "bg-white" : "bg-slate-50"}`} data-testid="direct-sourcing">
+      <div className="mx-auto max-w-6xl px-4 sm:px-6">
+        <Eyebrow>{DIRECT_SOURCING.eyebrow}</Eyebrow>
+        <h2 className="mt-3 max-w-3xl text-balance text-3xl font-extrabold tracking-tight sm:text-5xl">{DIRECT_SOURCING.title}</h2>
+        <p className="mt-4 max-w-3xl text-lg text-muted">{DIRECT_SOURCING.body}</p>
+        {/* A real sequence: order matters, so it is numbered. */}
+        <ol className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {DIRECT_SOURCING.steps.map((st, i) => (
+            <li key={st.title} className="rounded-3xl border border-line bg-white p-5">
+              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand text-sm font-extrabold text-ink">{i + 1}</span>
+              <h3 className="mt-3 text-lg font-extrabold tracking-tight">{st.title}</h3>
+              <p className="mt-2 text-[15px] leading-relaxed text-muted">{st.body}</p>
+            </li>
+          ))}
+        </ol>
+      </div>
+    </section>
+  );
+}
+
 export function AudienceSection({ items }: { items: Audience[] }) {
   return (
     <section id="who" className="scroll-mt-20 bg-slate-50 py-20 sm:py-28" data-testid="who-section">

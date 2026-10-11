@@ -1,6 +1,6 @@
 // The two operation sides of a company, and what each one means. Pure: no database, no clock, easy to test.
 //
-//   Wholesale side    -> buys from individuals (quotation, free shipping label), sells to distributors.
+//   Wholesale side    -> sources directly from sellers (quotation, free shipping label), sells to distributors.
 //   Distribution side -> buys from wholesalers (purchase orders to suppliers), sells to pharmacies and other retail outlets.
 //
 // A company runs one side, or both (both cost more than one; see lib/pricing-rules.ts). At least one
@@ -84,7 +84,7 @@ export type OpenWork = { openQuotations: number; openPurchaseOrders: number };
 export function turnOffBlocker(side: Side, work: OpenWork): string | null {
   if (side === "wholesale" && work.openQuotations > 0) {
     const n = work.openQuotations;
-    return `You still have ${n} open quotation${n === 1 ? "" : "s"} for individuals (quoted or confirmed). Finish or cancel ${n === 1 ? "it" : "them"} first, then switch this side off.`;
+    return `You still have ${n} open quotation${n === 1 ? "" : "s"} for sellers (quoted or confirmed). Finish or cancel ${n === 1 ? "it" : "them"} first, then switch this side off.`;
   }
   if (side === "distribution" && work.openPurchaseOrders > 0) {
     const n = work.openPurchaseOrders;
@@ -107,14 +107,14 @@ export const SIDE_INFO: Record<Side, SideInfo> = {
   wholesale: {
     side: "wholesale",
     title: "Wholesale",
-    tagline: "Buy supplies from individuals and sell them on to distributors.",
-    buysFrom: "Individuals, one package at a time",
+    tagline: "Source supplies directly from sellers and sell them on to distributors.",
+    buysFrom: "Sellers directly, one package at a time",
     sellsTo: "Distributors",
     turnsOn: [
-      "Quotations to individuals, with an optional free shipping label",
-      "Customers (the individuals), conditions, expiry ranges and price rules",
+      "Quotations to sellers, with an optional free shipping label",
+      "Customers (your sellers), conditions, expiry ranges and price rules",
       "Package intake, checking and price adjustments in Receiving",
-      "Paying individuals in Accounts, and payment emails in Customer Service",
+      "Paying sellers in Accounts, and payment emails in Customer Service",
     ],
     firstSteps: [
       { id: "shippo", text: "Connect your own Shippo account so you can send free labels", href: "/dashboard/purchasing/connectors" },

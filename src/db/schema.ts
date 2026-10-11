@@ -2615,7 +2615,7 @@ export const shippingContacts = sqliteTable(
     organizationId: text("organization_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
-    /** BUYER (a pharmacy or wholesale buyer), SELLER (an individual who sells to us), SUPPLIER (a wholesaler we buy from), OTHER. */
+    /** BUYER (a pharmacy or wholesale buyer), SELLER (a seller who sources to us directly), SUPPLIER (a wholesaler we buy from), OTHER. */
     kind: text("kind", { enum: ["BUYER", "SELLER", "SUPPLIER", "OTHER"] }).notNull().default("BUYER"),
     name: text("name").notNull(),
     company: text("company"),

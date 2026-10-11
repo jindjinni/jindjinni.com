@@ -1,6 +1,6 @@
 // Which tabs each operation shows. Pure: no database, no clock, easy to test.
 //
-// A Wholesale operation buys from individuals (quotation, free shipping label, package checking) and sells to distributors.
+// A Wholesale operation sources directly from sellers (quotation, free shipping label, package checking) and sells to distributors.
 // A Distribution operation buys from wholesalers (the wholesaler sends an invoice, the distributor sends back a purchase order)
 // and sells to pharmacies and other retail outlets. So each operation hides the tabs that belong only to the other one's way of
 // working. Hiding is only the menu: every page still opens by its address and no record is ever removed. An owner or admin can
@@ -17,7 +17,7 @@ export const WHOLESALE_HIDDEN: Hidden = {
   purchasing: ["purchase-orders", "suppliers"],
 };
 
-/** Tab ids a Distribution operation does not need: quoting individuals and everything that prices a package from an individual. */
+/** Tab ids a Distribution operation does not need: quoting sellers and everything that prices a package from a seller. */
 export const DISTRIBUTION_HIDDEN: Hidden = {
   purchasing: ["quotations", "customers", "conditions", "month-range", "product-multipliers", "bonus-tiers", "quotation-profile", "receipt-layout"],
   receiving: ["adjustments"],
@@ -60,16 +60,16 @@ export function hidesTabs(sides: Sides): boolean {
 export function purchasingBlurb(sides: Sides): string {
   const side = singleSide(sides);
   if (side === "distribution") return "Send purchase orders to your suppliers, keep the product list, and follow each order until it arrives.";
-  if (side === "wholesale") return "Quote individuals, manage the product catalog, and track quotations through to the shared Overall Orders record.";
+  if (side === "wholesale") return "Quote sellers, manage the product catalog, and track quotations through to the shared Overall Orders record.";
   return "Quote customers, manage the product catalog, and track quotations through to the shared Overall Orders record.";
 }
 
 /** The step-by-step day of each operation, in plain words (shown in Settings → Operations and told to Jin). */
 export const SIDE_FLOW: Record<"wholesale" | "distribution", string[]> = {
   wholesale: [
-    "An individual wants to sell supplies: you send a quotation, with a free shipping label if you offer one.",
+    "A seller offers supplies: you send a quotation, with a free shipping label if you offer one.",
     "The package arrives. Receiving checks it and records what was really inside.",
-    "If something differs, you send a corrected (adjustment) quotation. Then Accounts pays the individual.",
+    "If something differs, you send a corrected (adjustment) quotation. Then Accounts pays the seller.",
     "You sell on to distributors: they send you a purchase order, you send them an invoice.",
   ],
   distribution: [

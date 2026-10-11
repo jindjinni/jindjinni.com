@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Icon } from "@/components/landing/icons";
-import { SafetySection, SiteFooter, SiteHeader, Eyebrow, btnPrimary, btnSecondary } from "@/components/landing/site-shell";
+import { DirectSourcingSection, SafetySection, SiteFooter, SiteHeader, Eyebrow, btnPrimary, btnSecondary } from "@/components/landing/site-shell";
 import { BOTH_POINTS, DISTRIBUTION, WHOLESALE, type DeptBlock, type OperationContent, type OperationSlug } from "@/lib/landing-content";
 
 const SWITCH: { slug: OperationSlug; label: string }[] = [
@@ -183,6 +183,7 @@ export function OperationPage({ content, priceNote }: { content: OperationConten
           </div>
         </section>
 
+        {c.slug !== "distribution" && <DirectSourcingSection white />}
         <Day c={c} />
         {c.slug === "both" ? <Together /> : <SingleSide c={c} />}
         <SafetySection />

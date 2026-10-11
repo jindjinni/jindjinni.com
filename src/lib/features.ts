@@ -39,7 +39,7 @@ export const FEATURES: FeatureDef[] = [
   {
     key: "operations",
     label: "Wholesale and Distribution sides",
-    blurb: "Separate operations: a company can run Wholesale (buying from individuals) and Distribution (buying from wholesalers, selling to pharmacies) as two separate workspaces under one sign-in, free. Settings -> Operations, the sign-in picker, the top-bar switcher and Overall status come with it.",
+    blurb: "Separate operations: a company can run Wholesale (sourcing directly from sellers) and Distribution (buying from wholesalers, selling to pharmacies) as two separate workspaces under one sign-in, free. Settings -> Operations, the sign-in picker, the top-bar switcher and Overall status come with it.",
     defaultStage: "mothership",
   },
   {
