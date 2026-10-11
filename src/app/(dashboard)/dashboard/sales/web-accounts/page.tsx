@@ -34,6 +34,7 @@ function Row({ b, canWrite }: { b: BuyerRow; canWrite: boolean }) {
     <details className="rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900" data-testid="wa-row" data-email={b.email} data-status={b.status}>
       <summary className="flex cursor-pointer flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-sm">
         <span className="font-medium text-slate-900 dark:text-slate-50">{b.businessName}</span>
+        {b.source === "API" && <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300" data-testid="wa-via-api">From your website</span>}
         <span className="text-slate-500">{b.contactName}</span>
         <span className="text-xs text-slate-400">NPI {b.npi}</span>
         <span className="ml-auto text-xs text-slate-400">{when(b.createdAt)}</span>

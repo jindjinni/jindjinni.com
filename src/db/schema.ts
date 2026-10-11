@@ -3948,6 +3948,8 @@ export const storefronts = sqliteTable(
     sellOpen: integer("sell_open", { mode: "boolean" }).notNull().default(false),
     /** Distribution: pharmacies can apply for an account and sign in. Null = not open (nullable on purpose, drizzle-kit rule). */
     buyOpen: integer("buy_open", { mode: "boolean" }),
+    /** Website addresses (one per line, like https://www.example.com) a browser form using the PUBLIC key may call from. Null = none. */
+    allowedOrigins: text("allowed_origins"),
     hiddenAt: text("hidden_at"),
     ...timestamps,
   },
@@ -3980,6 +3982,10 @@ export const websiteRequests = sqliteTable(
     zip: text("zip").notNull(),
     itemsText: text("items_text").notNull(),
     notes: text("notes"),
+    /** Where it came from: null = the storefront page, "API" = the company's own website through its connection. */
+    source: text("source"),
+    /** The seller says the products are a donation (no payment expected). Null = not stated. */
+    isDonation: integer("is_donation", { mode: "boolean" }),
     quotationId: text("quotation_id"),
     handledByUserId: text("handled_by_user_id"),
     handledAt: text("handled_at"),
@@ -4019,6 +4025,8 @@ export const storefrontBuyers = sqliteTable(
     licenseNumber: text("license_number").notNull(),
     licenseState: text("license_state").notNull(),
     notes: text("notes"),
+    /** null = the storefront page, "API" = the company's own website through its connection. */
+    source: text("source"),
     salesBuyerId: text("sales_buyer_id"),
     decidedByUserId: text("decided_by_user_id"),
     decidedAt: text("decided_at"),
@@ -4045,4 +4053,30 @@ export const storefrontBuyerLogins = sqliteTable(
     ...timestamps,
   },
   (t) => [uniqueIndex("storefront_buyer_logins_token_unique").on(t.tokenHash), index("storefront_buyer_logins_buyer_idx").on(t.buyerId)],
+);
+
+/**
+ * Keys a company's own website uses to talk to its storefront (Settings -> Storefront -> Connect your website). Only a hash of the key is
+ * kept (the key itself is shown once, when it is made). "secret" keys are for the website's server; "public" keys sit in browser forms
+ * and only work from the website addresses the company lists. Turned off (revoked), never deleted.
+ */
+export const storefrontApiKeys = sqliteTable(
+  "storefront_api_keys",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    storefrontId: text("storefront_id").notNull(),
+    kind: text("kind", { enum: ["secret", "public"] }).notNull(),
+    label: text("label").notNull(),
+    keyHash: text("key_hash").notNull(),
+    /** The first characters and last 4 of the key, for telling keys apart in the list. */
+    hint: text("hint").notNull(),
+    createdByUserId: text("created_by_user_id"),
+    lastUsedAt: text("last_used_at"),
+    revokedAt: text("revoked_at"),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex("storefront_api_keys_hash_unique").on(t.keyHash), index("storefront_api_keys_org_idx").on(t.organizationId)],
 );

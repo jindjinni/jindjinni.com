@@ -26,10 +26,10 @@ export type PublicStorefront = {
   buyOpen: boolean;
 };
 
-/** The storefront at this public address, or null for anything that should look like "no such page". */
-export async function findPublicStorefront(rawHandle: string): Promise<PublicStorefront | null> {
-  const handle = normalizeHandle(rawHandle);
-  if (!handle || handle !== rawHandle) return null; // only the exact, clean handle opens a page
+type Where = ReturnType<typeof eq>;
+
+/** Finds a storefront by a condition and applies every "is this door open" rule. Anything not open looks like "no such page". */
+async function loadPublic(where: Where): Promise<PublicStorefront | null> {
   const [row] = await db
     .select({
       id: storefronts.id,
@@ -45,7 +45,7 @@ export async function findPublicStorefront(rawHandle: string): Promise<PublicSto
     })
     .from(storefronts)
     .innerJoin(organizations, eq(storefronts.organizationId, organizations.id))
-    .where(and(eq(storefronts.handle, handle), isNull(storefronts.hiddenAt)))
+    .where(and(where, isNull(storefronts.hiddenAt)))
     .limit(1);
   if (!row || row.closedAt) return null;
   if (row.parent) {
@@ -59,6 +59,19 @@ export async function findPublicStorefront(rawHandle: string): Promise<PublicSto
   return { storefrontId: row.id, organizationId: row.organizationId, handle: row.handle, displayName: row.displayName, welcomeText: row.welcomeText, sellOpen: row.sellOpen, buyOpen: !!row.buyOpen };
 }
 
+/** The storefront at this public address, or null for anything that should look like "no such page". */
+export async function findPublicStorefront(rawHandle: string): Promise<PublicStorefront | null> {
+  const handle = normalizeHandle(rawHandle);
+  if (!handle || handle !== rawHandle) return null; // only the exact, clean handle opens a page
+  return loadPublic(eq(storefronts.handle, handle));
+}
+
+/** The storefront a connection key belongs to (the company's own website talking to it). The same open-door rules apply. */
+export async function findPublicStorefrontById(storefrontId: string, organizationId: string): Promise<PublicStorefront | null> {
+  const sf = await loadPublic(and(eq(storefronts.id, storefrontId), eq(storefronts.organizationId, organizationId)) as Where);
+  return sf && sf.organizationId === organizationId ? sf : null;
+}
+
 export type SubmitResult = { ok: true; reference: string } | { ok: false; error: string };
 
 /**
@@ -66,7 +79,7 @@ export type SubmitResult = { ok: true; reference: string } | { ok: false; error:
  * A flood is turned away (a daily limit per storefront), and sending the very same request twice within a day returns the first
  * reference instead of a second record.
  */
-export async function submitSellRequest(sf: PublicStorefront, request: SellRequest): Promise<SubmitResult> {
+export async function submitSellRequest(sf: PublicStorefront, request: SellRequest, opts: { source?: string | null; isDonation?: boolean } = {}): Promise<SubmitResult> {
   if (!sf.sellOpen) return { ok: false, error: "This company is not taking offers through its website right now." };
   const dayAgo = new Date(Date.now() - 24 * 3600 * 1000).toISOString().slice(0, 19).replace("T", " ");
 
@@ -104,6 +117,8 @@ export async function submitSellRequest(sf: PublicStorefront, request: SellReque
         zip: request.zip,
         itemsText: request.itemsText,
         notes: request.notes,
+        source: opts.source ?? null,
+        isDonation: opts.isDonation ? true : null,
       });
       return { ok: true, reference };
     } catch (err) {

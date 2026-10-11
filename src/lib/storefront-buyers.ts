@@ -30,7 +30,7 @@ export type ApplyResult = { ok: true } | { ok: false; error: string };
  * does not make a second record and says nothing about the earlier one (the visitor sees the same "received" answer), so this can't be
  * used to find out who has an account. A flood is turned away by a daily cap.
  */
-export async function submitApplication(sf: PublicStorefront, app: Application): Promise<ApplyResult> {
+export async function submitApplication(sf: PublicStorefront, app: Application, opts: { source?: string | null } = {}): Promise<ApplyResult> {
   if (!sf.buyOpen) return { ok: false, error: "This company is not taking applications right now." };
   const dayAgo = new Date(Date.now() - 24 * 3600 * 1000).toISOString().slice(0, 19).replace("T", " ");
   const [count] = await db.select({ n: sql<number>`count(*)` }).from(storefrontBuyers).where(and(eq(storefrontBuyers.storefrontId, sf.storefrontId), gt(storefrontBuyers.createdAt, dayAgo)));
@@ -38,7 +38,7 @@ export async function submitApplication(sf: PublicStorefront, app: Application):
   const [same] = await db.select({ id: storefrontBuyers.id }).from(storefrontBuyers).where(and(eq(storefrontBuyers.storefrontId, sf.storefrontId), eq(storefrontBuyers.email, app.email))).limit(1);
   if (same) return { ok: true };
   try {
-    await db.insert(storefrontBuyers).values({ id: newId("sfbuy"), organizationId: sf.organizationId, storefrontId: sf.storefrontId, status: "PENDING", ...app });
+    await db.insert(storefrontBuyers).values({ id: newId("sfbuy"), organizationId: sf.organizationId, storefrontId: sf.storefrontId, status: "PENDING", source: opts.source ?? null, ...app });
   } catch (err) {
     if (!String(err).toLowerCase().includes("unique")) throw err;
   }

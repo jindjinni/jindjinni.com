@@ -23,6 +23,8 @@ function Row({ r, canWrite }: { r: RequestRow; canWrite: boolean }) {
       <summary className="flex cursor-pointer flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-sm">
         <span className="font-mono text-xs font-semibold text-slate-500">{r.reference}</span>
         <span className="font-medium text-slate-900 dark:text-slate-50">{r.businessName}</span>
+        {r.isDonation && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-100" data-testid="wr-donation">Donation</span>}
+        {r.source === "API" && <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300" data-testid="wr-via-api">From your website</span>}
         <span className="text-slate-500">{r.contactName}</span>
         <span className="ml-auto text-xs text-slate-400">{when(r.createdAt)}</span>
         {r.hiddenAt && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">Hidden</span>}

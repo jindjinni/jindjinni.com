@@ -9,6 +9,8 @@ import { cleanStorefrontSettings } from "@/lib/storefront-rules";
 import { canWriteSales } from "@/lib/permissions";
 import { decideBuyer, setBuyerHidden } from "@/lib/storefront-buyers";
 import { getStorefront } from "@/lib/storefront-service";
+import { createApiKey, revokeApiKey, saveAllowedOrigins } from "@/lib/storefront-api";
+import { KEY_KINDS, type KeyKind } from "@/lib/storefront-api-rules";
 import type { BuyerDecision } from "@/lib/storefront-buyer-rules";
 import { makeQuotationFromRequest, moveRequest, saveStorefront, setRequestHidden } from "@/lib/storefront-service";
 
@@ -91,4 +93,48 @@ export async function hideBuyerAction(id: string, hidden: boolean): Promise<void
   const org = await requireAccountHandler();
   await setBuyerHidden(org.organizationId, org.userId, id, hidden);
   revalidatePath("/dashboard/sales/web-accounts");
+}
+
+// ---- Connect your website (keys and allowed website addresses). Owners and admins only. ----------------------------------------------
+
+async function requireConnectAdmin(): Promise<{ org: CurrentOrg } | { error: string }> {
+  const org = await requireOrg();
+  if (org.viewAs) return { error: "Viewing a company is read-only." };
+  if (!isAdmin(org.role)) return { error: "Only an owner or admin can change the website connection." };
+  if (!(await featureOn("storefronts", org.organizationId))) return { error: "Storefronts are not switched on for this company yet." };
+  return { org };
+}
+
+export type KeyState = { error?: string; key?: string; kind?: string; label?: string } | undefined;
+
+/** Makes a key. The key is shown once, in the answer, and is never kept. */
+export async function makeKeyAction(_prev: KeyState, formData: FormData): Promise<KeyState> {
+  const g = await requireConnectAdmin();
+  if ("error" in g) return { error: g.error };
+  const kind = String(formData.get("kind") ?? "");
+  if (!(KEY_KINDS as readonly string[]).includes(kind)) return { error: "Choose which kind of key to make." };
+  const sf = await getStorefront(g.org.organizationId);
+  if (!sf) return { error: "Set up your storefront first (name and web address), then make a key." };
+  const made = await createApiKey(g.org.organizationId, g.org.userId, sf.id, kind as KeyKind, formData.get("label"));
+  if (!made.ok) return { error: made.error };
+  revalidatePath("/dashboard/settings/storefront");
+  return { key: made.key, kind, label: String(formData.get("label") ?? "").trim() };
+}
+
+export async function revokeKeyAction(id: string): Promise<void> {
+  const g = await requireConnectAdmin();
+  if ("error" in g) return;
+  await revokeApiKey(g.org.organizationId, g.org.userId, id);
+  revalidatePath("/dashboard/settings/storefront");
+}
+
+export type OriginsState = { error?: string; saved?: boolean; origins?: string } | undefined;
+
+export async function saveOriginsAction(_prev: OriginsState, formData: FormData): Promise<OriginsState> {
+  const g = await requireConnectAdmin();
+  if ("error" in g) return { error: g.error };
+  const r = await saveAllowedOrigins(g.org.organizationId, g.org.userId, formData.get("origins"));
+  if (!r.ok) return { error: r.error };
+  revalidatePath("/dashboard/settings/storefront");
+  return { saved: true, origins: r.origins.join("\n") };
 }
