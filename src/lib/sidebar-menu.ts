@@ -120,6 +120,7 @@ export const DEPARTMENT_MENUS: Record<MenuDept, DepartmentMenu> = {
       { id: "sales-orders", href: `${S}/sales-orders`, label: "Sales Orders", icon: "📦" },
       { id: "invoices", href: `${S}/invoices`, label: "Invoices", icon: "💵" },
       { id: "buyers", href: `${S}/buyers`, label: "Buyers", icon: "👥" },
+      { id: "web-accounts", href: `${S}/web-accounts`, label: "Web accounts", icon: "🌐" },
       { id: "price-comparison", href: `${S}/price-comparison`, label: "Price Comparison", icon: "⚖️" },
       { id: "quickbooks", href: `${S}/quickbooks`, label: "QuickBooks", icon: "📒" },
       { id: "mail", href: `${S}/mail`, label: "Mail", icon: "✉️" },

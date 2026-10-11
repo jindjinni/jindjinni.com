@@ -12,6 +12,7 @@ import { operationsOf } from "@/lib/operations-service";
 import { wordsFor } from "@/lib/operations-rules";
 import { withMailTab } from "@/lib/mail-access";
 import { mailBadges } from "@/lib/mailbox-service";
+import { featureOn } from "@/lib/features";
 
 // Sales is its own department, built like Inventory: a colored sidebar down the left and a workspace beside it.
 // Quotations, invoices, buyers and prices are for the Purchasing roles (the accountant only looks); the company profile
@@ -19,14 +20,14 @@ import { mailBadges } from "@/lib/mailbox-service";
 export default async function SalesLayout({ children }: { children: React.ReactNode }) {
   const org = await requireOrg();
   if (!canViewSales(org.role, org.access)) notFound();
-  const everyday = ["quotations", "purchase-orders", "sales-orders", "invoices", "buyers", "price-comparison", "quickbooks", "mail"];
+  const everyday = ["quotations", "purchase-orders", "sales-orders", "invoices", "buyers", "web-accounts", "price-comparison", "quickbooks", "mail"];
   const allowed = menuIdsFor("sales", { connectors: isAdmin(org.role), base: canManageSalesSettings(org.role) ? undefined : everyday });
   // Purchase orders and the document templates come with the "purchase-orders" rollout feature; a Distributor sees Purchase Orders first.
-  const [poOn, soOn, qbOn, operation, sides] = await Promise.all([purchaseOrdersEnabled(org.organizationId), salesOrdersOn(org.organizationId), quickbooksOn(org.organizationId), operationTypeOf(org.organizationId), operationsOf(org.organizationId)]);
+  const [poOn, soOn, qbOn, operation, sides, sfOn] = await Promise.all([purchaseOrdersEnabled(org.organizationId), salesOrdersOn(org.organizationId), quickbooksOn(org.organizationId), operationTypeOf(org.organizationId), operationsOf(org.organizationId), featureOn("storefronts", org.organizationId)]);
   const menu = resolveMenu(
     "sales",
     await getSavedSidebarMenus(org.organizationId),
-    await withMailTab((poOn ? allowed : allowed.filter((id) => id !== "purchase-orders" && id !== "templates")).filter((id) => soOn || id !== "sales-orders").filter((id) => qbOn || id !== "quickbooks"), org.organizationId),
+    await withMailTab((poOn ? allowed : allowed.filter((id) => id !== "purchase-orders" && id !== "templates")).filter((id) => soOn || id !== "sales-orders").filter((id) => qbOn || id !== "quickbooks").filter((id) => sfOn || id !== "web-accounts"), org.organizationId),
     { purchaseOrdersFirst: primaryDocument(operation) === "PURCHASE_ORDER", defaultLabels: { buyers: wordsFor(sides).buyers } },
   );
 

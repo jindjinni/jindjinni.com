@@ -3,7 +3,7 @@
 import { useActionState, useState } from "react";
 import { saveStorefrontAction } from "@/app/actions/storefront";
 
-type Initial = { handle: string; displayName: string; welcomeText: string; sellOpen: boolean; hidden: boolean };
+type Initial = { handle: string; displayName: string; welcomeText: string; sellOpen: boolean; buyOpen: boolean; hidden: boolean };
 
 export function StorefrontForm({ initial, base, suggestion }: { initial: Initial; base: string; suggestion: string }) {
   const [state, action, pending] = useActionState(saveStorefrontAction, undefined);
@@ -24,6 +24,10 @@ export function StorefrontForm({ initial, base, suggestion }: { initial: Initial
       <label className="flex items-start gap-2 text-sm text-slate-800 dark:text-slate-100">
         <input type="checkbox" name="sellOpen" defaultChecked={initial.sellOpen} className="mt-1" data-testid="sfs-sell" />
         <span><span className="font-medium">Open the &ldquo;Sell to us&rdquo; page.</span><br /><span className="text-slate-500">Sellers can send you a list of what they have. It lands in Purchasing &rarr; Website requests.</span></span>
+      </label>
+      <label className="flex items-start gap-2 text-sm text-slate-800 dark:text-slate-100">
+        <input type="checkbox" name="buyOpen" defaultChecked={initial.buyOpen} className="mt-1" data-testid="sfs-buy" />
+        <span><span className="font-medium">Let pharmacies apply for an account.</span><br /><span className="text-slate-500">A pharmacy sends its license details; your team approves it in Sales &rarr; Web accounts. Only approved pharmacies can sign in.</span></span>
       </label>
       <label className="flex items-start gap-2 text-sm text-slate-800 dark:text-slate-100">
         <input type="checkbox" name="hidden" defaultChecked={initial.hidden} className="mt-1" data-testid="sfs-hidden" />

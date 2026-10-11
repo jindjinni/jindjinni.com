@@ -58,15 +58,24 @@ export function EditAuditForm({ auditId, v, pharmacies, products }: { auditId: s
   const [state, action, pending] = useActionState(updateAuditAction.bind(null, auditId), undefined);
   const [scope, setScope] = useState(v.productScope);
   const pbm = v.type === "PBM";
+  const [buyerId, setBuyerId] = useState(v.buyerId);
+  const [ncpdp, setNcpdp] = useState(pharmacies.find((p) => p.id === v.buyerId)?.ncpdp ?? "");
   return (
     <form action={action} className="space-y-3" data-testid="edit-form">
       <input type="hidden" name="type" value={v.type} />
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="sm:col-span-2">
           <label htmlFor="e-buyer" className={label}>Pharmacy</label>
-          <select id="e-buyer" name="buyerId" defaultValue={v.buyerId} className={`${field} mt-1`}>
-            {pharmacies.map((p) => <option key={p.id} value={p.id}>{p.name}{p.ncpdp ? ` · NCPDP ${p.ncpdp}` : ""}</option>)}
+          <select id="e-buyer" name="buyerId" value={buyerId} onChange={(e) => { setBuyerId(e.target.value); setNcpdp(pharmacies.find((p) => p.id === e.target.value)?.ncpdp ?? ""); }} className={`${field} mt-1`}>
+            {pharmacies.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
+          {pbm && (
+            <div className="mt-2">
+              <label htmlFor="e-ncpdp" className={label}>Pharmacy NCPDP number (7 digits)</label>
+              <input id="e-ncpdp" name="ncpdp" value={ncpdp} onChange={(e) => setNcpdp(e.target.value)} inputMode="numeric" maxLength={10} required className={`${field} mt-1 max-w-xs`} data-testid="edit-ncpdp" />
+              <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">A PBM audit needs it. It is saved on the pharmacy.</p>
+            </div>
+          )}
         </div>
         <div><label htmlFor="e-start" className={label}>Start date</label><input id="e-start" name="startDate" type="date" defaultValue={v.startDate} className={`${field} mt-1`} data-testid="e-start" /></div>
         <div><label htmlFor="e-end" className={label}>End date</label><input id="e-end" name="endDate" type="date" defaultValue={v.endDate} className={`${field} mt-1`} data-testid="e-end" /></div>

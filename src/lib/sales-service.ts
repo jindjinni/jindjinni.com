@@ -153,7 +153,7 @@ export type BuyerInput = {
   taxInfo?: string | null;
   taxExempt?: boolean;
   defaultNotes?: string | null;
-  /** The pharmacy's NCPDP number (7 digits) and NPI (10 digits); only set from screens in a Distribution operation. */
+  /** The pharmacy's NPI (10 digits) and NCPDP number (7 digits). The NCPDP is never asked for on the buyer screens: a PBM audit asks for it and saves it here. */
   ncpdp?: string | null;
   npi?: string | null;
   active?: boolean;

@@ -28,12 +28,14 @@ export function NewAuditForm({ type, pharmacies, today, auditors = [] }: { type:
   const [state, action, pending] = useActionState(createAuditAction, undefined);
   const [find, setFind] = useState("");
   const [buyerId, setBuyerId] = useState("");
+  // Only a PBM audit asks for the NCPDP number; it is filled in from the pharmacy when we already have it, and saved on the pharmacy once typed.
+  const [ncpdp, setNcpdp] = useState("");
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
   const [device, setDevice] = useState("");
   const shown = useMemo(() => {
     const t = find.trim().toLowerCase();
-    return t ? pharmacies.filter((p) => p.name.toLowerCase().includes(t) || (p.ncpdp ?? "").includes(t)) : pharmacies;
+    return t ? pharmacies.filter((p) => p.name.toLowerCase().includes(t)) : pharmacies;
   }, [find, pharmacies]);
   const chosen = pharmacies.find((p) => p.id === buyerId) ?? null;
   const pbm = type === "PBM";
@@ -43,7 +45,7 @@ export function NewAuditForm({ type, pharmacies, today, auditors = [] }: { type:
   if (pharmacies.length === 0) {
     return (
       <p className={card} data-testid="no-pharmacies">
-        There are no pharmacies yet. Add the pharmacy in <Link href="/dashboard/sales/buyers" className="text-emerald-800 underline dark:text-emerald-300">Sales → Buyers</Link> first (with its NCPDP number), then come back.
+        There are no pharmacies yet. Add the pharmacy in <Link href="/dashboard/sales/buyers" className="text-emerald-800 underline dark:text-emerald-300">Sales → Buyers</Link> first , then come back.
       </p>
     );
   }
@@ -55,25 +57,24 @@ export function NewAuditForm({ type, pharmacies, today, auditors = [] }: { type:
       <section className={`${card} space-y-3`}>
         <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">1. Pharmacy</h2>
         <div>
-          <label htmlFor="pharmacy-find" className={label}>Find by name or NCPDP</label>
+          <label htmlFor="pharmacy-find" className={label}>Find by name</label>
           <input id="pharmacy-find" value={find} onChange={(e) => setFind(e.target.value)} className={`${field} mt-1`} placeholder="Type to narrow the list" data-testid="pharmacy-find" />
         </div>
         <div>
           <label htmlFor="buyerId" className={label}>Pharmacy</label>
-          <select id="buyerId" name="buyerId" value={buyerId} onChange={(e) => setBuyerId(e.target.value)} className={`${field} mt-1`} data-testid="pharmacy-select" required>
+          <select id="buyerId" name="buyerId" value={buyerId} onChange={(e) => { setBuyerId(e.target.value); setNcpdp(pharmacies.find((x) => x.id === e.target.value)?.ncpdp ?? ""); }} className={`${field} mt-1`} data-testid="pharmacy-select" required>
             <option value="">Choose the pharmacy…</option>
-            {shown.map((p) => <option key={p.id} value={p.id}>{p.name}{p.ncpdp ? ` · NCPDP ${p.ncpdp}` : ""}</option>)}
+            {shown.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         </div>
-        {chosen && (
-          <p className="text-sm text-slate-700 dark:text-slate-300" data-testid="pharmacy-info">
-            {chosen.ncpdp ? <>NCPDP <strong data-testid="pharmacy-ncpdp">{chosen.ncpdp}</strong> is filled in from the pharmacy&apos;s record.</> : (
-              <span className={pbm ? "font-medium text-red-700 dark:text-red-300" : ""} data-testid="pharmacy-no-ncpdp">
-                This pharmacy has no NCPDP number yet.{pbm ? " A PBM audit needs it. " : " "}
-                <Link href={`/dashboard/sales/buyers/${chosen.id}`} className="underline">Add it to the pharmacy</Link>.
-              </span>
-            )}
-          </p>
+        {chosen && pbm && (
+          <div data-testid="pharmacy-info">
+            <label htmlFor="ncpdp" className={label}>Pharmacy NCPDP number (7 digits)</label>
+            <input id="ncpdp" name="ncpdp" value={ncpdp} onChange={(e) => setNcpdp(e.target.value)} inputMode="numeric" maxLength={10} required className={`${field} mt-1 max-w-xs`} placeholder="For example 5746826" data-testid="audit-ncpdp" />
+            <p className="mt-1 text-xs text-slate-600 dark:text-slate-400" data-testid="pharmacy-ncpdp-note">
+              {chosen.ncpdp ? "Filled in from the pharmacy's record." : "A PBM audit needs it. It is saved on the pharmacy, so you only type it once."}
+            </p>
+          </div>
         )}
       </section>
 

@@ -157,6 +157,8 @@ export type AuditInputForm = {
   referenceNumber: string;
   requestReceivedOn: string;
   dueOn: string;
+  /** A PBM audit asks for the pharmacy's NCPDP number (7 digits). It is saved on the pharmacy so it is asked only once. Ignored for other kinds. */
+  ncpdp?: string;
 };
 
 const looksLikeEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
@@ -192,9 +194,26 @@ function productKeysOf(a: AuditRow): string[] | null {
   }
 }
 
-export async function createAudit(a: Actor, input: AuditInputForm): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
-  const buyer = await buyerOf(a.organizationId, input.buyerId);
+/**
+ * A PBM audit is the only place an NCPDP number is asked for. When one is typed it must be 7 digits, and it is saved on the pharmacy's own
+ * record (Sales buyer) so the next audit already has it. Returns the pharmacy as it is after that, or a plain-words problem.
+ */
+async function withAuditNcpdp(a: Actor, type: AuditType, buyerId: string, typed: string | undefined): Promise<{ ok: true; buyer: NonNullable<Awaited<ReturnType<typeof buyerOf>>> } | { ok: false; error: string }> {
+  const buyer = await buyerOf(a.organizationId, buyerId);
   if (!buyer) return { ok: false, error: "Choose the pharmacy." };
+  if (type !== "PBM") return { ok: true, buyer };
+  const digits = String(typed ?? "").replace(/\D/g, "");
+  if (!digits) return buyer.ncpdp ? { ok: true, buyer } : { ok: false, error: "A PBM audit needs the pharmacy's NCPDP number. Enter it below." };
+  if (digits.length !== 7) return { ok: false, error: "An NCPDP number has 7 digits." };
+  if (digits === buyer.ncpdp) return { ok: true, buyer };
+  await db.update(salesBuyers).set({ ncpdp: digits, updatedAt: new Date().toISOString() }).where(and(eq(salesBuyers.organizationId, a.organizationId), eq(salesBuyers.id, buyer.id)));
+  return { ok: true, buyer: { ...buyer, ncpdp: digits } };
+}
+
+export async function createAudit(a: Actor, input: AuditInputForm): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  const withN = await withAuditNcpdp(a, input.type, input.buyerId, input.ncpdp);
+  if (!withN.ok) return withN;
+  const buyer = withN.buyer;
   if (input.auditorEmail && !looksLikeEmail(clean(input.auditorEmail, 160))) return { ok: false, error: "That auditor email doesn't look right." };
   const v = formValues(input);
   const year = Number(billingDateOf().slice(0, 4));
@@ -253,8 +272,9 @@ export async function updateAudit(a: Actor, id: string, input: AuditInputForm): 
   if (!cur) return { ok: false, error: "That audit wasn't found." };
   if (isClosed(cur.status)) return { ok: false, error: "This audit is closed. Reopen it to change it." };
   if (input.auditorEmail && !looksLikeEmail(clean(input.auditorEmail, 160))) return { ok: false, error: "That auditor email doesn't look right." };
-  const buyer = await buyerOf(a.organizationId, input.buyerId);
-  if (!buyer) return { ok: false, error: "Choose the pharmacy." };
+  const withN = await withAuditNcpdp(a, cur.auditType as AuditType, input.buyerId, input.ncpdp);
+  if (!withN.ok) return withN;
+  const buyer = withN.buyer;
   const v = formValues({ ...input, type: cur.auditType as AuditType });
   const next: Record<string, unknown> = {
     ...v,

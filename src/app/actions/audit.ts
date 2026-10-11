@@ -44,6 +44,7 @@ function formFrom(fd: FormData, type: AuditType): AuditInputForm {
     referenceNumber: str(fd, "referenceNumber"),
     requestReceivedOn: str(fd, "requestReceivedOn"),
     dueOn: str(fd, "dueOn"),
+    ncpdp: str(fd, "ncpdp"),
   };
 }
 

@@ -17,7 +17,7 @@ export type BuyerFormValues = {
   taxInfo: string;
   taxExempt: boolean;
   defaultNotes: string;
-  /** The pharmacy's NCPDP provider number and NPI (the Audit Center needs the NCPDP). */
+  /** The pharmacy's NPI, and an NCPDP number if one was saved when a PBM audit was made. The NCPDP is never asked for on this form (only a PBM audit needs it, and it is asked for there); it is carried along unchanged so saving never wipes it. */
   ncpdp: string;
   npi: string;
   active: boolean;
@@ -73,7 +73,6 @@ export function BuyerForm({ id, initial, readOnly, pharmacyFields }: { id: strin
         {f("Billing address", "billingAddress", { testid: "by-billing", multi: true })}
         {f("Shipping address (blank = same as billing)", "shippingAddress", { testid: "by-shipping", multi: true })}
         {f("Tax information (resale certificate or ID)", "taxInfo", { testid: "by-tax" })}
-        {pharmacyFields && f("NCPDP number (7 digits, for pharmacies)", "ncpdp", { testid: "by-ncpdp", placeholder: "For example 5746826" })}
         {pharmacyFields && f("NPI (10 digits, optional)", "npi", { testid: "by-npi" })}
         <label htmlFor="by-exempt" className="flex items-center gap-2 self-end pb-2 text-sm text-slate-800 dark:text-slate-100">
           <input id="by-exempt" type="checkbox" checked={v.taxExempt} disabled={readOnly} onChange={(e) => set("taxExempt", e.target.checked)} data-testid="by-exempt" /> Tax exempt

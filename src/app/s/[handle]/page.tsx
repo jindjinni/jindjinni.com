@@ -22,7 +22,18 @@ export default async function StorefrontHome({ params }: { params: Promise<{ han
             <h2 className="text-xl font-extrabold text-ink">Sell to us</h2>
             <p className="mt-1 text-sm text-muted">Have supplies to sell? Tell us what you have and we will send you a quotation.</p>
           </Link>
-        ) : (
+        ) : null}
+        {sf.buyOpen && (
+          <div className="rounded-2xl border border-line p-6" data-testid="sf-buy-card">
+            <h2 className="text-xl font-extrabold text-ink">Pharmacies</h2>
+            <p className="mt-1 text-sm text-muted">Licensed pharmacies can apply for an account with {sf.displayName}.</p>
+            <div className="mt-4 flex flex-wrap gap-3">
+              <Link href={`/s/${sf.handle}/apply`} className="rounded-full bg-brand px-5 py-2.5 text-sm font-bold text-ink hover:bg-brand-hover" data-testid="sf-apply-link">Apply for an account</Link>
+              <Link href={`/s/${sf.handle}/account`} className="rounded-full border border-line px-5 py-2.5 text-sm font-bold text-ink hover:border-ink" data-testid="sf-account-link">Sign in</Link>
+            </div>
+          </div>
+        )}
+        {!sf.sellOpen && !sf.buyOpen && (
           <p className="rounded-2xl border border-line p-6 text-sm text-muted" data-testid="sf-nothing">Nothing is open on this page right now. Please check back soon.</p>
         )}
       </div>

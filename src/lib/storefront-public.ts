@@ -23,6 +23,7 @@ export type PublicStorefront = {
   displayName: string;
   welcomeText: string | null;
   sellOpen: boolean;
+  buyOpen: boolean;
 };
 
 /** The storefront at this public address, or null for anything that should look like "no such page". */
@@ -37,6 +38,7 @@ export async function findPublicStorefront(rawHandle: string): Promise<PublicSto
       displayName: storefronts.displayName,
       welcomeText: storefronts.welcomeText,
       sellOpen: storefronts.sellOpen,
+      buyOpen: storefronts.buyOpen,
       parent: organizations.parentOrganizationId,
       closedAt: organizations.closedAt,
       approval: organizations.approvalStatus,
@@ -54,7 +56,7 @@ export async function findPublicStorefront(rawHandle: string): Promise<PublicSto
     return null;
   }
   if (!(await featureOn("storefronts", row.organizationId))) return null;
-  return { storefrontId: row.id, organizationId: row.organizationId, handle: row.handle, displayName: row.displayName, welcomeText: row.welcomeText, sellOpen: row.sellOpen };
+  return { storefrontId: row.id, organizationId: row.organizationId, handle: row.handle, displayName: row.displayName, welcomeText: row.welcomeText, sellOpen: row.sellOpen, buyOpen: !!row.buyOpen };
 }
 
 export type SubmitResult = { ok: true; reference: string } | { ok: false; error: string };

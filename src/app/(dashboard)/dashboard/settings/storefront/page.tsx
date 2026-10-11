@@ -20,7 +20,7 @@ export default async function StorefrontSettingsPage() {
         Your company&rsquo;s public page. Share the address with sellers or link to it from your own website. What visitors send comes into your records for your team to review; nothing is bought, sold or paid automatically.
       </p>
       <StorefrontForm
-        initial={{ handle: sf?.handle ?? "", displayName: sf?.displayName ?? org.organizationName, welcomeText: sf?.welcomeText ?? "", sellOpen: sf?.sellOpen ?? false, hidden: !!sf?.hiddenAt }}
+        initial={{ handle: sf?.handle ?? "", displayName: sf?.displayName ?? org.organizationName, welcomeText: sf?.welcomeText ?? "", sellOpen: sf?.sellOpen ?? false, buyOpen: !!sf?.buyOpen, hidden: !!sf?.hiddenAt }}
         base={base}
         suggestion={normalizeHandle(org.organizationName)}
       />

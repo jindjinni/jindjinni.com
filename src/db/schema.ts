@@ -3946,6 +3946,8 @@ export const storefronts = sqliteTable(
     welcomeText: text("welcome_text"),
     /** Wholesale: the "sell to us" page is open to visitors. */
     sellOpen: integer("sell_open", { mode: "boolean" }).notNull().default(false),
+    /** Distribution: pharmacies can apply for an account and sign in. Null = not open (nullable on purpose, drizzle-kit rule). */
+    buyOpen: integer("buy_open", { mode: "boolean" }),
     hiddenAt: text("hidden_at"),
     ...timestamps,
   },
@@ -3988,4 +3990,59 @@ export const websiteRequests = sqliteTable(
     index("website_requests_org_idx").on(t.organizationId, t.createdAt),
     uniqueIndex("website_requests_reference_unique").on(t.organizationId, t.reference),
   ],
+);
+
+/**
+ * A pharmacy's account on a company's storefront. It starts as an application (PENDING) with the identifiers staff check; only an
+ * APPROVED account can sign in. Approving also puts the pharmacy in the company's Sales buyers (salesBuyerId). Hidden, never deleted.
+ */
+export const storefrontBuyers = sqliteTable(
+  "storefront_buyers",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    storefrontId: text("storefront_id").notNull(),
+    status: text("status", { enum: ["PENDING", "APPROVED", "DECLINED", "SUSPENDED"] }).notNull().default("PENDING"),
+    businessName: text("business_name").notNull(),
+    contactName: text("contact_name").notNull(),
+    email: text("email").notNull(),
+    phone: text("phone"),
+    street1: text("street1").notNull(),
+    street2: text("street2"),
+    city: text("city").notNull(),
+    state: text("state").notNull(),
+    zip: text("zip").notNull(),
+    npi: text("npi").notNull(),
+    deaNumber: text("dea_number").notNull(),
+    licenseNumber: text("license_number").notNull(),
+    licenseState: text("license_state").notNull(),
+    notes: text("notes"),
+    salesBuyerId: text("sales_buyer_id"),
+    decidedByUserId: text("decided_by_user_id"),
+    decidedAt: text("decided_at"),
+    hiddenAt: text("hidden_at"),
+    ...timestamps,
+  },
+  (t) => [
+    index("storefront_buyers_org_idx").on(t.organizationId, t.createdAt),
+    uniqueIndex("storefront_buyers_email_unique").on(t.storefrontId, t.email),
+  ],
+);
+
+/** One-time sign-in links for approved pharmacies (only a hash of the token is kept). */
+export const storefrontBuyerLogins = sqliteTable(
+  "storefront_buyer_logins",
+  {
+    id: text("id").primaryKey(),
+    buyerId: text("buyer_id")
+      .notNull()
+      .references(() => storefrontBuyers.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: text("expires_at").notNull(),
+    usedAt: text("used_at"),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex("storefront_buyer_logins_token_unique").on(t.tokenHash), index("storefront_buyer_logins_buyer_idx").on(t.buyerId)],
 );

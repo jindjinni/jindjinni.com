@@ -298,7 +298,7 @@ export function blockers(a: AuditInput): string[] {
     if (!text(a.agency) && !text(a.auditorName)) out.push("Enter who the regulator is (agency or investigator).");
   }
   if (a.type === "PBM") {
-    if (!text(a.ncpdp)) out.push("This pharmacy has no NCPDP number on file. Add it to the pharmacy in Sales → Buyers.");
+    if (!text(a.ncpdp)) out.push("This pharmacy has no NCPDP number on file. Add it on the audit (Edit the case).");
     if (!text(a.auditorName) && !text(a.auditorEmail)) out.push("Enter who the auditor is (name or email).");
   }
   return out;
