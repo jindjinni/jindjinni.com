@@ -77,6 +77,12 @@ export function SignupForm({ needsVerification, book, referred = false, askSecon
           and a few fields are optional.
         </p>
 
+        <p className="mt-3 text-sm font-semibold text-muted">
+          Already have an account? <Link href="/login" className="font-extrabold text-ink underline decoration-brand decoration-2 underline-offset-4 hover:decoration-ink">Sign in</Link>
+          {" "}&middot; Forgot your password?{" "}
+          <Link href="/forgot-password" data-testid="signup-forgot-link-top" className="font-extrabold text-ink underline decoration-brand decoration-2 underline-offset-4 hover:decoration-ink">Reset it</Link>
+        </p>
+
         <RequiredMarks>
         <form ref={formRef} onSubmit={handleCreateAccount} className="mt-8 flex flex-col gap-6">
           <RequiredLegend />
@@ -181,6 +187,10 @@ export function SignupForm({ needsVerification, book, referred = false, askSecon
           Already have an account?{" "}
           <Link href="/login" className="font-extrabold text-ink underline decoration-brand decoration-2 underline-offset-4 hover:decoration-ink">
             Sign in
+          </Link>
+          {" "}&middot; Forgot your password?{" "}
+          <Link href="/forgot-password" data-testid="signup-forgot-link" className="font-extrabold text-ink underline decoration-brand decoration-2 underline-offset-4 hover:decoration-ink">
+            Reset it
           </Link>
         </p>
       </AuthCard>

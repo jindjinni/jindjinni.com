@@ -18,7 +18,9 @@ export default function LoginPage() {
 
 function LoginScreen() {
   const [state, action, pending] = useActionState(login, undefined);
-  const next = useSearchParams().get("next") ?? "";
+  const params = useSearchParams();
+  const next = params.get("next") ?? "";
+  const justReset = params.get("reset") === "1";
   // Controlled fields: React clears an uncontrolled form after every press of the button, and the second step (the two-step code)
   // needs the same email and password sent again.
   const [email, setEmail] = useState("");
@@ -41,6 +43,12 @@ function LoginScreen() {
             {codeStep ? "Open your authenticator app and type the 6-digit code. Lost your phone? Type one of your backup codes instead." : "Sign in to pick up where you left off."}
           </p>
 
+          {justReset && !codeStep && (
+            <p role="status" data-testid="reset-done" className="mt-6 rounded-xl border border-mint-line bg-mint px-4 py-3 text-sm font-semibold text-brand-deep">
+              Your password was changed. Sign in with the new one.
+            </p>
+          )}
+
           <form action={action} className="mt-8 flex flex-col gap-5">
             <input type="hidden" name="next" value={next} />
             {/* Kept in the form on the code step too (hidden), so they are sent again with the code. */}
@@ -51,6 +59,11 @@ function LoginScreen() {
               <AuthField label="Password">
                 <input name="password" type="password" required autoComplete="current-password" placeholder="Your password" value={password} onChange={(e) => setPassword(e.target.value)} />
               </AuthField>
+              <p className="-mt-3 text-right text-sm font-semibold">
+                <Link href="/forgot-password" data-testid="forgot-link" className="font-extrabold text-ink underline decoration-brand decoration-2 underline-offset-4 hover:decoration-ink">
+                  Forgot password?
+                </Link>
+              </p>
 
               <label className="flex items-center gap-2.5 text-sm font-semibold text-ink">
                 <input name="rememberMe" type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />

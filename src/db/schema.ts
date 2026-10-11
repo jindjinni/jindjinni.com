@@ -277,6 +277,27 @@ export const signupEmailVerifications = sqliteTable(
   (t) => [index("signup_email_verifications_email_idx").on(t.email)],
 );
 
+/**
+ * "Forgot password" links. One row per emailed link: the link carries a long random token and only its SHA-256 hash is kept here,
+ * so a copy of the database can't be used to take over an account. A link works once, for one hour (usedAt is set when it is
+ * spent, or when a newer reset for the same person is completed). Only people who chose their own login can use it; staff logins
+ * an admin created are reset by their admin (see lib/password-reset-rules.ts).
+ */
+export const passwordResets = sqliteTable(
+  "password_resets",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull().unique(),
+    expiresAt: text("expires_at").notNull(),
+    usedAt: text("used_at"),
+    ...timestamps,
+  },
+  (t) => [index("password_resets_user_idx").on(t.userId, t.createdAt)],
+);
+
 /** Which organization(s) a user belongs to, and with what role. */
 export const memberships = sqliteTable(
   "memberships",
