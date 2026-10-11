@@ -32,26 +32,51 @@ export function OperationTypeField({
         {OPERATION_QUESTION}
         <RequiredStar required />
       </legend>
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className={auth ? "grid gap-3" : "grid gap-3 sm:grid-cols-3"}>
         {OPERATION_OPTIONS.map((o, i) => (
-          <label key={o.value} className={card(value === o.value)} data-testid={`operation-${o.value}`}>
-            <input
-              type="radio"
-              name="operationType"
-              value={o.value}
-              checked={value === o.value}
-              required={i === 0}
-              onChange={() => {
-                setValue(o.value);
-                onChange?.(o.value);
-              }}
-              className="mt-1 h-4 w-4 shrink-0"
-            />
-            <span className="flex flex-col gap-1">
-              <span className={auth ? "text-base font-extrabold text-ink" : "text-sm font-semibold text-slate-900 dark:text-slate-50"}>{o.label}</span>
-              <span className={auth ? "text-sm text-muted" : "text-xs text-slate-600 dark:text-slate-300"}>{o.description}</span>
-            </span>
-          </label>
+          <div key={o.value} className="flex flex-col gap-2">
+            <label className={card(value === o.value)} data-testid={`operation-${o.value}`}>
+              <input
+                type="radio"
+                name="operationType"
+                value={o.value}
+                checked={value === o.value}
+                required={i === 0}
+                onChange={() => {
+                  setValue(o.value);
+                  onChange?.(o.value);
+                }}
+                className="mt-1 h-4 w-4 shrink-0"
+              />
+              <span className="flex flex-col gap-1">
+                <span className={auth ? "text-base font-extrabold text-ink" : "text-sm font-semibold text-slate-900 dark:text-slate-50"}>{o.label}</span>
+                <span className={auth ? "text-sm text-muted" : "text-xs text-slate-600 dark:text-slate-300"}>{o.description}</span>
+                {auth && (
+                  <ul className="mt-2 space-y-1.5 text-sm text-muted" data-testid={`operation-details-${o.value}`}>
+                    {o.details.map((d) => (
+                      <li key={d} className="flex items-start gap-2">
+                        <span aria-hidden="true" className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-brand" />
+                        {d}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </span>
+            </label>
+            {/* Outside the label so pressing it never picks the choice; it opens in a new tab so the half-filled form is not lost. */}
+            {auth && (
+              <a
+                href={o.learnHref}
+                target="_blank"
+                rel="noopener"
+                data-testid={`operation-learn-${o.value}`}
+                className="self-start rounded-full border border-brand-deep px-4 py-1.5 text-sm font-bold text-brand-deep transition hover:bg-mint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+              >
+                {o.learnLabel} <span aria-hidden="true">&#8599;</span>
+                <span className="sr-only"> (opens in a new tab)</span>
+              </a>
+            )}
+          </div>
         ))}
       </div>
       <p className={auth ? "text-sm text-muted" : "text-xs text-slate-600 dark:text-slate-300"} data-testid="operation-free-note">{OPERATION_FREE_NOTE}</p>

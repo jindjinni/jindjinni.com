@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { AUDIENCES, BANNED_WORDS, BOTH, BOTH_POINTS, DISTRIBUTION, OPERATIONS, SAFETY_CHECKS, SAFETY_LIMITS, WHOLESALE } from "../src/lib/landing-content";
 import { DEPARTMENT_MENUS } from "../src/lib/sidebar-menu";
+import { OPERATION_OPTIONS } from "../src/lib/operation-type";
 
 const all = (): string[] => {
   const out: string[] = [];
@@ -50,5 +51,16 @@ assert.ok(wp.includes("quotation") && !wp.includes("purchase order"));
 assert.ok(dp.includes("purchase order") && !dp.includes("quotations priced"));
 assert.ok(DISTRIBUTION.depts.find((d) => d.dept === "Accounts")!.points.join(" ").includes("Audit Center"));
 assert.ok(!WHOLESALE.depts.find((d) => d.dept === "Accounts")!.points.join(" ").includes("Audit Center"), "Audit Center is Distribution only");
+
+// the sign-up choices: each points at its explainer page, has real detail, and follows the same word rules
+assert.deepEqual(OPERATION_OPTIONS.map((o) => o.learnHref), ["/wholesale", "/distribution", "/both"]);
+for (const o of OPERATION_OPTIONS) {
+  assert.ok(o.description.length > 60 && o.details.length === 3 && o.learnLabel.length > 10, o.value);
+  const t = [o.description, ...o.details].join(" ").toLowerCase();
+  assert.ok(!/\$\s?\d/.test(t), "no price on the sign-up choices");
+  for (const w of BANNED_WORDS) assert.ok(!t.includes(w), `${o.value}: ${w}`);
+}
+assert.ok(!OPERATION_OPTIONS[0].details.join(" ").includes("Audit Center"), "Audit Center is Distribution only");
+assert.ok(OPERATION_OPTIONS[1].details.join(" ").includes("Audit Center"));
 
 console.log("landing-content: ok");

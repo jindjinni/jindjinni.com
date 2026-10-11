@@ -10,23 +10,54 @@
 export const OPERATION_TYPES = ["WHOLESALER", "DISTRIBUTOR", "BOTH"] as const;
 export type OperationType = (typeof OPERATION_TYPES)[number];
 
-export type OperationOption = { value: OperationType; label: string; description: string };
+export type OperationOption = {
+  value: OperationType;
+  label: string;
+  /** Two plain sentences: who this is. */
+  description: string;
+  /** What running it looks like day to day (sign-up and onboarding show these). Only what the software does today. */
+  details: string[];
+  /** The public page that explains every department for this choice, and the words on the button that opens it. */
+  learnHref: "/wholesale" | "/distribution" | "/both";
+  learnLabel: string;
+};
 
 export const OPERATION_OPTIONS: OperationOption[] = [
   {
     value: "WHOLESALER",
     label: "Wholesale",
-    description: "We source supplies from individuals and sell them back to distribution companies. We give quotations and sometimes provide a free shipping label.",
+    description: "You buy supplies, such as unused test strips, pumps and sensors, directly from individuals, and sell what you collect on to distribution companies.",
+    details: [
+      "You send each person a quotation priced from your own list, and can include a free prepaid shipping label.",
+      "Every package is opened, photographed and checked for recalls and counterfeits before you pay the person.",
+      "You then sell on to distributors with sales orders and invoices, from the stock you actually hold.",
+    ],
+    learnHref: "/wholesale",
+    learnLabel: "See what Wholesale includes",
   },
   {
     value: "DISTRIBUTOR",
     label: "Distribution",
-    description: "We sell to pharmacies and other established retail places that deal in medical supplies. We buy from wholesalers by sending purchase orders.",
+    description: "You buy from wholesalers and sell to pharmacies and other established retail places that deal in medical supplies.",
+    details: [
+      "You send purchase orders to your suppliers, and correct them with numbered revisions instead of silent edits.",
+      "Deliveries are checked against the order, and each supplier bill is approved before a payment is recorded.",
+      "You invoice pharmacies, and the Audit Center helps you answer pharmacy, PBM and regulatory audits from those invoices.",
+    ],
+    learnHref: "/distribution",
+    learnLabel: "See what Distribution includes",
   },
   {
     value: "BOTH",
     label: "Both (we do both)",
-    description: "We do both: we buy from individuals and from wholesalers, and we sell on to distributors and retailers.",
+    description: "You buy from individuals and from wholesalers, and sell on to distributors and to pharmacies. Each side runs as its own workspace under one sign-in.",
+    details: [
+      "Wholesale and Distribution keep their own customers, suppliers, products, orders, stock and payments, so nothing gets mixed up.",
+      "They can be one company or two LLCs: a different LLC gives its own business details and is approved on its own.",
+      "Switch between the sides with a click; owners and admins also get an overall page with totals only.",
+    ],
+    learnHref: "/both",
+    learnLabel: "See what running both includes",
   },
 ];
 
