@@ -3,12 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireOrg, type CurrentOrg } from "@/lib/tenant";
-import { canWritePurchasing, isAdmin } from "@/lib/permissions";
+import { canRevealBankDetails, canWritePurchasing, isAdmin } from "@/lib/permissions";
 import { featureOn } from "@/lib/features";
 import { cleanStorefrontSettings } from "@/lib/storefront-rules";
 import { canWriteSales } from "@/lib/permissions";
 import { decideBuyer, setBuyerHidden } from "@/lib/storefront-buyers";
 import { getStorefront } from "@/lib/storefront-service";
+import { erasePayout, revealPayout } from "@/lib/storefront-payouts";
 import { createApiKey, revokeApiKey, saveAllowedOrigins } from "@/lib/storefront-api";
 import { KEY_KINDS, type KeyKind } from "@/lib/storefront-api-rules";
 import type { BuyerDecision } from "@/lib/storefront-buyer-rules";
@@ -137,4 +138,32 @@ export async function saveOriginsAction(_prev: OriginsState, formData: FormData)
   if (!r.ok) return { error: r.error };
   revalidatePath("/dashboard/settings/storefront");
   return { saved: true, origins: r.origins.join("\n") };
+}
+
+// ---- Direct-deposit details a seller sent (owners, admins and Accounts only) -----------------------------------------------------------
+
+export type BankView = { error?: string; details?: { ownerName: string; routingNumber: string; accountNumber: string; accountType: string } } | undefined;
+
+async function requireBankViewer(): Promise<{ org: CurrentOrg } | { error: string }> {
+  const org = await requireOrg();
+  if (org.viewAs) return { error: "Viewing a company is read-only." };
+  if (!(await featureOn("storefronts", org.organizationId))) return { error: "Storefronts are not switched on for this company yet." };
+  if (!canRevealBankDetails(org.role, org.access)) return { error: "Your role can't see bank details. Ask an owner, an admin or Accounts." };
+  return { org };
+}
+
+/** Shows the full details to one person who is allowed, once, and records that they looked. Nothing is kept on the page afterwards. */
+export async function revealBankAction(requestId: string): Promise<BankView> {
+  const g = await requireBankViewer();
+  if ("error" in g) return { error: g.error };
+  const r = await revealPayout(g.org.organizationId, g.org.userId, requestId);
+  return r.ok ? { details: r.details } : { error: r.error };
+}
+
+export async function eraseBankAction(requestId: string): Promise<{ error?: string; erased?: boolean }> {
+  const g = await requireBankViewer();
+  if ("error" in g) return { error: g.error };
+  const r = await erasePayout(g.org.organizationId, g.org.userId, requestId);
+  revalidatePath("/dashboard/purchasing/website-requests");
+  return r.ok ? { erased: true } : { error: r.error };
 }

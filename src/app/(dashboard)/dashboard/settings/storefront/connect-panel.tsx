@@ -112,6 +112,21 @@ export function ConnectPanel({ keys, origins, apiBase, hasStorefront }: { keys: 
           <p className="mt-1 text-xs text-slate-500">Send <span className="font-mono">items</span> (a list), <span className="font-mono">itemsText</span> (words), or both. Answer: <span className="font-mono">201 {`{ "reference": "WEB-7KQ2MX", "status": "received" }`}</span>. Show the reference to the seller. The request appears in Purchasing &rarr; Website requests, where your team makes the quotation. Prices, status and company can&rsquo;t be set by the website.</p>
         </details>
         <details>
+          <summary className="cursor-pointer font-medium">Send the seller&rsquo;s direct-deposit details (secret key only)</summary>
+          <pre className={`${code} mt-2`}>{`POST ${api}/sell-requests      (same call as above, plus:)
+
+  "payout": {
+    "ownerName": "Pat Lee",            (the business owner the account belongs to)
+    "routingNumber": "021000021",
+    "accountNumber": "00123456789",
+    "accountType": "checking"          ("checking" or "savings")
+  }`}</pre>
+          <p className="mt-1 text-xs text-slate-500">
+            Your website&rsquo;s own form posts to <em>your server</em>, and your server forwards it here with the secret key over HTTPS; a public key in a web page is refused for bank details. The details are checked (a routing number must pass its check digit), saved together with the request, and stored encrypted. On the request, everyone sees only &ldquo;Checking account ending 1234&rdquo;;
+            owners, admins and Accounts can press &ldquo;Show the full details&rdquo; (every look is recorded) and &ldquo;Erase&rdquo; them after the seller is paid. They are never sent back by the API, never put in an email, and never written to a log. If the same request is sent twice, the details of the second try are not kept. Don&rsquo;t log or store them on your own server either.
+          </p>
+        </details>
+        <details>
           <summary className="cursor-pointer font-medium">Show a seller where their request stands, and their free label (secret key)</summary>
           <pre className={`${code} mt-2`}>{`GET ${api}/sell-requests/WEB-7KQ2MX
 

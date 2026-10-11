@@ -9,7 +9,9 @@
 
 import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import { db } from "@/db/client";
-import { organizations, storefronts, websiteRequests } from "@/db/schema";
+import { organizations, storefronts, websiteRequestPayouts, websiteRequests } from "@/db/schema";
+import { encryptBank } from "@/lib/bank-crypto";
+import { last4, payoutToJson, type Payout } from "@/lib/bank-rules";
 import { featureOn } from "@/lib/features";
 import { newId } from "@/lib/ids";
 import { isHeldBack } from "@/lib/tenant";
@@ -72,14 +74,15 @@ export async function findPublicStorefrontById(storefrontId: string, organizatio
   return sf && sf.organizationId === organizationId ? sf : null;
 }
 
-export type SubmitResult = { ok: true; reference: string } | { ok: false; error: string };
+/** `created` is false when the very same request had already been sent (nothing new was saved, and nothing sent with it is kept). */
+export type SubmitResult = { ok: true; reference: string; created: boolean } | { ok: false; error: string };
 
 /**
  * Saves a seller's request for the storefront's company. `request` has already been checked and cleaned (cleanSellRequest).
  * A flood is turned away (a daily limit per storefront), and sending the very same request twice within a day returns the first
  * reference instead of a second record.
  */
-export async function submitSellRequest(sf: PublicStorefront, request: SellRequest, opts: { source?: string | null; isDonation?: boolean } = {}): Promise<SubmitResult> {
+export async function submitSellRequest(sf: PublicStorefront, request: SellRequest, opts: { source?: string | null; isDonation?: boolean; payout?: Payout } = {}): Promise<SubmitResult> {
   if (!sf.sellOpen) return { ok: false, error: "This company is not taking offers through its website right now." };
   const dayAgo = new Date(Date.now() - 24 * 3600 * 1000).toISOString().slice(0, 19).replace("T", " ");
 
@@ -94,14 +97,15 @@ export async function submitSellRequest(sf: PublicStorefront, request: SellReque
     .from(websiteRequests)
     .where(and(eq(websiteRequests.organizationId, sf.organizationId), eq(websiteRequests.email, request.email), eq(websiteRequests.itemsText, request.itemsText), gt(websiteRequests.createdAt, dayAgo)))
     .limit(1);
-  if (same) return { ok: true, reference: same.reference };
+  if (same) return { ok: true, reference: same.reference, created: false };
 
   // A reference clash is vanishingly rare; the unique index would refuse it, so try a few times.
   for (let attempt = 0; attempt < 5; attempt++) {
     const reference = makeReference();
     try {
-      await db.insert(websiteRequests).values({
-        id: newId("wreq"),
+      const id = newId("wreq");
+      const insertRequest = db.insert(websiteRequests).values({
+        id,
         organizationId: sf.organizationId,
         storefrontId: sf.storefrontId,
         reference,
@@ -120,7 +124,24 @@ export async function submitSellRequest(sf: PublicStorefront, request: SellReque
         source: opts.source ?? null,
         isDonation: opts.isDonation ? true : null,
       });
-      return { ok: true, reference };
+      if (opts.payout) {
+        // The request and its bank details are saved together or not at all. Only the encrypted value and the last 4 digits are stored.
+        const p = opts.payout;
+        await db.batch([
+          insertRequest,
+          db.insert(websiteRequestPayouts).values({
+            id: newId("wpay"),
+            organizationId: sf.organizationId,
+            requestId: id,
+            payloadEnc: encryptBank(payoutToJson(p), `${sf.organizationId}|${id}`),
+            accountLast4: last4(p.accountNumber),
+            accountType: p.accountType,
+          }),
+        ]);
+      } else {
+        await insertRequest;
+      }
+      return { ok: true, reference, created: true };
     } catch (err) {
       if (!String(err).toLowerCase().includes("unique")) throw err;
     }

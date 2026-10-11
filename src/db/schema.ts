@@ -4080,3 +4080,27 @@ export const storefrontApiKeys = sqliteTable(
   },
   (t) => [uniqueIndex("storefront_api_keys_hash_unique").on(t.keyHash), index("storefront_api_keys_org_idx").on(t.organizationId)],
 );
+
+/**
+ * A seller's direct-deposit details sent with a website request. Kept in its OWN table so no ordinary list or query can ever read it by
+ * accident. The numbers and the owner's name are one encrypted value (payloadEnc, see bank-crypto.ts); only the last 4 digits and the
+ * account type are readable. Revealed only by people allowed to see bank details (every reveal is recorded); erased when the company is done
+ * with it (payloadEnc is cleared, the last 4 and the dates stay).
+ */
+export const websiteRequestPayouts = sqliteTable(
+  "website_request_payouts",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    requestId: text("request_id").notNull(),
+    payloadEnc: text("payload_enc"),
+    accountLast4: text("account_last4").notNull(),
+    accountType: text("account_type", { enum: ["checking", "savings"] }).notNull(),
+    erasedAt: text("erased_at"),
+    erasedByUserId: text("erased_by_user_id"),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex("website_request_payouts_request_unique").on(t.requestId), index("website_request_payouts_org_idx").on(t.organizationId)],
+);

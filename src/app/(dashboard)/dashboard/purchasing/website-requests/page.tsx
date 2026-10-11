@@ -1,10 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireOrg } from "@/lib/tenant";
-import { canWritePurchasing } from "@/lib/permissions";
+import { canRevealBankDetails, canWritePurchasing } from "@/lib/permissions";
 import { featureOn } from "@/lib/features";
 import { getStorefront, listWebsiteRequests, type RequestRow } from "@/lib/storefront-service";
 import { REQUEST_LABEL, type RequestStatus } from "@/lib/storefront-rules";
+import { payoutSummaries, type PayoutSummary } from "@/lib/storefront-payouts";
+import { maskedLine } from "@/lib/bank-rules";
+import { BankBox } from "./bank-box";
 import { declineRequestAction, hideRequestAction, makeQuotationAction, reopenRequestAction } from "@/app/actions/storefront";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +20,7 @@ const GROUPS: { status: RequestStatus; blurb: string }[] = [
 
 const when = (iso: string) => new Date(iso.includes("T") ? iso : iso.replace(" ", "T") + "Z").toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
 
-function Row({ r, canWrite }: { r: RequestRow; canWrite: boolean }) {
+function Row({ r, canWrite, bank, canReveal }: { r: RequestRow; canWrite: boolean; bank?: PayoutSummary; canReveal: boolean }) {
   return (
     <details className="group rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900" data-testid="wr-row" data-reference={r.reference} data-status={r.status}>
       <summary className="flex cursor-pointer flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-sm">
@@ -38,6 +41,7 @@ function Row({ r, canWrite }: { r: RequestRow; canWrite: boolean }) {
         <h3 className="mt-4 text-xs font-medium uppercase tracking-wide text-slate-400">What they have</h3>
         <p className="mt-1 whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-slate-800 dark:bg-slate-950 dark:text-slate-100" data-testid="wr-items">{r.itemsText}</p>
         {r.notes && (<><h3 className="mt-4 text-xs font-medium uppercase tracking-wide text-slate-400">Their note</h3><p className="mt-1 whitespace-pre-wrap text-slate-800 dark:text-slate-100">{r.notes}</p></>)}
+        {bank && <BankBox requestId={r.id} line={maskedLine(bank.accountType, bank.accountLast4)} canReveal={canReveal} erased={!!bank.erasedAt} />}
         <div className="mt-4 flex flex-wrap items-center gap-2">
           {r.quotationId && <Link href={`/dashboard/purchasing/quotations/${r.quotationId}`} className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700" data-testid="wr-open-quote">Open the quotation</Link>}
           {canWrite && r.status === "NEW" && (
@@ -68,6 +72,8 @@ export default async function WebsiteRequestsPage({ searchParams }: { searchPara
   const showHidden = sp.hidden === "1";
   const [rows, storefront] = await Promise.all([listWebsiteRequests(org.organizationId, showHidden), getStorefront(org.organizationId)]);
   const canWrite = canWritePurchasing(org.role, org.access);
+  const canReveal = !org.viewAs && canRevealBankDetails(org.role, org.access);
+  const banks = await payoutSummaries(org.organizationId, rows.map((r) => r.id));
   const base = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "");
   const live = !!storefront && !storefront.hiddenAt && storefront.sellOpen;
 
@@ -96,7 +102,7 @@ export default async function WebsiteRequestsPage({ searchParams }: { searchPara
                 <span className="text-xs font-normal text-slate-400">{g.blurb}</span>
               </summary>
               <div className="mt-3 flex flex-col gap-2">
-                {items.length === 0 ? <p className="text-sm text-slate-400">Nothing here.</p> : items.map((r) => <Row key={r.id} r={r} canWrite={canWrite} />)}
+                {items.length === 0 ? <p className="text-sm text-slate-400">Nothing here.</p> : items.map((r) => <Row key={r.id} r={r} canWrite={canWrite} bank={banks.get(r.id)} canReveal={canReveal} />)}
               </div>
             </details>
           );

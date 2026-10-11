@@ -192,6 +192,14 @@ export function canViewAccounts(role: string, access?: Access): boolean {
   return role === "accountant" || isAdmin(role) || sees(access, "accounts");
 }
 
+/**
+ * May see a seller's full direct-deposit details (routing and account numbers): the owner, admins and Accounts (the accountant, or anyone
+ * given Accounts). Purchasing staff who make the quotation see only the last 4 digits. Every reveal is recorded.
+ */
+export function canRevealBankDetails(role: string, access?: Access): boolean {
+  return canViewAccounts(role, access);
+}
+
 /** May open the Customer Service department (the paid orders waiting for their email, and the Emailed database): Customer Service, Admin and the Owner, or anyone given it. */
 export function canViewCustomerService(role: string, access?: Access): boolean {
   return role === "customer_service" || isAdmin(role) || sees(access, "customer-service");
