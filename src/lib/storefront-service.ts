@@ -22,7 +22,7 @@ export type SaveResult = { ok: true } | { ok: false; error: string };
 /** Creates or updates the company's storefront. A web address already used by another company is refused with a plain message. */
 export async function saveStorefront(
   organizationId: string,
-  v: { handle: string; displayName: string; welcomeText: string | null; sellOpen: boolean; buyOpen: boolean; hidden: boolean },
+  v: { handle: string; displayName: string; welcomeText: string | null; sellOpen: boolean; buyOpen: boolean; ordersOpen: boolean; orderReviewOver: number | null; hidden: boolean },
 ): Promise<SaveResult> {
   const [clash] = await db.select({ organizationId: storefronts.organizationId }).from(storefronts).where(eq(storefronts.handle, v.handle)).limit(1);
   if (clash && clash.organizationId !== organizationId) return { ok: false, error: "That web address is already taken. Please choose another." };
@@ -33,10 +33,10 @@ export async function saveStorefront(
     if (existing) {
       await db
         .update(storefronts)
-        .set({ handle: v.handle, displayName: v.displayName, welcomeText: v.welcomeText, sellOpen: v.sellOpen, buyOpen: v.buyOpen, hiddenAt: v.hidden ? existing.hiddenAt ?? now : null, updatedAt: now })
+        .set({ handle: v.handle, displayName: v.displayName, welcomeText: v.welcomeText, sellOpen: v.sellOpen, buyOpen: v.buyOpen, ordersOpen: v.ordersOpen, orderReviewOver: v.orderReviewOver, hiddenAt: v.hidden ? existing.hiddenAt ?? now : null, updatedAt: now })
         .where(eq(storefronts.organizationId, organizationId));
     } else {
-      await db.insert(storefronts).values({ id: newId("sfront"), organizationId, handle: v.handle, displayName: v.displayName, welcomeText: v.welcomeText, sellOpen: v.sellOpen, buyOpen: v.buyOpen, hiddenAt });
+      await db.insert(storefronts).values({ id: newId("sfront"), organizationId, handle: v.handle, displayName: v.displayName, welcomeText: v.welcomeText, sellOpen: v.sellOpen, buyOpen: v.buyOpen, ordersOpen: v.ordersOpen, orderReviewOver: v.orderReviewOver, hiddenAt });
     }
   } catch (err) {
     if (String(err).toLowerCase().includes("unique")) return { ok: false, error: "That web address is already taken. Please choose another." };

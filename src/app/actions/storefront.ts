@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { requireOrg, type CurrentOrg } from "@/lib/tenant";
 import { canRevealBankDetails, canWritePurchasing, isAdmin } from "@/lib/permissions";
 import { featureOn } from "@/lib/features";
+import { cleanReviewOver } from "@/lib/storefront-order-rules";
 import { cleanStorefrontSettings } from "@/lib/storefront-rules";
 import { canWriteSales } from "@/lib/permissions";
 import { decideBuyer, setBuyerHidden } from "@/lib/storefront-buyers";
@@ -34,8 +35,12 @@ export async function saveStorefrontAction(_prev: StorefrontState, formData: For
   if (!(await featureOn("storefronts", org.organizationId))) return { error: "Storefronts are not switched on for this company yet." };
   const cleaned = cleanStorefrontSettings({ handle: formData.get("handle"), displayName: formData.get("displayName"), welcomeText: formData.get("welcomeText") });
   if (!cleaned.ok) return { error: cleaned.error };
+  const review = cleanReviewOver(formData.get("orderReviewOver"));
+  if (!review.ok) return { error: review.error };
   const saved = await saveStorefront(org.organizationId, {
     ...cleaned.value,
+    ordersOpen: formData.get("ordersOpen") === "on",
+    orderReviewOver: review.value,
     sellOpen: formData.get("sellOpen") === "on",
     buyOpen: formData.get("buyOpen") === "on",
     hidden: formData.get("hidden") === "on",

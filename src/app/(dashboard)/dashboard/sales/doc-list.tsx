@@ -6,7 +6,7 @@ import { type SalesStatus } from "@/lib/sales-rules";
 import { docPlural, dueShort, type DocKind } from "@/lib/sales-doc-ui";
 import { StatusChip, card, field, fmtDay, fmtMoney } from "@/components/sales-ui";
 
-export type DocRow = { id: string; number: string; buyer: string; date: string; due: string; total: number; balance: number; status: SalesStatus | "PAST_DUE"; units: number };
+export type DocRow = { id: string; number: string; buyer: string; date: string; due: string; total: number; balance: number; status: SalesStatus | "PAST_DUE"; units: number; web?: boolean };
 
 const ORDER: (SalesStatus | "PAST_DUE")[] = ["PAST_DUE", "PARTIALLY_PAID", "SENT", "DRAFT", "ACCEPTED", "PAID", "CONVERTED", "DECLINED", "VOID"];
 
@@ -48,7 +48,7 @@ export function DocList({ kind, base, rows }: { kind: DocKind; base: string; row
                   <li key={r.id}>
                     <Link href={`${base}/${r.id}`} className="grid gap-1 px-4 py-2.5 text-sm hover:bg-stone-50 sm:grid-cols-[5rem_1fr_7rem_7rem_6rem] sm:items-center dark:hover:bg-slate-800/50" data-testid="doc-row">
                       <span className="font-semibold tabular-nums text-slate-900 dark:text-slate-50">{kind === "INVOICE" ? "#" : ""}{r.number}</span>
-                      <span className="truncate">{r.buyer}</span>
+                      <span className="truncate">{r.buyer}{r.web && <span className="ml-2 rounded-full bg-sky-100 px-2 py-0.5 text-xs font-semibold text-sky-900 dark:bg-sky-950 dark:text-sky-200" data-testid="doc-web">From the website</span>}</span>
                       <span className="text-slate-500">{fmtDay(r.date)}</span>
                       <span className={g.s === "PAST_DUE" ? "font-medium text-red-700 dark:text-red-300" : "text-slate-500"}>{r.due ? `${dueShort(kind)} ${fmtDay(r.due)}` : ""}</span>
                       <span className="tabular-nums sm:text-right">{fmtMoney(r.total)}</span>

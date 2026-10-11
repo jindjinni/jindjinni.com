@@ -639,6 +639,11 @@ export async function deleteDraft(org: Org, id: string): Promise<{ ok: true } | 
   return { ok: true };
 }
 
+/** Removes a Sales order that was only just made and must not stand (a website order that lost a race for the last units). Lines go with it. */
+export async function deleteDraftSilently(organizationId: string, id: string): Promise<void> {
+  await db.delete(salesDocuments).where(and(eq(salesDocuments.id, id), eq(salesDocuments.organizationId, organizationId), eq(salesDocuments.kind, "SALES_ORDER")));
+}
+
 export async function setQuotationStatus(org: Org, id: string, status: "ACCEPTED" | "DECLINED"): Promise<{ ok: true } | { ok: false; error: string }> {
   const have = await getDocument(org.organizationId, id);
   if (!have || !isOrderDoc(have.doc.kind)) return { ok: false, error: "That quotation, purchase order or sales order wasn't found." };

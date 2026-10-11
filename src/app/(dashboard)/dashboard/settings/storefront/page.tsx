@@ -21,10 +21,10 @@ export default async function StorefrontSettingsPage() {
     <div>
       <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-50">Storefront</h1>
       <p className="mt-1 max-w-2xl text-sm text-slate-500 dark:text-slate-400">
-        Your company&rsquo;s public page. Share the address with sellers or link to it from your own website. What visitors send comes into your records for your team to review; nothing is bought, sold or paid automatically.
+        Your company&rsquo;s public page. Share the address with sellers or link to it from your own website. What sellers send comes into your records for your team to review. Orders from approved pharmacies are confirmed automatically when everything is in stock (unless you set a review amount below); nothing is paid automatically.
       </p>
       <StorefrontForm
-        initial={{ handle: sf?.handle ?? "", displayName: sf?.displayName ?? org.organizationName, welcomeText: sf?.welcomeText ?? "", sellOpen: sf?.sellOpen ?? false, buyOpen: !!sf?.buyOpen, hidden: !!sf?.hiddenAt }}
+        initial={{ handle: sf?.handle ?? "", displayName: sf?.displayName ?? org.organizationName, welcomeText: sf?.welcomeText ?? "", sellOpen: sf?.sellOpen ?? false, buyOpen: !!sf?.buyOpen, ordersOpen: !!sf?.ordersOpen, orderReviewOver: sf?.orderReviewOver != null ? String(sf.orderReviewOver) : "", hidden: !!sf?.hiddenAt }}
         base={base}
         suggestion={normalizeHandle(org.organizationName)}
       />

@@ -24,3 +24,36 @@ export function buyerApprovedEmail(i: { company: string; contactName: string; ph
   ].join("\n");
   return { subject: `Your ${i.company} account is approved`, text, html: toHtml(text) };
 }
+
+export type OrderMailInput = {
+  company: string;
+  contactName: string;
+  reference: string;
+  confirmed: boolean;
+  lines: { name: string; condition: string; quantity: number; unitPrice: number }[];
+  total: number;
+  poNumber: string | null;
+  ordersUrl: string;
+};
+
+const money = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD" });
+
+/** Sent to the pharmacy when its order is placed: confirmed on the spot, or received and waiting for the company to review. */
+export function orderPlacedEmail(i: OrderMailInput): Mail {
+  const lines = i.lines.map((l) => `- ${l.quantity} x ${l.name} (${l.condition}) at ${money(l.unitPrice)} = ${money(l.quantity * l.unitPrice)}`);
+  const text = [
+    `Hi ${i.contactName},`,
+    "",
+    i.confirmed ? `${i.company} has confirmed your order ${i.reference}.` : `${i.company} has received your order ${i.reference} and will review it shortly. We will email you once it is confirmed.`,
+    i.poNumber ? `Your PO number: ${i.poNumber}` : "",
+    "",
+    ...lines,
+    "",
+    `Order total: ${money(i.total)}`,
+    "",
+    `You can see your orders at ${i.ordersUrl}`,
+    "",
+    i.company,
+  ].filter((l, idx, a) => l !== "" || a[idx - 1] !== "").join("\n");
+  return { subject: `${i.confirmed ? "Order confirmed" : "Order received"}: ${i.reference}`, text, html: toHtml(text) };
+}

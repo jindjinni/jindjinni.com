@@ -3,7 +3,7 @@
 import { useActionState, useState } from "react";
 import { saveStorefrontAction } from "@/app/actions/storefront";
 
-type Initial = { handle: string; displayName: string; welcomeText: string; sellOpen: boolean; buyOpen: boolean; hidden: boolean };
+type Initial = { handle: string; displayName: string; welcomeText: string; sellOpen: boolean; buyOpen: boolean; ordersOpen: boolean; orderReviewOver: string; hidden: boolean };
 
 export function StorefrontForm({ initial, base, suggestion }: { initial: Initial; base: string; suggestion: string }) {
   const [state, action, pending] = useActionState(saveStorefrontAction, undefined);
@@ -28,6 +28,14 @@ export function StorefrontForm({ initial, base, suggestion }: { initial: Initial
       <label className="flex items-start gap-2 text-sm text-slate-800 dark:text-slate-100">
         <input type="checkbox" name="buyOpen" defaultChecked={initial.buyOpen} className="mt-1" data-testid="sfs-buy" />
         <span><span className="font-medium">Let pharmacies apply for an account.</span><br /><span className="text-slate-500">A pharmacy sends its license details; your team approves it in Sales &rarr; Web accounts. Only approved pharmacies can sign in.</span></span>
+      </label>
+      <label className="flex items-start gap-2 text-sm text-slate-800 dark:text-slate-100">
+        <input type="checkbox" name="ordersOpen" defaultChecked={initial.ordersOpen} className="mt-1" data-testid="sfs-orders" />
+        <span><span className="font-medium">Let approved pharmacies place orders.</span><br /><span className="text-slate-500">They see only their own price list, with &ldquo;In stock&rdquo; or &ldquo;Out of stock&rdquo; (never counts), and orders are confirmed automatically. Each order lands in Sales &rarr; Sales orders marked &ldquo;From the website&rdquo; and holds its stock until you invoice it. Needs Sales orders turned on.</span></span>
+      </label>
+      <label className="text-sm font-medium text-slate-800 dark:text-slate-100">Hold orders over this amount for review <span className="font-normal text-slate-400">(optional, in dollars)</span>
+        <input name="orderReviewOver" inputMode="decimal" maxLength={12} defaultValue={initial.orderReviewOver} placeholder="Leave empty to confirm every order automatically" className={field} data-testid="sfs-review" />
+        <span className="mt-1 block text-xs font-normal text-slate-500">A larger order is still received and holds its stock, but waits for your team to accept or decline it in Sales orders.</span>
       </label>
       <label className="flex items-start gap-2 text-sm text-slate-800 dark:text-slate-100">
         <input type="checkbox" name="hidden" defaultChecked={initial.hidden} className="mt-1" data-testid="sfs-hidden" />

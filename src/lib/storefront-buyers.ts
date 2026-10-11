@@ -134,7 +134,7 @@ async function audit(organizationId: string, userId: string, id: string, field: 
 export type DecideResult = { ok: true; emailed?: boolean } | { ok: false; error: string };
 
 /** Puts the pharmacy in the company's Sales buyers (reusing one with the same email or NPI) and returns its id. The NCPDP number is never asked for here: only a PBM audit needs it. */
-async function linkSalesBuyer(organizationId: string, b: BuyerRow): Promise<string> {
+export async function linkSalesBuyer(organizationId: string, b: BuyerRow): Promise<string> {
   const rows = await db.select({ id: salesBuyers.id, email: salesBuyers.email, npi: salesBuyers.npi }).from(salesBuyers).where(eq(salesBuyers.organizationId, organizationId));
   const hit = rows.find((r) => (r.email && r.email.toLowerCase() === b.email) || (r.npi && r.npi === b.npi));
   if (hit) return hit.id;

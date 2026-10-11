@@ -6,7 +6,9 @@ import { guardPublicForm } from "@/lib/human-check";
 import { findPublicStorefront } from "@/lib/storefront-public";
 import { cleanApplication, BUYER_COOKIE } from "@/lib/storefront-buyer-rules";
 import { signBuyerSession } from "@/lib/storefront-buyer-session";
-import { completeBuyerSignin, requestBuyerSignin, submitApplication } from "@/lib/storefront-buyers";
+import { completeBuyerSignin, currentBuyer, requestBuyerSignin, submitApplication } from "@/lib/storefront-buyers";
+import { placeOrder } from "@/lib/storefront-orders";
+import { cleanOrderRequest, linesFromForm } from "@/lib/storefront-order-rules";
 import { emailCheck, normalizeResetEmail } from "@/lib/password-reset-rules";
 
 export type ApplyState = { error?: string; received?: boolean } | undefined;
@@ -74,4 +76,30 @@ export async function buyerSignOutAction(handle: string): Promise<void> {
   const sf = await findPublicStorefront(handle);
   if (sf) (await cookies()).set(BUYER_COOKIE, "", { httpOnly: true, sameSite: "lax", path: `/s/${sf.handle}`, maxAge: 0 });
   redirect(`/s/${handle}`);
+}
+
+export type OrderState = { error?: string; unavailable?: string[] } | undefined;
+
+/**
+ * The hosted order form. The pharmacy comes ONLY from the signed cookie (re-checked: still approved, this storefront), the company only from
+ * the page address. The form sends quantities per price-sheet line and a key for this form; no price, stock or status is read from it.
+ */
+export async function placeOrderAction(handle: string, _prev: OrderState, formData: FormData): Promise<OrderState> {
+  const sf = await findPublicStorefront(handle);
+  if (!sf) return { error: "This page is not available." };
+  const me = await currentBuyer(sf);
+  if (!me) redirect(`/s/${sf.handle}/account`);
+  const blocked = await guardPublicForm(formData, { scope: "storefront-order", max: 30, windowSec: 3600, skipHuman: true });
+  if (blocked) return { error: blocked };
+  const cleaned = cleanOrderRequest({ key: formData.get("key"), lines: linesFromForm(formData.entries()), poNumber: formData.get("poNumber"), notes: formData.get("notes") });
+  if (!cleaned.ok) return { error: cleaned.error };
+  let result;
+  try {
+    result = await placeOrder(sf, me.id, cleaned.value, { source: "STOREFRONT" });
+  } catch (err) {
+    console.error("[storefront] order failed:", err);
+    return { error: "Something went wrong. Please try again in a minute." };
+  }
+  if (!result.ok) return { error: result.error, unavailable: result.unavailable?.map((u) => u.itemId) };
+  redirect(`/s/${sf.handle}/orders/${result.order.reference}?placed=1`);
 }

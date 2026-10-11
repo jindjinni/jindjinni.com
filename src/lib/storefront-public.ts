@@ -26,6 +26,10 @@ export type PublicStorefront = {
   welcomeText: string | null;
   sellOpen: boolean;
   buyOpen: boolean;
+  /** Approved pharmacies may place orders (also needs buyOpen and Sales orders switched on; see storefront-orders.ts). */
+  ordersOpen: boolean;
+  /** Orders above this total wait for staff instead of being confirmed automatically. Null = confirm all. */
+  orderReviewOver: number | null;
 };
 
 type Where = ReturnType<typeof eq>;
@@ -41,6 +45,8 @@ async function loadPublic(where: Where): Promise<PublicStorefront | null> {
       welcomeText: storefronts.welcomeText,
       sellOpen: storefronts.sellOpen,
       buyOpen: storefronts.buyOpen,
+      ordersOpen: storefronts.ordersOpen,
+      orderReviewOver: storefronts.orderReviewOver,
       parent: organizations.parentOrganizationId,
       closedAt: organizations.closedAt,
       approval: organizations.approvalStatus,
@@ -58,7 +64,7 @@ async function loadPublic(where: Where): Promise<PublicStorefront | null> {
     return null;
   }
   if (!(await featureOn("storefronts", row.organizationId))) return null;
-  return { storefrontId: row.id, organizationId: row.organizationId, handle: row.handle, displayName: row.displayName, welcomeText: row.welcomeText, sellOpen: row.sellOpen, buyOpen: !!row.buyOpen };
+  return { storefrontId: row.id, organizationId: row.organizationId, handle: row.handle, displayName: row.displayName, welcomeText: row.welcomeText, sellOpen: row.sellOpen, buyOpen: !!row.buyOpen, ordersOpen: !!row.ordersOpen, orderReviewOver: row.orderReviewOver ?? null };
 }
 
 /** The storefront at this public address, or null for anything that should look like "no such page". */

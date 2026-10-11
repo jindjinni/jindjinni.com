@@ -23,6 +23,7 @@ export async function DocsPage({ kind }: { kind: DocKind }) {
     balance: d.kind === "INVOICE" && d.status !== "VOID" && d.status !== "DRAFT" ? balanceOf(d) : 0,
     status: shownStatus(d, today),
     units: 0,
+    web: d.source === "WEBSITE",
   }));
   const base = DOC_BASE[kind];
   const isInvoice = kind === "INVOICE";

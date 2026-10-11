@@ -2381,6 +2381,8 @@ export const salesDocuments = sqliteTable(
     revisedAt: text("revised_at"),
     /** Stock has been taken out of Inventory for this invoice. */
     inventoryPosted: integer("inventory_posted", { mode: "boolean" }).notNull().default(false),
+    /** null = made by staff, "WEBSITE" = placed by a pharmacy on the company's storefront or website. */
+    source: text("source"),
     createdByUserId: text("created_by_user_id"),
     ...timestamps,
   },
@@ -3950,6 +3952,10 @@ export const storefronts = sqliteTable(
     buyOpen: integer("buy_open", { mode: "boolean" }),
     /** Website addresses (one per line, like https://www.example.com) a browser form using the PUBLIC key may call from. Null = none. */
     allowedOrigins: text("allowed_origins"),
+    /** Distribution: approved pharmacies can place orders. Null = not open (nullable on purpose, drizzle-kit rule). */
+    ordersOpen: integer("orders_open", { mode: "boolean" }),
+    /** An order whose total is MORE than this is received for staff to review instead of being confirmed automatically. Null = confirm every order. */
+    orderReviewOver: real("order_review_over"),
     hiddenAt: text("hidden_at"),
     ...timestamps,
   },
@@ -4103,4 +4109,36 @@ export const websiteRequestPayouts = sqliteTable(
     ...timestamps,
   },
   (t) => [uniqueIndex("website_request_payouts_request_unique").on(t.requestId), index("website_request_payouts_org_idx").on(t.organizationId)],
+);
+
+/**
+ * An order a pharmacy placed on the company's storefront or website. The order itself is an ordinary Sales order (salesDocumentId); this
+ * row is the pharmacy-side record: its short reference, the key that makes a double submit return the same order, and who placed it.
+ * The prices and quantities live only on the Sales order, set by the server from the pharmacy's own price sheet.
+ */
+export const storefrontOrders = sqliteTable(
+  "storefront_orders",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    storefrontId: text("storefront_id").notNull(),
+    storefrontBuyerId: text("storefront_buyer_id").notNull(),
+    salesDocumentId: text("sales_document_id").notNull(),
+    reference: text("reference").notNull(),
+    /** Made by the page or the website for one attempt to place an order; the same key never makes a second order. */
+    idempotencyKey: text("idempotency_key").notNull(),
+    /** CONFIRMED = accepted automatically; REVIEW = received, waiting for staff. */
+    outcome: text("outcome", { enum: ["CONFIRMED", "REVIEW"] }).notNull(),
+    poNumber: text("po_number"),
+    total: real("total").notNull().default(0),
+    source: text("source"),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("storefront_orders_key_unique").on(t.storefrontBuyerId, t.idempotencyKey),
+    uniqueIndex("storefront_orders_ref_unique").on(t.organizationId, t.reference),
+    index("storefront_orders_buyer_idx").on(t.storefrontBuyerId, t.createdAt),
+  ],
 );

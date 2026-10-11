@@ -16,7 +16,7 @@ export type ApiCtx = { key: KeyContext; sf: PublicStorefront; origin: string | n
 export type ApiResult = { status: number; body: unknown };
 
 export const done = (status: number, body: unknown): ApiResult => ({ status, body });
-export const fail = (code: ApiErrorCode, message: string): ApiResult => ({ status: ERROR_STATUS[code], body: { error: { code, message } } });
+export const fail = (code: ApiErrorCode, message: string, extra?: Record<string, unknown>): ApiResult => ({ status: ERROR_STATUS[code], body: { error: { code, message, ...extra } } });
 
 function reply(res: ApiResult, origin: string | null, corsOk: boolean): NextResponse {
   const h = new Headers({ "Cache-Control": "no-store", Vary: "Origin" });

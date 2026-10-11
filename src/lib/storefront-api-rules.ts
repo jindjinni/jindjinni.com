@@ -53,7 +53,7 @@ export function cleanKeyLabel(raw: unknown): { ok: true; label: string } | { ok:
 }
 
 /** Which things each kind of key may do. A public key can only send a new request or application. */
-export type ApiAction = "info" | "sell-request-create" | "sell-request-read" | "application-create";
+export type ApiAction = "info" | "sell-request-create" | "sell-request-read" | "application-create" | "pharmacy-read" | "order-create" | "order-read";
 export function mayDo(kind: KeyKind, action: ApiAction): boolean {
   if (kind === "secret") return true;
   return action === "info" || action === "sell-request-create" || action === "application-create";
@@ -152,11 +152,11 @@ export const REFERENCE_PATTERN = /^WEB-[A-HJ-NP-Z2-9]{6}$/;
 
 export type ApiErrorCode =
   | "missing_key" | "invalid_key" | "secret_key_in_browser" | "origin_not_allowed" | "not_allowed_for_key" | "storefront_unavailable"
-  | "not_open" | "invalid_request" | "not_found" | "rate_limited" | "daily_limit" | "too_large" | "server_error";
+  | "not_open" | "items_unavailable" | "invalid_request" | "not_found" | "rate_limited" | "daily_limit" | "too_large" | "server_error";
 
 export const ERROR_STATUS: Record<ApiErrorCode, number> = {
   missing_key: 401, invalid_key: 401, secret_key_in_browser: 403, origin_not_allowed: 403, not_allowed_for_key: 403, storefront_unavailable: 404,
-  not_open: 409, invalid_request: 422, not_found: 404, rate_limited: 429, daily_limit: 429, too_large: 413, server_error: 500,
+  not_open: 409, items_unavailable: 409, invalid_request: 422, not_found: 404, rate_limited: 429, daily_limit: 429, too_large: 413, server_error: 500,
 };
 
 /** Whether a text pile looks like link advertising is checked by the same cleaners as the storefront's own forms. Kept here so tests can use it. */
