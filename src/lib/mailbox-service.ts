@@ -32,6 +32,8 @@ export type MailboxView = {
   ownerName: string | null;
   provider: "GOOGLE" | "MICROSOFT" | "SMTP" | null;
   accountEmail: string | null;
+  /** The address the company typed on Settings -> Company emails, before connecting. */
+  plannedEmail: string | null;
   status: "NOT_CONNECTED" | "ACTIVE" | "NEEDS_RECONNECT";
   canRead: boolean;
   lastError: string | null;
@@ -55,6 +57,7 @@ async function viewOf(org: OrgCtx, dept: MailDept, row: MailboxRow, ownerName: s
     ownerName,
     provider: row.provider === "GOOGLE" || row.provider === "MICROSOFT" || row.provider === "SMTP" ? row.provider : null,
     accountEmail: row.accountEmail,
+    plannedEmail: row.plannedEmail,
     status: row.status === "ACTIVE" || row.status === "NEEDS_RECONNECT" ? row.status : "NOT_CONNECTED",
     canRead: row.canRead,
     lastError: row.lastError,

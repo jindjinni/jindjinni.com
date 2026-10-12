@@ -63,7 +63,7 @@ export async function MailboxSettings({ dept, sp }: { dept: MailDept; sp: Settin
           open={sp.box === b.id}
           flash={sp.box === b.id ? { connected: sp.connected === "1", noRead: sp.no_read === "1", error: sp.connect_error ? ERRORS[sp.connect_error] ?? "That didn't work. Please try again." : undefined } : undefined}
           box={{
-            id: b.id, name: b.name, kind: b.kind, ownerName: b.ownerName, status: b.status, provider: b.provider, accountEmail: b.accountEmail, canRead: b.canRead,
+            id: b.id, name: b.name, kind: b.kind, ownerName: b.ownerName, status: b.status, provider: b.provider, accountEmail: b.accountEmail, plannedEmail: b.plannedEmail, canRead: b.canRead,
             lastError: b.lastError, hidden: b.hidden, rights: b.rights,
           }}
         />

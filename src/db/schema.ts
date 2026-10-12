@@ -3703,6 +3703,8 @@ export const mailboxes = sqliteTable(
     /** GOOGLE | MICROSOFT | SMTP, empty until connected. */
     provider: text("provider"),
     accountEmail: text("account_email"),
+    /** The address the company says this mailbox will use (typed on Settings -> Company emails) before it is connected. */
+    plannedEmail: text("planned_email"),
     credentialEnc: text("credential_enc"),
     /** NOT_CONNECTED | ACTIVE | NEEDS_RECONNECT */
     status: text("status").notNull().default("NOT_CONNECTED"),

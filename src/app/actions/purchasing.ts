@@ -1296,6 +1296,13 @@ async function resolveQuotedItemPricing(org: CurrentOrg, params: Parameters<type
   return resolvePricing(org.organizationId, params);
 }
 
+/** Once an order has arrived or been cancelled its prices are final: money still moves through Receiving adjustments. */
+function quotationLockedMessage(status: string): string | null {
+  if (status === "RECEIVED") return "This order has already been received, so its items and prices can't be changed here. Use an adjustment in Receiving.";
+  if (status === "CANCELLED") return "This order was cancelled, so it can't be changed.";
+  return null;
+}
+
 export async function addPurchasingQuotedItem(
   quotationId: string,
   _prevState: ActionState,
@@ -1304,6 +1311,8 @@ export async function addPurchasingQuotedItem(
   const org = await requirePurchasingWriter();
   const quotation = await requireOrgQuotation(org.organizationId, quotationId);
   if (!quotation) return { error: "Quotation not found." };
+  const lockedAdd = quotationLockedMessage(quotation.status);
+  if (lockedAdd) return { error: lockedAdd };
 
   const productId = String(formData.get("productId") ?? "") || null;
   const conditionId = String(formData.get("conditionId") ?? "") || null;
@@ -1397,12 +1406,15 @@ export async function updatePurchasingQuotedItem(
       productNameSnapshot: purchasingQuotedItems.productNameSnapshot,
       baseUnitPrice: purchasingQuotedItems.baseUnitPrice,
       quotationNumber: purchasingQuotations.quotationNumber,
+      quotationStatus: purchasingQuotations.status,
     })
     .from(purchasingQuotedItems)
     .innerJoin(purchasingQuotations, eq(purchasingQuotedItems.quotationId, purchasingQuotations.id))
     .where(and(eq(purchasingQuotedItems.id, itemId), eq(purchasingQuotations.organizationId, org.organizationId)))
     .limit(1);
   if (!existing) return { error: "Line not found." };
+  const lockedUpdate = quotationLockedMessage(existing.quotationStatus);
+  if (lockedUpdate) return { error: lockedUpdate };
 
   const conditionId = String(formData.get("conditionId") ?? "") || null;
   const expirationRangeId = String(formData.get("expirationRangeId") ?? "") || null;
@@ -1478,12 +1490,14 @@ export async function removePurchasingQuotedItem(
   const org = await requirePurchasingWriter();
 
   const [item] = await db
-    .select({ id: purchasingQuotedItems.id, quotationId: purchasingQuotedItems.quotationId })
+    .select({ id: purchasingQuotedItems.id, quotationId: purchasingQuotedItems.quotationId, quotationStatus: purchasingQuotations.status })
     .from(purchasingQuotedItems)
     .innerJoin(purchasingQuotations, eq(purchasingQuotedItems.quotationId, purchasingQuotations.id))
     .where(and(eq(purchasingQuotedItems.id, itemId), eq(purchasingQuotations.organizationId, org.organizationId)))
     .limit(1);
   if (!item) return { error: "Line not found." };
+  const lockedRemove = quotationLockedMessage(item.quotationStatus);
+  if (lockedRemove) return { error: lockedRemove };
 
   await db.delete(purchasingQuotedItems).where(eq(purchasingQuotedItems.id, itemId));
   await recomputeQuotationTotals(org, item.quotationId);
@@ -1618,6 +1632,8 @@ export async function setPurchasingQuotationDeduction(
   const org = await requirePurchasingWriter();
   const quotation = await requireOrgQuotation(org.organizationId, quotationId);
   if (!quotation) return { error: "Quotation not found." };
+  const lockedDeduction = quotationLockedMessage(quotation.status);
+  if (lockedDeduction) return { error: lockedDeduction };
 
   const deductionEnabled = formData.get("deductionEnabled") === "on";
   const deductionAmount = Number(formData.get("deductionAmount") ?? 0) || 0;

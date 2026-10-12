@@ -17,6 +17,7 @@ export type CardBox = {
   status: "NOT_CONNECTED" | "ACTIVE" | "NEEDS_RECONNECT";
   provider: "GOOGLE" | "MICROSOFT" | "SMTP" | null;
   accountEmail: string | null;
+  plannedEmail?: string | null;
   canRead: boolean;
   lastError: string | null;
   hidden: boolean;
@@ -32,10 +33,10 @@ const PILL: Record<CardBox["status"], string> = {
 const PILL_TEXT: Record<CardBox["status"], string> = { ACTIVE: "Connected", NEEDS_RECONNECT: "Needs reconnecting", NOT_CONNECTED: "Not connected yet" };
 const PROVIDER_TEXT = { GOOGLE: "Google (Gmail / Google Workspace)", MICROSOFT: "Microsoft (Outlook / Microsoft 365)", SMTP: "another email host" } as const;
 
-function OtherMailboxForm({ dept, id }: { dept: string; id: string }) {
+function OtherMailboxForm({ dept, id, planned }: { dept: string; id: string; planned?: string | null }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(planned ?? "");
   const [password, setPassword] = useState("");
   const [host, setHost] = useState("");
   const [port, setPort] = useState("465");
@@ -210,7 +211,7 @@ export function MailboxCard({
                 ),
               )}
             </div>
-            <OtherMailboxForm dept={dept} id={box.id} />
+            <OtherMailboxForm dept={dept} id={box.id} planned={box.plannedEmail} />
             <p className="text-xs text-slate-500">Need help? Open <Link className="underline" href="/dashboard/support">Support</Link> and send us a message; we&apos;ll walk you through it.</p>
           </div>
         </details>

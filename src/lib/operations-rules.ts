@@ -119,6 +119,7 @@ export const SIDE_INFO: Record<Side, SideInfo> = {
     firstSteps: [
       { id: "shippo", text: "Connect your own Shippo account so you can send free labels", href: "/dashboard/purchasing/connectors" },
       { id: "address", text: "Set the return address printed on your labels", href: "/dashboard/settings/business" },
+      { id: "emails", text: "Set up your department email addresses", href: "/dashboard/settings/emails" },
       { id: "products", text: "Add your products and prices", href: "/dashboard/purchasing/products" },
       { id: "quotation", text: "Make your first quotation", href: "/dashboard/purchasing/quotations" },
     ],
@@ -137,6 +138,7 @@ export const SIDE_INFO: Record<Side, SideInfo> = {
     ],
     firstSteps: [
       { id: "supplier", text: "Add your first supplier", href: "/dashboard/purchasing/suppliers" },
+      { id: "emails", text: "Set up your department email addresses", href: "/dashboard/settings/emails" },
       { id: "po-look", text: "Choose how your purchase orders look", href: "/dashboard/purchasing/templates?type=PURCHASE_ORDER" },
       { id: "buyers", text: "Add the pharmacies and outlets you sell to", href: "/dashboard/sales/buyers" },
       { id: "po", text: "Make your first purchase order", href: "/dashboard/purchasing/purchase-orders" },
