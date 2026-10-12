@@ -66,7 +66,7 @@ import { customerValidationError, missingCustomerFields } from "@/lib/purchasing
 import { pickLabelRate, type ShippoAddress } from "@/lib/shippo";
 import { parseCarrier, parseLabelCount, CARRIER_NAME } from "@/lib/shipping-labels";
 import { buyAndSaveLabels } from "@/lib/purchasing-label-service";
-import { recomputeTotals, resolvePricing } from "@/lib/purchasing-quote-service";
+import { checkLineChoices, recomputeTotals, resolvePricing } from "@/lib/purchasing-quote-service";
 
 export type ActionState = { error?: string } | undefined;
 export type SeedCatalogActionState = { error?: string; message?: string } | undefined;
@@ -1321,6 +1321,8 @@ export async function addPurchasingQuotedItem(
   if (!Number.isInteger(quantity) || quantity <= 0) {
     return { error: "Quantity must be a whole number greater than zero." };
   }
+  const choiceError = await checkLineChoices(org.organizationId, { productId, conditionId, expirationRangeId });
+  if (choiceError) return { error: choiceError };
 
   const pricing = await resolveQuotedItemPricing(org, {
     productId,
@@ -1403,6 +1405,8 @@ export async function updatePurchasingQuotedItem(
       id: purchasingQuotedItems.id,
       quotationId: purchasingQuotedItems.quotationId,
       productId: purchasingQuotedItems.productId,
+      conditionId: purchasingQuotedItems.conditionId,
+      expirationRangeId: purchasingQuotedItems.expirationRangeId,
       productNameSnapshot: purchasingQuotedItems.productNameSnapshot,
       baseUnitPrice: purchasingQuotedItems.baseUnitPrice,
       quotationNumber: purchasingQuotations.quotationNumber,
@@ -1422,6 +1426,9 @@ export async function updatePurchasingQuotedItem(
   if (!Number.isInteger(quantity) || quantity <= 0) {
     return { error: "Quantity must be a whole number greater than zero." };
   }
+
+  const choiceError = await checkLineChoices(org.organizationId, { productId: existing.productId, conditionId, expirationRangeId }, { conditionId: existing.conditionId, expirationRangeId: existing.expirationRangeId });
+  if (choiceError) return { error: choiceError };
 
   const pricing = await resolveQuotedItemPricing(org, {
     productId: existing.productId,

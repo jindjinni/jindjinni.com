@@ -4,9 +4,10 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import {
-  purchasingCategories, purchasingConditions, purchasingExpirationRanges, purchasingProductMultipliers, purchasingProducts,
+  purchasingCategories, purchasingConditions, purchasingExpirationRanges, purchasingProductConditions, purchasingProductMultipliers, purchasingProducts,
   purchasingQuotations, purchasingQuotedItems,
 } from "@/db/schema";
+import { CUSTOM_CONDITION, lineChoiceError } from "@/lib/quote-line-rules";
 import { computeAutomaticBonus, getPurchasingBonusTiers } from "@/lib/queries";
 import { roundCents } from "@/lib/purchasing-price";
 import { refreshGeneratedReceipt } from "@/lib/purchasing-receipt-docs";
@@ -211,3 +212,65 @@ export async function recomputeTotals(org: { organizationId: string; organizatio
   await refreshGeneratedReceipt(org, quotationId);
 }
 
+
+/**
+ * The condition and expiry a manual line may use for its product: the same choices the Add-item form offers (the product's own list when
+ * it has one, otherwise any active one). Returns a plain message, or null when the choice is fine. `current` is the line's existing
+ * condition and expiry when it is being corrected, so fixing a quantity never trips on a condition that was archived since.
+ */
+export async function checkLineChoices(
+  organizationId: string,
+  input: { productId: string | null; conditionId: string | null; expirationRangeId: string | null },
+  current?: { conditionId: string | null; expirationRangeId: string | null },
+): Promise<string | null> {
+  if (!input.productId) return null;
+  const [product] = await db
+    .select({ noExpiration: purchasingProducts.noExpiration })
+    .from(purchasingProducts)
+    .where(and(eq(purchasingProducts.id, input.productId), eq(purchasingProducts.organizationId, organizationId)))
+    .limit(1);
+  if (!product) return "Product not found.";
+
+  let conditionOffered = false;
+  if (input.conditionId && input.conditionId !== CUSTOM_CONDITION) {
+    const [c] = await db
+      .select({ active: purchasingConditions.active })
+      .from(purchasingConditions)
+      .where(and(eq(purchasingConditions.id, input.conditionId), eq(purchasingConditions.organizationId, organizationId)))
+      .limit(1);
+    if (c?.active) {
+      const assigned = await db
+        .select({ conditionId: purchasingProductConditions.conditionId })
+        .from(purchasingProductConditions)
+        .where(and(eq(purchasingProductConditions.productId, input.productId), eq(purchasingProductConditions.organizationId, organizationId)));
+      conditionOffered = assigned.length === 0 || assigned.some((a) => a.conditionId === input.conditionId);
+    }
+  }
+
+  let rangeOffered = false;
+  if (input.expirationRangeId) {
+    const [r] = await db
+      .select({ active: purchasingExpirationRanges.active })
+      .from(purchasingExpirationRanges)
+      .where(and(eq(purchasingExpirationRanges.id, input.expirationRangeId), eq(purchasingExpirationRanges.organizationId, organizationId)))
+      .limit(1);
+    if (r?.active) {
+      const options = await db
+        .select({ rangeId: purchasingProductMultipliers.expirationRangeId })
+        .from(purchasingProductMultipliers)
+        .where(and(eq(purchasingProductMultipliers.productId, input.productId), eq(purchasingProductMultipliers.organizationId, organizationId)));
+      rangeOffered = options.length === 0 || options.some((o) => o.rangeId === input.expirationRangeId);
+    }
+  }
+
+  return lineChoiceError({
+    hasProduct: true,
+    neverExpires: product.noExpiration,
+    conditionId: input.conditionId,
+    expirationRangeId: input.expirationRangeId,
+    conditionOffered,
+    rangeOffered,
+    conditionUnchanged: current ? current.conditionId === input.conditionId : false,
+    rangeUnchanged: current ? current.expirationRangeId === input.expirationRangeId : false,
+  });
+}
