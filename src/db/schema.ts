@@ -60,6 +60,8 @@ export const organizations = sqliteTable("organizations", {
   // Each department's sidebar menu as JSON: the order of its tabs and any names the company changed
   // (see lib/sidebar-menu.ts). null = every department shows its original menu. Nullable on purpose.
   sidebarMenus: text("sidebar_menus"),
+  /** JSON: what this company hides or does not require on the Receiving Intake Form (lib/receiving-form-config.ts). Null = the standard form. */
+  receivingFormConfig: text("receiving_form_config"),
   // Team-size cap. null = use the default for this company (see lib/seats.ts);
   // -1 = unlimited; any other number = that many people (active members +
   // pending invitations). Nullable on purpose -- never NOT NULL on a table

@@ -6,6 +6,8 @@
 // filled in by an Accountant. Everyone else is view-only. Everything is scoped
 // by the signed-in user's company.
 
+import { photoHidden } from "@/lib/receiving-form-config";
+import { getReceivingFormConfig } from "@/lib/receiving-form-config-store";
 import { revalidatePath } from "next/cache";
 import { and, eq, inArray, isNull, like, or, sql } from "drizzle-orm";
 import { db } from "@/db/client";
@@ -862,6 +864,8 @@ export async function uploadReceivingPhoto(packageId: string, kind: string, form
   const org = await requireOrg();
   if (!(RECEIVING_PHOTO_KINDS as readonly string[]).includes(kind)) return { error: "Unknown photo type." };
   const k = kind as PhotoKind;
+  // A photo type this company hid on its form is not taken any more (photos already saved stay).
+  if (photoHidden(await getReceivingFormConfig(org.organizationId), k)) return { error: "Your company doesn't use that photo type." };
   const accountsKind = ACCOUNTS_PHOTO_KINDS.includes(k);
   if (k === "PAYMENT_CONFIRMATION" ? !canWritePayment(org.role, org.access) : accountsKind ? !canWriteAccounts(org.role, org.access) : !canWriteReceiving(org.role, org.access)) {
     return { error: "Your role can view Receiving but can't make changes." };

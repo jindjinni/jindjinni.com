@@ -332,6 +332,7 @@ export function settingsSectionsFor(role: string): SettingsSection[] {
   out.push({ href: "/dashboard/settings/business-profile", label: "Business profile", blurb: "Your company's official details." });
   out.push({ href: "/dashboard/settings/appearance", label: "Appearance", blurb: "Your company's color theme." });
   if (isAdmin(role)) {
+    out.push({ href: "/dashboard/settings/menus", label: "Menus", blurb: "Which departments show in the top bar, their order and names." });
     out.push({ href: "/dashboard/settings/company-profile", label: "Company profile", blurb: "Your details, account status and payment status." });
     out.push({ href: "/dashboard/settings/business", label: "Shipping & labels", blurb: "The return address printed on labels." });
     out.push({ href: "/dashboard/settings/team", label: "Team & access", blurb: "Invite people and choose their role." });

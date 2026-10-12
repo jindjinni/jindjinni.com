@@ -30,6 +30,7 @@ import {
 import { MONEY, STATUS_PILL, chipClass, formatUtcStamp } from "@/lib/receiving-ui";
 import { MarkPaidButton } from "@/app/(dashboard)/dashboard/accounts/mark-paid-button";
 import { LocalTime } from "@/components/local-time";
+import { fieldHidden, photoHidden, type HideableField, type ReceivingFormConfig } from "@/lib/receiving-form-config";
 import { Choice, PhotoAddContext, PhotoSlot, Row, Step, YN, YN_RISK, field } from "./intake-parts";
 import { ItemAdjustmentCard, itemFactsOf, toItemState, type ItemState } from "./item-card";
 import { ReceiptPreview, ReceivedItemsGrid } from "./receiving-table";
@@ -100,6 +101,8 @@ type Props = {
   quotedLines: QuotedLine[];
   adjustment: AdjustmentSummary | null;
   started: { at: string; byName: string | null };
+  /** What this company hides or does not require on the form (Receiving -> Form settings). */
+  formConfig: ReceivingFormConfig;
   catalog: CatalogProduct[];
   saved: {
     accountsStatus: string;
@@ -277,7 +280,7 @@ export function IntakeForm(props: Props) {
       }
     }
   }
-  const missing = [...computeMissingInfo(facts, counts, itemFacts), ...recallGate];
+  const missing = [...computeMissingInfo(facts, counts, itemFacts, props.formConfig), ...recallGate];
   // Quoted products nothing has been entered for yet count as shortages. Blank rows (no product chosen) are not lines yet.
   const namedFacts = itemFacts.filter((f) => f.productName?.trim());
   const notEntered = quotedNotEntered(props.quotedLines, namedFacts);
@@ -391,6 +394,9 @@ export function IntakeForm(props: Props) {
     });
   }
 
+  const cfg = props.formConfig;
+  const hideF = (k: HideableField) => fieldHidden(cfg, k);
+  const hideP = (k: PhotoKind) => photoHidden(cfg, k);
   const slot = (kind: PhotoKind, opts?: { accounts?: boolean; payment?: boolean }) => (
     <PhotoSlot packageId={packageId} kind={kind} photos={photos} editable={opts?.payment ? canPayment : opts?.accounts ? canAccounts : editable} canAdd={opts?.payment ? canPayment : opts?.accounts ? canAccounts : canWrite} storageOk={storageOk} onError={setError} />
   );
@@ -491,12 +497,12 @@ export function IntakeForm(props: Props) {
           <Row label="Order Tracking Number">
             <input id="trackingNumber" className={field} value={v.trackingNumber} maxLength={80} onChange={(e) => set("trackingNumber", e.target.value)} />
           </Row>
-          <Row label="Carrier">
+          {!hideF("carrier") && <Row label="Carrier">
             <select id="carrier" className={field} value={v.carrier} onChange={(e) => set("carrier", e.target.value)}>
               <option value="">Choose…</option>
               {["UPS", "USPS", "FedEx", "Other"].map((c) => <option key={c}>{c}</option>)}
             </select>
-          </Row>
+          </Row>}
           <Row label="Carrier Tracking Status">
             {props.tracking.packageStatus ? (
               <span>
@@ -539,8 +545,8 @@ export function IntakeForm(props: Props) {
               {props.team.map((t) => <option key={t.userId} value={t.userId}>{t.name}</option>)}
             </select>
           </Row>
-          <Row label="Photo - Unopened Package">{slot("UNOPENED_PACKAGE")}</Row>
-          <Row label="Photo - Shipping Label">{slot("SHIPPING_LABEL")}</Row>
+          {!hideP("UNOPENED_PACKAGE") && <Row label="Photo - Unopened Package">{slot("UNOPENED_PACKAGE")}</Row>}
+          {!hideP("SHIPPING_LABEL") && <Row label="Photo - Shipping Label">{slot("SHIPPING_LABEL")}</Row>}
         </Step>
 
         {/* STEP 3 */}
@@ -566,20 +572,20 @@ export function IntakeForm(props: Props) {
                 </div>
               </Row>
               <Row label="Damage Notes">{textInput("damageNotes", 2)}</Row>
-              <Row label="Damage Photos">{slot("DAMAGE")}</Row>
+              {!hideP("DAMAGE") && <Row label="Damage Photos">{slot("DAMAGE")}</Row>}
             </>
           )}
-          <Row label="Photo - Package As Opened">{slot("PACKAGE_AS_OPENED")}</Row>
+          {!hideP("PACKAGE_AS_OPENED") && <Row label="Photo - Package As Opened">{slot("PACKAGE_AS_OPENED")}</Row>}
         </Step>
 
         {/* STEP 4 */}
         <Step n={4} id="step-4" title="Packaging check">
-          <Row label="Double-Boxed?"><Choice name="Double-Boxed?" value={v.doubleBoxed} onChange={(x) => set("doubleBoxed", x)} options={YN} disabled={!editable} /></Row>
-          <Row label="Bubble Wrap / Protective Material?"><Choice name="Protective material?" value={v.protectiveMaterial} onChange={(x) => set("protectiveMaterial", x)} options={YN} disabled={!editable} /></Row>
-          <Row label="Sturdy Outer Box?"><Choice name="Sturdy outer box?" value={v.sturdyOuterBox} onChange={(x) => set("sturdyOuterBox", x)} options={YN} disabled={!editable} /></Row>
-          <Row label="Products Properly Secured?"><Choice name="Products properly secured?" value={v.productsSecured} onChange={(x) => set("productsSecured", x)} options={YN} disabled={!editable} /></Row>
-          <Row label="Package Properly Sealed?"><Choice name="Package properly sealed?" value={v.packageSealed} onChange={(x) => set("packageSealed", x)} options={YN} disabled={!editable} /></Row>
-          <Row label="Packaging Requirements Met?">
+          {!hideF("doubleBoxed") && <Row label="Double-Boxed?"><Choice name="Double-Boxed?" value={v.doubleBoxed} onChange={(x) => set("doubleBoxed", x)} options={YN} disabled={!editable} /></Row>}
+          {!hideF("protectiveMaterial") && <Row label="Bubble Wrap / Protective Material?"><Choice name="Protective material?" value={v.protectiveMaterial} onChange={(x) => set("protectiveMaterial", x)} options={YN} disabled={!editable} /></Row>}
+          {!hideF("sturdyOuterBox") && <Row label="Sturdy Outer Box?"><Choice name="Sturdy outer box?" value={v.sturdyOuterBox} onChange={(x) => set("sturdyOuterBox", x)} options={YN} disabled={!editable} /></Row>}
+          {!hideF("productsSecured") && <Row label="Products Properly Secured?"><Choice name="Products properly secured?" value={v.productsSecured} onChange={(x) => set("productsSecured", x)} options={YN} disabled={!editable} /></Row>}
+          {!hideF("packageSealed") && <Row label="Package Properly Sealed?"><Choice name="Package properly sealed?" value={v.packageSealed} onChange={(x) => set("packageSealed", x)} options={YN} disabled={!editable} /></Row>}
+          {!hideF("packagingRequirementsMet") && <Row label="Packaging Requirements Met?">
             <Choice
               name="Packaging requirements met?"
               value={v.packagingRequirementsMet}
@@ -591,7 +597,7 @@ export function IntakeForm(props: Props) {
               ]}
               disabled={!editable}
             />
-          </Row>
+          </Row>}
           <Row label="Overall Packaging Condition">
             <Choice
               name="Overall packaging condition"
@@ -607,16 +613,16 @@ export function IntakeForm(props: Props) {
           {v.overallPackaging === "NOT_ACCEPTABLE" && (
             <>
               <Row label="Packaging Issue Notes">{textInput("packagingIssueNotes", 2)}</Row>
-              <Row label="Packaging Issue Photos">{slot("PACKAGING_ISSUE")}</Row>
+              {!hideP("PACKAGING_ISSUE") && <Row label="Packaging Issue Photos">{slot("PACKAGING_ISSUE")}</Row>}
             </>
           )}
         </Step>
 
         {/* STEP 5 */}
         <Step n={5} id="step-5" title="Contents">
-          <Row label="Photo - Complete Contents">{slot("COMPLETE_CONTENTS")}</Row>
-          <Row label="Invoice / Packing Sheet Included?"><Choice name="Packing sheet included?" value={v.packingSheetIncluded} onChange={(x) => set("packingSheetIncluded", x)} options={YN} disabled={!editable} /></Row>
-          {v.packingSheetIncluded === "YES" && <Row label="Invoice / Packing Sheet Photo">{slot("PACKING_SHEET")}</Row>}
+          {!hideP("COMPLETE_CONTENTS") && <Row label="Photo - Complete Contents">{slot("COMPLETE_CONTENTS")}</Row>}
+          {!hideF("packingSheetIncluded") && <Row label="Invoice / Packing Sheet Included?"><Choice name="Packing sheet included?" value={v.packingSheetIncluded} onChange={(x) => set("packingSheetIncluded", x)} options={YN} disabled={!editable} /></Row>}
+          {v.packingSheetIncluded === "YES" && !hideP("PACKING_SHEET") && <Row label="Invoice / Packing Sheet Photo">{slot("PACKING_SHEET")}</Row>}
           <Row label="Does Quantity Match What Was Quoted?"><Choice name="Quantity matches?" value={v.quantityMatches} onChange={(x) => set("quantityMatches", x)} options={YN} disabled={!editable} /></Row>
         </Step>
 

@@ -32,7 +32,7 @@ const TONES: Record<Tone, { aside: string; faint: string; muted: string; active:
   },
 };
 
-type Draft = { id: string; label: string }[];
+type Draft = { id: string; label: string; hidden: boolean }[];
 
 export function DepartmentSidebar({
   dept,
@@ -78,8 +78,8 @@ export function DepartmentSidebar({
   const isActive = (i: ResolvedItem) => (i.exact ? path === i.href : path === i.href || path.startsWith(i.href + "/"));
 
   function beginEdit() {
-    setMain(items.filter((i) => !i.setup).map((i) => ({ id: i.id, label: i.label })));
-    setSetup(items.filter((i) => i.setup).map((i) => ({ id: i.id, label: i.label })));
+    setMain(items.filter((i) => !i.setup).map((i) => ({ id: i.id, label: i.label, hidden: i.hidden })));
+    setSetup(items.filter((i) => i.setup).map((i) => ({ id: i.id, label: i.label, hidden: i.hidden })));
     setSetupName(setupLabel);
     setError("");
     setEditing(true);
@@ -93,6 +93,7 @@ export function DepartmentSidebar({
     set(next);
   };
   const rename = (list: Draft, set: (d: Draft) => void, index: number, label: string) => set(list.map((d, i) => (i === index ? { ...d, label } : d)));
+  const setHidden = (list: Draft, set: (d: Draft) => void, index: number, hidden: boolean) => set(list.map((d, i) => (i === index ? { ...d, hidden } : d)));
 
   function save() {
     setError("");
@@ -132,8 +133,16 @@ export function DepartmentSidebar({
             placeholder={meta.defaultLabel}
             onChange={(e) => rename(list, set, i, e.target.value)}
             aria-label={`Name of the ${meta.defaultLabel} tab`}
-            className={`min-w-0 flex-1 rounded-md border bg-white/80 px-2 py-1 text-sm text-slate-900 outline-none ${t.field}`}
+            className={`min-w-0 flex-1 rounded-md border bg-white/80 px-2 py-1 text-sm text-slate-900 outline-none ${t.field} ${d.hidden ? "opacity-50" : ""}`}
           />
+          {meta.exact ? (
+            <span className="w-12 shrink-0 text-center text-[10px] opacity-60" title="The first tab always shows">always</span>
+          ) : (
+            <label className="flex w-12 shrink-0 flex-col items-center text-[10px] leading-3" title={d.hidden ? "Hidden. Tick to show this tab again." : "Shown. Untick to hide this tab (its page and data stay)."}>
+              <input type="checkbox" checked={!d.hidden} onChange={(e) => setHidden(list, set, i, !e.target.checked)} aria-label={`Show the ${meta.defaultLabel} tab`} data-testid="menu-show" />
+              show
+            </label>
+          )}
         </div>
       );
     });
@@ -160,8 +169,8 @@ export function DepartmentSidebar({
     );
   };
 
-  const mainItems = items.filter((i) => !i.setup);
-  const setupItems = items.filter((i) => i.setup);
+  const mainItems = items.filter((i) => !i.setup && !i.hidden);
+  const setupItems = items.filter((i) => i.setup && !i.hidden);
   const setupOpen = setupChoice ?? setupItems.some(isActive);
 
   return (
@@ -173,7 +182,7 @@ export function DepartmentSidebar({
 
       {editing ? (
         <div className="flex flex-col gap-1.5 px-3 pb-4" aria-label={`${title} menu editor`}>
-          <p className={`px-1 pb-1 text-xs ${t.faint}`}>Type a new name, or move a tab up or down. This changes the menu for everyone in your company.</p>
+          <p className={`px-1 pb-1 text-xs ${t.faint}`}>Type a new name, move a tab up or down, or untick Show to hide it. Hiding only removes it from the menu: nothing is deleted. This changes the menu for everyone in your company.</p>
           {editRows(main, setMain)}
           {setup.length > 0 && (
             <>

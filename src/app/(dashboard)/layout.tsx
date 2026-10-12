@@ -22,7 +22,10 @@ import { waitingCount } from "@/lib/company-admin";
 import { inboxCounts } from "@/lib/support-service";
 import { twoStepOn } from "@/lib/two-step";
 import { minutesLeft } from "@/lib/support-rules";
-import { ROLE_LABELS, canViewAccounts, canViewCustomerService, canViewInventory, canViewPurchasing, canViewReceiving, canViewSales, canViewShipping, canViewHr, canViewMarketing } from "@/lib/permissions";
+import { ROLE_LABELS } from "@/lib/permissions";
+import { topLinksFor } from "@/lib/top-nav";
+import { resolveTop } from "@/lib/sidebar-menu";
+import { getSavedSidebarMenus } from "@/lib/sidebar-menu-store";
 
 export default async function DashboardLayout({
   children,
@@ -55,22 +58,11 @@ export default async function DashboardLayout({
   let lampBadge = 0;
   if (level) lampBadge = (await waitingCount()) + (await inboxCounts()).needs;
   const clock = await getMyClock({ organizationId: org.organizationId, userId: org.userId }, nowIso);
-  const navItems: NavItem[] = [
-    { href: "/dashboard", label: "Home" },
-    ...(canViewPurchasing(org.role, org.access) ? [{ href: "/dashboard/purchasing", label: "Purchasing" }] : []),
-    ...(canViewReceiving(org.role, org.access) ? [{ href: "/dashboard/receiving", label: "Receiving" }] : []),
-    ...(canViewAccounts(org.role, org.access) ? [{ href: "/dashboard/accounts", label: "Accounts" }] : []),
-    ...(canViewCustomerService(org.role, org.access) ? [{ href: "/dashboard/customer-service", label: "Customer Service" }] : []),
-    ...(canViewInventory(org.role, org.access) ? [{ href: "/dashboard/inventory", label: "Inventory" }] : []),
-    ...(canViewSales(org.role, org.access) ? [{ href: "/dashboard/sales", label: "Sales" }] : []),
-    ...(shippingOn && canViewShipping(org.role, org.access) ? [{ href: "/dashboard/shipping", label: "Shipping" }] : []),
-    ...(canViewMarketing(org.role, org.access) ? [{ href: "/dashboard/marketing", label: "Marketing" }] : []),
-    ...(canViewHr(org.role) ? [{ href: "/dashboard/hr", label: "HR" }] : []),
-    ...(viewing ? [] : [{ href: "/dashboard/chat", label: "Chat" }]),
-    ...(showSupport ? [{ href: "/dashboard/support", label: "Support" }] : []),
-    ...(level ? [{ href: "/dashboard/lamp", label: lampBadge ? `Lamp (${lampBadge})` : "Lamp" }] : []),
-    { href: "/dashboard/settings", label: mayOpenSettings(level) ? "Settings" : "My account" },
-  ];
+  // The links this person may use, then the company's own order, names and hidden links (Settings -> Menus). Home, Lamp and Settings always stay.
+  const savedMenus = await getSavedSidebarMenus(org.organizationId);
+  const links = topLinksFor(org, { shippingOn, showSupport, viewing: !!viewing, level: level ?? null, lampLabel: lampBadge ? `Lamp (${lampBadge})` : "Lamp", settingsLabel: mayOpenSettings(level) ? "Settings" : "My account" });
+  const hrefOf = new Map(links.map((l) => [l.id, l.href]));
+  const navItems: NavItem[] = resolveTop(links, savedMenus).filter((r) => !r.hidden).map((r) => ({ href: hrefOf.get(r.id)!, label: r.label }));
 
   return (
     <ThemeScope themes={parseDepartmentThemes(orgRow?.departmentThemes)}>

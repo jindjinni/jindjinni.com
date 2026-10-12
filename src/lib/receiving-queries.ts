@@ -3,6 +3,7 @@
 // An order is never copied into Receiving: each package points at its quotation
 // in the Purchasing Quotation Summary and reads the order details from there.
 
+import { getReceivingFormConfig } from "@/lib/receiving-form-config-store";
 import { and, desc, eq, inArray, isNull, like, ne, or, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { isTemplateKey, type TemplateKey, type TemplateText } from "@/lib/email-templates";
@@ -443,6 +444,7 @@ export async function getReceivingPackage(organizationId: string, packageId: str
     .where(and(eq(receivingAdjustments.packageId, packageId), eq(receivingAdjustments.organizationId, organizationId)))
     .limit(1);
   const adjustment: AdjustmentSummary | null = adjRow ?? null;
+  const formConfig = await getReceivingFormConfig(organizationId);
   // Who opened the package and when (older packages fall back to the day the record was created).
   const starterId = pkg.startedByUserId ?? pkg.receivedByUserId;
   const [starter] = starterId ? await db.select({ name: users.name, email: users.email }).from(users).where(eq(users.id, starterId)).limit(1) : [];
@@ -463,7 +465,8 @@ export async function getReceivingPackage(organizationId: string, packageId: str
     receipt,
     duplicates: dupes,
     settings,
-    missing: [...computeMissingInfo({ ...pkg, damageTypes }, photoCounts, itemRows), ...(await recallGateIssues(organizationId, packageId, itemRows))],
+    formConfig,
+    missing: [...computeMissingInfo({ ...pkg, damageTypes }, photoCounts, itemRows, formConfig), ...(await recallGateIssues(organizationId, packageId, itemRows))],
   };
 }
 

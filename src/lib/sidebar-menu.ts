@@ -71,6 +71,7 @@ export const DEPARTMENT_MENUS: Record<MenuDept, DepartmentMenu> = {
       { id: "products", href: `${R}/products`, label: "Products", icon: "🏷️" },
       { id: "adjustments", href: `${R}/adjustments`, label: "Order Adjustments", icon: "🧾" },
       { id: "mail", href: `${R}/mail`, label: "Mail", icon: "✉️" },
+      { id: "form-settings", href: `${R}/form-settings`, label: "Form settings", setup: true },
       { id: "connectors", href: `${R}/connectors`, label: "Connectors", setup: true },
     ],
   },
@@ -171,7 +172,7 @@ export const DEPARTMENT_MENUS: Record<MenuDept, DepartmentMenu> = {
  */
 export function menuIdsFor(dept: MenuDept, opts: { connectors: boolean; base?: string[] }): string[] {
   const ids = DEPARTMENT_MENUS[dept].items.map((i) => i.id);
-  return ids.filter((id) => (id !== "connectors" || opts.connectors) && (!opts.base || opts.base.includes(id)));
+  return ids.filter((id) => ((id !== "connectors" && id !== "form-settings") || opts.connectors) && (!opts.base || opts.base.includes(id)));
 }
 
 export const isMenuDept = (v: unknown): v is MenuDept => typeof v === "string" && Object.prototype.hasOwnProperty.call(DEPARTMENT_MENUS, v);
@@ -184,8 +185,11 @@ export type SavedMenu = {
   labels?: Record<string, string>;
   /** The name over the Setup group, when changed. */
   setupLabel?: string;
+  /** Tabs the company chose to hide from the menu (the pages and their data stay; a tab's home page can't be hidden). */
+  hidden?: string[];
 };
-export type SavedMenus = Partial<Record<MenuDept, SavedMenu>>;
+/** `top` is the bar across the top of every page: ids from TOP_ITEMS. */
+export type SavedMenus = Partial<Record<MenuDept, SavedMenu>> & { top?: SavedMenu };
 
 export const MAX_LABEL = 40;
 
@@ -221,9 +225,92 @@ export function parseSidebarMenus(raw: string | null | undefined): SavedMenus {
       saved.labels = labels;
     }
     if (typeof o.setupLabel === "string" && cleanLabel(o.setupLabel)) saved.setupLabel = cleanLabel(o.setupLabel);
+    const locked = new Set(DEPARTMENT_MENUS[dept].items.filter((i) => i.exact).map((i) => i.id));
+    if (Array.isArray(o.hidden)) saved.hidden = [...new Set(o.hidden.filter((x): x is string => typeof x === "string" && known.has(x) && !locked.has(x)))];
     out[dept] = saved;
   }
+  const top = parseTop((data as Record<string, unknown>).top);
+  if (top) out.top = top;
   return out;
+}
+
+// ---- the top bar ---------------------------------------------------------------------------------------------------
+
+/** Every link that can be in the top bar. `locked` ones are always shown and keep their place (Home first, Settings and Lamp last). */
+export const TOP_ITEMS = [
+  { id: "home", label: "Home", locked: true },
+  { id: "purchasing", label: "Purchasing" },
+  { id: "receiving", label: "Receiving" },
+  { id: "accounts", label: "Accounts" },
+  { id: "customer-service", label: "Customer Service" },
+  { id: "inventory", label: "Inventory" },
+  { id: "sales", label: "Sales" },
+  { id: "shipping", label: "Shipping" },
+  { id: "marketing", label: "Marketing" },
+  { id: "hr", label: "HR" },
+  { id: "chat", label: "Chat" },
+  { id: "support", label: "Support" },
+  { id: "lamp", label: "Lamp", locked: true },
+  { id: "settings", label: "Settings", locked: true },
+] as const;
+const TOP_IDS = new Map<string, { id: string; label: string; locked?: boolean }>(TOP_ITEMS.map((t) => [t.id, t]));
+
+function parseTop(v: unknown): SavedMenu | null {
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>;
+  const ok = (x: unknown): x is string => typeof x === "string" && TOP_IDS.has(x);
+  const out: SavedMenu = {};
+  if (Array.isArray(o.order)) out.order = [...new Set(o.order.filter(ok))];
+  if (o.labels && typeof o.labels === "object") {
+    const labels: Record<string, string> = {};
+    for (const [id, l] of Object.entries(o.labels as Record<string, unknown>)) if (ok(id) && !TOP_IDS.get(id)!.locked && cleanLabel(l)) labels[id] = cleanLabel(l);
+    out.labels = labels;
+  }
+  if (Array.isArray(o.hidden)) out.hidden = [...new Set(o.hidden.filter(ok).filter((id) => !TOP_IDS.get(id)!.locked))];
+  return out;
+}
+
+export type TopRow = { id: string; label: string; defaultLabel: string; locked: boolean; hidden: boolean };
+
+/**
+ * The top bar for this person: `present` are the links they may see (by id, in the original order, with their original names).
+ * Returns every present link in the company's order with the company's names; `hidden` marks the ones to leave out of the bar.
+ * Home is always first, and Lamp and Settings always last. A company can never hide Home, Lamp or Settings.
+ */
+export function resolveTop(present: { id: string; label: string }[], saved: SavedMenus): TopRow[] {
+  const mine = saved.top ?? {};
+  const rank = new Map((mine.order ?? []).map((id, i) => [id, i]));
+  const original = new Map(present.map((p, i) => [p.id, i]));
+  const hidden = new Set(mine.hidden ?? []);
+  const rows = present.map<TopRow>((p) => {
+    const locked = !!TOP_IDS.get(p.id)?.locked;
+    return { id: p.id, label: (!locked && mine.labels?.[p.id]) || p.label, defaultLabel: p.label, locked, hidden: !locked && hidden.has(p.id) };
+  });
+  const place = (r: TopRow) => (r.id === "home" ? -1 : r.id === "lamp" ? 2000 : r.id === "settings" ? 2001 : rank.has(r.id) ? rank.get(r.id)! : 1000 + original.get(r.id)!);
+  return rows.sort((a, b) => place(a) - place(b));
+}
+
+/** Applies a save from the top bar editor. Links the editor could not see (a department this person has no access to) keep their earlier name, place and hidden state. */
+export function applyTopEdit(previous: SavedMenus, edit: { items: { id: string; label: string; hidden: boolean }[] }): SavedMenus {
+  const prev = previous.top ?? {};
+  const seen = new Set<string>();
+  const order: string[] = [];
+  const labels: Record<string, string> = { ...(prev.labels ?? {}) };
+  const hidden = new Set(prev.hidden ?? []);
+  for (const it of edit.items) {
+    const def = TOP_IDS.get(it.id);
+    if (!def || seen.has(it.id)) continue;
+    seen.add(it.id);
+    order.push(it.id);
+    if (def.locked) continue;
+    const l = cleanLabel(it.label);
+    if (l && l !== def.label) labels[it.id] = l;
+    else delete labels[it.id];
+    if (it.hidden) hidden.add(it.id);
+    else hidden.delete(it.id);
+  }
+  for (const id of prev.order ?? []) if (!seen.has(id)) order.push(id);
+  return { ...previous, top: { order, labels, hidden: [...hidden] } };
 }
 
 export type ResolvedItem = {
@@ -235,6 +322,8 @@ export type ResolvedItem = {
   icon?: string;
   exact: boolean;
   setup: boolean;
+  /** The company hid this tab: it is left out of the menu but still listed in the menu editor so it can be shown again. */
+  hidden: boolean;
 };
 
 export type ResolvedMenu = { title: string; setupLabel: string; defaultSetupLabel: string; items: ResolvedItem[] };
@@ -248,6 +337,7 @@ export function resolveMenu(dept: MenuDept, saved: SavedMenus, allowedIds?: stri
   const def = DEPARTMENT_MENUS[dept];
   const mine = saved[dept] ?? {};
   const allowed = allowedIds ? new Set(allowedIds) : null;
+  const hiddenSet = new Set(mine.hidden ?? []);
   const rank = new Map((mine.order ?? []).map((id, i) => [id, i]));
   const defaultIndex = new Map(def.items.map((it, i) => [it.id, i]));
   // A Distributor starts with Purchase Orders before Quotations (the company's own saved order, if any, always wins).
@@ -261,7 +351,7 @@ export function resolveMenu(dept: MenuDept, saved: SavedMenus, allowedIds?: stri
   }
   const items = def.items
     .filter((it) => !allowed || allowed.has(it.id))
-    .map<ResolvedItem>((it) => ({ id: it.id, href: it.href, label: mine.labels?.[it.id] || opts.defaultLabels?.[it.id] || it.label, defaultLabel: opts.defaultLabels?.[it.id] || it.label, icon: it.icon, exact: !!it.exact, setup: !!it.setup }));
+    .map<ResolvedItem>((it) => ({ id: it.id, href: it.href, label: mine.labels?.[it.id] || opts.defaultLabels?.[it.id] || it.label, defaultLabel: opts.defaultLabels?.[it.id] || it.label, icon: it.icon, exact: !!it.exact, setup: !!it.setup, hidden: !it.exact && hiddenSet.has(it.id) }));
   items.sort((a, b) => {
     if (a.setup !== b.setup) return a.setup ? 1 : -1;
     const ra = rank.has(a.id) ? rank.get(a.id)! : 1000 + defaultIndex.get(a.id)!;
@@ -275,18 +365,22 @@ export function resolveMenu(dept: MenuDept, saved: SavedMenus, allowedIds?: stri
  * Applies a save from the editor on top of what was saved before. `items` is the order of the tabs the editor
  * could see, with the names typed. Tabs the editor could not see keep their earlier name and place.
  */
-export function applyMenuEdit(dept: MenuDept, previous: SavedMenus, edit: { items: { id: string; label: string }[]; setupLabel: string }): SavedMenus {
+export function applyMenuEdit(dept: MenuDept, previous: SavedMenus, edit: { items: { id: string; label: string; hidden?: boolean }[]; setupLabel: string }): SavedMenus {
   const def = DEPARTMENT_MENUS[dept];
   const known = new Map(def.items.map((i) => [i.id, i]));
   const prev = previous[dept] ?? {};
   const seen = new Set<string>();
   const order: string[] = [];
   const labels: Record<string, string> = { ...(prev.labels ?? {}) };
+  const hidden = new Set(prev.hidden ?? []);
   for (const it of edit.items) {
     const orig = known.get(it.id);
     if (!orig || seen.has(it.id)) continue;
     seen.add(it.id);
     order.push(it.id);
+    // A tab's home page (the first tab) can never be hidden; every other tab can, and hiding never touches its page or data.
+    if (it.hidden && !orig.exact) hidden.add(it.id);
+    else hidden.delete(it.id);
     const l = cleanLabel(it.label);
     if (l && l !== orig.label) labels[it.id] = l;
     else delete labels[it.id];
@@ -294,6 +388,7 @@ export function applyMenuEdit(dept: MenuDept, previous: SavedMenus, edit: { item
   for (const id of prev.order ?? []) if (!seen.has(id)) order.push(id);
   const setupLabel = cleanLabel(edit.setupLabel);
   const next: SavedMenu = { order, labels };
+  if (hidden.size > 0) next.hidden = [...hidden];
   if (setupLabel && setupLabel !== def.setupLabel) next.setupLabel = setupLabel;
   return { ...previous, [dept]: next };
 }

@@ -3,6 +3,7 @@
 // final status should be, how a product line is judged, and which customer
 // email applies.
 
+import { fieldOptional, photoHidden, type OptionalField, type ReceivingFormConfig } from "@/lib/receiving-form-config";
 import type {
   RECEIVING_PHOTO_KINDS,
   RECEIVING_ACCOUNTS_DECISIONS,
@@ -183,8 +184,11 @@ export function computeMissingInfo(
   s: ShipmentFacts,
   photoCounts: Partial<Record<PhotoKind, number>>,
   items: ItemFacts[] = [],
+  form?: ReceivingFormConfig | null,
 ): string[] {
-  const n = (k: PhotoKind) => photoCounts[k] ?? 0;
+  // A photo type the company hid is never asked for, and a question it made optional is not required (lib/receiving-form-config.ts).
+  const n = (k: PhotoKind) => (photoHidden(form, k) ? 1 : (photoCounts[k] ?? 0));
+  const req = (k: OptionalField) => !fieldOptional(form, k);
   const out: string[] = [];
   if (blank(s.trackingNumber)) out.push("Order Tracking Number");
   if (blank(s.receivedAt)) out.push("Date/Time Received");
@@ -197,13 +201,13 @@ export function computeMissingInfo(
     if (n("DAMAGE") < 1) out.push(PHOTO_KIND_LABELS.DAMAGE);
   }
   if (n("PACKAGE_AS_OPENED") < 1) out.push(PHOTO_KIND_LABELS.PACKAGE_AS_OPENED);
-  if (!s.overallPackaging) out.push("Overall Packaging Condition");
+  if (req("overallPackaging") && !s.overallPackaging) out.push("Overall Packaging Condition");
   if (s.overallPackaging === "NOT_ACCEPTABLE") {
     if (blank(s.packagingIssueNotes)) out.push("Packaging Issue Notes");
     if (n("PACKAGING_ISSUE") < 1) out.push(PHOTO_KIND_LABELS.PACKAGING_ISSUE);
   }
   if (n("COMPLETE_CONTENTS") < 1) out.push(PHOTO_KIND_LABELS.COMPLETE_CONTENTS);
-  if (!s.quantityMatches) out.push("Does Quantity Match What Was Quoted?");
+  if (req("quantityMatches") && !s.quantityMatches) out.push("Does Quantity Match What Was Quoted?");
   if (items.length === 0) out.push("At least one product line in Verify What Arrived");
   for (const i of items) {
     if (!i.productName?.trim()) {
@@ -214,9 +218,9 @@ export function computeMissingInfo(
     if (!i.wasReceived) out.push(`${name}: Quantity Received`);
     else if (i.wasReceived !== "NO" && (i.quantityReceived == null || i.quantityReceived < 0)) out.push(`${name}: Quantity Received`);
   }
-  if (!s.adjustmentNeeded) out.push("Adjustment Needed?");
+  if (req("adjustmentNeeded") && !s.adjustmentNeeded) out.push("Adjustment Needed?");
   if (s.adjustmentNeeded === "YES" && blank(s.adjustmentDetails)) out.push("Adjustment Details");
-  if (blank(s.receivingNotes)) out.push("Receiving Notes");
+  if (req("receivingNotes") && blank(s.receivingNotes)) out.push("Receiving Notes");
   return out;
 }
 
