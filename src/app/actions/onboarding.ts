@@ -9,13 +9,11 @@ import {
   organizations,
   memberships,
   conditions,
-  purchasingBonusTiers,
   businessProfiles,
 } from "@/db/schema";
 import {
   newId,
   defaultConditionRows,
-  defaultPurchasingBonusTierRows,
 } from "@/lib/ids";
 import { setupNewOrgCatalog } from "@/lib/catalog-template";
 import { extractBusinessProfileIdentityFields } from "@/lib/business-profile-form";
@@ -98,10 +96,9 @@ export async function createOrganization(
     role: "owner",
   });
   await db.insert(conditions).values(defaultConditionRows(orgId));
-  // A copy of the platform's default catalog (brands, products at $0, conditions, month ranges, starter recalls,
-  // receipt wording) -- or the built-in starter lists when none is published. See lib/catalog-template.ts.
+  // A copy of the platform's default catalog (brands, products with their default prices, conditions, month ranges, bonus tiers,
+  // starter recalls, receipt wording) -- or the built-in starter lists when none is published. See lib/catalog-template.ts.
   await setupNewOrgCatalog(orgId);
-  await db.insert(purchasingBonusTiers).values(defaultPurchasingBonusTierRows(orgId));
   await db.insert(businessProfiles).values({
     id: newId("bizprofile"),
     organizationId: orgId,

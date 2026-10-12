@@ -4,12 +4,14 @@
 // brands, NDCs, conditions, month ranges, starter recalls and receipt wording.
 // Every company that signs up afterwards gets its OWN COPY of the latest
 // snapshot, which it can then edit, reprice or remove freely. Prices are never
-// part of the snapshot (every product arrives at $0) and nothing is shared
-// live: after the copy, each company's rows are theirs alone.
+// part of the snapshot only in the sense that they are the platform owner's
+// chosen STARTING prices: each product arrives at the published price (and the
+// bonus tiers come along), and nothing is shared live: after the copy, each
+// company's rows are theirs alone to reprice or remove.
 //
 // Safety rails: the snapshot is built only from the publishing company's
-// catalog tables (no customers, quotations, receiving history, recall lot
-// lists or prices), and publishing is refused if the wording contains the
+// catalog tables (no customers, quotations, receiving history or recall lot
+// lists), and publishing is refused if the wording contains the
 // publisher's own company name / email / phone.
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db/client";
@@ -17,6 +19,7 @@ import {
   businessProfiles,
   organizations,
   platformCatalogTemplates,
+  purchasingBonusTiers,
   purchasingCategories,
   purchasingConditions,
   purchasingExpirationRanges,
@@ -24,9 +27,12 @@ import {
   purchasingProductMultipliers,
   purchasingProducts,
   purchasingReceiptSettings,
+  accountsSettings,
+  receivingEmailTemplates,
   receivingRecalls,
 } from "@/db/schema";
 import {
+  defaultPurchasingBonusTierRows,
   defaultPurchasingCategoryRows,
   defaultPurchasingConditionRows,
   defaultPurchasingExpirationRangeRows,
@@ -46,6 +52,8 @@ export type TemplateProduct = {
   productCode: string | null;
   ndc: string | null;
   notes: string | null;
+  /** Starting price (what the platform owner charges/pays per unit). Older snapshots have none = 0. */
+  price?: number;
   noExpiration: boolean;
   active: boolean;
   /** Condition names this product carries. */
@@ -78,6 +86,19 @@ export type TemplateReceipt = {
   paymentTimingSubtext: string | null;
   footerThankYou: string | null;
 };
+/** General (not company-specific) settings the platform owner has set up. Absent in older snapshots. */
+export type TemplateSettings = {
+  /** Accounts -> Payment terms. */
+  accounts: { payWithinBusinessDays: number; skipUsHolidays: boolean; timeZone: string } | null;
+  /** Receiving Intake Form settings, as the stored JSON text. */
+  receivingFormConfig: string | null;
+  /** The customer-email wording (Receiving), one per template key. */
+  emailTemplates: { templateKey: string; subject: string; body: string }[];
+  /** Menus and department colors, as the stored JSON text. */
+  sidebarMenus: string | null;
+  departmentThemes: string | null;
+};
+export type TemplateBonusTier = { thresholdAmount: number; bonusAmount: number; description: string | null; active: boolean };
 export type CatalogTemplateData = {
   categories: { name: string; active: boolean }[];
   conditions: { name: string; multiplier: number; active: boolean }[];
@@ -85,6 +106,9 @@ export type CatalogTemplateData = {
   products: TemplateProduct[];
   recalls: TemplateRecall[];
   receipt: TemplateReceipt | null;
+  /** Absent in snapshots published before bonus tiers were included. */
+  bonusTiers?: TemplateBonusTier[];
+  settings?: TemplateSettings;
 };
 export type LoadedTemplate = {
   version: number;
@@ -138,6 +162,8 @@ export async function getLatestTemplate(): Promise<LoadedTemplate | null> {
         products: data.products,
         recalls: data.recalls ?? [],
         receipt: data.receipt ?? null,
+        bonusTiers: Array.isArray(data.bonusTiers) ? data.bonusTiers : undefined,
+        settings: data.settings && typeof data.settings === "object" ? data.settings : undefined,
       },
     };
   } catch {
@@ -150,7 +176,7 @@ export async function getLatestTemplate(): Promise<LoadedTemplate | null> {
 // ---------------------------------------------------------------------------
 
 export type PublishResult =
-  | { ok: true; version: number; counts: { products: number; categories: number; conditions: number; ranges: number; recalls: number } }
+  | { ok: true; version: number; counts: { products: number; categories: number; conditions: number; ranges: number; recalls: number; priced: number; bonusTiers: number } }
   | { ok: false; error: string };
 
 /** Everything that is free text in the snapshot, so it can be checked for the publisher's own details. */
@@ -166,11 +192,12 @@ function textsToCheck(d: CatalogTemplateData): { where: string; text: string }[]
   if (d.receipt) {
     for (const [k, v] of Object.entries(d.receipt)) if (v) out.push({ where: `the receipt wording (${k})`, text: String(v) });
   }
+  for (const t of d.settings?.emailTemplates ?? []) out.push({ where: `the customer email wording (${t.templateKey})`, text: `${t.subject} ${t.body}` });
   return out;
 }
 
 export async function buildTemplateFromOrg(organizationId: string): Promise<CatalogTemplateData> {
-  const [cats, conds, ranges, prods, links, mults, recalls, [receipt]] = await Promise.all([
+  const [cats, conds, ranges, prods, links, mults, recalls, [receipt], tiers, [acct], emailTpls, [orgRow]] = await Promise.all([
     db.select().from(purchasingCategories).where(eq(purchasingCategories.organizationId, organizationId)).orderBy(purchasingCategories.sortOrder),
     db.select().from(purchasingConditions).where(eq(purchasingConditions.organizationId, organizationId)).orderBy(purchasingConditions.sortOrder),
     db.select().from(purchasingExpirationRanges).where(eq(purchasingExpirationRanges.organizationId, organizationId)).orderBy(purchasingExpirationRanges.sortOrder),
@@ -179,6 +206,14 @@ export async function buildTemplateFromOrg(organizationId: string): Promise<Cata
     db.select().from(purchasingProductMultipliers).where(eq(purchasingProductMultipliers.organizationId, organizationId)),
     db.select().from(receivingRecalls).where(eq(receivingRecalls.organizationId, organizationId)),
     db.select().from(purchasingReceiptSettings).where(eq(purchasingReceiptSettings.organizationId, organizationId)).limit(1),
+    db.select().from(purchasingBonusTiers).where(eq(purchasingBonusTiers.organizationId, organizationId)).orderBy(purchasingBonusTiers.sortOrder),
+    db.select().from(accountsSettings).where(eq(accountsSettings.organizationId, organizationId)).limit(1),
+    db.select().from(receivingEmailTemplates).where(eq(receivingEmailTemplates.organizationId, organizationId)),
+    db
+      .select({ receivingFormConfig: organizations.receivingFormConfig, sidebarMenus: organizations.sidebarMenus, departmentThemes: organizations.departmentThemes })
+      .from(organizations)
+      .where(eq(organizations.id, organizationId))
+      .limit(1),
   ]);
 
   const catName = new Map(cats.map((c) => [c.id, c.name]));
@@ -214,6 +249,7 @@ export async function buildTemplateFromOrg(organizationId: string): Promise<Cata
         productCode: p.productCode,
         ndc: p.ndc,
         notes: p.notes,
+        price: p.standardPrice,
         noExpiration: p.noExpiration,
         active: p.active,
         conditions: linksBy.get(p.id) ?? [],
@@ -246,6 +282,14 @@ export async function buildTemplateFromOrg(organizationId: string): Promise<Cata
           footerThankYou: receipt.footerThankYou,
         }
       : null,
+    bonusTiers: tiers.map((t) => ({ thresholdAmount: t.thresholdAmount, bonusAmount: t.bonusAmount, description: t.description, active: t.active })),
+    settings: {
+      accounts: acct ? { payWithinBusinessDays: acct.payWithinBusinessDays, skipUsHolidays: acct.skipUsHolidays, timeZone: acct.timeZone } : null,
+      receivingFormConfig: orgRow?.receivingFormConfig ?? null,
+      emailTemplates: emailTpls.map((t) => ({ templateKey: t.templateKey, subject: t.subject, body: t.body })),
+      sidebarMenus: orgRow?.sidebarMenus ?? null,
+      departmentThemes: orgRow?.departmentThemes ?? null,
+    },
   };
 }
 
@@ -284,7 +328,15 @@ export async function publishTemplateFromOrg(organizationId: string, publisherEm
   return {
     ok: true,
     version,
-    counts: { products: data.products.length, categories: data.categories.length, conditions: data.conditions.length, ranges: data.ranges.length, recalls: data.recalls.length },
+    counts: {
+      products: data.products.length,
+      categories: data.categories.length,
+      conditions: data.conditions.length,
+      ranges: data.ranges.length,
+      recalls: data.recalls.length,
+      priced: data.products.filter((p) => (p.price ?? 0) > 0).length,
+      bonusTiers: data.bonusTiers?.length ?? 0,
+    },
   };
 }
 
@@ -292,7 +344,7 @@ export async function publishTemplateFromOrg(organizationId: string, publisherEm
 // Applying a snapshot to ONE company (always scoped to that company's id)
 // ---------------------------------------------------------------------------
 
-/** Inserts a whole snapshot into a brand-new, empty company. Prices are always 0. */
+/** Inserts a whole snapshot into a brand-new, empty company. Products start at the published prices. */
 async function insertTemplateForNewOrg(organizationId: string, t: LoadedTemplate): Promise<void> {
   const d = t.data;
 
@@ -323,6 +375,92 @@ async function insertTemplateForNewOrg(organizationId: string, t: LoadedTemplate
   if (d.receipt) {
     await db.insert(purchasingReceiptSettings).values({ id: newId("preceiptset"), organizationId, ...d.receipt });
   }
+  await insertBonusTiers(organizationId, d.bonusTiers);
+  await applySettings(organizationId, d.settings, { overwriteDefaults: false });
+}
+
+const BUILT_IN_ACCOUNTS = { payWithinBusinessDays: 3, skipUsHolidays: true, timeZone: "America/New_York" };
+
+/**
+ * Copies the general settings into a company. Only fills what the company has not set: a form setting, menu or color
+ * theme that is empty, email wording it has no row for, and payment terms that are missing or still the built-in
+ * defaults. Returns what it filled.
+ */
+async function applySettings(
+  organizationId: string,
+  st: TemplateSettings | undefined,
+  _opts: { overwriteDefaults: boolean },
+): Promise<string[]> {
+  void _opts;
+  const filled: string[] = [];
+  if (!st) return filled;
+
+  if (st.accounts) {
+    const [cur] = await db.select().from(accountsSettings).where(eq(accountsSettings.organizationId, organizationId)).limit(1);
+    if (!cur) {
+      await db.insert(accountsSettings).values({ organizationId, ...st.accounts });
+      filled.push("payment terms");
+    } else if (
+      cur.payWithinBusinessDays === BUILT_IN_ACCOUNTS.payWithinBusinessDays &&
+      cur.skipUsHolidays === BUILT_IN_ACCOUNTS.skipUsHolidays &&
+      cur.timeZone === BUILT_IN_ACCOUNTS.timeZone &&
+      (st.accounts.payWithinBusinessDays !== cur.payWithinBusinessDays || st.accounts.skipUsHolidays !== cur.skipUsHolidays || st.accounts.timeZone !== cur.timeZone)
+    ) {
+      await db.update(accountsSettings).set(st.accounts).where(eq(accountsSettings.organizationId, organizationId));
+      filled.push("payment terms");
+    }
+  }
+
+  const [org] = await db
+    .select({ receivingFormConfig: organizations.receivingFormConfig, sidebarMenus: organizations.sidebarMenus, departmentThemes: organizations.departmentThemes })
+    .from(organizations)
+    .where(eq(organizations.id, organizationId))
+    .limit(1);
+  const patch: Partial<{ receivingFormConfig: string; sidebarMenus: string; departmentThemes: string }> = {};
+  if (!org?.receivingFormConfig && st.receivingFormConfig) {
+    patch.receivingFormConfig = st.receivingFormConfig;
+    filled.push("receiving form");
+  }
+  if (!org?.sidebarMenus && st.sidebarMenus) {
+    patch.sidebarMenus = st.sidebarMenus;
+    filled.push("menus");
+  }
+  if (!org?.departmentThemes && st.departmentThemes) {
+    patch.departmentThemes = st.departmentThemes;
+    filled.push("department colors");
+  }
+  if (Object.keys(patch).length > 0) await db.update(organizations).set(patch).where(eq(organizations.id, organizationId));
+
+  if (st.emailTemplates.length > 0) {
+    const have = new Set(
+      (await db.select({ k: receivingEmailTemplates.templateKey }).from(receivingEmailTemplates).where(eq(receivingEmailTemplates.organizationId, organizationId))).map((r) => r.k),
+    );
+    const add = st.emailTemplates.filter((t) => !have.has(t.templateKey));
+    if (add.length > 0) {
+      await db.insert(receivingEmailTemplates).values(add.map((t) => ({ organizationId, templateKey: t.templateKey, subject: t.subject, body: t.body })));
+      filled.push("customer email wording");
+    }
+  }
+  return filled;
+}
+
+/** The published bonus tiers, or the built-in starter tiers when the snapshot has none. */
+async function insertBonusTiers(organizationId: string, tiers: TemplateBonusTier[] | undefined) {
+  if (tiers && tiers.length > 0) {
+    await db.insert(purchasingBonusTiers).values(
+      tiers.map((t, sortOrder) => ({
+        id: newId("pbonus"),
+        organizationId,
+        thresholdAmount: t.thresholdAmount,
+        bonusAmount: t.bonusAmount,
+        description: t.description,
+        sortOrder,
+        active: t.active,
+      })),
+    );
+    return;
+  }
+  await db.insert(purchasingBonusTiers).values(defaultPurchasingBonusTierRows(organizationId));
 }
 
 async function insertRecall(organizationId: string, r: TemplateRecall) {
@@ -357,7 +495,7 @@ async function insertProducts(
       name: p.name,
       productCode: p.productCode,
       ndc: p.ndc,
-      standardPrice: 0, // every company sets its own prices
+      standardPrice: Number.isFinite(p.price) && (p.price ?? 0) > 0 ? (p.price as number) : 0, // the published starting price; the company can change it
       notes: p.notes,
       noExpiration: p.noExpiration,
       active: p.active,
@@ -413,6 +551,8 @@ export async function setupNewOrgCatalog(organizationId: string): Promise<{ sour
     if ((await count(purchasingCategories, organizationId)) === 0) await db.insert(purchasingCategories).values(defaultPurchasingCategoryRows(organizationId));
     if ((await count(purchasingConditions, organizationId)) === 0) await db.insert(purchasingConditions).values(defaultPurchasingConditionRows(organizationId));
     if ((await count(purchasingExpirationRanges, organizationId)) === 0) await db.insert(purchasingExpirationRanges).values(defaultPurchasingExpirationRangeRows(organizationId));
+    const [hasTiers] = await db.select({ id: purchasingBonusTiers.id }).from(purchasingBonusTiers).where(eq(purchasingBonusTiers.organizationId, organizationId)).limit(1);
+    if (!hasTiers) await db.insert(purchasingBonusTiers).values(defaultPurchasingBonusTierRows(organizationId));
     if (source === "built-in") {
       await seedPurchasingProductCatalogForOrg(organizationId);
       await setupDefaultRecalls(organizationId);
@@ -489,4 +629,56 @@ export async function addNewProductsForOrg(organizationId: string): Promise<AddN
 
   await db.update(organizations).set({ catalogTemplateVersion: t.version }).where(eq(organizations.id, organizationId));
   return { addedProducts: plan.products.length, addedRecalls: plan.recalls.length, upToDate: plan.products.length === 0 && plan.recalls.length === 0 };
+}
+
+
+// ---------------------------------------------------------------------------
+// "Use the default prices" for a company that already exists
+// ---------------------------------------------------------------------------
+
+export type ApplyPricesResult = { hasTemplate: boolean; priced: number; alreadyPriced: number; notInDefault: number; tiersAdded: number; settingsFilled: string[] };
+
+/**
+ * Fills in the default catalog's price for every product this company has at $0 (matched by name), plus the general
+ * settings it has not set itself (payment terms, receiving form, email wording, menus, colors). A price the
+ * company already set is never changed, and a company's own bonus tiers are never replaced (the default tiers are
+ * added only when it has none).
+ */
+export async function applyDefaultPricesForOrg(organizationId: string): Promise<ApplyPricesResult> {
+  const t = await getLatestTemplate();
+  if (!t) return { hasTemplate: false, priced: 0, alreadyPriced: 0, notInDefault: 0, tiersAdded: 0, settingsFilled: [] };
+  const priceBy = new Map(t.data.products.filter((p) => (p.price ?? 0) > 0).map((p) => [lc(p.name), p.price as number]));
+  const mine = await db
+    .select({ id: purchasingProducts.id, name: purchasingProducts.name, price: purchasingProducts.standardPrice })
+    .from(purchasingProducts)
+    .where(and(eq(purchasingProducts.organizationId, organizationId), isNull(purchasingProducts.archivedAt)));
+  let priced = 0;
+  let alreadyPriced = 0;
+  let notInDefault = 0;
+  for (const p of mine) {
+    if (p.price > 0) {
+      alreadyPriced++;
+      continue;
+    }
+    const want = priceBy.get(lc(p.name));
+    if (want === undefined) {
+      notInDefault++;
+      continue;
+    }
+    await db
+      .update(purchasingProducts)
+      .set({ standardPrice: want })
+      .where(and(eq(purchasingProducts.id, p.id), eq(purchasingProducts.organizationId, organizationId)));
+    priced++;
+  }
+  let tiersAdded = 0;
+  if (t.data.bonusTiers && t.data.bonusTiers.length > 0) {
+    const [has] = await db.select({ id: purchasingBonusTiers.id }).from(purchasingBonusTiers).where(eq(purchasingBonusTiers.organizationId, organizationId)).limit(1);
+    if (!has) {
+      await insertBonusTiers(organizationId, t.data.bonusTiers);
+      tiersAdded = t.data.bonusTiers.length;
+    }
+  }
+  const settingsFilled = await applySettings(organizationId, t.data.settings, { overwriteDefaults: false });
+  return { hasTemplate: true, priced, alreadyPriced, notInDefault, tiersAdded, settingsFilled };
 }

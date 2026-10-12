@@ -11,7 +11,7 @@ export function PublishMasterPanel({ latest }: { latest: { version: number; publ
       <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">Platform owner: default catalog for new companies</p>
       <p className="text-xs text-amber-800 dark:text-amber-300">
         {latest ? `Latest published: version ${latest.version} (${latest.publishedAt.slice(0, 10)}). ` : "Nothing published yet — new companies get the built-in starter catalog. "}
-        Publishing copies this company&rsquo;s products, brands, NDCs, conditions, month ranges, starter recalls and receipt wording as the default every new company starts with. Prices, customers, quotations and recall lot lists are never copied.
+        Publishing copies this company&rsquo;s products, brands, NDCs, prices, conditions, month ranges, bonus tiers, payment terms, receiving form settings, customer email wording, menus, starter recalls and receipt wording as the default every new company starts with. Customers, quotations and recall lot lists are never copied.
       </p>
       <button
         type="submit"

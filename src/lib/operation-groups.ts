@@ -6,11 +6,11 @@ import { startSeparateBusiness } from "@/lib/second-business";
 import type { VerificationInput } from "@/lib/business-verification";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db/client";
-import { businessProfiles, conditions, memberships, organizations, purchasingBonusTiers } from "@/db/schema";
+import { businessProfiles, conditions, memberships, organizations } from "@/db/schema";
 import { setupNewOrgCatalog } from "@/lib/catalog-template";
 import { ensureCompanyCode } from "@/lib/company-code";
 import { logActivity } from "@/lib/hr-service";
-import { defaultConditionRows, defaultPurchasingBonusTierRows, newId } from "@/lib/ids";
+import { defaultConditionRows, newId } from "@/lib/ids";
 import { addOperationBlocker, kindLabel, parseKind, typeFromKind, type OperationKind, type Workspace } from "@/lib/operation-groups-rules";
 import { columnsForChoice } from "@/lib/operations-rules";
 
@@ -116,7 +116,6 @@ export async function addOperation(who: Who, canManage: boolean, wanted: Operati
 
   await db.insert(conditions).values(defaultConditionRows(orgId));
   await setupNewOrgCatalog(orgId);
-  await db.insert(purchasingBonusTiers).values(defaultPurchasingBonusTierRows(orgId));
   const [profile] = await db.select().from(businessProfiles).where(eq(businessProfiles.organizationId, who.organizationId)).limit(1);
   if (profile) {
     const { id: _id, organizationId: _o, ...rest } = profile;
