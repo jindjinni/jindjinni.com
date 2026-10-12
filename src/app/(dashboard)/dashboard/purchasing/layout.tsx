@@ -33,8 +33,8 @@ export default async function PurchasingLayout({ children }: { children: React.R
     await getSavedSidebarMenus(org.organizationId),
     // A Wholesale operation does not show Purchase Orders and Suppliers; a Distribution operation does not show Quotations and the tabs that price
     // packages from sellers (lib/operation-tabs-rules.ts). The pages still open by address and an owner can switch every tab on.
-    // "Website requests" comes with the storefronts feature; until it is on for the company the tab isn't there.
-    await withMailTab(withoutHidden((poOn ? allowed : allowed.filter((id) => id !== "purchase-orders" && id !== "suppliers" && id !== "templates")).filter((id) => storefrontsOn || id !== "website-requests"), view.sides, "purchasing", view.showAll), org.organizationId),
+    // "Website orders" and "Other website requests" come with the storefronts feature; until it is on for the company the tab isn't there.
+    await withMailTab(withoutHidden((poOn ? allowed : allowed.filter((id) => id !== "purchase-orders" && id !== "suppliers" && id !== "templates")).filter((id) => storefrontsOn || (id !== "website-requests" && id !== "website-orders")), view.sides, "purchasing", view.showAll), org.organizationId),
     { purchaseOrdersFirst: primaryDocument(operation) === "PURCHASE_ORDER" },
   );
 

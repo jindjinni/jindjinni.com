@@ -17,6 +17,12 @@ export default async function StorefrontHome({ params }: { params: Promise<{ han
       <h1 className="text-3xl font-extrabold tracking-tight text-ink">{sf.displayName}</h1>
       {sf.welcomeText && <p className="mt-3 whitespace-pre-line text-base text-muted" data-testid="sf-welcome">{sf.welcomeText}</p>}
       <div className="mt-8 grid gap-4">
+        {sf.checkoutOpen ? (
+          <Link href={`/s/${sf.handle}/checkout`} className="rounded-2xl border-2 border-ink p-6 transition hover:bg-mint" data-testid="sf-checkout-link">
+            <h2 className="text-xl font-extrabold text-ink">Sell us your supplies</h2>
+            <p className="mt-1 text-sm text-muted">Pick your products, see exactly what we pay, and get your free shipping label right away. No waiting for a quote.</p>
+          </Link>
+        ) : null}
         {sf.sellOpen ? (
           <Link href={`/s/${sf.handle}/sell`} className="rounded-2xl border border-line p-6 transition hover:border-ink" data-testid="sf-sell-link">
             <h2 className="text-xl font-extrabold text-ink">Sell to us</h2>
@@ -33,7 +39,7 @@ export default async function StorefrontHome({ params }: { params: Promise<{ han
             </div>
           </div>
         )}
-        {!sf.sellOpen && !sf.buyOpen && (
+        {!sf.sellOpen && !sf.buyOpen && !sf.checkoutOpen && (
           <p className="rounded-2xl border border-line p-6 text-sm text-muted" data-testid="sf-nothing">Nothing is open on this page right now. Please check back soon.</p>
         )}
       </div>

@@ -30,6 +30,8 @@ export type PublicStorefront = {
   ordersOpen: boolean;
   /** Orders above this total wait for staff instead of being confirmed automatically. Null = confirm all. */
   orderReviewOver: number | null;
+  /** The automatic "sell us your supplies" checkout is open (cart -> quotation -> free label). */
+  checkoutOpen: boolean;
 };
 
 type Where = ReturnType<typeof eq>;
@@ -47,6 +49,7 @@ async function loadPublic(where: Where): Promise<PublicStorefront | null> {
       buyOpen: storefronts.buyOpen,
       ordersOpen: storefronts.ordersOpen,
       orderReviewOver: storefronts.orderReviewOver,
+      checkoutOpen: storefronts.checkoutOpen,
       parent: organizations.parentOrganizationId,
       closedAt: organizations.closedAt,
       approval: organizations.approvalStatus,
@@ -64,7 +67,7 @@ async function loadPublic(where: Where): Promise<PublicStorefront | null> {
     return null;
   }
   if (!(await featureOn("storefronts", row.organizationId))) return null;
-  return { storefrontId: row.id, organizationId: row.organizationId, handle: row.handle, displayName: row.displayName, welcomeText: row.welcomeText, sellOpen: row.sellOpen, buyOpen: !!row.buyOpen, ordersOpen: !!row.ordersOpen, orderReviewOver: row.orderReviewOver ?? null };
+  return { storefrontId: row.id, organizationId: row.organizationId, handle: row.handle, displayName: row.displayName, welcomeText: row.welcomeText, sellOpen: row.sellOpen, buyOpen: !!row.buyOpen, ordersOpen: !!row.ordersOpen, orderReviewOver: row.orderReviewOver ?? null, checkoutOpen: !!row.checkoutOpen };
 }
 
 /** The storefront at this public address, or null for anything that should look like "no such page". */

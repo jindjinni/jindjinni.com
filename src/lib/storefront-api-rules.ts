@@ -53,10 +53,10 @@ export function cleanKeyLabel(raw: unknown): { ok: true; label: string } | { ok:
 }
 
 /** Which things each kind of key may do. A public key can only send a new request or application. */
-export type ApiAction = "info" | "sell-request-create" | "sell-request-read" | "application-create" | "pharmacy-read" | "order-create" | "order-read";
+export type ApiAction = "info" | "sell-request-create" | "sell-request-read" | "application-create" | "pharmacy-read" | "order-create" | "order-read" | "catalog-read" | "checkout-quote" | "checkout-create" | "checkout-read";
 export function mayDo(kind: KeyKind, action: ApiAction): boolean {
   if (kind === "secret") return true;
-  return action === "info" || action === "sell-request-create" || action === "application-create";
+  return action === "info" || action === "sell-request-create" || action === "application-create" || action === "catalog-read" || action === "checkout-quote";
 }
 
 // ---- allowed website addresses ---------------------------------------------------------------------------------------------------

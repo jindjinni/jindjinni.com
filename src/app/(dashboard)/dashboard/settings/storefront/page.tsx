@@ -24,7 +24,7 @@ export default async function StorefrontSettingsPage() {
         Your company&rsquo;s public page. Share the address with sellers or link to it from your own website. What sellers send comes into your records for your team to review. Orders from approved pharmacies are confirmed automatically when everything is in stock (unless you set a review amount below); nothing is paid automatically.
       </p>
       <StorefrontForm
-        initial={{ handle: sf?.handle ?? "", displayName: sf?.displayName ?? org.organizationName, welcomeText: sf?.welcomeText ?? "", sellOpen: sf?.sellOpen ?? false, buyOpen: !!sf?.buyOpen, ordersOpen: !!sf?.ordersOpen, orderReviewOver: sf?.orderReviewOver != null ? String(sf.orderReviewOver) : "", hidden: !!sf?.hiddenAt }}
+        initial={{ handle: sf?.handle ?? "", displayName: sf?.displayName ?? org.organizationName, welcomeText: sf?.welcomeText ?? "", sellOpen: sf?.sellOpen ?? false, buyOpen: !!sf?.buyOpen, ordersOpen: !!sf?.ordersOpen, orderReviewOver: sf?.orderReviewOver != null ? String(sf.orderReviewOver) : "", hidden: !!sf?.hiddenAt, checkoutOpen: !!sf?.checkoutOpen, checkoutFlagOver: sf?.checkoutFlagOver != null ? String(sf.checkoutFlagOver) : "", checkoutLabelMax: sf?.checkoutLabelMax != null ? String(sf.checkoutLabelMax) : "", checkoutLabelsPerDay: sf?.checkoutLabelsPerDay != null ? String(sf.checkoutLabelsPerDay) : "", checkoutOrdersPerCustomer: sf?.checkoutOrdersPerCustomer != null ? String(sf.checkoutOrdersPerCustomer) : "" }}
         base={base}
         suggestion={normalizeHandle(org.organizationName)}
       />

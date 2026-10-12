@@ -79,8 +79,8 @@ export default async function WebsiteRequestsPage({ searchParams }: { searchPara
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-50">Website requests</h1>
-      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Offers sellers sent through your &ldquo;sell to us&rdquo; page. Make a quotation from one and it opens like any other quotation, with the seller&rsquo;s list in its notes.</p>
+      <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-50">Other website requests</h1>
+      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Offers sellers sent as a typed list through your &ldquo;sell to us&rdquo; page. Orders from the automatic checkout are in Website orders. Make a quotation from one and it opens like any other quotation, with the seller&rsquo;s list in its notes.</p>
 
       {sp.problem && <p className="mt-4 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-200" role="alert" data-testid="wr-problem">{sp.problem}</p>}
 

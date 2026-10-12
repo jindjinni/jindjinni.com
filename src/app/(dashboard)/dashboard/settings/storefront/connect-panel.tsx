@@ -90,6 +90,36 @@ export function ConnectPanel({ keys, origins, apiBase, hasStorefront }: { keys: 
           <p className="mt-1 text-xs text-slate-500">Answers with your company name and whether sell requests and pharmacy applications are open.</p>
         </details>
         <details>
+          <summary className="cursor-pointer font-medium">Automatic checkout for your own website: catalog, price, order (wholesale)</summary>
+          <pre className={`${code} mt-2`}>{`GET  ${api}/checkout/catalog          (secret or public key)
+  -> products with their expiry options, conditions and payout %
+
+POST ${api}/checkout/quote            (secret or public key)
+{ "items": [ { "productId": "...", "quantity": 4,
+               "expirationRangeId": "...", "conditionId": "..." } ] }
+  -> { lines: [...], itemsTotal, bonus, total }     (nothing is saved)
+
+POST ${api}/checkout/orders           (SECRET key only)
+{
+  "orderKey": "a-new-unique-id-per-order",     (a retry with the same key makes ONE order)
+  "expectedTotal": 123.45,                      (optional: the total you showed the customer)
+  "customer": { "businessName": "", "contactName": "Pat Lee", "email": "pat@example.com",
+                "phone": "713-555-0100", "street1": "1 Main St", "street2": "",
+                "city": "Houston", "state": "TX", "zip": "77002", "residential": false },
+  "items": [ { "productId": "...", "quantity": 4, "expirationRangeId": "...", "conditionId": "..." } ],
+  "payout": { "ownerName": "Pat Lee", "routingNumber": "021000021",
+              "accountNumber": "00123456789", "accountType": "checking" }
+}
+  -> 201 { reference, quotationNumber, lines, total, label: { carrier, trackingNumber, trackingUrl, labelUrl } | null,
+           labelPending, statusPage, emailed }
+
+GET  ${api}/checkout/orders/WEB-7KQ2MX  (SECRET key only)  -> the same order, with tracking`}</pre>
+          <p className="mt-1 text-xs text-slate-500">
+            The order is priced from <em>your</em> price list (the website can&rsquo;t send a price), the customer and quotation are made, one free label is bought from your carrier account within the limits you set above, and the customer is emailed the quotation and label. If prices changed after you showed a total, the order is refused with the new total so the customer can confirm it. The order appears in Purchasing &rarr; Website orders; bank details are shown there only to owners, admins and Accounts. Your page can show the <span className="font-mono">labelUrl</span> for printing, or send the customer to <span className="font-mono">statusPage</span>.
+            Because bank details are included, call the order endpoint from <em>your server</em> with the secret key; never put a secret key in a web page. Don&rsquo;t log or store the bank details on your server.
+          </p>
+        </details>
+        <details>
           <summary className="cursor-pointer font-medium">Send a seller&rsquo;s request (wholesale)</summary>
           <pre className={`${code} mt-2`}>{`POST ${api}/sell-requests
 

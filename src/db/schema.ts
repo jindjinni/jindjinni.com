@@ -1208,6 +1208,8 @@ export const purchasingQuotationLabels = sqliteTable(
     labelUrl: text("label_url").notNull(),
     trackingNumber: text("tracking_number"),
     trackingUrl: text("tracking_url"),
+    /** What the label cost the company, in dollars, when the carrier rate said (null = not known). */
+    labelCost: real("label_cost"),
     ...timestamps,
   },
   (t) => [
@@ -3956,6 +3958,16 @@ export const storefronts = sqliteTable(
     ordersOpen: integer("orders_open", { mode: "boolean" }),
     /** An order whose total is MORE than this is received for staff to review instead of being confirmed automatically. Null = confirm every order. */
     orderReviewOver: real("order_review_over"),
+    /** The automatic "sell us your supplies" checkout (cart -> quotation -> free label). Null/false = off. */
+    checkoutOpen: integer("checkout_open", { mode: "boolean" }),
+    /** Orders worth more than this are flagged for staff (null = the built-in default). */
+    checkoutFlagOver: real("checkout_flag_over"),
+    /** Orders worth more than this do not get a label bought automatically; staff buy it (null = default). */
+    checkoutLabelMax: real("checkout_label_max"),
+    /** Most labels the checkout buys by itself in 24 hours (null = default). */
+    checkoutLabelsPerDay: integer("checkout_labels_per_day"),
+    /** Most checkout orders one email address may place in 24 hours (null = default). */
+    checkoutOrdersPerCustomer: integer("checkout_orders_per_customer"),
     hiddenAt: text("hidden_at"),
     ...timestamps,
   },
@@ -3993,6 +4005,14 @@ export const websiteRequests = sqliteTable(
     /** The seller says the products are a donation (no payment expected). Null = not stated. */
     isDonation: integer("is_donation", { mode: "boolean" }),
     quotationId: text("quotation_id"),
+    /** null = a typed "what I have" request; "ORDER" = an automatic checkout order (priced quotation + label made at once). */
+    kind: text("kind"),
+    /** The key a checkout order was sent with, so sending the same order twice makes one order. */
+    orderKey: text("order_key"),
+    /** Why staff should look at this order (several short reasons, separated by "; "). Null = nothing odd. */
+    flagReason: text("flag_reason"),
+    /** When staff last emailed the customer a copy of the quotation and label (the automatic email is not counted). */
+    copySentAt: text("copy_sent_at"),
     handledByUserId: text("handled_by_user_id"),
     handledAt: text("handled_at"),
     hiddenAt: text("hidden_at"),
@@ -4001,6 +4021,7 @@ export const websiteRequests = sqliteTable(
   (t) => [
     index("website_requests_org_idx").on(t.organizationId, t.createdAt),
     uniqueIndex("website_requests_reference_unique").on(t.organizationId, t.reference),
+    uniqueIndex("website_requests_order_key_unique").on(t.organizationId, t.orderKey),
   ],
 );
 

@@ -64,8 +64,9 @@ import { refreshGeneratedReceipt } from "@/lib/purchasing-receipt-docs";
 import { CustomerDedupeIndex } from "@/lib/purchasing-customer-dedupe";
 import { customerValidationError, missingCustomerFields } from "@/lib/purchasing-customer-rules";
 import { pickLabelRate, type ShippoAddress } from "@/lib/shippo";
-import { noteShippoFailure, resolveShippo } from "@/lib/shippo-connection";
-import { buyLabels, failureMessage, parseCarrier, parseLabelCount, CARRIER_NAME } from "@/lib/shipping-labels";
+import { parseCarrier, parseLabelCount, CARRIER_NAME } from "@/lib/shipping-labels";
+import { buyAndSaveLabels } from "@/lib/purchasing-label-service";
+import { recomputeTotals, resolvePricing } from "@/lib/purchasing-quote-service";
 
 export type ActionState = { error?: string } | undefined;
 export type SeedCatalogActionState = { error?: string; message?: string } | undefined;
@@ -1198,44 +1199,8 @@ async function requireOrgQuotation(organizationId: string, quotationId: string) 
   return row ?? null;
 }
 
-/** Recomputes items total, the automatic bonus tier, and the grand total. Never touches an individual line's frozen price fields. */
 async function recomputeQuotationTotals(org: CurrentOrg, quotationId: string) {
-  const items = await db
-    .select({ lineTotal: purchasingQuotedItems.lineTotal })
-    .from(purchasingQuotedItems)
-    .where(eq(purchasingQuotedItems.quotationId, quotationId));
-
-  const [quotation] = await db
-    .select()
-    .from(purchasingQuotations)
-    .where(eq(purchasingQuotations.id, quotationId))
-    .limit(1);
-  if (!quotation) return;
-
-  // An imported order has no quoted lines -- its total came from the file and
-  // already includes whatever bonus was given, so keep it as the base instead
-  // of recomputing it down to $0.
-  const keepImportedTotal = quotation.source === "IMPORTED" && items.length === 0;
-  const itemsTotal = keepImportedTotal ? quotation.itemsTotal : roundCents(items.reduce((sum, i) => sum + i.lineTotal, 0));
-
-  const tiers = await getPurchasingBonusTiers(org.organizationId);
-  const { bonusAmount, tier } = keepImportedTotal ? { bonusAmount: 0, tier: null } : computeAutomaticBonus(itemsTotal, tiers);
-
-  const deduction = quotation.deductionEnabled ? quotation.deductionAmount : 0;
-  const grandTotal = roundCents(itemsTotal + bonusAmount - deduction + quotation.returnLabelCost);
-
-  await db
-    .update(purchasingQuotations)
-    .set({
-      itemsTotal,
-      bonusAmount,
-      bonusTierLabelSnapshot: tier ? `$${tier.thresholdAmount}+ -> $${tier.bonusAmount} bonus` : null,
-      grandTotal,
-    })
-    .where(eq(purchasingQuotations.id, quotationId));
-
-  // Keep the stored receipt PDF in step with the order (never blocks the save).
-  await refreshGeneratedReceipt(org, quotationId);
+  await recomputeTotals(org, quotationId);
 }
 
 /**
@@ -1327,163 +1292,8 @@ export async function createPurchasingQuotation(
   redirect(`/dashboard/purchasing/quotations/${quotationId}`);
 }
 
-type QuotedItemPricing = {
-  /** The expiry band actually used -- null when the product never expires. */
-  expirationRangeId: string | null;
-  productNameSnapshot: string;
-  productCodeSnapshot: string | null;
-  categoryNameSnapshot: string | null;
-  baseUnitPrice: number;
-  appliedMultiplier: number;
-  expirationRangeLabelSnapshot: string | null;
-  conditionId: string | null;
-  conditionNameSnapshot: string | null;
-  conditionMultiplier: number;
-};
-
-/**
- * Shared by addPurchasingQuotedItem and updatePurchasingQuotedItem so a line
- * prices identically whether it's being created or corrected later --
- * product/condition/expiry lookups and the multiplier fallback chain
- * (per-product override -> range default -> 1) live in exactly one place.
- */
-async function resolveQuotedItemPricing(
-  org: CurrentOrg,
-  params: {
-    productId: string | null;
-    expirationRangeId: string | null;
-    conditionId: string | null; // may be "__custom__"
-    customConditionName: string | null;
-    customConditionMultiplierRaw: FormDataEntryValue | null;
-    fallbackProductNameSnapshot: string | null;
-  },
-): Promise<{ error: string } | QuotedItemPricing> {
-  const { productId, fallbackProductNameSnapshot } = params;
-  let expirationRangeId = params.expirationRangeId;
-  let conditionId = params.conditionId;
-
-  let productNameSnapshot = fallbackProductNameSnapshot;
-  let productCodeSnapshot: string | null = null;
-  let categoryNameSnapshot: string | null = null;
-  let baseUnitPrice = 0;
-  let appliedMultiplier = 1;
-
-  // Range default comes first, so a brand-new range prices correctly even
-  // before anyone sets up a per-product override; the override (looked up
-  // below once productId is known) wins over this default when it exists.
-  let expirationRangeLabelSnapshot: string | null = null;
-  let rangeDefaultMultiplier = 1;
-  if (expirationRangeId) {
-    const [range] = await db
-      .select({ label: purchasingExpirationRanges.label, defaultMultiplier: purchasingExpirationRanges.defaultMultiplier })
-      .from(purchasingExpirationRanges)
-      .where(
-        and(
-          eq(purchasingExpirationRanges.id, expirationRangeId),
-          eq(purchasingExpirationRanges.organizationId, org.organizationId),
-        ),
-      )
-      .limit(1);
-    if (!range) return { error: "Expiry range not found." };
-    expirationRangeLabelSnapshot = range.label;
-    rangeDefaultMultiplier = range.defaultMultiplier ?? 1;
-    appliedMultiplier = rangeDefaultMultiplier;
-  }
-
-  if (productId) {
-    const [product] = await db
-      .select({
-        name: purchasingProducts.name,
-        productCode: purchasingProducts.productCode,
-        standardPrice: purchasingProducts.standardPrice,
-        categoryId: purchasingProducts.categoryId,
-        noExpiration: purchasingProducts.noExpiration,
-      })
-      .from(purchasingProducts)
-      .where(and(eq(purchasingProducts.id, productId), eq(purchasingProducts.organizationId, org.organizationId)))
-      .limit(1);
-    if (!product) return { error: "Product not found." };
-    if (product.noExpiration) {
-      // Receivers/readers/meters never expire, so an expiry band must not
-      // discount them even if one is sent along.
-      expirationRangeId = null;
-      expirationRangeLabelSnapshot = null;
-      appliedMultiplier = 1;
-    }
-    productNameSnapshot = product.name;
-    productCodeSnapshot = product.productCode;
-    baseUnitPrice = product.standardPrice;
-
-    if (product.categoryId) {
-      const [cat] = await db
-        .select({ name: purchasingCategories.name })
-        .from(purchasingCategories)
-        .where(and(eq(purchasingCategories.id, product.categoryId), eq(purchasingCategories.organizationId, org.organizationId)))
-        .limit(1);
-      categoryNameSnapshot = cat?.name ?? null;
-    }
-
-    if (expirationRangeId && !product.noExpiration) {
-      const [mult] = await db
-        .select({ multiplier: purchasingProductMultipliers.multiplier })
-        .from(purchasingProductMultipliers)
-        .where(
-          and(
-            eq(purchasingProductMultipliers.productId, productId),
-            eq(purchasingProductMultipliers.expirationRangeId, expirationRangeId),
-          ),
-        )
-        .limit(1);
-      appliedMultiplier = mult?.multiplier ?? rangeDefaultMultiplier;
-    }
-  }
-  if (!productNameSnapshot) return { error: "Choose a product, or describe the item." };
-
-  let conditionNameSnapshot: string | null = null;
-  let conditionMultiplier = 1;
-  if (conditionId === "__custom__") {
-    // A one-off condition that doesn't fit the normal grading scale -- a
-    // free-text label + payout multiplier typed right on this line, same as
-    // an override price, instead of forcing a new row into Manage
-    // Conditions for something that may never come up again.
-    const customName = params.customConditionName;
-    if (!customName) return { error: "Enter a name for the custom condition." };
-    const customMultiplier = Number(params.customConditionMultiplierRaw);
-    if (Number.isNaN(customMultiplier) || customMultiplier < 0) {
-      return { error: "Custom condition payout must be a positive number." };
-    }
-    if (customMultiplier > 1) {
-      return {
-        error:
-          "A custom condition can't pay more than 100% of the standard price. A manager can use an override price if a higher payout is really intended.",
-      };
-    }
-    conditionId = null;
-    conditionNameSnapshot = customName;
-    conditionMultiplier = customMultiplier;
-  } else if (conditionId) {
-    const [condition] = await db
-      .select({ name: purchasingConditions.name, multiplier: purchasingConditions.multiplier })
-      .from(purchasingConditions)
-      .where(and(eq(purchasingConditions.id, conditionId), eq(purchasingConditions.organizationId, org.organizationId)))
-      .limit(1);
-    if (!condition) return { error: "Condition not found." };
-    conditionNameSnapshot = condition.name;
-    conditionMultiplier = condition.multiplier;
-  }
-
-  return {
-    expirationRangeId,
-    productNameSnapshot,
-    productCodeSnapshot,
-    categoryNameSnapshot,
-    baseUnitPrice,
-    appliedMultiplier,
-    expirationRangeLabelSnapshot,
-    conditionId,
-    conditionNameSnapshot,
-    conditionMultiplier,
-  };
+async function resolveQuotedItemPricing(org: CurrentOrg, params: Parameters<typeof resolvePricing>[1]) {
+  return resolvePricing(org.organizationId, params);
 }
 
 export async function addPurchasingQuotedItem(
@@ -1760,173 +1570,28 @@ export async function generatePurchasingShippingLabel(
   const org = await requirePurchasingWriter();
   const quotation = await requireOrgQuotation(org.organizationId, quotationId);
   if (!quotation) return { error: "Quotation not found." };
+  if (quotation.archivedAt) return { error: "This quotation is archived. Restore it before making labels." };
+  if (quotation.status === "RECEIVED" || quotation.status === "CANCELLED") return { error: `This order is ${quotation.status === "RECEIVED" ? "already received" : "cancelled"}, so no more labels can be made for it.` };
 
   const labelCarrier = parseCarrier(formData.get("labelCarrier"), quotation.labelCarrier);
   const parsedCount = parseLabelCount(formData.get("labelCount"));
   if ("error" in parsedCount) return { error: parsedCount.error };
   const labelCount = parsedCount.count;
-  const parcelLengthIn = Number(formData.get("parcelLengthIn")) || quotation.parcelLengthIn;
-  const parcelWidthIn = Number(formData.get("parcelWidthIn")) || quotation.parcelWidthIn;
-  const parcelHeightIn = Number(formData.get("parcelHeightIn")) || quotation.parcelHeightIn;
-  const parcelWeightLb = Number(formData.get("parcelWeightLb")) || quotation.parcelWeightLb;
 
-  // Persist the chosen carrier/dimensions regardless of what happens next,
-  // so a retry after fixing an address starts from the same choices.
-  await db
-    .update(purchasingQuotations)
-    .set({ labelCarrier, parcelLengthIn, parcelWidthIn, parcelHeightIn, parcelWeightLb })
-    .where(eq(purchasingQuotations.id, quotationId));
-
-  const existing = await getQuotationLabels(org.organizationId, quotationId);
-
-  // Only an order with no label yet shows a "failed" state -- an order that
-  // already has saved labels keeps showing them no matter what happens here.
-  async function recordFailure(message: string) {
-    if (existing.length === 0) {
-      await db
-        .update(purchasingQuotations)
-        .set({ labelStatus: "ERROR", labelError: message })
-        .where(eq(purchasingQuotations.id, quotationId));
-    }
-    revalidatePath(`/dashboard/purchasing/quotations/${quotationId}`);
-    return { error: message };
-  }
-
-  // Labels are bought from THIS company's own Shippo account (Purchasing -> Settings -> Connectors); never another company's.
-  const shippo = await resolveShippo(org.organizationId);
-  if (!shippo.ok) return recordFailure(shippo.message);
-
-  const orgRow = await getOrganization(org.organizationId);
-  if (!hasShipFromAddress(orgRow)) {
-    return { error: "Add your business's receiving address in Settings → Business before generating a label." };
-  }
-
-  const customer = await getPurchasingCustomer(org.organizationId, quotation.customerId);
-  if (!customer || !hasCustomerAddress(customer)) {
-    return {
-      error:
-        "This customer doesn't have a shipping address on file yet -- that's the address they'll ship from. Add it on the customer's page, then generate the label.",
-    };
-  }
-
-  // The customer is shipping the package to us, so they're the origin...
-  const addressFrom: ShippoAddress = {
-    name: `${customer.firstName}${customer.lastName ? ` ${customer.lastName}` : ""}`,
-    street1: customer.addressStreet1!,
-    street2: customer.addressStreet2,
-    city: customer.addressCity!,
-    state: customer.addressState!,
-    zip: customer.addressZip!,
-    country: customer.addressCountry,
-    phone: customer.phone,
-    email: customer.email,
-    isResidential: customer.isResidential,
-  };
-  // ...and it always arrives at our receiving address on file, never the
-  // other way around -- this business is always the destination here.
-  const addressTo: ShippoAddress = {
-    name: orgRow!.shipFromName!,
-    company: orgRow!.shipFromCompany,
-    street1: orgRow!.shipFromStreet1!,
-    street2: orgRow!.shipFromStreet2,
-    city: orgRow!.shipFromCity!,
-    state: orgRow!.shipFromState!,
-    zip: orgRow!.shipFromZip!,
-    country: orgRow!.shipFromCountry,
-    phone: orgRow!.shipFromPhone,
-    email: orgRow!.shipFromEmail,
-    isResidential: false,
-  };
-
-  // Every label is its own Shippo shipment + purchase, so each box gets its
-  // own label and its own tracking number.
-  const { labels, errors } = await buyLabels(
-    {
-      // A token Shippo refuses is remembered, so the Shipping settings say why labels stopped.
-      createShipment: (params) => shippo.client.createShipment(params).catch(async (e) => (await noteShippoFailure(org.organizationId, e), Promise.reject(e))),
-      pickRate: pickLabelRate,
-      createTransaction: (rateId) => shippo.client.createTransaction(rateId).catch(async (e) => (await noteShippoFailure(org.organizationId, e), Promise.reject(e))),
-    },
+  const res = await buyAndSaveLabels({
+    organizationId: org.organizationId,
+    quotation,
     labelCarrier,
     labelCount,
-    {
-      addressFrom,
-      addressTo,
-      // Explicit, not just relying on Shippo's "defaults to addressFrom"
-      // behavior: an undeliverable package always goes back to the
-      // customer -- we're only ever the receiver here, never the sender.
-      addressReturn: addressFrom,
-      parcel: { lengthIn: parcelLengthIn, widthIn: parcelWidthIn, heightIn: parcelHeightIn, weightLb: parcelWeightLb },
+    parcel: {
+      lengthIn: Number(formData.get("parcelLengthIn")) || quotation.parcelLengthIn,
+      widthIn: Number(formData.get("parcelWidthIn")) || quotation.parcelWidthIn,
+      heightIn: Number(formData.get("parcelHeightIn")) || quotation.parcelHeightIn,
+      weightLb: Number(formData.get("parcelWeightLb")) || quotation.parcelWeightLb,
     },
-  );
+  });
 
-  // Save whatever was bought first -- a paid label is never lost, even when
-  // another one in the same batch failed.
-  if (labels.length > 0) {
-    // An order labelled before multi-label support has its one label only in
-    // the old columns; copy it in so it becomes "Label 1" and the new ones
-    // are numbered after it.
-    let copiedLegacy = false;
-    if (existing.length === 0 && quotation.labelStatus === "GENERATED" && quotation.labelUrl) {
-      await db.insert(purchasingQuotationLabels).values({
-        id: newId("plabel"),
-        organizationId: org.organizationId,
-        quotationId,
-        labelNumber: 1,
-        carrier: quotation.labelCarrier,
-        shippoShipmentId: quotation.shippoShipmentId,
-        shippoRateId: quotation.shippoRateId,
-        shippoTransactionId: quotation.shippoTransactionId,
-        labelUrl: quotation.labelUrl,
-        trackingNumber: quotation.labelTrackingNumber,
-        trackingUrl: quotation.labelTrackingUrl,
-      });
-      copiedLegacy = true;
-    }
-    const firstNumber = copiedLegacy ? 2 : existing.reduce((max, l) => Math.max(max, l.labelNumber), 0) + 1;
-    await db.insert(purchasingQuotationLabels).values(
-      labels.map((l, i) => ({
-        id: newId("plabel"),
-        organizationId: org.organizationId,
-        quotationId,
-        labelNumber: firstNumber + i,
-        carrier: labelCarrier,
-        shippoShipmentId: l.shipmentId,
-        shippoRateId: l.rateId,
-        shippoTransactionId: l.transactionId,
-        labelUrl: l.labelUrl,
-        trackingNumber: l.trackingNumber,
-        trackingUrl: l.trackingUrl,
-      })),
-    );
-
-    // The old single-label columns mirror the FIRST label, so the Quotation
-    // Summary's Tracking # column keeps working.
-    if (firstNumber === 1) {
-      const first = labels[0];
-      await db
-        .update(purchasingQuotations)
-        .set({
-          labelStatus: "GENERATED",
-          shippoShipmentId: first.shipmentId,
-          shippoRateId: first.rateId,
-          shippoTransactionId: first.transactionId,
-          labelUrl: first.labelUrl,
-          labelTrackingNumber: first.trackingNumber,
-          labelTrackingUrl: first.trackingUrl,
-          labelError: null,
-          labelGeneratedAt: new Date().toISOString(),
-          carrier: labelCarrier === "UPS_GROUND" ? "UPS" : "USPS",
-          trackingNumber: first.trackingNumber ?? quotation.trackingNumber,
-        })
-        .where(eq(purchasingQuotations.id, quotationId));
-    } else {
-      await db
-        .update(purchasingQuotations)
-        .set({ labelError: null })
-        .where(eq(purchasingQuotations.id, quotationId));
-    }
-
+  if (res.bought > 0) {
     await logAudit(
       org,
       "quotation",
@@ -1934,25 +1599,13 @@ export async function generatePurchasingShippingLabel(
       "shipping_label",
       null,
       null,
-      `${labels.length} ${CARRIER_NAME[labelCarrier]} shipping label${labels.length === 1 ? "" : "s"} generated via Shippo`,
+      `${res.bought} ${CARRIER_NAME[labelCarrier]} shipping label${res.bought === 1 ? "" : "s"} generated via Shippo`,
     );
-    await logActivity(org, "LABEL_SENT", `Sent order ${quotation.quotationNumber} to ${quotation.customerNameSnapshot}: ${labels.length} shipping label${labels.length === 1 ? "" : "s"}`, { type: "quotation", id: quotationId });
-    // Start following the new packages right away (best effort: the label is already bought and saved).
-    await startTracking(org.organizationId, quotationId);
+    await logActivity(org, "LABEL_SENT", `Sent order ${quotation.quotationNumber} to ${quotation.customerNameSnapshot}: ${res.bought} shipping label${res.bought === 1 ? "" : "s"}`, { type: "quotation", id: quotationId });
   }
-
   revalidatePath(`/dashboard/purchasing/quotations/${quotationId}`);
   revalidatePath("/dashboard/purchasing/quotations");
-
-  if (errors.length > 0) {
-    let message = failureMessage(labelCount, labels.length, errors);
-    if (/phone/i.test(message) && !customer.phone) {
-      message += " (This customer has no phone number on file yet -- try USPS Priority Mail, or add their phone on their profile and generate the label again.)";
-    }
-    if (labels.length === 0) return recordFailure(message);
-    // Some were bought: tell the page how many are still missing so the box can be set to exactly that.
-    return { error: message, remaining: labelCount - labels.length };
-  }
+  if (res.error) return res.remaining !== undefined ? { error: res.error, remaining: res.remaining } : { error: res.error };
   return undefined;
 }
 

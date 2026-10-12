@@ -3,7 +3,7 @@
 import { useActionState, useState } from "react";
 import { saveStorefrontAction } from "@/app/actions/storefront";
 
-type Initial = { handle: string; displayName: string; welcomeText: string; sellOpen: boolean; buyOpen: boolean; ordersOpen: boolean; orderReviewOver: string; hidden: boolean };
+type Initial = { handle: string; displayName: string; welcomeText: string; sellOpen: boolean; buyOpen: boolean; ordersOpen: boolean; orderReviewOver: string; hidden: boolean; checkoutOpen: boolean; checkoutFlagOver: string; checkoutLabelMax: string; checkoutLabelsPerDay: string; checkoutOrdersPerCustomer: string };
 
 export function StorefrontForm({ initial, base, suggestion }: { initial: Initial; base: string; suggestion: string }) {
   const [state, action, pending] = useActionState(saveStorefrontAction, undefined);
@@ -23,8 +23,30 @@ export function StorefrontForm({ initial, base, suggestion }: { initial: Initial
       </label>
       <label className="flex items-start gap-2 text-sm text-slate-800 dark:text-slate-100">
         <input type="checkbox" name="sellOpen" defaultChecked={initial.sellOpen} className="mt-1" data-testid="sfs-sell" />
-        <span><span className="font-medium">Open the &ldquo;Sell to us&rdquo; page.</span><br /><span className="text-slate-500">Sellers can send you a list of what they have. It lands in Purchasing &rarr; Website requests.</span></span>
+        <span><span className="font-medium">Open the &ldquo;Sell to us&rdquo; page.</span><br /><span className="text-slate-500">Sellers can send you a list of what they have. It lands in Purchasing &rarr; Website orders (typed lists).</span></span>
       </label>
+      <fieldset className="flex flex-col gap-4 rounded-lg border border-slate-200 p-4 dark:border-slate-700" data-testid="sfs-checkout-box">
+        <legend className="px-1 text-sm font-semibold text-slate-800 dark:text-slate-100">Automatic checkout: &ldquo;Sell us your supplies&rdquo;</legend>
+        <label className="flex items-start gap-2 text-sm text-slate-800 dark:text-slate-100">
+          <input type="checkbox" name="checkoutOpen" defaultChecked={initial.checkoutOpen} className="mt-1" data-testid="sfs-checkout" />
+          <span><span className="font-medium">Let customers sell to you with no staff help.</span><br /><span className="text-slate-500">A customer picks products, sees what you will pay (from your own price list), gives a shipping address and a bank account to be paid into, and submits. A quotation is made, one free shipping label is bought from your carrier account, and both are emailed. Each order shows in Purchasing &rarr; Website orders. Needs your carrier (Shippo) connected in Settings.</span></span>
+        </label>
+        <p className="text-xs text-slate-500">Limits (leave a box empty to use the standard setting). Orders that go past a limit are still saved; they are flagged for your team instead of getting an automatic label.</p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="text-sm font-medium text-slate-800 dark:text-slate-100">Flag orders over <span className="font-normal text-slate-400">(dollars, standard $2,000)</span>
+            <input name="checkoutFlagOver" inputMode="decimal" maxLength={12} defaultValue={initial.checkoutFlagOver} className={field} data-testid="sfs-flag-over" />
+          </label>
+          <label className="text-sm font-medium text-slate-800 dark:text-slate-100">No automatic label over <span className="font-normal text-slate-400">(dollars, standard $10,000)</span>
+            <input name="checkoutLabelMax" inputMode="decimal" maxLength={12} defaultValue={initial.checkoutLabelMax} className={field} data-testid="sfs-label-max" />
+          </label>
+          <label className="text-sm font-medium text-slate-800 dark:text-slate-100">Labels bought per day <span className="font-normal text-slate-400">(standard 40)</span>
+            <input name="checkoutLabelsPerDay" inputMode="numeric" maxLength={5} defaultValue={initial.checkoutLabelsPerDay} className={field} data-testid="sfs-labels-day" />
+          </label>
+          <label className="text-sm font-medium text-slate-800 dark:text-slate-100">Orders per customer per day <span className="font-normal text-slate-400">(standard 3)</span>
+            <input name="checkoutOrdersPerCustomer" inputMode="numeric" maxLength={4} defaultValue={initial.checkoutOrdersPerCustomer} className={field} data-testid="sfs-orders-customer" />
+          </label>
+        </div>
+      </fieldset>
       <label className="flex items-start gap-2 text-sm text-slate-800 dark:text-slate-100">
         <input type="checkbox" name="buyOpen" defaultChecked={initial.buyOpen} className="mt-1" data-testid="sfs-buy" />
         <span><span className="font-medium">Let pharmacies apply for an account.</span><br /><span className="text-slate-500">A pharmacy sends its license details; your team approves it in Sales &rarr; Web accounts. Only approved pharmacies can sign in.</span></span>

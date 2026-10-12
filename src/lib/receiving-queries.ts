@@ -11,6 +11,8 @@ import {
   receivingPackagePhotos,
   purchasingQuotations,
   purchasingQuotedItems,
+  purchasingQuotationLabels,
+  purchasingTracking,
   purchasingCustomers,
   purchasingProducts,
   purchasingCategories,
@@ -25,6 +27,7 @@ import {
   users,
 } from "@/db/schema";
 import { newId } from "@/lib/ids";
+import { trackingKeys } from "@/lib/tracking-search-rules";
 import { getReceiptState } from "@/lib/purchasing-receipt-docs";
 import { recallGateIssues } from "@/lib/receiving-recall-service";
 import {
@@ -500,13 +503,24 @@ export async function ensureItemsFromQuotation(organizationId: string, packageId
   return lines.length;
 }
 
-/** Find orders in the Quotation Summary to start receiving: by reference #, customer, email or any part of the tracking #. */
+/**
+ * Find orders to start receiving: by reference #, customer, email or any part of the tracking #. The tracking # is matched against the
+ * order's own number AND every label bought for it (a multi-box order has several) AND the live tracking list, and a scanned USPS barcode
+ * (420 + ZIP + number) is reduced to the real number first. Website orders and hand-made orders are the same table, so both are found.
+ */
 export async function searchQuotationsForReceiving(organizationId: string, term: string) {
   const t = term.trim();
   if (t.length < 2) return [];
   const core = t.replace(/[%_]/g, "").trim();
   if (core.length < 2) return [];
   const pat = `%${core}%`;
+  const keys = trackingKeys(core).map((k) => k.replace(/[%_]/g, "")).filter((k) => k.length >= 4);
+  const idsFromLabels = keys.length
+    ? or(...keys.map((k) => inArray(purchasingQuotations.id, db.select({ id: purchasingQuotationLabels.quotationId }).from(purchasingQuotationLabels).where(and(eq(purchasingQuotationLabels.organizationId, organizationId), like(purchasingQuotationLabels.trackingNumber, `%${k}%`))))))
+    : undefined;
+  const idsFromTracking = keys.length
+    ? or(...keys.map((k) => inArray(purchasingQuotations.id, db.select({ id: purchasingTracking.quotationId }).from(purchasingTracking).where(and(eq(purchasingTracking.organizationId, organizationId), like(purchasingTracking.trackingNumber, `%${k}%`))))))
+    : undefined;
   const rows = await db
     .select({ ...briefSelect, packageId: receivingPackages.id })
     .from(purchasingQuotations)
@@ -521,6 +535,9 @@ export async function searchQuotationsForReceiving(organizationId: string, term:
           like(purchasingQuotations.customerNameSnapshot, pat),
           like(purchasingQuotations.customerEmailSnapshot, pat),
           like(purchasingQuotations.trackingNumber, pat),
+          ...keys.map((k) => like(purchasingQuotations.trackingNumber, `%${k}%`)),
+          idsFromLabels,
+          idsFromTracking,
         ),
       ),
     )

@@ -6,6 +6,7 @@ import { requireOrg, type CurrentOrg } from "@/lib/tenant";
 import { canRevealBankDetails, canWritePurchasing, isAdmin } from "@/lib/permissions";
 import { featureOn } from "@/lib/features";
 import { cleanReviewOver } from "@/lib/storefront-order-rules";
+import { cleanMoneyLimit, cleanWholeLimit } from "@/lib/checkout-rules";
 import { cleanStorefrontSettings } from "@/lib/storefront-rules";
 import { canWriteSales } from "@/lib/permissions";
 import { decideBuyer, setBuyerHidden } from "@/lib/storefront-buyers";
@@ -15,6 +16,7 @@ import { createApiKey, revokeApiKey, saveAllowedOrigins } from "@/lib/storefront
 import { KEY_KINDS, type KeyKind } from "@/lib/storefront-api-rules";
 import type { BuyerDecision } from "@/lib/storefront-buyer-rules";
 import { makeQuotationFromRequest, moveRequest, saveStorefront, setRequestHidden } from "@/lib/storefront-service";
+import { cancelWebsiteOrder, clearOrderFlag, makeOrderLabel, sendOrderCopy } from "@/lib/website-orders-service";
 
 export type StorefrontState = { error?: string; saved?: boolean } | undefined;
 
@@ -37,8 +39,21 @@ export async function saveStorefrontAction(_prev: StorefrontState, formData: For
   if (!cleaned.ok) return { error: cleaned.error };
   const review = cleanReviewOver(formData.get("orderReviewOver"));
   if (!review.ok) return { error: review.error };
+  const flagOver = cleanMoneyLimit(formData.get("checkoutFlagOver"), "The \"flag orders over\" amount");
+  if (!flagOver.ok) return { error: flagOver.error };
+  const labelMax = cleanMoneyLimit(formData.get("checkoutLabelMax"), "The \"no automatic label over\" amount");
+  if (!labelMax.ok) return { error: labelMax.error };
+  const labelsPerDay = cleanWholeLimit(formData.get("checkoutLabelsPerDay"), "Labels per day", 1000);
+  if (!labelsPerDay.ok) return { error: labelsPerDay.error };
+  const perCustomer = cleanWholeLimit(formData.get("checkoutOrdersPerCustomer"), "Orders per customer per day", 100);
+  if (!perCustomer.ok) return { error: perCustomer.error };
   const saved = await saveStorefront(org.organizationId, {
     ...cleaned.value,
+    checkoutOpen: formData.get("checkoutOpen") === "on",
+    checkoutFlagOver: flagOver.value,
+    checkoutLabelMax: labelMax.value,
+    checkoutLabelsPerDay: labelsPerDay.value,
+    checkoutOrdersPerCustomer: perCustomer.value,
     ordersOpen: formData.get("ordersOpen") === "on",
     orderReviewOver: review.value,
     sellOpen: formData.get("sellOpen") === "on",
@@ -170,5 +185,49 @@ export async function eraseBankAction(requestId: string): Promise<{ error?: stri
   if ("error" in g) return { error: g.error };
   const r = await erasePayout(g.org.organizationId, g.org.userId, requestId);
   revalidatePath("/dashboard/purchasing/website-requests");
+  revalidatePath("/dashboard/purchasing/website-orders", "layout");
   return r.ok ? { erased: true } : { error: r.error };
+}
+
+// ---- Website orders (the automatic checkout) ------------------------------------------------------------------------------------------
+
+export type OrderActionState = { error?: string; message?: string } | undefined;
+
+const refreshOrder = (reference: string) => {
+  revalidatePath("/dashboard/purchasing/website-orders");
+  revalidatePath(`/dashboard/purchasing/website-orders/${reference}`);
+};
+
+/** Emails the customer a copy of their quotation, label and tracking (for the customer who can't find theirs). */
+export async function emailOrderCopyAction(reference: string, _prev: OrderActionState, formData: FormData): Promise<OrderActionState> {
+  const org = await requireRequestHandler();
+  const r = await sendOrderCopy(org.organizationId, org.userId, reference, String(formData.get("to") ?? ""));
+  refreshOrder(reference);
+  return r.ok ? { message: r.message } : { error: r.error };
+}
+
+export async function makeOrderLabelAction(reference: string, _prev: OrderActionState): Promise<OrderActionState> {
+  const org = await requireRequestHandler();
+  const r = await makeOrderLabel(org.organizationId, org.userId, reference);
+  refreshOrder(reference);
+  return r.ok ? { message: r.message } : { error: r.error };
+}
+
+export async function cancelOrderAction(reference: string): Promise<void> {
+  const org = await requireRequestHandler();
+  await cancelWebsiteOrder(org.organizationId, org.userId, reference);
+  refreshOrder(reference);
+  redirect(`/dashboard/purchasing/website-orders/${reference}`);
+}
+
+export async function clearOrderFlagAction(reference: string): Promise<void> {
+  const org = await requireRequestHandler();
+  await clearOrderFlag(org.organizationId, org.userId, reference);
+  refreshOrder(reference);
+}
+
+export async function hideOrderAction(id: string, reference: string, hidden: boolean): Promise<void> {
+  const org = await requireRequestHandler();
+  await setRequestHidden(org.organizationId, org.userId, id, hidden);
+  refreshOrder(reference);
 }

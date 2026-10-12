@@ -22,7 +22,8 @@ export type SaveResult = { ok: true } | { ok: false; error: string };
 /** Creates or updates the company's storefront. A web address already used by another company is refused with a plain message. */
 export async function saveStorefront(
   organizationId: string,
-  v: { handle: string; displayName: string; welcomeText: string | null; sellOpen: boolean; buyOpen: boolean; ordersOpen: boolean; orderReviewOver: number | null; hidden: boolean },
+  v: { handle: string; displayName: string; welcomeText: string | null; sellOpen: boolean; buyOpen: boolean; ordersOpen: boolean; orderReviewOver: number | null; hidden: boolean;
+    checkoutOpen: boolean; checkoutFlagOver: number | null; checkoutLabelMax: number | null; checkoutLabelsPerDay: number | null; checkoutOrdersPerCustomer: number | null },
 ): Promise<SaveResult> {
   const [clash] = await db.select({ organizationId: storefronts.organizationId }).from(storefronts).where(eq(storefronts.handle, v.handle)).limit(1);
   if (clash && clash.organizationId !== organizationId) return { ok: false, error: "That web address is already taken. Please choose another." };
@@ -33,10 +34,10 @@ export async function saveStorefront(
     if (existing) {
       await db
         .update(storefronts)
-        .set({ handle: v.handle, displayName: v.displayName, welcomeText: v.welcomeText, sellOpen: v.sellOpen, buyOpen: v.buyOpen, ordersOpen: v.ordersOpen, orderReviewOver: v.orderReviewOver, hiddenAt: v.hidden ? existing.hiddenAt ?? now : null, updatedAt: now })
+        .set({ handle: v.handle, displayName: v.displayName, welcomeText: v.welcomeText, sellOpen: v.sellOpen, buyOpen: v.buyOpen, ordersOpen: v.ordersOpen, orderReviewOver: v.orderReviewOver, checkoutOpen: v.checkoutOpen, checkoutFlagOver: v.checkoutFlagOver, checkoutLabelMax: v.checkoutLabelMax, checkoutLabelsPerDay: v.checkoutLabelsPerDay, checkoutOrdersPerCustomer: v.checkoutOrdersPerCustomer, hiddenAt: v.hidden ? existing.hiddenAt ?? now : null, updatedAt: now })
         .where(eq(storefronts.organizationId, organizationId));
     } else {
-      await db.insert(storefronts).values({ id: newId("sfront"), organizationId, handle: v.handle, displayName: v.displayName, welcomeText: v.welcomeText, sellOpen: v.sellOpen, buyOpen: v.buyOpen, ordersOpen: v.ordersOpen, orderReviewOver: v.orderReviewOver, hiddenAt });
+      await db.insert(storefronts).values({ id: newId("sfront"), organizationId, handle: v.handle, displayName: v.displayName, welcomeText: v.welcomeText, sellOpen: v.sellOpen, buyOpen: v.buyOpen, ordersOpen: v.ordersOpen, orderReviewOver: v.orderReviewOver, checkoutOpen: v.checkoutOpen, checkoutFlagOver: v.checkoutFlagOver, checkoutLabelMax: v.checkoutLabelMax, checkoutLabelsPerDay: v.checkoutLabelsPerDay, checkoutOrdersPerCustomer: v.checkoutOrdersPerCustomer, hiddenAt });
     }
   } catch (err) {
     if (String(err).toLowerCase().includes("unique")) return { ok: false, error: "That web address is already taken. Please choose another." };
@@ -45,11 +46,14 @@ export async function saveStorefront(
   return { ok: true };
 }
 
+/** Automatic checkout orders have their own tab (Website orders); the typed-list requests are everything else. */
+const notOrder = sql`coalesce(${websiteRequests.kind}, '') <> 'ORDER'`;
+
 export async function listWebsiteRequests(organizationId: string, includeHidden: boolean): Promise<RequestRow[]> {
   return db
     .select()
     .from(websiteRequests)
-    .where(includeHidden ? eq(websiteRequests.organizationId, organizationId) : and(eq(websiteRequests.organizationId, organizationId), isNull(websiteRequests.hiddenAt)))
+    .where(and(eq(websiteRequests.organizationId, organizationId), notOrder, includeHidden ? undefined : isNull(websiteRequests.hiddenAt)))
     .orderBy(desc(websiteRequests.createdAt))
     .limit(500);
 }
@@ -59,7 +63,7 @@ export async function newRequestCount(organizationId: string): Promise<number> {
   const [r] = await db
     .select({ n: sql<number>`count(*)` })
     .from(websiteRequests)
-    .where(and(eq(websiteRequests.organizationId, organizationId), eq(websiteRequests.status, "NEW"), isNull(websiteRequests.hiddenAt)));
+    .where(and(eq(websiteRequests.organizationId, organizationId), notOrder, eq(websiteRequests.status, "NEW"), isNull(websiteRequests.hiddenAt)));
   return Number(r?.n ?? 0);
 }
 

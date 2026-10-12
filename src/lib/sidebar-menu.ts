@@ -39,7 +39,8 @@ export const DEPARTMENT_MENUS: Record<MenuDept, DepartmentMenu> = {
     items: [
       { id: "dashboard", href: P, label: "Dashboard", icon: "🏠", exact: true },
       { id: "quotations", href: `${P}/quotations`, label: "Quotations", icon: "🧾" },
-      { id: "website-requests", href: `${P}/website-requests`, label: "Website requests", icon: "🌐" },
+      { id: "website-orders", href: `${P}/website-orders`, label: "Website orders", icon: "🌐" },
+      { id: "website-requests", href: `${P}/website-requests`, label: "Other website requests", icon: "📨" },
       { id: "purchase-orders", href: `${P}/purchase-orders`, label: "Purchase Orders", icon: "📑" },
       { id: "suppliers", href: `${P}/suppliers`, label: "Suppliers", icon: "🏭" },
       { id: "customers", href: `${P}/customers`, label: "Customers", icon: "👥" },
