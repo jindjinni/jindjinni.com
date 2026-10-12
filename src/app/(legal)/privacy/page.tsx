@@ -30,6 +30,15 @@ const sections: LegalSection[] = [
     ],
   },
   {
+    heading: "Information from Google and Microsoft mailboxes",
+    paras: [
+      "If your company connects a Google (Gmail or Google Workspace) or Microsoft (Outlook or Microsoft 365) mailbox to a department, you choose which permissions to give on the provider's own sign-in page: to send email as that address and, if you allow it, to read the mailbox so its Inbox appears in jindjinni. We never see your mailbox password. We keep the permission we are given (a token) encrypted, and we use it only for that company's mailbox.",
+      "When reading is allowed, we keep copies of the messages and attachments in that company's Mail tab so your team can read and answer them. We use this mail only to provide that Mail feature to your company: showing, searching, sending and answering email. We do not use it for advertising, we do not sell it, we do not use it to train AI models, and nobody at jindjinni reads it except where you ask us for support and agree, where it is needed for security or to investigate abuse, or where the law requires.",
+      "jindjinni's use and transfer of information received from Google APIs to any other app will adhere to the Google API Services User Data Policy, including the Limited Use requirements.",
+      "You can disconnect a mailbox at any time in the department's Mail settings, and you can also remove jindjinni's access from your Google or Microsoft account settings. Mail already copied into jindjinni stays in your company's workspace until your company removes it or closes its account.",
+    ],
+  },
+  {
     heading: "Cookies",
     paras: [
       "We use essential cookies only. One keeps you signed in; if you choose \"Remember me\" when signing in it lasts up to 90 days, otherwise one day. One remembers which operation (Wholesale or Distribution) you are working in. If you arrive through an affiliate's link, one remembers the affiliate's code for 30 days so the referral can be credited. An affiliate who signs in to the affiliate portal gets one that keeps them signed in for 7 days. They are needed for the Service to work and are not used for advertising or tracking across other websites. We do not use advertising cookies. Because we do not track you across websites, we do not respond to \"do not track\" signals.",
