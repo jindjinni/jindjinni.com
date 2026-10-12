@@ -186,6 +186,7 @@ export async function eraseBankAction(requestId: string): Promise<{ error?: stri
   const r = await erasePayout(g.org.organizationId, g.org.userId, requestId);
   revalidatePath("/dashboard/purchasing/website-requests");
   revalidatePath("/dashboard/purchasing/website-orders", "layout");
+  revalidatePath("/dashboard/accounts", "layout");
   return r.ok ? { erased: true } : { error: r.error };
 }
 

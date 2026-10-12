@@ -4,6 +4,10 @@ import { getPaymentTerms, getToBePaid } from "@/lib/accounts-queries";
 import { todayIn } from "@/lib/payment-due";
 import { dueWording, startSentence } from "@/lib/accounts-rules";
 import { IntakeFormFor } from "../../../receiving/intake/[id]/intake-loader";
+import { payoutForShipment } from "@/lib/storefront-payouts";
+import { maskedLine } from "@/lib/bank-rules";
+import { canRevealBankDetails } from "@/lib/permissions";
+import { BankBox } from "../../../purchasing/website-requests/bank-box";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +26,8 @@ export default async function AccountsOrderPage({ params }: { params: Promise<{ 
   const terms = await getPaymentTerms(org.organizationId);
   const order = (await getToBePaid(org.organizationId, terms)).find((o) => o.id === id);
   const today = todayIn(terms.timeZone);
+  const payout = await payoutForShipment(org.organizationId, id);
+  const canReveal = !org.viewAs && canRevealBankDetails(org.role, org.access);
   const due = order?.dueDay ? dueWording(order.dueDay, today) : null;
   return (
     <div>
@@ -31,6 +37,13 @@ export default async function AccountsOrderPage({ params }: { params: Promise<{ 
           {order.dueStartDay && <p data-testid="due-delivered" className="font-semibold">{startSentence(order.dueStartDay, order.dueBasis)}.</p>}
           <p data-testid="due-sentence" className="font-semibold">{due.sentence}</p>
         </div>
+      )}
+      {payout && (
+        <section className="mt-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm dark:border-slate-800 dark:bg-slate-900" aria-label="Where to pay this seller" data-testid="pay-bank-section">
+          <h2 className="font-semibold text-slate-900 dark:text-slate-50">Where to pay this seller</h2>
+          <p className="mt-0.5 text-slate-500">Website order {payout.reference}. The seller asked to be paid by direct deposit. After you have paid and attached the receipt, erase the stored details.</p>
+          <BankBox requestId={payout.requestId} line={maskedLine(payout.summary.accountType, payout.summary.accountLast4)} canReveal={canReveal} erased={!!payout.summary.erasedAt} />
+        </section>
       )}
       <div className="mt-3">
         <IntakeFormFor id={id} focus="accounts" />

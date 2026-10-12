@@ -555,6 +555,7 @@ async function receiveOrder(
   }
   if (sc.kind === "CLEAN_PAID") {
     await addPhotos(org, pid, ["PAYMENT_CONFIRMATION"], placeholderPath);
+    await R.saveFollowUp(pid, fd({ accountsDecision: "NEED_TO_BE_PAID", accountsStatus: "IN_REVIEW" }));
     const paid = await R.saveFollowUp(pid, fd({ accountsDecision: "PAID", accountsStatus: "PAID" }));
     if (!paid.ok) problem(`Marking Paid failed: ${paid.error ?? "unknown"}`);
     else res.receiving += "; PAID by Accounts";

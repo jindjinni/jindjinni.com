@@ -48,6 +48,7 @@ import {
 import { storage, STORAGE_NOT_CONNECTED } from "@/lib/receiving-storage";
 import { auditReceiving, deleteIntakeLog, refreshIntakeLogPrice, writeIntakeLog } from "@/lib/receiving-service";
 import { finalPayout } from "@/lib/receiving-rules";
+import { paidBlockerFor, shouldAutoNeedToBePaid } from "@/lib/paid-gate";
 import { isShipmentLocked } from "@/lib/receiving-test-lock";
 import { clearNearHolds, listChecks, openNearHolds, rowIsRecalled, type RecallCheckView } from "@/lib/receiving-recall-service";
 import { autoCheckRowLots } from "@/lib/receiving-recall-auto";
@@ -435,6 +436,12 @@ async function applyAccountsFields(org: CurrentOrg, p: typeof receivingPackages.
     else if (decChanged && decision === "PAID") status = "PAID";
     else if (stChanged && p.accountsStatus === "PAID" && decision === "PAID") decision = "NEED_TO_BE_REVIEWED";
     else if (decChanged && p.accountsDecision === "PAID" && status === "PAID") status = "IN_REVIEW";
+    // Every way of marking Paid goes through the same check: receipt attached, no recall hold, no open adjustment (lib/paid-gate-rules.ts).
+    const becomingPaid = (decision === "PAID" || status === "PAID") && p.accountsDecision !== "PAID" && p.accountsStatus !== "PAID";
+    if (becomingPaid) {
+      const blocked = await paidBlockerFor(org.organizationId, p);
+      if (blocked) return { error: blocked };
+    }
     set.accountsDecision = decision;
     set.accountsStatus = status;
     // The "paid" timestamp is stamped by the app the moment the status becomes Paid.
@@ -564,6 +571,14 @@ export async function submitReceiving(packageId: string, formData: FormData): Pr
     );
   await writeIntakeLog(org, packageId);
   await auditReceiving(org, pkg.quotationId, "receiving", `Receiving submitted: ${status === "RECEIVING_COMPLETE" ? "complete" : "complete with discrepancy"}`);
+  // A clean shipment (no discrepancy, no recall hit, nothing to return or still undecided) goes to Need to Be Paid by itself; anything else waits for a person.
+  if (await shouldAutoNeedToBePaid(org.organizationId, { id: packageId, status, accountsDecision: pkg.accountsDecision })) {
+    await db
+      .update(receivingPackages)
+      .set({ accountsDecision: "NEED_TO_BE_PAID", accountsStatus: "IN_REVIEW", updatedAt: sql`(current_timestamp)` })
+      .where(and(eq(receivingPackages.id, packageId), eq(receivingPackages.organizationId, org.organizationId), isNull(receivingPackages.accountsDecision)));
+    await auditReceiving(org, pkg.quotationId, "receiving", "Moved to Need to Be Paid automatically (clean shipment)");
+  }
   const notice = saved.notice || undefined;
   refresh(packageId);
   return { ok: true, id: packageId, notice, itemPatches: saved.itemPatches, recallChecks: await listChecks(org.organizationId, packageId) };
@@ -578,6 +593,11 @@ export async function reopenReceiving(packageId: string): Promise<ReceivingActio
     .update(receivingPackages)
     .set({ status: "IN_PROGRESS", submittedAt: null, submittedByUserId: null, updatedAt: sql`(current_timestamp)` })
     .where(eq(receivingPackages.id, packageId));
+  // Back in progress means it can't be paid yet: an order waiting to be paid goes back to no decision (a Paid order is left alone).
+  await db
+    .update(receivingPackages)
+    .set({ accountsDecision: null })
+    .where(and(eq(receivingPackages.id, packageId), eq(receivingPackages.organizationId, org.organizationId), eq(receivingPackages.accountsDecision, "NEED_TO_BE_PAID")));
   await deleteIntakeLog(packageId);
   await auditReceiving(org, p.quotationId, "receiving", "Receiving reopened for changes");
   refresh(packageId);

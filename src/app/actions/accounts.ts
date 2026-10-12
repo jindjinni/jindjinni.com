@@ -3,12 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { and, eq, isNull, ne, or, sql } from "drizzle-orm";
 import { db } from "@/db/client";
-import { accountsClosureDays, accountsSettings, receivingPackagePhotos, receivingPackages } from "@/db/schema";
+import { accountsClosureDays, accountsSettings, receivingPackages } from "@/db/schema";
 import { requireOrg } from "@/lib/tenant";
 import { canWritePayment, isAdmin } from "@/lib/permissions";
 import { isDay, isUsTimeZone, MAX_BUSINESS_DAYS } from "@/lib/payment-due";
 import { newId } from "@/lib/ids";
 import { auditReceiving } from "@/lib/receiving-service";
+import { paidBlockerFor } from "@/lib/paid-gate";
 
 export type AccountsActionState = { ok?: boolean; error?: string };
 
@@ -29,14 +30,9 @@ export async function markOrderPaid(packageId: string): Promise<AccountsActionSt
     .limit(1);
   if (!p) return { error: "That order wasn't found." };
   if (p.accountsStatus === "PAID") return { error: "This order is already marked Paid." };
-  if (p.status === "IN_PROGRESS" || p.accountsDecision !== "NEED_TO_BE_PAID") return { error: "This order isn't waiting to be paid." };
-
-  const [receipt] = await db
-    .select({ id: receivingPackagePhotos.id })
-    .from(receivingPackagePhotos)
-    .where(and(eq(receivingPackagePhotos.packageId, packageId), eq(receivingPackagePhotos.organizationId, org.organizationId), eq(receivingPackagePhotos.kind, "PAYMENT_CONFIRMATION")))
-    .limit(1);
-  if (!receipt) return { error: "Attach the payment receipt first, then mark the order Paid." };
+  // One rule for every way of marking Paid (lib/paid-gate-rules.ts): submitted, Need to Be Paid, receipt attached, no recall hold, no open adjustment.
+  const blocked = await paidBlockerFor(org.organizationId, p);
+  if (blocked) return { error: blocked };
 
   // The condition makes a double click harmless: only the first one changes anything.
   const res = await db

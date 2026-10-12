@@ -4,7 +4,7 @@
 
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { db } from "@/db/client";
-import { purchasingAuditLog, websiteRequestPayouts } from "@/db/schema";
+import { purchasingAuditLog, receivingPackages, websiteRequestPayouts, websiteRequests } from "@/db/schema";
 import { decryptBank } from "@/lib/bank-crypto";
 import { payoutFromJson, type Payout } from "@/lib/bank-rules";
 import { newId } from "@/lib/ids";
@@ -58,4 +58,20 @@ export async function erasePayout(organizationId: string, userId: string, reques
   if (res.rowsAffected === 0) return { ok: false, error: "No bank details to erase on this request." };
   await audit(organizationId, userId, requestId, "bank_details_erased", "Erased the stored bank details");
   return { ok: true };
+}
+
+/**
+ * The seller's direct-deposit summary for a shipment, when the order came from the website (so Accounts can see where to pay it).
+ * Joined through the shipment's quotation and filtered by company; only the last 4 digits ever leave here.
+ */
+export async function payoutForShipment(organizationId: string, packageId: string): Promise<{ requestId: string; reference: string; summary: PayoutSummary } | null> {
+  const [row] = await db
+    .select({ requestId: websiteRequests.id, reference: websiteRequests.reference })
+    .from(receivingPackages)
+    .innerJoin(websiteRequests, and(eq(websiteRequests.quotationId, receivingPackages.quotationId), eq(websiteRequests.organizationId, receivingPackages.organizationId)))
+    .where(and(eq(receivingPackages.id, packageId), eq(receivingPackages.organizationId, organizationId)))
+    .limit(1);
+  if (!row) return null;
+  const summary = (await payoutSummaries(organizationId, [row.requestId])).get(row.requestId);
+  return summary ? { ...row, summary } : null;
 }
