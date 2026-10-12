@@ -24,6 +24,7 @@ const sections: LegalSection[] = [
       "Team details: the email addresses, roles and department access of people invited to a workspace, and whether an invitation has been accepted.",
       `Sign-in records: the time of each successful sign-in, kept for about ${SIGN_IN_HISTORY_MONTHS} months, and the time of your last sign-in. We do not store your IP address, location or device details in these records.`,
       "Workspace data: whatever your team enters, uploads or imports. Depending on the departments you use, this includes your customers' names, addresses, phone numbers and email addresses, product and pricing information, quotations, receiving records, photos and scans of packages, lot and serial numbers, tracking numbers, accounting and payment records, inventory, sales documents, marketing contacts and campaign content, emails sent through the Service, chat messages and shared files, and employee clock-in and clock-out times and activity.",
+      "Storefront visitors: when a company turns on a public storefront, a visitor who asks to sell to it or places an order gives their name, email address, phone number, shipping address and what they are selling or buying, and, for a seller who wants to be paid by direct deposit, the account owner's name and the routing and account numbers. This is described under \"Visitors to a company's storefront\" below.",
       "Choices you make: when you agreed to our Terms and which version, and the preferences you set.",
       "Technical information: like most websites, our servers and hosting providers see basic request information (such as IP address and browser type) in routine logs used to keep the Service running and secure.",
     ],
@@ -63,6 +64,14 @@ const sections: LegalSection[] = [
       "Other people in your company, according to the roles your Owner and Admins assign. Owners and Admins can see team members' names, emails, roles and sign-in times, and the company's workspace data.",
       "Authorities or other parties when we believe the law requires it, or when needed to protect people, the Service or our rights.",
       "A buyer or successor if jindjinni is involved in a merger, sale or similar change, who must honour this policy.",
+    ],
+  },
+  {
+    heading: "Visitors to a company's storefront",
+    paras: [
+      "Some companies turn on a public storefront, a checkout or a connection for their own website. If you use one, you are dealing with that company, not with jindjinni. We process what you enter for that company, as its service provider, so the company decides why it is collected and how long it is kept, and you should ask the company about your information and read its notice. The details are kept in that company's own workspace, apart from every other company's.",
+      "What we do with it: show the company your request or order, make the quotation, send you an order email and a link to a page showing your order, and, if the company allows it, buy a shipping label, which sends the shipping addresses to the company's shipping provider and a tracking number back. We use no advertising or tracking cookies for this, and we do not sell or share a visitor's details for marketing.",
+      "Direct-deposit details are stored encrypted, shown to the company's staff only with the last four digits visible, and shown in full only to the company's Owner, Admins and people with Accounts access, with a record of each time. They are never included in emails, logs or exports. The company can erase them after paying you, and it should; ask the company to erase them if you want them removed. You can also ask the company to correct or delete your other details.",
     ],
   },
   {

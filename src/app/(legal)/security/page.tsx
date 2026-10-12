@@ -53,6 +53,12 @@ const sections: LegalSection[] = [
     ],
   },
   {
+    heading: "Sellers' direct-deposit details",
+    paras: [
+      "When a company's storefront takes a seller's routing and account numbers, they are encrypted before they are saved, each one tied to the company and the order it belongs to, so a copy moved to another record or company cannot be read. Staff see only the last four digits. The full details are shown only to the company's Owner, Admins and people with Accounts access, and every time they are shown it is recorded in the audit log. They are never sent in emails, written to logs or included in exports, and the company can erase them once the seller is paid. Customer order pages open only with a private link and are marked so search engines do not list them. Public storefront forms are limited by how often one address can try them, and a company's own website connects with keys that are stored only in scrambled form.",
+    ],
+  },
+  {
     heading: "In transit and at our providers",
     paras: [
       "Traffic between your browser and jindjinni is protected with HTTPS. We run on established hosting, database, file storage, email and shipping providers, described in our Privacy Policy, and we limit what each of them receives to what the feature needs.",

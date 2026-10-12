@@ -35,6 +35,7 @@ const sections: LegalSection[] = [
     items: [
       "Protected health information, such as patient names linked to conditions, prescriptions or medical records. The Service is not built to hold it.",
       "Payment card numbers, bank login details, full government ID numbers (such as Social Security numbers) or passport details of customers or staff.",
+      "On a public storefront or checkout, anything beyond what its forms ask for. Never use a storefront to collect payment card numbers, bank login details, government ID numbers or health information, to collect a seller's direct-deposit details for any reason other than paying that seller, or to pretend to be another company.",
       "Passwords or secret keys for other services, except in the Connectors screens made for connecting your own accounts.",
       "Information about children under 13.",
     ],
