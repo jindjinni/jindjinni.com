@@ -3,7 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { deleteQuotations, previewQuotationDelete } from "@/app/actions/purchasing-delete";
-import { DELETE_ALL_PHRASE, DELETE_PAID_PHRASE, type DeletionPreview } from "@/lib/quotation-delete-text";
+import { DELETE_ALL_PHRASE, type DeletionPreview } from "@/lib/quotation-delete-text";
 
 /**
  * The confirm step for deleting quotations. `ids` = the ones picked in the list; `null` = every quotation.
@@ -31,7 +31,7 @@ export function QuotationDeletePanel({ ids, onClose, onDeleted }: { ids: string[
   }, [ids]);
 
   const all = ids === null;
-  const needWord = all ? DELETE_ALL_PHRASE : preview && preview.paid > 0 ? DELETE_PAID_PHRASE : null;
+  const needWord = all ? DELETE_ALL_PHRASE : null;
   const ready = !!preview && preview.quotations > 0 && (!needWord || typed.trim().toUpperCase() === needWord);
 
   function confirm() {
@@ -42,7 +42,15 @@ export function QuotationDeletePanel({ ids, onClose, onDeleted }: { ids: string[
         setError(r.error);
         return;
       }
-      setDone(`Deleted ${r.deleted} quotation${r.deleted === 1 ? "" : "s"}.`);
+      const { toDelete, toHide } = r.result;
+      setDone(
+        [
+          toDelete > 0 ? `Deleted ${toDelete} quotation${toDelete === 1 ? "" : "s"}.` : "",
+          toHide > 0 ? `${toHide} ${toHide === 1 ? "has" : "have"} received stock, a payment or a bought label, so ${toHide === 1 ? "it was" : "they were"} hidden in Settings → Archive instead.` : "",
+        ]
+          .filter(Boolean)
+          .join(" "),
+      );
       onDeleted();
       router.refresh();
     });
@@ -65,21 +73,25 @@ export function QuotationDeletePanel({ ids, onClose, onDeleted }: { ids: string[
           {!preview && !error && <p className="mt-2 text-xs text-slate-500">Checking what would be removed…</p>}
           {preview && (
             <div className="mt-2 text-xs text-slate-700" data-testid="qdel-summary">
-              <p>
-                This permanently removes <strong>{preview.quotations}</strong> quotation{preview.quotations === 1 ? "" : "s"}, their items and receipt files
-                {preview.withReceiving > 0 && <>, and <strong>{preview.withReceiving}</strong> receiving package{preview.withReceiving === 1 ? "" : "s"} made from them (with photos and scans)</>}. It can&rsquo;t be undone.
-              </p>
-              <p className="mt-1 text-slate-500">Your customers, products, prices and settings are not touched. Orders from the website keep their request but lose the link.</p>
-              {preview.labels > 0 && (
-                <p className="mt-1 text-amber-800">
-                  {preview.labels} shipping label{preview.labels === 1 ? " was" : "s were"} already bought. Deleting the order doesn&rsquo;t refund or void a label in Shippo.
+              {preview.toDelete > 0 && (
+                <p data-testid="qdel-erase">
+                  <strong>{preview.toDelete}</strong> quotation{preview.toDelete === 1 ? "" : "s"} with nothing received, paid or shipped will be <strong>erased for good</strong> (with their items and receipt files). It can&rsquo;t be undone.
                 </p>
               )}
-              {preview.paid > 0 && (
-                <p className="mt-1 font-medium text-red-700">
-                  {preview.paid} of these {preview.paid === 1 ? "is" : "are"} already marked Paid by Accounts.
+              {preview.toHide > 0 && (
+                <p data-testid="qdel-hide" className="mt-1 text-amber-800">
+                  <strong>{preview.toHide}</strong> already {preview.toHide === 1 ? "has" : "have"} history (
+                  {[
+                    preview.withReceiving > 0 ? `${preview.withReceiving} received` : "",
+                    preview.paid > 0 ? `${preview.paid} paid` : "",
+                    preview.labels > 0 ? `${preview.labels} with a bought shipping label` : "",
+                  ]
+                    .filter(Boolean)
+                    .join(", ")}
+                  ), so {preview.toHide === 1 ? "it is" : "they are"} <strong>hidden, not erased</strong>. Restore {preview.toHide === 1 ? "it" : "them"} any time from Settings → Archive. (Hidden orders still count as imported, so the same reference # can&rsquo;t be imported again until restored or cleared with Start fresh.)
                 </p>
               )}
+              <p className="mt-1 text-slate-500">Your customers, products, prices and settings are not touched. The change history is kept.</p>
               {needWord && (
                 <label className="mt-3 flex flex-col gap-1">
                   <span>
@@ -109,7 +121,7 @@ export function QuotationDeletePanel({ ids, onClose, onDeleted }: { ids: string[
               data-testid="qdel-confirm"
               className="rounded-md bg-red-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-800 disabled:opacity-50"
             >
-              {pending ? "Deleting…" : preview ? `Delete ${preview.quotations} quotation${preview.quotations === 1 ? "" : "s"}` : "Delete"}
+              {pending ? "Working…" : preview ? (preview.toDelete > 0 ? `Delete ${preview.toDelete}${preview.toHide > 0 ? ` and hide ${preview.toHide}` : ""}` : `Hide ${preview.toHide}`) : "Delete"}
             </button>
             <button type="button" onClick={onClose} className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50">
               Cancel

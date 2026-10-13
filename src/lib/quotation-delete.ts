@@ -1,29 +1,23 @@
-// Deleting quotations on purpose: a few picked from the list, or all of them. This removes the quotations and what hangs
-// off them (the database cascades): their lines, receipt files, shipping labels and tracking, and the receiving packages
-// made from them with photos, intake scans, adjustments and payment records. It does NOT remove customers, products, prices
-// or settings. Website requests that pointed at a deleted quotation are kept and simply lose the link.
+// Deleting quotations on purpose: a few picked from the list, or all of them.
 //
-// (Settings -> Start fresh is the bigger version that also clears customers.)
+//  * A quotation with NO history (nothing received against it, no payment, no shipping label bought) is erased for good,
+//    with what hangs off it (its lines, receipt files, tracking).
+//  * A quotation that already has history -- a receiving package (received stock, lot/serial numbers, recall checks,
+//    photos), a payment record, or a bought shipping label -- is NEVER erased here. It is hidden (archived) instead, the same
+//    as everywhere else in the platform, and can be restored from Settings -> Archive. (Settings -> Start fresh is the owner-only
+//    way to clear test data completely.)
+//  * Customers, products, prices and settings are never touched. The change history (audit log) is kept, and one summary line
+//    is added. Website requests that pointed at an erased quotation are kept and just lose the link.
 
-import { and, count, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db/client";
-import {
-  purchasingAuditLog,
-  purchasingQuotationLabels,
-  purchasingQuotations,
-  purchasingQuotedItems,
-  receivingPackagePhotos,
-  receivingPackages,
-  websiteRequests,
-} from "@/db/schema";
+import { purchasingAuditLog, purchasingQuotationLabels, purchasingQuotations, receivingPackages, websiteRequests } from "@/db/schema";
 import { newId } from "@/lib/ids";
-import { storage } from "@/lib/receiving-storage";
-
-export { DELETE_ALL_PHRASE, DELETE_PAID_PHRASE, type DeletionPreview } from "@/lib/quotation-delete-text";
 import type { DeletionPreview } from "@/lib/quotation-delete-text";
 
+export { DELETE_ALL_PHRASE, type DeletionPreview } from "@/lib/quotation-delete-text";
+
 const chunks = <T,>(xs: T[], n = 400) => Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, i * n + n));
-const num = (rows: { n: number | string | null }[]) => Number(rows[0]?.n ?? 0);
 
 /** Only ids that really belong to this company. */
 export async function ownQuotationIds(organizationId: string, ids: string[]): Promise<string[]> {
@@ -42,52 +36,58 @@ export async function allQuotationIds(organizationId: string): Promise<string[]>
   return (await db.select({ id: purchasingQuotations.id }).from(purchasingQuotations).where(eq(purchasingQuotations.organizationId, organizationId))).map((r) => r.id);
 }
 
-export async function previewQuotationDeletion(organizationId: string, ids: string[]): Promise<DeletionPreview> {
-  const own = await ownQuotationIds(organizationId, ids);
-  let withReceiving = 0;
-  let paid = 0;
-  let labels = 0;
+type Split = { toDelete: string[]; toHide: string[]; withReceiving: number; paid: number; labels: number };
+
+/** Which of these quotations have history (kept, hidden) and which don't (erased). */
+async function splitByHistory(organizationId: string, own: string[]): Promise<Split> {
+  const hasReceiving = new Set<string>();
+  const hasPaid = new Set<string>();
+  const hasLabel = new Set<string>();
   for (const part of chunks(own)) {
-    const [pk, pd, lb, lbq] = await Promise.all([
-      db.select({ n: count() }).from(receivingPackages).where(and(eq(receivingPackages.organizationId, organizationId), inArray(receivingPackages.quotationId, part))),
-      db.select({ n: count() }).from(receivingPackages).where(and(eq(receivingPackages.organizationId, organizationId), inArray(receivingPackages.quotationId, part), eq(receivingPackages.accountsStatus, "PAID"))),
-      db.select({ n: count() }).from(purchasingQuotationLabels).where(and(eq(purchasingQuotationLabels.organizationId, organizationId), inArray(purchasingQuotationLabels.quotationId, part))),
-      db.select({ n: count() }).from(purchasingQuotations).where(and(inArray(purchasingQuotations.id, part), eq(purchasingQuotations.labelStatus, "GENERATED"), sql`not exists (select 1 from purchasing_quotation_labels l where l.quotation_id = purchasing_quotations.id)`)),
-    ]);
-    withReceiving += num(pk);
-    paid += num(pd);
-    labels += num(lb) + num(lbq);
+    const pk = await db
+      .select({ q: receivingPackages.quotationId, paid: receivingPackages.accountsStatus })
+      .from(receivingPackages)
+      .where(and(eq(receivingPackages.organizationId, organizationId), inArray(receivingPackages.quotationId, part)));
+    for (const r of pk) {
+      hasReceiving.add(r.q);
+      if (r.paid === "PAID") hasPaid.add(r.q);
+    }
+    const lb = await db
+      .select({ q: purchasingQuotationLabels.quotationId })
+      .from(purchasingQuotationLabels)
+      .where(and(eq(purchasingQuotationLabels.organizationId, organizationId), inArray(purchasingQuotationLabels.quotationId, part)));
+    for (const r of lb) hasLabel.add(r.q);
+    // A label bought before the per-label records existed is only on the quotation itself.
+    const old = await db
+      .select({ q: purchasingQuotations.id })
+      .from(purchasingQuotations)
+      .where(and(inArray(purchasingQuotations.id, part), sql`(${purchasingQuotations.labelStatus} = 'GENERATED' or ${purchasingQuotations.shippoTransactionId} is not null)`));
+    for (const r of old) hasLabel.add(r.q);
   }
-  return { quotations: own.length, withReceiving, paid, labels };
+  const toHide = own.filter((id) => hasReceiving.has(id) || hasPaid.has(id) || hasLabel.has(id));
+  const hide = new Set(toHide);
+  return { toDelete: own.filter((id) => !hide.has(id)), toHide, withReceiving: hasReceiving.size, paid: hasPaid.size, labels: hasLabel.size };
 }
 
-/** Removes the quotations and what they created, all-or-nothing. Returns what was removed. */
+export async function previewQuotationDeletion(organizationId: string, ids: string[]): Promise<DeletionPreview> {
+  const own = await ownQuotationIds(organizationId, ids);
+  const s = await splitByHistory(organizationId, own);
+  return { quotations: own.length, toDelete: s.toDelete.length, toHide: s.toHide.length, withReceiving: s.withReceiving, paid: s.paid, labels: s.labels };
+}
+
+/** Erases the ones with no history, hides the rest, all-or-nothing. Returns what happened. */
 export async function deleteQuotationsById(organizationId: string, userId: string, ids: string[], how: string): Promise<DeletionPreview> {
   const own = await ownQuotationIds(organizationId, ids);
-  const before = await previewQuotationDeletion(organizationId, own);
-  if (own.length === 0) return before;
+  const s = await splitByHistory(organizationId, own);
+  const result: DeletionPreview = { quotations: own.length, toDelete: s.toDelete.length, toHide: s.toHide.length, withReceiving: s.withReceiving, paid: s.paid, labels: s.labels };
+  if (own.length === 0) return result;
 
-  // Things to clean up that the database can't do by itself.
-  const photoPaths: string[] = [];
-  const itemIds: string[] = [];
-  for (const part of chunks(own)) {
-    const pkgs = await db.select({ id: receivingPackages.id }).from(receivingPackages).where(and(eq(receivingPackages.organizationId, organizationId), inArray(receivingPackages.quotationId, part)));
-    for (const p2 of chunks(pkgs.map((p) => p.id))) {
-      const ph = await db.select({ path: receivingPackagePhotos.storagePath }).from(receivingPackagePhotos).where(inArray(receivingPackagePhotos.packageId, p2));
-      photoPaths.push(...ph.map((r) => r.path));
-    }
-    const items = await db.select({ id: purchasingQuotedItems.id }).from(purchasingQuotedItems).where(inArray(purchasingQuotedItems.quotationId, part));
-    itemIds.push(...items.map((r) => r.id));
-  }
-
-  const parts = chunks(own);
+  const now = new Date().toISOString();
   type Stmt = Parameters<typeof db.batch>[0][number];
   const stmts: Stmt[] = [
-    ...parts.map((ids2) => db.update(websiteRequests).set({ quotationId: null }).where(and(eq(websiteRequests.organizationId, organizationId), inArray(websiteRequests.quotationId, ids2)))),
-    ...parts.map((ids2) => db.delete(purchasingAuditLog).where(and(eq(purchasingAuditLog.organizationId, organizationId), eq(purchasingAuditLog.recordType, "quotation"), inArray(purchasingAuditLog.recordId, ids2)))),
-    ...chunks(itemIds).map((ids2) => db.delete(purchasingAuditLog).where(and(eq(purchasingAuditLog.organizationId, organizationId), eq(purchasingAuditLog.recordType, "quoted_item"), inArray(purchasingAuditLog.recordId, ids2)))),
-    ...parts.map((ids2) => db.delete(receivingPackages).where(and(eq(receivingPackages.organizationId, organizationId), inArray(receivingPackages.quotationId, ids2)))),
-    ...parts.map((ids2) => db.delete(purchasingQuotations).where(and(eq(purchasingQuotations.organizationId, organizationId), inArray(purchasingQuotations.id, ids2)))),
+    ...chunks(s.toDelete).map((part) => db.update(websiteRequests).set({ quotationId: null }).where(and(eq(websiteRequests.organizationId, organizationId), inArray(websiteRequests.quotationId, part)))),
+    ...chunks(s.toDelete).map((part) => db.delete(purchasingQuotations).where(and(eq(purchasingQuotations.organizationId, organizationId), inArray(purchasingQuotations.id, part)))),
+    ...chunks(s.toHide).map((part) => db.update(purchasingQuotations).set({ archivedAt: now }).where(and(eq(purchasingQuotations.organizationId, organizationId), inArray(purchasingQuotations.id, part), isNull(purchasingQuotations.archivedAt)))),
     db.insert(purchasingAuditLog).values({
       id: newId("paudit"),
       organizationId,
@@ -95,14 +95,12 @@ export async function deleteQuotationsById(organizationId: string, userId: strin
       recordType: "quotation_delete",
       recordId: organizationId,
       fieldName: "deleted",
-      previousValue: String(before.quotations),
-      newValue: "0",
-      note: `Deleted ${before.quotations} quotation(s) (${how}); ${before.withReceiving} receiving package(s) and ${before.labels} label record(s) went with them.`,
-      changedAt: new Date().toISOString(),
+      previousValue: String(own.length),
+      newValue: String(s.toHide.length),
+      note: `Deleted ${s.toDelete.length} quotation(s) (${how}); ${s.toHide.length} had received stock, a payment or a bought label, so they were hidden in Archive instead.`,
+      changedAt: now,
     }),
   ];
   await db.batch(stmts as [Stmt, ...Stmt[]]);
-  // The photo files themselves, once the records are gone. A file that can't be removed is left harmlessly (nothing points at it).
-  if (photoPaths.length && storage.configured()) await Promise.allSettled(photoPaths.map((p) => storage.remove(p)));
-  return before;
+  return result;
 }

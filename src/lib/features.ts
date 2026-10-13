@@ -90,6 +90,12 @@ export const FEATURES: FeatureDef[] = [
     blurb: "Shipping: orders ready to go out, shipments with their boxes, tracking numbers and photos, the status of every package, and the 'your order has shipped' email you review and send.",
     defaultStage: "mothership",
   },
+  {
+    key: "quotation-delete",
+    label: "Delete quotations",
+    blurb: "Purchasing -> Quotations: tick quotations and delete them, or delete all. Quotations with nothing received, paid or shipped are erased for good; any that already have received stock, a payment or a bought label are hidden in Settings -> Archive instead.",
+    defaultStage: "mothership",
+  },
 ];
 
 export const featureDef = (key: string) => FEATURES.find((f) => f.key === key);
