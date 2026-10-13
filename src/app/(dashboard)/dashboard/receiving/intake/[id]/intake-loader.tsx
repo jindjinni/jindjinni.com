@@ -7,6 +7,8 @@ import { storage } from "@/lib/receiving-storage";
 import { listChecks, listRecalls } from "@/lib/receiving-recall-service";
 import { listSerials } from "@/lib/receiving-serial-service";
 import { photoReadingOn } from "@/lib/receiving-recall-photo";
+import { featureOn } from "@/lib/features";
+import { cleanPicks } from "@/lib/receiving-picks";
 import { IntakeForm, type FormValues } from "./intake-form";
 
 /**
@@ -49,7 +51,9 @@ export async function IntakeFormFor({ id, focus }: { id: string; focus?: "accoun
     accountsDecision: pkg.accountsDecision ?? "",
     accountsStatus: pkg.accountsStatus ?? "",
     customerTexted: !!pkg.customerTexted,
+    picks: cleanPicks(pkg.intakePicks, data.formConfig),
   };
+  const picksOn = await featureOn("receiving-picks", org.organizationId);
 
   return (
     <IntakeForm
@@ -79,6 +83,7 @@ export async function IntakeFormFor({ id, focus }: { id: string; focus?: "accoun
       photoReading={await photoReadingOn(org.organizationId)}
       started={data.started}
       formConfig={data.formConfig}
+      picksOn={picksOn}
       catalog={catalog}
       saved={{
         accountsStatus: pkg.accountsStatus ?? "",

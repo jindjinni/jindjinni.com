@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { requireOrg } from "@/lib/tenant";
 import { isAdmin } from "@/lib/permissions";
 import { getReceivingFormConfig } from "@/lib/receiving-form-config-store";
+import { featureOn } from "@/lib/features";
 import { FormSettings } from "./form-settings";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +18,7 @@ export default async function ReceivingFormSettingsPage() {
         Make the Receiving Intake Form fit how your company works. Hiding a photo type or a question only takes it off the form: photos and answers already saved stay in each shipment,
         and nothing is deleted. The product lines, quantities, lot and expiration numbers, recall checks and the Accounts steps always stay.
       </p>
-      <FormSettings initial={cfg} />
+      <FormSettings initial={cfg} picksOn={await featureOn("receiving-picks", org.organizationId)} />
     </div>
   );
 }

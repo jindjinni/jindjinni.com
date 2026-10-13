@@ -5,6 +5,7 @@
 // The things that decide what a shipment is (product lines, quantities, lots, expirations, recall checks, the accounts steps) can't be changed.
 
 import type { PhotoKind } from "@/lib/receiving-rules";
+import { MAX_EXTRA_PER_SECTION, MAX_LABEL, PICK_SECTION_KEYS, type PickSectionKey } from "@/lib/receiving-picks";
 
 /** Photo types that belong to the package as a whole (never the per-product photos or the accounts documents). */
 export const HIDEABLE_PHOTOS = [
@@ -40,9 +41,18 @@ export const OPTIONAL_FIELDS = [
 ] as const;
 export type OptionalField = (typeof OPTIONAL_FIELDS)[number]["key"];
 
-export type ReceivingFormConfig = { hiddenPhotos: HideablePhoto[]; hiddenFields: HideableField[]; optional: OptionalField[] };
+export type ReceivingFormConfig = {
+  hiddenPhotos: HideablePhoto[];
+  hiddenFields: HideableField[];
+  optional: OptionalField[];
+  /** Standard pick-list options this company hides, as "section:option-slug" (lib/receiving-picks.ts). Hiding never deletes what was ticked on a shipment. */
+  hiddenPicks: string[];
+  /** Options this company added to a pick list, by list. */
+  extraPicks: Partial<Record<PickSectionKey, string[]>>;
+};
 
-export const STANDARD_FORM: ReceivingFormConfig = { hiddenPhotos: [], hiddenFields: [], optional: [] };
+export const STANDARD_FORM: ReceivingFormConfig = { hiddenPhotos: [], hiddenFields: [], optional: [], hiddenPicks: [], extraPicks: {} };
+const fresh = (): ReceivingFormConfig => ({ hiddenPhotos: [], hiddenFields: [], optional: [], hiddenPicks: [], extraPicks: {} });
 
 const PHOTO_KEYS: ReadonlySet<string> = new Set(HIDEABLE_PHOTOS.map((p) => p.key));
 const FIELD_KEYS: ReadonlySet<string> = new Set(HIDEABLE_FIELDS.map((f) => f.key));
@@ -61,15 +71,46 @@ export function cleanFormConfig(raw: unknown): ReceivingFormConfig {
       v = null;
     }
   }
-  if (!v || typeof v !== "object") return { ...STANDARD_FORM, hiddenPhotos: [], hiddenFields: [], optional: [] };
+  if (!v || typeof v !== "object") return fresh();
   const o = v as Record<string, unknown>;
-  return { hiddenPhotos: keep<HideablePhoto>(o.hiddenPhotos, PHOTO_KEYS), hiddenFields: keep<HideableField>(o.hiddenFields, FIELD_KEYS), optional: keep<OptionalField>(o.optional, OPTIONAL_KEYS) };
+  const sectionSet: ReadonlySet<string> = new Set(PICK_SECTION_KEYS);
+  const hiddenPicks = Array.isArray(o.hiddenPicks)
+    ? [...new Set(o.hiddenPicks.filter((x): x is string => typeof x === "string" && /^[a-zA-Z]+:[a-z0-9-]{1,80}$/.test(x) && sectionSet.has(x.split(":")[0])))]
+    : [];
+  const extraPicks: Partial<Record<PickSectionKey, string[]>> = {};
+  if (o.extraPicks && typeof o.extraPicks === "object") {
+    for (const key of PICK_SECTION_KEYS) {
+      const list = (o.extraPicks as Record<string, unknown>)[key];
+      if (!Array.isArray(list)) continue;
+      const seen = new Set<string>();
+      const clean: string[] = [];
+      for (const x of list) {
+        if (typeof x !== "string") continue;
+        const label = x.replace(/\s+/g, " ").trim().slice(0, MAX_LABEL);
+        if (!label || seen.has(label.toLowerCase())) continue;
+        seen.add(label.toLowerCase());
+        clean.push(label);
+        if (clean.length >= MAX_EXTRA_PER_SECTION) break;
+      }
+      if (clean.length) extraPicks[key] = clean;
+    }
+  }
+  return {
+    hiddenPhotos: keep<HideablePhoto>(o.hiddenPhotos, PHOTO_KEYS),
+    hiddenFields: keep<HideableField>(o.hiddenFields, FIELD_KEYS),
+    optional: keep<OptionalField>(o.optional, OPTIONAL_KEYS),
+    hiddenPicks,
+    extraPicks,
+  };
 }
 
 /** What to store: null when it is the standard form. */
 export function serializeFormConfig(c: ReceivingFormConfig): string | null {
   const x = cleanFormConfig(c);
-  return x.hiddenPhotos.length + x.hiddenFields.length + x.optional.length === 0 ? null : JSON.stringify(x);
+  if (x.hiddenPhotos.length + x.hiddenFields.length + x.optional.length + x.hiddenPicks.length + Object.keys(x.extraPicks).length === 0) return null;
+  // The pick-list parts are only written when used, so a company that never touched them stores exactly what it always did.
+  const { hiddenPicks, extraPicks, ...base } = x;
+  return JSON.stringify({ ...base, ...(hiddenPicks.length ? { hiddenPicks } : {}), ...(Object.keys(extraPicks).length ? { extraPicks } : {}) });
 }
 
 export const photoHidden = (c: ReceivingFormConfig | null | undefined, kind: string) => !!c && c.hiddenPhotos.includes(kind as HideablePhoto);

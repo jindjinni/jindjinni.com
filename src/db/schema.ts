@@ -1174,6 +1174,8 @@ export const receivingPackages = sqliteTable(
     adjustmentNeeded: text("adjustment_needed", { enum: ["YES", "NO"] }),
     adjustmentDetails: text("adjustment_details"),
     receivingNotes: text("receiving_notes"),
+    // What the agent ticked in the Receiving Intake Form pick lists (JSON, lib/receiving-picks.ts). The four text fields above are filled in from it.
+    intakePicks: text("intake_picks"),
     submittedByUserId: text("submitted_by_user_id").references(() => users.id),
     submittedAt: text("submitted_at"),
     // Step 7 -- adjustments (dollar amounts the customer is told / actually paid)

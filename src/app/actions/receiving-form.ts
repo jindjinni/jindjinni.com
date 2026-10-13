@@ -30,7 +30,7 @@ export async function saveReceivingFormConfig(input: unknown): Promise<FormSetti
     fieldName: "form_settings",
     previousValue: null,
     newValue: null,
-    note: `Receiving form changed: ${cfg.hiddenPhotos.length} photo type(s) hidden, ${cfg.hiddenFields.length} question(s) hidden, ${cfg.optional.length} question(s) not required`,
+    note: `Receiving form changed: ${cfg.hiddenPhotos.length} photo type(s) hidden, ${cfg.hiddenFields.length} question(s) hidden, ${cfg.optional.length} question(s) not required, ${cfg.hiddenPicks.length} pick-list option(s) hidden, ${Object.values(cfg.extraPicks).reduce((n, l) => n + (l?.length ?? 0), 0)} added`,
   });
   revalidatePath("/dashboard/receiving", "layout");
   revalidatePath("/dashboard/accounts", "layout");

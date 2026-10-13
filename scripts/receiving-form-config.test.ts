@@ -6,13 +6,13 @@ import { computeMissingInfo, type ShipmentFacts } from "../src/lib/receiving-rul
 assert.deepEqual(cleanFormConfig(null), STANDARD_FORM);
 assert.deepEqual(cleanFormConfig("not json"), STANDARD_FORM);
 assert.deepEqual(cleanFormConfig({ hiddenPhotos: ["SHIPPING_LABEL", "ITEM_PRODUCT", "PAYMENT_CONFIRMATION", 5], hiddenFields: ["carrier", "trackingNumber"], optional: ["receivingNotes", "receivedBy"] }),
-  { hiddenPhotos: ["SHIPPING_LABEL"], hiddenFields: ["carrier"], optional: ["receivingNotes"] });
+  { hiddenPhotos: ["SHIPPING_LABEL"], hiddenFields: ["carrier"], optional: ["receivingNotes"], hiddenPicks: [], extraPicks: {} });
 // the per-product photos and the accounts documents can never be hidden
 assert.equal(cleanFormConfig({ hiddenPhotos: ["ITEM_DAMAGE", "REVISED_INVOICE", "PAYMENT_CONFIRMATION"] }).hiddenPhotos.length, 0);
 // the standard form stores nothing
 assert.equal(serializeFormConfig(STANDARD_FORM), null);
-assert.equal(serializeFormConfig({ hiddenPhotos: ["SHIPPING_LABEL"], hiddenFields: [], optional: [] }), '{"hiddenPhotos":["SHIPPING_LABEL"],"hiddenFields":[],"optional":[]}');
-assert.deepEqual(cleanFormConfig(serializeFormConfig({ hiddenPhotos: ["DAMAGE"], hiddenFields: ["doubleBoxed"], optional: ["quantityMatches"] })), { hiddenPhotos: ["DAMAGE"], hiddenFields: ["doubleBoxed"], optional: ["quantityMatches"] });
+assert.equal(serializeFormConfig({ ...STANDARD_FORM, hiddenPhotos: ["SHIPPING_LABEL"] }), '{"hiddenPhotos":["SHIPPING_LABEL"],"hiddenFields":[],"optional":[]}');
+assert.deepEqual(cleanFormConfig(serializeFormConfig({ ...STANDARD_FORM, hiddenPhotos: ["DAMAGE"], hiddenFields: ["doubleBoxed"], optional: ["quantityMatches"] })), { ...STANDARD_FORM, hiddenPhotos: ["DAMAGE"], hiddenFields: ["doubleBoxed"], optional: ["quantityMatches"] });
 assert.equal(photoHidden(null, "SHIPPING_LABEL"), false);
 assert.equal(photoHidden({ ...STANDARD_FORM, hiddenPhotos: ["SHIPPING_LABEL"] }, "SHIPPING_LABEL"), true);
 assert.equal(fieldHidden({ ...STANDARD_FORM, hiddenFields: ["carrier"] }, "carrier"), true);
@@ -23,7 +23,7 @@ const empty = { trackingNumber: "1Z", receivedAt: "2026-10-12T10:00", receivedBy
 const std = computeMissingInfo(empty, {}, []);
 assert.ok(std.includes("Photo - Shipping Label") && std.includes("Receiving Notes") && std.includes("Overall Packaging Condition") && std.includes("Does Quantity Match What Was Quoted?") && std.includes("Adjustment Needed?"));
 const cfg = { hiddenPhotos: ["SHIPPING_LABEL", "PACKAGE_AS_OPENED"], hiddenFields: [], optional: ["receivingNotes", "quantityMatches"] } as const;
-const custom = computeMissingInfo(empty, {}, [], { hiddenPhotos: [...cfg.hiddenPhotos], hiddenFields: [], optional: [...cfg.optional] });
+const custom = computeMissingInfo(empty, {}, [], { ...STANDARD_FORM, hiddenPhotos: [...cfg.hiddenPhotos], optional: [...cfg.optional] });
 assert.ok(!custom.includes("Photo - Shipping Label") && !custom.includes("Photo - Package As Opened"));
 assert.ok(!custom.includes("Receiving Notes") && !custom.includes("Does Quantity Match What Was Quoted?"));
 // everything else is still asked for

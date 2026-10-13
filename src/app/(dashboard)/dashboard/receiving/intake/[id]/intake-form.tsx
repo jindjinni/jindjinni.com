@@ -30,7 +30,9 @@ import {
 import { MONEY, STATUS_PILL, chipClass, formatUtcStamp } from "@/lib/receiving-ui";
 import { MarkPaidButton } from "@/app/(dashboard)/dashboard/accounts/mark-paid-button";
 import { LocalTime } from "@/components/local-time";
-import { fieldHidden, photoHidden, type HideableField, type ReceivingFormConfig } from "@/lib/receiving-form-config";
+import { fieldHidden, fieldOptional, photoHidden, type HideableField, type ReceivingFormConfig } from "@/lib/receiving-form-config";
+import { legacyFromPicks, summaryLines, type PickSectionKey, type PickState } from "@/lib/receiving-picks";
+import { PickList } from "./pick-list";
 import { Choice, PhotoAddContext, PhotoSlot, Row, Step, YN, YN_RISK, field } from "./intake-parts";
 import { ItemAdjustmentCard, itemFactsOf, toItemState, type ItemState } from "./item-card";
 import { ReceiptPreview, ReceivedItemsGrid } from "./receiving-table";
@@ -71,6 +73,8 @@ export type FormValues = {
   accountsDecision: string;
   accountsStatus: string;
   customerTexted: boolean;
+  /** What was ticked in the pick lists (only used when the company has the pick lists on). */
+  picks: PickState;
 };
 
 type Props = {
@@ -103,6 +107,8 @@ type Props = {
   started: { at: string; byName: string | null };
   /** What this company hides or does not require on the form (Receiving -> Form settings). */
   formConfig: ReceivingFormConfig;
+  /** The pick lists replace the typed notes (feature `receiving-picks`). */
+  picksOn: boolean;
   catalog: CatalogProduct[];
   saved: {
     accountsStatus: string;
@@ -210,6 +216,26 @@ export function IntakeForm(props: Props) {
   const editable = canWrite;
   const accountsFocus = props.focus === "accounts";
   const set = <K extends keyof FormValues>(k: K, val: FormValues[K]) => setV((p) => ({ ...p, [k]: val }));
+  const picksOn = props.picksOn;
+  // Ticking in a pick list also fills in the text fields the rest of the app reads, and answers the matching yes/no question when it is still blank
+  // (a damage tick = External Damage Yes, "No Damage" = No; a packaging issue = Not acceptable; an adjustment tick = Adjustment Needed Yes).
+  function setPicks(section: PickSectionKey, labels: string[], note: string) {
+    setV((p) => {
+      const picks: PickState = { ...p.picks, [section]: labels, custom: { ...p.picks.custom, [section]: note } };
+      const text = legacyFromPicks(picks);
+      const next: FormValues = { ...p, picks, damageNotes: text.damageNotes, packagingIssueNotes: text.packagingIssueNotes, adjustmentDetails: text.adjustmentDetails, receivingNotes: text.receivingNotes };
+      if (section === "damage") {
+        if (labels.includes("No Damage")) next.externalDamage = "NO";
+        else if (labels.length > 0) next.externalDamage = "YES";
+      }
+      if (section === "packaging" && labels.length > 0 && !p.overallPackaging) next.overallPackaging = "NOT_ACCEPTABLE";
+      if (section === "adjustment" && labels.length > 0 && !p.adjustmentNeeded) next.adjustmentNeeded = "YES";
+      return next;
+    });
+  }
+  const pickList = (section: PickSectionKey) => (
+    <PickList section={section} config={props.formConfig} selected={v.picks[section]} note={v.picks.custom[section]} disabled={!editable} onChange={(labels, note) => setPicks(section, labels, note)} />
+  );
 
   // Product lines: the server's list, with whatever the agent has typed over the top.
   const items: ItemState[] = props.items.map((pi) => edits[pi.id] ?? toItemState(pi));
@@ -280,7 +306,14 @@ export function IntakeForm(props: Props) {
       }
     }
   }
-  const missing = [...computeMissingInfo(facts, counts, itemFacts, props.formConfig), ...recallGate];
+  const baseMissing = computeMissingInfo(facts, counts, itemFacts, props.formConfig);
+  // With the pick lists, "Receiving Notes" means the Receiving Outcome list (or its custom note), not any text at all.
+  const outcomeMissing = picksOn && !fieldOptional(props.formConfig, "receivingNotes") && v.picks.outcome.length === 0 && !v.picks.custom.outcome.trim();
+  const missing = [
+    ...(picksOn ? baseMissing.filter((m) => m !== "Receiving Notes") : baseMissing),
+    ...(outcomeMissing ? ["Receiving Outcome (tick at least one)"] : []),
+    ...recallGate,
+  ];
   // Quoted products nothing has been entered for yet count as shortages. Blank rows (no product chosen) are not lines yet.
   const namedFacts = itemFacts.filter((f) => f.productName?.trim());
   const notEntered = quotedNotEntered(props.quotedLines, namedFacts);
@@ -301,10 +334,12 @@ export function IntakeForm(props: Props) {
   function receivingFormData() {
     const fd = new FormData();
     for (const [k, val] of Object.entries(v)) {
+      if (k === "picks" || typeof val === "object" && !Array.isArray(val)) continue;
       if (Array.isArray(val)) val.forEach((x) => fd.append(k, x));
       else fd.set(k, typeof val === "boolean" ? String(val) : val);
     }
     fd.set("itemsJson", JSON.stringify(items));
+    if (picksOn) fd.set("picks", JSON.stringify(v.picks));
     return fd;
   }
   function accountsFormData() {
@@ -554,24 +589,29 @@ export function IntakeForm(props: Props) {
           <Row label="External Damage?">
             <Choice name="External Damage?" value={v.externalDamage} onChange={(x) => set("externalDamage", x)} options={YN_RISK} disabled={!editable} />
           </Row>
+          {picksOn && <Row label="Damage Noted">{pickList("damage")}</Row>}
           {v.externalDamage === "YES" && (
             <>
-              <Row label="Damage Type">
-                <div className="flex flex-wrap gap-x-4 gap-y-2">
-                  {DAMAGE_TYPES.map((t) => (
-                    <label key={t} className="flex items-center gap-1.5">
-                      <input
-                        type="checkbox"
-                        checked={v.damageTypes.includes(t)}
-                        onChange={(e) => set("damageTypes", e.target.checked ? [...v.damageTypes, t] : v.damageTypes.filter((x) => x !== t))}
-                        className="h-4 w-4 accent-amber-600"
-                      />
-                      {t}
-                    </label>
-                  ))}
-                </div>
-              </Row>
-              <Row label="Damage Notes">{textInput("damageNotes", 2)}</Row>
+              {!picksOn && (
+                <>
+                  <Row label="Damage Type">
+                    <div className="flex flex-wrap gap-x-4 gap-y-2">
+                      {DAMAGE_TYPES.map((t) => (
+                        <label key={t} className="flex items-center gap-1.5">
+                          <input
+                            type="checkbox"
+                            checked={v.damageTypes.includes(t)}
+                            onChange={(e) => set("damageTypes", e.target.checked ? [...v.damageTypes, t] : v.damageTypes.filter((x) => x !== t))}
+                            className="h-4 w-4 accent-amber-600"
+                          />
+                          {t}
+                        </label>
+                      ))}
+                    </div>
+                  </Row>
+                  <Row label="Damage Notes">{textInput("damageNotes", 2)}</Row>
+                </>
+              )}
               {!hideP("DAMAGE") && <Row label="Damage Photos">{slot("DAMAGE")}</Row>}
             </>
           )}
@@ -610,9 +650,10 @@ export function IntakeForm(props: Props) {
               disabled={!editable}
             />
           </Row>
+          {picksOn && <Row label="Packaging Issues">{pickList("packaging")}</Row>}
           {v.overallPackaging === "NOT_ACCEPTABLE" && (
             <>
-              <Row label="Packaging Issue Notes">{textInput("packagingIssueNotes", 2)}</Row>
+              {!picksOn && <Row label="Packaging Issue Notes">{textInput("packagingIssueNotes", 2)}</Row>}
               {!hideP("PACKAGING_ISSUE") && <Row label="Packaging Issue Photos">{slot("PACKAGING_ISSUE")}</Row>}
             </>
           )}
@@ -769,9 +810,10 @@ export function IntakeForm(props: Props) {
         {/* STEP 7 (receiving part) */}
         <Step n={7} id="step-7" title="Adjustments">
           <Row label="Adjustment Needed?"><Choice name="Adjustment needed?" value={v.adjustmentNeeded} onChange={(x) => set("adjustmentNeeded", x)} options={YN_RISK} disabled={!editable} /></Row>
+          {picksOn && <Row label="Adjustment Details">{pickList("adjustment")}</Row>}
           {v.adjustmentNeeded === "YES" && (
             <>
-              <Row label="Adjustment Details">{textInput("adjustmentDetails", 3)}</Row>
+              {!picksOn && <Row label="Adjustment Details">{textInput("adjustmentDetails", 3)}</Row>}
               {items.length > 0 && (
                 <div className="mt-3 space-y-3">
                   {items.map((it, idx) => it.productName.trim() ? (
@@ -820,7 +862,27 @@ export function IntakeForm(props: Props) {
       {/* STEP 9 */}
       <Step n={9} id="step-9" title="Completion">
         <fieldset disabled={!editable} className="min-w-0 border-0 p-0">
-          <Row label="Receiving Notes">{textInput("receivingNotes", 3)}</Row>
+          {picksOn ? (
+            <>
+              <Row label="Receiving Outcome">{pickList("outcome")}</Row>
+              <Row label="Recommended Adjustment Outcome" hint="Tells Accounts what needs to happen.">{pickList("adjOutcome")}</Row>
+              <Row label="Customer Warning Level" hint="Recorded only. No message is sent from this.">{pickList("warning")}</Row>
+              {summaryLines(v.picks).length > 0 && (
+                <Row label="Receiving Summary" hint="Written for you from the picks. Accounts and Customer Service see this.">
+                  <dl className="space-y-1.5" data-testid="picks-summary">
+                    {summaryLines(v.picks).map((l) => (
+                      <div key={l.title}>
+                        <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">{l.title}</dt>
+                        <dd className="text-sm text-slate-900 dark:text-slate-50">{l.text}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </Row>
+              )}
+            </>
+          ) : (
+            <Row label="Receiving Notes">{textInput("receivingNotes", 3)}</Row>
+          )}
         </fieldset>
         <Row label="Receiving Completion Status">
           <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_PILL[locked ? status : "IN_PROGRESS"]}`}>{STATUS_LABELS[locked ? status : "IN_PROGRESS"]}</span>

@@ -8,6 +8,8 @@
 
 import { photoHidden } from "@/lib/receiving-form-config";
 import { getReceivingFormConfig } from "@/lib/receiving-form-config-store";
+import { featureOn } from "@/lib/features";
+import { cleanPicks, legacyFromPicks, serializePicks, type LegacyText } from "@/lib/receiving-picks";
 import { revalidatePath } from "next/cache";
 import { and, eq, inArray, isNull, like, or, sql } from "drizzle-orm";
 import { db } from "@/db/client";
@@ -497,6 +499,16 @@ export async function saveReceiving(packageId: string, formData: FormData): Prom
     }
   }
 
+  // Pick lists (flag `receiving-picks`): what the agent ticked is saved as it is, and the four text fields the rest of the app reads
+  // are written out from it. With the feature off a posted "picks" field is ignored.
+  let pickText: LegacyText | null = null;
+  let pickJson: string | null | undefined;
+  if (formData.has("picks") && (await featureOn("receiving-picks", org.organizationId))) {
+    const cfg = await getReceivingFormConfig(org.organizationId);
+    const picks = cleanPicks(String(formData.get("picks") ?? ""), cfg);
+    pickJson = serializePicks(picks);
+    pickText = legacyFromPicks(picks);
+  }
   const externalDamage = pick(formData.get("externalDamage"), YES_NO);
   const damageTypes = formData
     .getAll("damageTypes")
@@ -511,7 +523,7 @@ export async function saveReceiving(packageId: string, formData: FormData): Prom
       receivedByUserId: receivedBy,
       externalDamage,
       damageTypes: externalDamage === "YES" && damageTypes.length ? JSON.stringify(damageTypes) : null,
-      damageNotes: text(formData.get("damageNotes")),
+      damageNotes: pickText ? text(pickText.damageNotes) : text(formData.get("damageNotes")),
       doubleBoxed: pick(formData.get("doubleBoxed"), YES_NO),
       protectiveMaterial: pick(formData.get("protectiveMaterial"), YES_NO),
       sturdyOuterBox: pick(formData.get("sturdyOuterBox"), YES_NO),
@@ -519,12 +531,13 @@ export async function saveReceiving(packageId: string, formData: FormData): Prom
       packageSealed: pick(formData.get("packageSealed"), YES_NO),
       packagingRequirementsMet: pick(formData.get("packagingRequirementsMet"), ["YES", "NO", "PARTIALLY"] as const),
       overallPackaging: pick(formData.get("overallPackaging"), ["ACCEPTABLE", "NOT_ACCEPTABLE"] as const),
-      packagingIssueNotes: text(formData.get("packagingIssueNotes")),
+      packagingIssueNotes: pickText ? text(pickText.packagingIssueNotes) : text(formData.get("packagingIssueNotes")),
       packingSheetIncluded: pick(formData.get("packingSheetIncluded"), YES_NO),
       quantityMatches: pick(formData.get("quantityMatches"), YES_NO),
       adjustmentNeeded: pick(formData.get("adjustmentNeeded"), YES_NO),
-      adjustmentDetails: text(formData.get("adjustmentDetails")),
-      receivingNotes: text(formData.get("receivingNotes"), 4000),
+      adjustmentDetails: pickText ? text(pickText.adjustmentDetails) : text(formData.get("adjustmentDetails")),
+      receivingNotes: pickText ? text(pickText.receivingNotes, 4000) : text(formData.get("receivingNotes"), 4000),
+      ...(pickJson !== undefined ? { intakePicks: pickJson } : {}),
       updatedAt: sql`(current_timestamp)`,
     })
     .where(eq(receivingPackages.id, packageId));
