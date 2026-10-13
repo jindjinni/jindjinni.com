@@ -110,6 +110,7 @@ export const DEPARTMENT_MENUS: Record<MenuDept, DepartmentMenu> = {
     items: [
       { id: "stock", href: I, label: "Live Stock", icon: "📦", exact: true },
       { id: "manual-add", href: `${I}/manual-add`, label: "Manual Add", icon: "➕" },
+      { id: "import", href: `${I}/import`, label: "Import Stock", icon: "📥" },
       { id: "movements", href: `${I}/movements`, label: "Stock History", icon: "🕘" },
       { id: "estimated-prices", href: `${I}/estimated-prices`, label: "Estimated Prices", setup: true },
     ],

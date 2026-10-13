@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { requireOrg } from "@/lib/tenant";
+import { featureOn } from "@/lib/features";
 import { canViewInventory, canWriteInventory, isAdmin } from "@/lib/permissions";
 import { resolveMenu } from "@/lib/sidebar-menu";
 import { getSavedSidebarMenus } from "@/lib/sidebar-menu-store";
@@ -13,7 +14,9 @@ export default async function InventoryLayout({ children }: { children: React.Re
   if (!canViewInventory(org.role, org.access)) notFound();
   const canWrite = canWriteInventory(org.role, org.access);
   // Everyone sees the stock and its history; only people who can change Inventory see Manual Add and Estimated Prices.
-  const allowed = canWrite ? undefined : ["stock", "movements"];
+  // Import Stock comes with the "inventory-import" rollout feature.
+  const importOn = canWrite && (await featureOn("inventory-import", org.organizationId));
+  const allowed = canWrite ? (importOn ? undefined : ["stock", "manual-add", "movements", "estimated-prices"]) : ["stock", "movements"];
   const menu = resolveMenu("inventory", await getSavedSidebarMenus(org.organizationId), allowed);
 
   return (

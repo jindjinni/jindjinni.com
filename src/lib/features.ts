@@ -108,6 +108,12 @@ export const FEATURES: FeatureDef[] = [
     blurb: "Purchasing -> a quotation: send the customer a private link where they enter the direct-deposit details we pay them with (a bank account, PayPal, Cash App, Venmo or Chime). The details are stored encrypted, only owners, admins and Accounts can see them, and they are erased when the order is marked Paid.",
     defaultStage: "mothership",
   },
+  {
+    key: "inventory-import",
+    label: "Inventory: import opening stock",
+    blurb: "Inventory -> Import Stock: a company moving over loads what it holds today from an Excel or CSV file. The file is read and shown first, nothing is saved until the person confirms, the same file can't be imported twice, and an import can be undone (reversing entries, nothing deleted). Same permissions as Manual Add.",
+    defaultStage: "mothership",
+  },
 ];
 
 export const featureDef = (key: string) => FEATURES.find((f) => f.key === key);
