@@ -53,7 +53,7 @@ export function PayoutLinkCard({ quotationId, summary, customerEmail, paidBefore
     <section className="mt-6 rounded-2xl border-2 border-emerald-600 bg-emerald-50 p-5 dark:border-emerald-700 dark:bg-emerald-950/30" data-testid="pl-card" aria-label="Request the customer's payment details">
       <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50">Request the customer&apos;s banking details</h2>
       <p className="mt-1 text-sm text-slate-700 dark:text-slate-300">
-        Generate one private, encrypted link for <strong>this order</strong>, then copy it or email it to the customer. The link works <strong>one time only</strong>. They type their direct-deposit details there (a bank account, PayPal, Cash App or Venmo) and the details come into our system safely. Only Accounts, admins and the owner can see them.
+        Generate one private, encrypted link for <strong>this order</strong>, then copy it or email it to the customer. The link works <strong>one time only</strong>. They type their direct-deposit details there (a bank account, PayPal, Cash App, Venmo or Chime) and the details come into our system safely. Only Accounts, admins and the owner can see them.
       </p>
       <p className={`mt-3 rounded-lg px-3 py-2 text-sm ${paidBefore.paidOrders === 0 ? "bg-amber-100 text-amber-950 dark:bg-amber-900/30 dark:text-amber-100" : "bg-white text-slate-700 dark:bg-slate-900 dark:text-slate-200"}`} data-testid="pl-hint">
         {paidBefore.otherOrders === 0

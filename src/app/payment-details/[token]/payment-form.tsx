@@ -33,7 +33,7 @@ export function PaymentDetailsForm({ token }: { token: string }) {
       <fieldset>
         <legend className="mb-2 text-sm font-medium">How do you want to be paid? Choose one.</legend>
         <p className="mb-3 rounded-xl bg-mint p-3 text-sm text-ink" data-testid="pl-fintech-note">{FINTECH_NOTE}</p>
-        <div className="grid gap-3 sm:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-5">
           {PAYOUT_METHODS.map((m) => (
             <label key={m.key} className={radio}>
               <input type="radio" name="method" value={m.key} checked={v.method === m.key} required onChange={() => setV((o) => ({ ...o, method: m.key }))} data-testid={`pl-method-${m.key}`} />

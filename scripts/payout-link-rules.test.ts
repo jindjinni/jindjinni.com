@@ -7,10 +7,10 @@ import {
 
 const good = { method: "paypal", holderName: "Jane Q Public", street1: "12 Main St", street2: "", city: "Austin", state: "tx", zip: "78701", phone: "(512) 555-0100", email: "Jane@Example.com", bankName: "Chase", accountNumber: "123456789", routingNumber: "021000021", accountType: "Checking" };
 
-// only the three methods the company pays through
-assert.deepEqual(PAYOUT_METHODS.map((m) => m.key), ["bank", "paypal", "cashapp", "venmo"]);
-for (const m of ["bank", "paypal", "cashapp", "venmo"]) assert.ok(cleanPayoutDetails({ ...good, method: m }).ok, m);
-for (const m of ["chime", "ach", "", "zelle"]) assert.equal(cleanPayoutDetails({ ...good, method: m }).ok, false, m);
+// the methods the company pays through
+assert.deepEqual(PAYOUT_METHODS.map((m) => m.key), ["bank", "paypal", "cashapp", "venmo", "chime"]);
+for (const m of ["bank", "paypal", "cashapp", "venmo", "chime"]) assert.ok(cleanPayoutDetails({ ...good, method: m }).ok, m);
+for (const m of ["ach", "", "zelle"]) assert.equal(cleanPayoutDetails({ ...good, method: m }).ok, false, m);
 
 // every method needs the same bank fields
 const ok = cleanPayoutDetails(good);
@@ -21,7 +21,7 @@ if (ok.ok) {
   assert.equal(ok.value.accountType, "checking");
   assert.equal(addressLine(ok.value), "12 Main St, Austin, TX 78701");
 }
-for (const m of ["bank", "paypal", "cashapp", "venmo"]) {
+for (const m of ["bank", "paypal", "cashapp", "venmo", "chime"]) {
   assert.equal(cleanPayoutDetails({ ...good, method: m, routingNumber: "" }).ok, false);
   assert.equal(cleanPayoutDetails({ ...good, method: m, accountNumber: "" }).ok, false);
 }
@@ -52,6 +52,7 @@ assert.ok(spaced.ok && spaced.value.routingNumber === "021000021" && spaced.valu
 if (ok.ok) { assert.deepEqual(detailsFromJson(detailsToJson(ok.value)), ok.value); }
 assert.equal(detailsFromJson("{}"), null);
 assert.equal(detailsFromJson("nope"), null);
+assert.equal(maskedPayoutLine("chime", "checking", "1234"), "Chime - Checking account ending 1234");
 assert.equal(maskedPayoutLine("cashapp", "savings", "6789"), "Cash App - Savings account ending 6789");
 
 // the link
@@ -103,7 +104,7 @@ assert.equal(reasonLabel("zzz"), null);
 const m2 = linkEmailContent({ companyName: "Co", quotationNumber: "Q-2", customerName: "Sam", url: "https://x.test/payment-details/z", reason: "new_customer" });
 assert.ok(m2.text.includes(reasonCustomerLine("new_customer")) && m2.html.includes("first order together"));
 // the explanations on the form
-assert.match(FINTECH_NOTE, /PayPal, Cash App and Venmo/);
+assert.match(FINTECH_NOTE, /PayPal, Cash App, Venmo and Chime/);
 assert.match(FINTECH_NOTE, /customer service/);
 assert.deepEqual(Object.keys(METHOD_HELP).sort(), PAYOUT_METHODS.map((m) => m.key).sort());
 assert.equal(maskedPayoutLine("bank", "checking", "1234"), "Bank account - Checking account ending 1234");
