@@ -44,6 +44,7 @@ const wholesaleDepts: DeptBlock[] = [
     points: [
       "Quotations from your own price list",
       "Free shipping labels, if you offer them",
+      "A private, one-time link for a seller to share their payment details",
     ],
   },
   {
@@ -61,6 +62,7 @@ const wholesaleDepts: DeptBlock[] = [
     line: "Pay sellers. Collect from distributors.",
     points: [
       "What to pay, and what you are owed",
+      "A seller's bank details are encrypted, shown only to Accounts, and erased once you pay",
       "Monthly reports",
     ],
   },
@@ -219,7 +221,7 @@ export const DIRECT_SOURCING = {
   steps: [
     { title: "Quote the seller", body: "Send a quotation, with a free shipping label if you like." },
     { title: "Check every package", body: "Anything that looks wrong is held for a person to decide." },
-    { title: "Pay the seller", body: "Pay what you accepted." },
+    { title: "Pay the seller", body: "Pay what you accepted, to the account the seller gave you through a private, one-time link." },
     { title: "Sell on to distributors", body: "Sell what you collect, with an invoice." },
   ],
 };

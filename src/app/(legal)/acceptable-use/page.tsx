@@ -36,10 +36,22 @@ const sections: LegalSection[] = [
       "Protected health information, such as patient names linked to conditions, prescriptions or medical records. The Service is not built to hold it.",
       "Payment card numbers, bank login details, full government ID numbers (such as Social Security numbers) or passport details of customers or staff.",
       "On a public storefront or checkout, anything beyond what its forms ask for. Never use a storefront to collect payment card numbers, bank login details, government ID numbers or health information, to collect a seller's direct-deposit details for any reason other than paying that seller, or to pretend to be another company.",
+      "Through a payment-details link, anything beyond what the link's form asks for, and never details of someone you are not about to pay for that order.",
       "Passwords or secret keys for other services, except in the Connectors screens made for connecting your own accounts.",
       "Information about children under 13.",
     ],
     after: ["Product, price and contact information needed for a business purchase are fine."],
+  },
+  {
+    heading: "Payment-details links and paying people",
+    paras: ["Where your company uses payment-details links to ask a seller for their direct-deposit details, you must:"],
+    items: [
+      "Send each link only to the person you are going to pay for that order, through a channel you trust, and keep it private. Don't post it, forward it to anyone else or reuse it for another person or order.",
+      "Use the link only to pay that person. Never use it, or what it collects, for marketing, for any other purchase, to open or change an account in someone's name, or to move money for anyone else.",
+      "Use your company's own real name. Don't make a page, a link or a message look like it comes from another company, a bank or a payment app (PayPal, Cash App, Venmo, Chime or any other), and never ask anyone to send bank details by email, text or chat instead.",
+      "Check that the details belong to the person you mean to pay before you pay, especially when someone says their banking details have changed. Don't pay an account you can't tie to the seller.",
+      "Don't copy the details out of the Service into chat, email, spreadsheets or other tools, don't try to guess or open links that were not sent to you, and erase the details once they are no longer needed.",
+    ],
   },
   {
     heading: "Messages: email, text and chat",

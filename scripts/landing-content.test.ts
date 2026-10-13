@@ -38,6 +38,9 @@ assert.equal(Object.keys(DEPARTMENT_MENUS).length, 9, "a new department needs it
 
 // the Wholesale side is "direct sourcing from sellers"; the word "individual" is not used for it anywhere
 assert.equal(DIRECT_SOURCING.steps.length, 4);
+// the payment-details link and the care taken with sellers' bank details are described, without promises
+assert.ok(WHOLESALE.depts.find((d) => d.dept === "Purchasing")!.points.join(" ").toLowerCase().includes("one-time link"));
+assert.ok(WHOLESALE.depts.find((d) => d.dept === "Accounts")!.points.join(" ").toLowerCase().includes("erased once you pay"));
 assert.ok(!/individual/i.test(all().join(" ") + OPERATION_OPTIONS.map((o) => o.description + o.details.join(" ")).join(" ")), "no 'individual' on the public pages");
 assert.ok(/direct/i.test(WHOLESALE.intro) && /direct/i.test(OPERATION_OPTIONS[0].description));
 

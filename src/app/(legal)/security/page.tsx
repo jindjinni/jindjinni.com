@@ -43,7 +43,7 @@ const sections: LegalSection[] = [
   {
     heading: "A record of what changed",
     paras: [
-      "Changes to prices, quantities, totals, customer details and receiving checks are written to an audit log with who made them and when. Team changes, such as invitations, role changes and access being turned off or on, are recorded as well. Orders are voided by reversing them, not by deleting them.",
+      "Changes to prices, quantities, totals, customer details and receiving checks are written to an audit log with who made them and when. Team changes, such as invitations, role changes and access being turned off or on, are recorded as well. Orders are voided by reversing them, not by deleting them, and a quotation with received items, payments or labels is archived rather than deleted.",
     ],
   },
   {
@@ -55,7 +55,18 @@ const sections: LegalSection[] = [
   {
     heading: "Sellers' direct-deposit details",
     paras: [
-      "When a company's storefront takes a seller's routing and account numbers, they are encrypted before they are saved, each one tied to the company and the order it belongs to, so a copy moved to another record or company cannot be read. Staff see only the last four digits. The full details are shown only to the company's Owner, Admins and people with Accounts access, and every time they are shown it is recorded in the audit log. They are never sent in emails, written to logs or included in exports, and the company can erase them once the seller is paid. Customer order pages open only with a private link and are marked so search engines do not list them. Public storefront forms are limited by how often one address can try them, and a company's own website connects with keys that are stored only in scrambled form.",
+      "When a company's storefront or a payment-details link takes a seller's routing and account numbers, they are encrypted before they are saved, each one tied to the company and the order it belongs to, so a copy moved to another record or company cannot be read. Staff see only the last four digits. The full details are shown only to the company's Owner, Admins and people with Accounts access, and every time they are shown it is recorded in the audit log. They are never sent in emails, written to logs or included in exports, and the company can erase them once the seller is paid. Customer order pages open only with a private link and are marked so search engines do not list them. Public storefront forms are limited by how often one address can try them, and a company's own website connects with keys that are stored only in scrambled form.",
+    ],
+  },
+  {
+    heading: "Payment-details links",
+    items: [
+      "Each link is made for one order and one company. It is a long random code (not guessable), and we keep only a one-way fingerprint of it to find it; an encrypted copy lets the company's staff copy the link again and nobody else.",
+      "A link works one time. Once the seller sends their details the page cannot be used again, nothing on it can be changed, and a correction needs a new link, which ends the old one and erases what it held. Links stop working after 14 days, when the order is paid, or when a newer link is made.",
+      "The page that opens shows the company's name as printed on its quotation receipt, and nothing else about the company. A link that is wrong, ended or expired shows the same plain message and no company name. If the company is closed, suspended or not approved, or the feature is switched off, its links stop working at once.",
+      "The page uses a human check, a hidden trap for automated programs and a limit on how often one network address can try, is marked so search engines do not list it, and does not pass the link on to other websites.",
+      "The seller's details are encrypted, tied to the company and the link, and shown to staff only as the kind of account and its last four digits. Only the Owner, Admins and people with Accounts access can open the full details, each look is recorded in the audit log without any number in it, and the screen hides them again after 60 seconds.",
+      "They are erased automatically when the order is marked Paid (the last four digits and the dates stay), or sooner by the company. They are never sent in emails, written to logs or included in exports, and the email that carries the link never contains them.",
     ],
   },
   {
@@ -75,7 +86,7 @@ const sections: LegalSection[] = [
   {
     heading: "Protecting the Service itself",
     paras: [
-      "How jindjinni is built is protected too. Our source code is kept in a private repository and runs on our servers, so it is never sent to your browser. Signed-in pages are marked so that search engines and AI crawlers are told not to collect them, and the Service cannot be shown inside another website. Sign-in, sign-up and invitation pages use a human check and a hidden trap for automated programs, and slow down repeated wrong tries from one network address. We log activity, watch for automated or bulk access, and may block or suspend accounts that copy or scrape the Service. Our Terms of Service and Acceptable Use Policy forbid copying, reverse engineering and using AI tools to clone the Service, and we will enforce them.",
+      "How jindjinni is built is protected too. Our source code is kept in a private repository and runs on our servers, so it is never sent to your browser. Signed-in pages are marked so that search engines and AI crawlers are told not to collect them, and the Service cannot be shown inside another website. Sign-in, sign-up, invitation, forgot-password and affiliate pages, public storefront forms and payment-details links use a human check and a hidden trap for automated programs, and slow down repeated wrong tries from one network address. We log activity, watch for automated or bulk access, and may block or suspend accounts that copy or scrape the Service. Our Terms of Service and Acceptable Use Policy forbid copying, reverse engineering and using AI tools to clone the Service, and we will enforce them.",
     ],
   },
   {
@@ -85,6 +96,7 @@ const sections: LegalSection[] = [
       "Don't give outside developers, agencies or AI tools access to your account or to screens of the Service.",
       "Invite people with the role they need and no more, and turn access off when someone leaves.",
       "Keep patient health information, payment card numbers and similar highly sensitive data out of the workspace.",
+      "Send a payment-details link only to the person you are paying, never share or forward it, and check the details with the person (for example by calling a number you already trust) before you pay, especially when someone says their banking details have changed. Erase details you no longer need.",
       "Keep your own devices and email accounts secure.",
     ],
   },
