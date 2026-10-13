@@ -5,11 +5,12 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { and, asc, eq, inArray, isNull, ne, notInArray, or, sql } from "drizzle-orm";
 import { db } from "@/db/client";
-import { purchasingQuotationLabels, purchasingQuotations, purchasingTracking, shippoConnections } from "@/db/schema";
+import { purchasingAuditLog, purchasingQuotationLabels, purchasingQuotations, purchasingTracking, shippoConnections } from "@/db/schema";
 import { newId } from "@/lib/ids";
 import { ShippoRequestError, type ShippoClient } from "@/lib/shippo";
 import { NOT_CONNECTED_MESSAGE, noteShippoFailure, resolveShippo } from "@/lib/shippo-connection";
 import { applyShipmentWebhook, sweepShipmentTracking } from "@/lib/shipping-tracking";
+import { readManualTracking, cleanManualNote } from "@/lib/tracking-manual-rules";
 import { carrierOfLabel, isFinished, isStale, parseTrack, rollUp, shippoCarrier, type ParsedTrack } from "@/lib/tracking-rules";
 
 export type TrackingRow = typeof purchasingTracking.$inferSelect;
@@ -84,17 +85,18 @@ export async function ensureTrackers(organizationId: string, quotationId: string
       .onConflictDoNothing();
   }
   const keep = wanted.map((w) => w.trackingNumber);
-  if (have.some((r) => !keep.includes(r.trackingNumber))) {
+  if (have.some((r) => !r.addedByUserId && !keep.includes(r.trackingNumber))) {
     await db
       .delete(purchasingTracking)
-      .where(and(eq(purchasingTracking.organizationId, organizationId), eq(purchasingTracking.quotationId, quotationId), keep.length ? notInArray(purchasingTracking.trackingNumber, keep) : sql`1=1`));
+      // A box a manager added by hand (added_by_user_id set) is never dropped here; only Remove takes it away.
+      .where(and(eq(purchasingTracking.organizationId, organizationId), eq(purchasingTracking.quotationId, quotationId), isNull(purchasingTracking.addedByUserId), keep.length ? notInArray(purchasingTracking.trackingNumber, keep) : sql`1=1`));
   }
   const rows = await db
     .select()
     .from(purchasingTracking)
     .where(and(eq(purchasingTracking.organizationId, organizationId), eq(purchasingTracking.quotationId, quotationId)))
     .orderBy(asc(purchasingTracking.createdAt), asc(purchasingTracking.trackingNumber));
-  if (wanted.length === 0) await rollUpQuotation(organizationId, quotationId);
+  if (rows.length === 0 || wanted.length === 0) await rollUpQuotation(organizationId, quotationId);
   return rows;
 }
 
@@ -387,4 +389,80 @@ export async function refreshCompanyTracking(organizationId: string, opts: { bud
     failed += results.filter((ok) => !ok).length;
   }
   return { started, refreshed, failed, remaining: Math.max(0, due.length - i), connected: true };
+}
+
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Tracking numbers added by hand
+
+type Actor = { organizationId: string; userId: string };
+const audit = (a: Actor, quotationId: string, field: string, prev: string | null, next: string | null, note: string) =>
+  db.insert(purchasingAuditLog).values({ id: newId("paudit"), organizationId: a.organizationId, userId: a.userId, recordType: "quotation", recordId: quotationId, fieldName: field, previousValue: prev, newValue: next, note });
+
+export type ManualBoxResult = { ok: true; trackingNumber: string; carrier: string } | { ok: false; error: string };
+
+/**
+ * Adds a tracking number to an order by hand, for a label bought on another website or when Shippo is down. Several boxes are fine.
+ * The first number on an order that has none also becomes the order's own Tracking # (so the Quotation Summary, Receiving and the
+ * CSV files show it). A number already used on any order of this company is refused: Receiving finds orders by tracking number.
+ * Never throws for a Shippo problem; the box is kept either way and can be checked on the carrier's own site.
+ */
+export async function addManualBox(a: Actor, quotationId: string, input: { trackingNumber: string; carrier: string; note?: string | null }): Promise<ManualBoxResult> {
+  const read = readManualTracking(input.trackingNumber, input.carrier);
+  if (!read.ok) return read;
+  const [q] = await db
+    .select({ id: purchasingQuotations.id, number: purchasingQuotations.quotationNumber, trackingNumber: purchasingQuotations.trackingNumber, carrier: purchasingQuotations.carrier })
+    .from(purchasingQuotations)
+    .where(and(eq(purchasingQuotations.id, quotationId), eq(purchasingQuotations.organizationId, a.organizationId)))
+    .limit(1);
+  if (!q) return { ok: false, error: "That order wasn't found." };
+  // Already used? Check the live list, the orders' own field and every bought label, all inside this company.
+  const n = read.trackingNumber;
+  const [inTracking] = await db
+    .select({ qid: purchasingTracking.quotationId, num: purchasingQuotations.quotationNumber })
+    .from(purchasingTracking)
+    .innerJoin(purchasingQuotations, eq(purchasingQuotations.id, purchasingTracking.quotationId))
+    .where(and(eq(purchasingTracking.organizationId, a.organizationId), sql`upper(${purchasingTracking.trackingNumber}) = ${n}`))
+    .limit(1);
+  const [inOrder] = await db
+    .select({ qid: purchasingQuotations.id, num: purchasingQuotations.quotationNumber })
+    .from(purchasingQuotations)
+    .where(and(eq(purchasingQuotations.organizationId, a.organizationId), sql`upper(replace(${purchasingQuotations.trackingNumber}, ' ', '')) = ${n}`))
+    .limit(1);
+  const [inLabel] = await db
+    .select({ qid: purchasingQuotationLabels.quotationId, num: purchasingQuotations.quotationNumber })
+    .from(purchasingQuotationLabels)
+    .innerJoin(purchasingQuotations, eq(purchasingQuotations.id, purchasingQuotationLabels.quotationId))
+    .where(and(eq(purchasingQuotationLabels.organizationId, a.organizationId), sql`upper(${purchasingQuotationLabels.trackingNumber}) = ${n}`))
+    .limit(1);
+  const clash = inTracking ?? inOrder ?? inLabel;
+  if (clash) return { ok: false, error: clash.qid === quotationId ? "That tracking number is already on this order." : `That tracking number is already on order ${clash.num}.` };
+
+  const note = cleanManualNote(input.note);
+  await db.insert(purchasingTracking).values({ id: newId("ptrack"), organizationId: a.organizationId, quotationId, labelId: null, carrier: read.carrier, trackingNumber: n, addedByUserId: a.userId, addedNote: note });
+  const makeMain = !q.trackingNumber?.trim();
+  if (makeMain) await db.update(purchasingQuotations).set({ trackingNumber: n, carrier: read.carrier }).where(and(eq(purchasingQuotations.id, quotationId), eq(purchasingQuotations.organizationId, a.organizationId)));
+  await audit(a, quotationId, "tracking_number_added", null, n, `Added by hand (${read.carrier})${note ? `: ${note}` : ""}${makeMain ? ". Also set as the order's tracking number" : ""}`);
+  await startTracking(a.organizationId, quotationId);
+  return { ok: true, trackingNumber: n, carrier: read.carrier };
+}
+
+/** Removes a box that was added by hand (a mistyped number). Boxes from labels, or from the order's own field, are not touched here. */
+export async function removeManualBox(a: Actor, quotationId: string, trackerId: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  const [row] = await db
+    .select()
+    .from(purchasingTracking)
+    .where(and(eq(purchasingTracking.id, trackerId), eq(purchasingTracking.quotationId, quotationId), eq(purchasingTracking.organizationId, a.organizationId)))
+    .limit(1);
+  if (!row) return { ok: false, error: "That tracking number wasn't found." };
+  if (!row.addedByUserId) return { ok: false, error: "Only a number added by hand can be removed here. Use Edit to change the order's own tracking number." };
+  await db.delete(purchasingTracking).where(eq(purchasingTracking.id, row.id));
+  // If it was also shown as the order's own tracking number, clear that so the two never disagree.
+  await db
+    .update(purchasingQuotations)
+    .set({ trackingNumber: null })
+    .where(and(eq(purchasingQuotations.id, quotationId), eq(purchasingQuotations.organizationId, a.organizationId), sql`upper(replace(${purchasingQuotations.trackingNumber}, ' ', '')) = ${row.trackingNumber.toUpperCase()}`));
+  await audit(a, quotationId, "tracking_number_removed", row.trackingNumber, null, "Removed (added by hand)");
+  await rollUpQuotation(a.organizationId, quotationId);
+  return { ok: true };
 }

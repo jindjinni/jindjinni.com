@@ -1266,6 +1266,10 @@ export const purchasingTracking = sqliteTable(
     history: text("history"),
     lastCheckedAt: text("last_checked_at"),
     lastError: text("last_error"),
+    // Set only for a box a manager added by hand (a label bought on another website, or Shippo being down). Those rows are
+    // never dropped when the order's own numbers are re-read. Null = the number came from a label or the order's tracking field.
+    addedByUserId: text("added_by_user_id"),
+    addedNote: text("added_note"),
     ...timestamps,
   },
   (t) => [

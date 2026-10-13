@@ -1559,12 +1559,15 @@ export async function updatePurchasingQuotationHeader(
   const quotation = await requireOrgQuotation(org.organizationId, quotationId);
   if (!quotation) return { error: "Quotation not found." };
 
-  const newTracking = trimmed(formData, "trackingNumber");
+  // The tracking number and carrier are changed by Admins, the Owner and Purchasing managers only. For anyone else the form
+  // does not even show them, and whatever arrives is ignored so the saved number can never be wiped by a save.
+  const mayTrack = isPurchasingManager(org.role);
+  const newTracking = mayTrack ? trimmed(formData, "trackingNumber") : quotation.trackingNumber;
   if (newTracking !== quotation.trackingNumber) {
     await logAudit(org, "quotation", quotationId, "tracking_number", quotation.trackingNumber, newTracking);
   }
 
-  const carrier = (trimmed(formData, "carrier") as typeof quotation.carrier) ?? null;
+  const carrier = mayTrack ? ((trimmed(formData, "carrier") as typeof quotation.carrier) ?? null) : quotation.carrier;
   const packageStatus = (trimmed(formData, "packageStatus") as typeof quotation.packageStatus) ?? quotation.packageStatus;
 
   // The delivered day starts the clock on when the customer is paid (Accounts -> Payment Terms). Marking the package

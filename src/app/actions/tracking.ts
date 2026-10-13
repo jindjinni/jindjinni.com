@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireOrg } from "@/lib/tenant";
 import { canViewPurchasing, isAdmin, isPurchasingManager } from "@/lib/permissions";
 import { getPurchasingQuotationWithItems } from "@/lib/queries";
-import { refreshCompanyTracking, syncQuotationTracking, turnOnLiveTracking } from "@/lib/tracking-service";
+import { addManualBox, refreshCompanyTracking, removeManualBox, syncQuotationTracking, turnOnLiveTracking } from "@/lib/tracking-service";
 
 export type TrackingActionState = { ok?: boolean; error?: string };
 
@@ -47,4 +47,40 @@ export async function refreshAllTracking(): Promise<RefreshAllState> {
   revalidatePath("/dashboard/receiving", "layout");
   if (!res.connected) return { error: "Shippo isn't connected, so packages can't be checked yet. An owner or admin connects it in Purchasing → Settings → Connectors." };
   return { ok: true, started: res.started, refreshed: res.refreshed, failed: res.failed, remaining: res.remaining };
+}
+
+function revalidateOrder(quotationId: string) {
+  revalidatePath(`/dashboard/purchasing/quotations/${quotationId}`);
+  revalidatePath("/dashboard/purchasing/quotations");
+  revalidatePath("/dashboard/purchasing/tracking");
+  revalidatePath("/dashboard/receiving", "layout");
+}
+
+/**
+ * Adds a tracking number to an order by hand (a label bought on another website, or Shippo is down). Admins, the owner and Purchasing
+ * managers only. The number is saved even when Shippo can't be reached; the carrier's own site link still works.
+ */
+export async function addManualTracking(quotationId: string, input: { trackingNumber: string; carrier: string; note?: string }): Promise<TrackingActionState> {
+  const org = await requireOrg();
+  if (org.viewAs) return { error: "Viewing a company is read-only." };
+  if (!isPurchasingManager(org.role)) return { error: "Only a Purchasing Manager or Admin can add a tracking number." };
+  const res = await addManualBox({ organizationId: org.organizationId, userId: org.userId }, String(quotationId), {
+    trackingNumber: String(input?.trackingNumber ?? ""),
+    carrier: String(input?.carrier ?? ""),
+    note: input?.note == null ? null : String(input.note),
+  });
+  if (!res.ok) return { error: res.error };
+  revalidateOrder(quotationId);
+  return { ok: true };
+}
+
+/** Removes a tracking number that was added by hand. Same people as adding one. */
+export async function removeManualTracking(quotationId: string, trackerId: string): Promise<TrackingActionState> {
+  const org = await requireOrg();
+  if (org.viewAs) return { error: "Viewing a company is read-only." };
+  if (!isPurchasingManager(org.role)) return { error: "Only a Purchasing Manager or Admin can remove a tracking number." };
+  const res = await removeManualBox({ organizationId: org.organizationId, userId: org.userId }, String(quotationId), String(trackerId));
+  if (!res.ok) return { error: res.error };
+  revalidateOrder(quotationId);
+  return { ok: true };
 }

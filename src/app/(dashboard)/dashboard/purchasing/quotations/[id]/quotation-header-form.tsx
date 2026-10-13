@@ -16,6 +16,7 @@ export function QuotationHeaderForm({
   packageStatus,
   deliveredDay,
   notes,
+  canEditTracking,
   children,
 }: {
   quotationId: string;
@@ -26,6 +27,8 @@ export function QuotationHeaderForm({
   /** The day it was delivered (the company's own calendar day), or "" when none is on file. */
   deliveredDay: string;
   notes: string | null;
+  /** Admins, the owner and Purchasing managers change the tracking number and carrier; for everyone else those two boxes are not shown. */
+  canEditTracking: boolean;
   /** The live tracking, shown right under the tracking number. */
   children?: React.ReactNode;
 }) {
@@ -91,6 +94,8 @@ export function QuotationHeaderForm({
             className={inputClass}
           />
         </label>
+        {canEditTracking && (
+          <>
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-slate-600 dark:text-slate-400">
             Tracking number
@@ -115,6 +120,8 @@ export function QuotationHeaderForm({
             <option value="Other">Other</option>
           </select>
         </label>
+          </>
+        )}
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-slate-600 dark:text-slate-400">
             Package status

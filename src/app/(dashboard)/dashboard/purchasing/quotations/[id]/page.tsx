@@ -92,12 +92,14 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
     history: parseHistory(r.history),
     trackingUrl: labelLink.get(r.trackingNumber) ?? null,
     labelName: labelName.get(r.trackingNumber) ?? null,
+    manual: !!r.addedByUserId,
+    note: r.addedNote,
   }));
   const checked = trackRows.filter((r) => r.lastCheckedAt);
   const roll = rollUp(checked);
   const trackingSummary = roll && roll.status !== "Unknown" ? { status: roll.status, delivered: roll.delivered, total: roll.total } : null;
   const hasTrackingNumber = !!(quotation.trackingNumber || quotation.labelTrackingNumber || labels.some((l) => l.trackingNumber));
-  const needsTrackingRefresh = hasTrackingNumber && (trackRows.length === 0 || trackRows.some((r) => isStale(r)));
+  const needsTrackingRefresh = (hasTrackingNumber || trackRows.length > 0) && (trackRows.length === 0 || trackRows.some((r) => isStale(r)));
 
   const [products, conditions, ranges, productConditionsMap, orgRow, multiplierRows, recalls] = await Promise.all([
     getPurchasingProducts(org.organizationId),
@@ -157,8 +159,9 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
             packageStatus={quotation.packageStatus}
             deliveredDay={dayInZone(quotation.deliveredAt, (await getPaymentTerms(org.organizationId)).timeZone)}
             notes={quotation.notes}
+            canEditTracking={canEdit}
           >
-            <TrackingPanel quotationId={quotation.id} trackers={trackers} summary={trackingSummary} hasNumber={hasTrackingNumber} needsRefresh={needsTrackingRefresh} />
+            <TrackingPanel quotationId={quotation.id} trackers={trackers} summary={trackingSummary} hasNumber={hasTrackingNumber} needsRefresh={needsTrackingRefresh} canAdd={canEdit && !org.viewAs} />
           </QuotationHeaderForm>
           {/* A quotation made from a "sell to us" request: the seller's own list, readable without opening Edit. */}
           {quotation.source === "WEBSITE" && quotation.notes && (
