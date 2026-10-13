@@ -354,7 +354,7 @@ export async function makeLabels(org: Org, shipmentId: string, input: LabelInput
   if (existing.length + count.count > MAX_BOXES) return { ok: false, error: `A shipment can have up to ${MAX_BOXES} boxes.` };
 
   const orgRow = await getOrganization(org.organizationId);
-  if (!hasShipFromAddress(orgRow)) return { ok: false, error: "Add your business's ship-from address (with a phone and an email) in Settings → Business before making a label." };
+  if (!hasShipFromAddress(orgRow)) return { ok: false, error: "Add your business's ship-from address (with a phone and an email) in Settings → Shipping & labels before making a label." };
   let deps = depsOverride;
   if (!deps) {
     const shippo = await resolveShippo(org.organizationId);

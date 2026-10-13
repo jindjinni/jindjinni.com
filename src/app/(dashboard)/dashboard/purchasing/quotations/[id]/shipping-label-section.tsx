@@ -103,7 +103,7 @@ export function ShippingLabelSection({
         <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:bg-amber-950 dark:text-amber-400">
           Add your business&apos;s receiving address in{" "}
           <Link href="/dashboard/settings/business" className="font-medium hover:underline">
-            Settings → Business
+            Settings → Shipping &amp; labels
           </Link>{" "}
           before generating a label.
         </p>

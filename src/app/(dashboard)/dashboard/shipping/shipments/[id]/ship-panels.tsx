@@ -192,7 +192,7 @@ export function LabelsPanel({ shipmentId, canWrite, shippoReady, shippoWhy, from
   const [wid, setWid] = useState(String(DEFAULT_PARCEL.widthIn));
   const [hei, setHei] = useState(String(DEFAULT_PARCEL.heightIn));
   const [wt, setWt] = useState(String(DEFAULT_PARCEL.weightLb));
-  const blocked = !shippoReady ? shippoWhy : !fromReady ? "Add your business's ship-from address (with a phone and an email) in Settings → Business first." : addressProblem ? `The address isn't complete. ${addressProblem}` : null;
+  const blocked = !shippoReady ? shippoWhy : !fromReady ? "Add your business's ship-from address (with a phone and an email) in Settings → Shipping & labels first." : addressProblem ? `The address isn't complete. ${addressProblem}` : null;
   const lab = "text-xs font-medium text-slate-700 dark:text-slate-300";
   return (
     <Panel title="Make shipping labels" id="labels-panel">

@@ -35,7 +35,7 @@ export function BusinessSettingsForm({
     >
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <label className="flex flex-col gap-1 text-sm">
-          <span className="text-slate-600 dark:text-slate-400">Sender name *</span>
+          <span className="text-slate-600 dark:text-slate-400">Contact name *</span>
           <input name="shipFromName" defaultValue={org?.shipFromName ?? ""} required className={inputClass} />
         </label>
         <label className="flex flex-col gap-1 text-sm">

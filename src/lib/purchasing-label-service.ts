@@ -59,7 +59,7 @@ export async function buyAndSaveLabels(p: {
   if (!shippo.ok) return recordFailure(shippo.message);
 
   const orgRow = await getOrganization(organizationId);
-  if (!hasShipFromAddress(orgRow)) return { bought: 0, error: "Add your business's receiving address in Settings → Business before generating a label." };
+  if (!hasShipFromAddress(orgRow)) return { bought: 0, error: "Add your company's address in Settings → Shipping & labels before generating a label." };
 
   const customer = await getPurchasingCustomer(organizationId, quotation.customerId);
   if (!customer || !hasCustomerAddress(customer)) {
