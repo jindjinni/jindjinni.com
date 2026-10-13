@@ -334,7 +334,7 @@ export function settingsSectionsFor(role: string): SettingsSection[] {
   if (isAdmin(role)) {
     out.push({ href: "/dashboard/settings/menus", label: "Menus", blurb: "Which departments show in the top bar, their order and names." });
     out.push({ href: "/dashboard/settings/company-profile", label: "Company profile", blurb: "Your details, account status and payment status." });
-    out.push({ href: "/dashboard/settings/business", label: "Shipping & labels", blurb: "The return address printed on labels." });
+    out.push({ href: "/dashboard/settings/business", label: "Shipping & labels", blurb: "The address your Shipping labels go from (you are the sender)." });
     out.push({ href: "/dashboard/settings/team", label: "Team & access", blurb: "Invite people and choose their role." });
     out.push({ href: "/dashboard/settings/emails", label: "Company emails", blurb: "One email address for each department, then connect them." });
     out.push({ href: "/dashboard/settings/connectors", label: "Connectors", blurb: "The accounts your whole company runs on: your mailbox, your AI and more." });

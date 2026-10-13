@@ -54,6 +54,17 @@ export const organizations = sqliteTable("organizations", {
   shipFromCountry: text("ship_from_country").notNull().default("US"),
   shipFromPhone: text("ship_from_phone"),
   shipFromEmail: text("ship_from_email"),
+  // Purchasing receiving address: where customers ship their supplies TO (customer is the sender, we are the receiver). Empty = Purchasing uses the ship-from address above.
+  receiveName: text("receive_name"),
+  receiveCompany: text("receive_company"),
+  receiveStreet1: text("receive_street1"),
+  receiveStreet2: text("receive_street2"),
+  receiveCity: text("receive_city"),
+  receiveState: text("receive_state"),
+  receiveZip: text("receive_zip"),
+  receiveCountry: text("receive_country"),
+  receivePhone: text("receive_phone"),
+  receiveEmail: text("receive_email"),
   // Each department's color theme as JSON, e.g. {"purchasing":"blue"} (see lib/theme.ts).
   // null = every department uses its own default color. Nullable on purpose.
   departmentThemes: text("department_themes"),
@@ -2501,7 +2512,7 @@ export const shipments = sqliteTable(
     documentId: text("document_id"),
     /** Which shipment of this order (1, 2, ...). */
     seq: integer("seq").notNull().default(1),
-    /** SALES_ORDER, INVOICE, or RETURN / OTHER for a shipment with no order. */
+    /** SALES_ORDER, INVOICE, or RETURN / SUPPLIER / DISTRIBUTOR / OTHER for a shipment with no order (we are always the sender). */
     docKind: text("doc_kind").notNull(),
     docNumber: text("doc_number").notNull().default(""),
     /** Why a return or other shipment is going out. */
@@ -2621,8 +2632,8 @@ export const shippingContacts = sqliteTable(
     organizationId: text("organization_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
-    /** BUYER (a pharmacy or wholesale buyer), SELLER (a seller who sources to us directly), SUPPLIER (a wholesaler we buy from), OTHER. */
-    kind: text("kind", { enum: ["BUYER", "SELLER", "SUPPLIER", "OTHER"] }).notNull().default("BUYER"),
+    /** BUYER (a pharmacy or wholesale buyer), SELLER (a seller who sources to us directly), SUPPLIER (a wholesaler we buy from), DISTRIBUTOR (a distributor we ship to), OTHER. */
+    kind: text("kind", { enum: ["BUYER", "SELLER", "SUPPLIER", "DISTRIBUTOR", "OTHER"] }).notNull().default("BUYER"),
     name: text("name").notNull(),
     company: text("company"),
     street1: text("street1"),

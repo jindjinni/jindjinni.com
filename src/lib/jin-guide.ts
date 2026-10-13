@@ -21,6 +21,7 @@ const WHAT: Record<MenuDept, Record<string, string>> = {
     "bonus-tiers": "Bonus percentages for bigger quotations.",
     "quotation-profile": "The numbering and details printed on your quotations.",
     "receipt-layout": "How the quotation receipt looks.",
+    "shipping-settings": "The address customers ship their supplies to. A customer label always goes from the customer to this address.",
     "shipment-tracking": "How packages are followed after the label is bought.",
     connectors: "Plug in your own Shippo account to buy UPS and USPS labels (owner or admin only).",
   },
@@ -68,9 +69,10 @@ const WHAT: Record<MenuDept, Record<string, string>> = {
   shipping: {
     "to-ship": "Orders that are ready to go out and have no shipment yet; press Start shipment on one.",
     shipments: "Every shipment with its boxes, tracking numbers, photos and status (In Transit, Out for Delivery, Delivered), and the shipped email you review and send.",
-    "new-shipment": "Send a return or anything else that has no sales order: pick an address, make the label, track it.",
+    "new-shipment": "Send a return to a customer, or a shipment to a supplier or a distributor (no sales order): pick the address, type the box weight and size, make the label, track it. Your company is always the sender.",
     addresses: "Saved addresses for your pharmacies, wholesale buyers, sellers and suppliers; bring them over from Sales and Purchasing with one button.",
     mail: "The Shipping mailbox the shipped emails go out from.",
+    "shipping-settings": "The address every Shipping label goes from (your company is always the sender here).",
     connectors: "Your Shippo account that buys the labels and follows the tracking numbers (owner or admin only).",
   },
   hr: {

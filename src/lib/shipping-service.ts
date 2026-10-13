@@ -13,11 +13,12 @@ import { storage, STORAGE_NOT_CONNECTED } from "@/lib/receiving-storage";
 import { sniffReceiptType } from "@/lib/purchasing-receipt-docs";
 import { safeFilename } from "@/lib/chat-rules";
 import { getDocument, renderPdf, resolveFrom, type Org } from "@/lib/sales-service";
-import { getOrganization, hasShipFromAddress } from "@/lib/queries";
+import { getOrganization } from "@/lib/queries";
+import { shippingAddressOf } from "@/lib/org-addresses";
 import { pickLabelRate, type ShippoAddress } from "@/lib/shippo";
 import { noteShippoFailure, resolveShippo } from "@/lib/shippo-connection";
 import { buyLabels, CARRIER_NAME, failureMessage, parseCarrier, parseLabelCount, type ShippoDeps } from "@/lib/shipping-labels";
-import { addressProblems, checkParcel, cleanAddress, DEFAULT_PARCEL, parseUsAddress, type CleanAddress } from "@/lib/shipping-address-rules";
+import { addressProblems, checkParcel, cleanAddress, parseUsAddress, type CleanAddress } from "@/lib/shipping-address-rules";
 import { contactForSalesBuyer, createContact, getContact } from "@/lib/shipping-contacts";
 import {
   canShipFrom, checkTracking, cleanTracking, docLabel, emailReadiness, guessCarrier, isCarrier, MANUAL_STATUSES, MAX_BOXES, MAX_FILE_BYTES, MAX_FILES, pickAttachments, shippedEmail, stageOf,
@@ -32,6 +33,8 @@ type Result<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 /** The rollout switch for the Shipping department (Settings -> Feature rollout). */
 export const shippingOn = (organizationId: string) => featureOn("shipping", organizationId);
 
+/** What can go out with no sales order. In all of them our company is the sender. */
+const OTHER_KINDS = ["RETURN", "SUPPLIER", "DISTRIBUTOR", "OTHER"] as const;
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const textToHtml = (t: string) => `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#1a1d21">${esc(t).replace(/\n/g, "<br>")}</div>`;
 
@@ -210,11 +213,14 @@ export async function createShipment(org: Org, documentId: string): Promise<Resu
   return { ok: true, id };
 }
 
-/** A shipment with no sales order: a return to a seller or a supplier, or anything else going out. It ships to a saved address profile. */
+/**
+ * A shipment with no sales order: a return to a customer, a shipment to a supplier, a shipment to a distributor, or anything else going out.
+ * Our company is ALWAYS the sender of these (the label goes from the Shipping address); it ships to a saved address profile.
+ */
 export async function createOtherShipment(org: Org, input: { contactId: string; kind: string; reason?: string | null }): Promise<Result<{ id: string }>> {
   const c = await getContact(org.organizationId, String(input.contactId ?? ""));
   if (!c || c.hiddenAt) return { ok: false, error: "Choose an address profile to ship to." };
-  const kind = input.kind === "RETURN" ? "RETURN" : "OTHER";
+  const kind = (OTHER_KINDS as readonly string[]).includes(input.kind) ? input.kind : "OTHER";
   const [{ n }] = await db.select({ n: sql<number>`count(*)` }).from(shipments).where(and(eq(shipments.organizationId, org.organizationId), eq(shipments.contactId, c.id), eq(shipments.docKind, kind)));
   const id = newId("ship");
   await db.insert(shipments).values({
@@ -345,7 +351,8 @@ export async function makeLabels(org: Org, shipmentId: string, input: LabelInput
   const carrier = parseCarrier(input.service);
   const count = parseLabelCount(input.count);
   if ("error" in count) return { ok: false, error: count.error };
-  const parcel = checkParcel(input.parcel ?? DEFAULT_PARCEL);
+  if (!input.parcel) return { ok: false, error: "Type the weight and the size of the box before making a label." };
+  const parcel = checkParcel(input.parcel);
   if (!parcel.ok) return parcel;
   const to = shipToOf(s);
   const problem = addressProblems(to)[0];
@@ -354,7 +361,8 @@ export async function makeLabels(org: Org, shipmentId: string, input: LabelInput
   if (existing.length + count.count > MAX_BOXES) return { ok: false, error: `A shipment can have up to ${MAX_BOXES} boxes.` };
 
   const orgRow = await getOrganization(org.organizationId);
-  if (!hasShipFromAddress(orgRow)) return { ok: false, error: "Add your business's ship-from address (with a phone and an email) in Settings → Shipping & labels before making a label." };
+  const from = shippingAddressOf(orgRow);
+  if (!from) return { ok: false, error: "Add your company's shipping address (with a phone and an email) in Shipping → Shipping settings before making a label." };
   let deps = depsOverride;
   if (!deps) {
     const shippo = await resolveShippo(org.organizationId);
@@ -369,9 +377,9 @@ export async function makeLabels(org: Org, shipmentId: string, input: LabelInput
       createTransaction: (rateId) => shippo.client.createTransaction(rateId).catch(note),
     };
   }
+  // Our company is always the sender in the Shipping department.
   const addressFrom: ShippoAddress = {
-    name: orgRow!.shipFromName!, company: orgRow!.shipFromCompany, street1: orgRow!.shipFromStreet1!, street2: orgRow!.shipFromStreet2, city: orgRow!.shipFromCity!, state: orgRow!.shipFromState!,
-    zip: orgRow!.shipFromZip!, country: orgRow!.shipFromCountry, phone: orgRow!.shipFromPhone, email: orgRow!.shipFromEmail, isResidential: false,
+    name: from.name, company: from.company, street1: from.street1, street2: from.street2, city: from.city, state: from.state, zip: from.zip, country: from.country, phone: from.phone, email: from.email, isResidential: false,
   };
   const addressTo: ShippoAddress = {
     name: to.name || to.company || "Receiving", company: to.company, street1: to.street1, street2: to.street2, city: to.city, state: to.state, zip: to.zip, country: to.country,

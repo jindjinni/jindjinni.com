@@ -14,7 +14,7 @@ export type Address = {
   email?: string | null;
 };
 
-export const CONTACT_KINDS = ["BUYER", "SELLER", "SUPPLIER", "OTHER"] as const;
+export const CONTACT_KINDS = ["BUYER", "SELLER", "SUPPLIER", "DISTRIBUTOR", "OTHER"] as const;
 export type ContactKind = (typeof CONTACT_KINDS)[number];
 export const isContactKind = (v: unknown): v is ContactKind => typeof v === "string" && (CONTACT_KINDS as readonly string[]).includes(v);
 
@@ -23,6 +23,7 @@ export function kindLabel(kind: string, buyers = "Buyers"): string {
   if (kind === "BUYER") return buyers;
   if (kind === "SELLER") return "Sellers";
   if (kind === "SUPPLIER") return "Suppliers";
+  if (kind === "DISTRIBUTOR") return "Distributors";
   return "Other";
 }
 export function kindOne(kind: string, buyers = "Buyers"): string {
@@ -143,8 +144,7 @@ export function cleanAddress(a: Partial<Record<keyof Address, string | null | un
 // ---------------------------------------------------------------------------
 
 export type Parcel = { lengthIn: number; widthIn: number; heightIn: number; weightLb: number };
-/** What the form starts with: a small carton. */
-export const DEFAULT_PARCEL: Parcel = { lengthIn: 12, widthIn: 9, heightIn: 6, weightLb: 2 };
+// There is deliberately no default box: the person types the weight and size of every box, and that is what Shippo prices the label from.
 
 export type ParcelCheck = { ok: true; parcel: Parcel } | { ok: false; error: string };
 

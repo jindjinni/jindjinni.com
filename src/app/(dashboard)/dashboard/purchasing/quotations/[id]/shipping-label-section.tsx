@@ -101,9 +101,9 @@ export function ShippingLabelSection({
 
       {!hasOrgAddress && (
         <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:bg-amber-950 dark:text-amber-400">
-          Add your business&apos;s receiving address in{" "}
-          <Link href="/dashboard/settings/business" className="font-medium hover:underline">
-            Settings → Shipping &amp; labels
+          Add the address your customers ship to in{" "}
+          <Link href="/dashboard/purchasing/shipping-settings" className="font-medium hover:underline">
+            Purchasing → Shipping settings
           </Link>{" "}
           before generating a label.
         </p>

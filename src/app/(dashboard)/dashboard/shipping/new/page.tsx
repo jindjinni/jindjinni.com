@@ -19,7 +19,7 @@ export default async function NewShipmentPage({ searchParams }: { searchParams: 
     <div className="max-w-3xl" data-testid="new-shipment-page">
       <h1 className="text-xl font-bold text-slate-900 dark:text-slate-50">Returns &amp; Labels</h1>
       <p className="mt-1 mb-5 max-w-2xl text-sm text-slate-600 dark:text-slate-400">
-        Sending something back to a seller or a supplier, or shipping anything that has no sales order? Pick the saved address, then make the label on the next page. Orders for your {buyers.toLowerCase()} start from To Ship.
+        Sending a return package to a customer, or shipping to a supplier or a distributor? Choose which one, pick the saved address, then type the box weight and size and make the label on the next page. Your company is always the sender. Orders for your {buyers.toLowerCase()} start from To Ship.
       </p>
       {!canWrite ? (
         <p className={`${card} text-sm text-slate-600 dark:text-slate-400`}>You can look at Shipping. Only the Shipping team, Sales, an Admin or the Owner can start a shipment.</p>
@@ -31,7 +31,7 @@ export default async function NewShipmentPage({ searchParams }: { searchParams: 
         <NewShipmentForm
           options={contacts.map((c) => ({ id: c.id, label: c.company ? `${c.company}${c.name !== c.company ? ` - ${c.name}` : ""}` : c.name, kind: c.kind, ready: addressReady(c) }))}
           initial={contacts.some((c) => c.id === initial) ? initial : ""}
-          kinds={{ BUYER: kindLabel("BUYER", buyers.endsWith("s") ? buyers.slice(0, -1) : buyers), SELLER: "Seller", SUPPLIER: "Supplier", OTHER: "Other" }}
+          kinds={{ BUYER: kindLabel("BUYER", buyers.endsWith("s") ? buyers.slice(0, -1) : buyers), SELLER: "Seller", SUPPLIER: "Supplier", DISTRIBUTOR: "Distributor", OTHER: "Other" }}
         />
       )}
     </div>

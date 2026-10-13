@@ -7,7 +7,8 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { purchasingQuotationLabels, purchasingQuotations } from "@/db/schema";
 import { newId } from "@/lib/ids";
-import { getOrganization, getPurchasingCustomer, getQuotationLabels, hasCustomerAddress, hasShipFromAddress } from "@/lib/queries";
+import { getOrganization, getPurchasingCustomer, getQuotationLabels, hasCustomerAddress } from "@/lib/queries";
+import { purchasingReceiveAddress } from "@/lib/org-addresses";
 import { pickLabelRate, type ShippoAddress } from "@/lib/shippo";
 import { noteShippoFailure, resolveShippo } from "@/lib/shippo-connection";
 import { buyLabels, failureMessage, type LabelCarrier } from "@/lib/shipping-labels";
@@ -59,7 +60,8 @@ export async function buyAndSaveLabels(p: {
   if (!shippo.ok) return recordFailure(shippo.message);
 
   const orgRow = await getOrganization(organizationId);
-  if (!hasShipFromAddress(orgRow)) return { bought: 0, error: "Add your company's address in Settings → Shipping & labels before generating a label." };
+  const receive = purchasingReceiveAddress(orgRow);
+  if (!receive) return { bought: 0, error: "Add the address your customers ship to (with a phone and an email) in Purchasing → Shipping settings before generating a label." };
 
   const customer = await getPurchasingCustomer(organizationId, quotation.customerId);
   if (!customer || !hasCustomerAddress(customer)) {
@@ -79,18 +81,9 @@ export async function buyAndSaveLabels(p: {
     email: customer.email,
     isResidential: customer.isResidential,
   };
+  const r = receive.address;
   const addressTo: ShippoAddress = {
-    name: orgRow!.shipFromName!,
-    company: orgRow!.shipFromCompany,
-    street1: orgRow!.shipFromStreet1!,
-    street2: orgRow!.shipFromStreet2,
-    city: orgRow!.shipFromCity!,
-    state: orgRow!.shipFromState!,
-    zip: orgRow!.shipFromZip!,
-    country: orgRow!.shipFromCountry,
-    phone: orgRow!.shipFromPhone,
-    email: orgRow!.shipFromEmail,
-    isResidential: false,
+    name: r.name, company: r.company, street1: r.street1, street2: r.street2, city: r.city, state: r.state, zip: r.zip, country: r.country, phone: r.phone, email: r.email, isResidential: false,
   };
 
   const { labels, errors } = await buyLabels(

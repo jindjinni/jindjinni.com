@@ -32,7 +32,7 @@ export function canShipFrom(kind: string, status: string): boolean {
 }
 
 export const docWordFor = (kind: string) =>
-  kind === "SALES_ORDER" ? "Sales order" : kind === "INVOICE" ? "Invoice" : kind === "PURCHASE_ORDER" ? "Purchase order" : kind === "RETURN" ? "Return" : kind === "OTHER" ? "Shipment" : "Quotation";
+  kind === "SALES_ORDER" ? "Sales order" : kind === "INVOICE" ? "Invoice" : kind === "PURCHASE_ORDER" ? "Purchase order" : kind === "RETURN" ? "Return" : kind === "SUPPLIER" ? "Shipment to a supplier" : kind === "DISTRIBUTOR" ? "Shipment to a distributor" : kind === "OTHER" ? "Shipment" : "Quotation";
 
 /** An order or invoice (a shipment of a sale) as opposed to a return or other shipment. */
 export const isOrderKind = (kind: string) => kind === "SALES_ORDER" || kind === "INVOICE";

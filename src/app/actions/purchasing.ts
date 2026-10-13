@@ -50,7 +50,6 @@ import {
   resolveBusinessDocumentIdentity,
   getPurchasingReceiptSettings,
   getOrganization,
-  hasShipFromAddress,
   hasCustomerAddress,
   getQuotationLabels,
 } from "@/lib/queries";

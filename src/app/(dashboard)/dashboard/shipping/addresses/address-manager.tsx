@@ -12,7 +12,7 @@ export type ContactRow = AddressValue & { id: string; kind: string; notes: strin
 
 type Words = { buyers: string };
 
-const kindWord = (k: string, w: Words) => (k === "BUYER" ? w.buyers : k === "SELLER" ? "Seller" : k === "SUPPLIER" ? "Supplier" : "Other");
+const kindWord = (k: string, w: Words) => (k === "BUYER" ? w.buyers : k === "SELLER" ? "Seller" : k === "SUPPLIER" ? "Supplier" : k === "DISTRIBUTOR" ? "Distributor" : "Other");
 
 /** Add, edit and hide address profiles; bring them over from Sales and Purchasing. Everything is checked again on the server. */
 export function AddressManager({ rows, canWrite, preview, words }: { rows: ContactRow[]; canWrite: boolean; preview: { sales_buyer: number; purchasing_customer: number; purchasing_supplier: number }; words: Words }) {

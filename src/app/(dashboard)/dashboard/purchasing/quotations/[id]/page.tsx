@@ -1,3 +1,4 @@
+import { purchasingReceiveAddress } from "@/lib/org-addresses";
 import { isPurchasingManager, canWritePurchasing } from "@/lib/permissions";
 import { getReceiptState } from "@/lib/purchasing-receipt-docs";
 import { ReceiptCell } from "../receipt-cell";
@@ -18,7 +19,6 @@ import {
   getAllProductMultipliersForOrg,
   purchasingCustomerName,
   getOrganization,
-  hasShipFromAddress,
   hasCustomerAddress,
   getQuotationLabels,
 } from "@/lib/queries";
@@ -313,7 +313,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
           trackingStatuses={Object.fromEntries(trackRows.filter((r) => r.lastCheckedAt && r.status !== "Unknown").map((r) => [r.trackingNumber, r.status]))}
           labelStatus={quotation.labelStatus}
           labelError={quotation.labelError}
-          hasOrgAddress={hasShipFromAddress(orgRow)}
+          hasOrgAddress={!!purchasingReceiveAddress(orgRow)}
           hasCustomerAddr={hasCustomerAddress(customer)}
         />
       )}

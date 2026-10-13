@@ -10,7 +10,6 @@ import { field, ghostBtn, primaryBtn } from "@/components/sales-ui";
 import { AddressFields, type AddressValue } from "../../addresses/address-fields";
 import { guessCarrier, MANUAL_STATUSES, pickAttachments, shippedEmail, statusLabel, type EmailItem } from "@/lib/shipping-rules";
 import { carrierTrackingLink, pillClass } from "@/lib/tracking-rules";
-import { DEFAULT_PARCEL } from "@/lib/shipping-address-rules";
 
 type Msg = { ok: boolean; text: string } | null;
 type R = { ok: true; message?: string } | { ok: false; error: string };
@@ -91,6 +90,7 @@ export function ShipToPanel({ shipmentId, address, lines, contactId, options, lo
               <option value="BUYER">Buyer or pharmacy</option>
               <option value="SELLER">Seller</option>
               <option value="SUPPLIER">Supplier</option>
+              <option value="DISTRIBUTOR">Distributor</option>
               <option value="OTHER">Other</option>
             </select>
           )}
@@ -184,19 +184,24 @@ export function BoxesPanel({ shipmentId, boxes, locked, canWrite, trackingConnec
 // Labels
 // ---------------------------------------------------------------------------
 
-export function LabelsPanel({ shipmentId, canWrite, shippoReady, shippoWhy, fromReady, addressProblem }: { shipmentId: string; canWrite: boolean; shippoReady: boolean; shippoWhy: string | null; fromReady: boolean; addressProblem: string | null }) {
+export function LabelsPanel({ shipmentId, canWrite, shippoReady, shippoWhy, fromReady, addressProblem, fromLine, toLine }: { shipmentId: string; canWrite: boolean; shippoReady: boolean; shippoWhy: string | null; fromReady: boolean; addressProblem: string | null; fromLine: string; toLine: string }) {
   const { pending, msg, run } = useRun();
   const [service, setService] = useState("UPS_GROUND");
   const [count, setCount] = useState(1);
-  const [len, setLen] = useState(String(DEFAULT_PARCEL.lengthIn));
-  const [wid, setWid] = useState(String(DEFAULT_PARCEL.widthIn));
-  const [hei, setHei] = useState(String(DEFAULT_PARCEL.heightIn));
-  const [wt, setWt] = useState(String(DEFAULT_PARCEL.weightLb));
-  const blocked = !shippoReady ? shippoWhy : !fromReady ? "Add your business's ship-from address (with a phone and an email) in Settings → Shipping & labels first." : addressProblem ? `The address isn't complete. ${addressProblem}` : null;
+  // No default box: the weight and size are typed for every label and sent to Shippo as typed.
+  const [len, setLen] = useState("");
+  const [wid, setWid] = useState("");
+  const [hei, setHei] = useState("");
+  const [wt, setWt] = useState("");
+  const typed = [len, wid, hei, wt].every((v) => Number(v.trim()) > 0);
+  const blocked = !shippoReady ? shippoWhy : !fromReady ? "Add your company's shipping address (with a phone and an email) in Shipping → Shipping settings first." : addressProblem ? `The address isn't complete. ${addressProblem}` : null;
   const lab = "text-xs font-medium text-slate-700 dark:text-slate-300";
   return (
     <Panel title="Make shipping labels" id="labels-panel">
       <p className="mb-3 text-xs text-slate-500">Labels are bought from your own Shippo account. Each label is one box with its own tracking number, followed for you automatically.</p>
+      <p className="mb-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-700 dark:bg-slate-800/60 dark:text-slate-300" data-testid="labels-direction">
+        <span className="font-medium">From (us):</span> {fromLine || "not set yet"} <span className="mx-1">→</span> <span className="font-medium">To:</span> {toLine || "not set yet"}
+      </p>
       {blocked && <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200" data-testid="labels-blocked">{blocked}</p>}
       {canWrite && (
         <div className="grid gap-3 sm:grid-cols-[1.4fr_5rem_repeat(4,4.5rem)_auto] sm:items-end">
@@ -205,13 +210,14 @@ export function LabelsPanel({ shipmentId, canWrite, shippoReady, shippoWhy, from
               <option value="UPS_GROUND">UPS Ground</option><option value="USPS_PRIORITY">USPS Priority Mail</option>
             </select></div>
           <div><label htmlFor="lb-count" className={lab}>Labels</label><input id="lb-count" type="number" min={1} max={10} value={count} onChange={(e) => setCount(Number(e.target.value))} className={`${field} mt-1`} data-testid="lb-count" /></div>
-          <div><label htmlFor="lb-len" className={lab}>Long (in)</label><input id="lb-len" value={len} onChange={(e) => setLen(e.target.value)} className={`${field} mt-1`} data-testid="lb-len" /></div>
-          <div><label htmlFor="lb-wid" className={lab}>Wide (in)</label><input id="lb-wid" value={wid} onChange={(e) => setWid(e.target.value)} className={`${field} mt-1`} /></div>
-          <div><label htmlFor="lb-hei" className={lab}>High (in)</label><input id="lb-hei" value={hei} onChange={(e) => setHei(e.target.value)} className={`${field} mt-1`} /></div>
-          <div><label htmlFor="lb-wt" className={lab}>Weight (lb)</label><input id="lb-wt" value={wt} onChange={(e) => setWt(e.target.value)} className={`${field} mt-1`} data-testid="lb-wt" /></div>
-          <button type="button" disabled={pending || !!blocked} className={primaryBtn} data-testid="lb-make" onClick={() => run(() => makeLabelsAction(shipmentId, { service, count, lengthIn: len, widthIn: wid, heightIn: hei, weightLb: wt }))}>{pending ? "Making…" : "Make labels"}</button>
+          <div><label htmlFor="lb-len" className={lab}>Long (in)</label><input id="lb-len" inputMode="decimal" placeholder="Type it" value={len} onChange={(e) => setLen(e.target.value)} className={`${field} mt-1`} data-testid="lb-len" /></div>
+          <div><label htmlFor="lb-wid" className={lab}>Wide (in)</label><input id="lb-wid" inputMode="decimal" placeholder="Type it" value={wid} onChange={(e) => setWid(e.target.value)} className={`${field} mt-1`} /></div>
+          <div><label htmlFor="lb-hei" className={lab}>High (in)</label><input id="lb-hei" inputMode="decimal" placeholder="Type it" value={hei} onChange={(e) => setHei(e.target.value)} className={`${field} mt-1`} /></div>
+          <div><label htmlFor="lb-wt" className={lab}>Weight (lb)</label><input id="lb-wt" inputMode="decimal" placeholder="Type it" value={wt} onChange={(e) => setWt(e.target.value)} className={`${field} mt-1`} data-testid="lb-wt" /></div>
+          <button type="button" disabled={pending || !!blocked || !typed} className={primaryBtn} data-testid="lb-make" onClick={() => run(() => makeLabelsAction(shipmentId, { service, count, lengthIn: len, widthIn: wid, heightIn: hei, weightLb: wt }))}>{pending ? "Making…" : "Make labels"}</button>
         </div>
       )}
+      {canWrite && !typed && !blocked && <p className="mt-2 text-xs text-slate-500" data-testid="lb-needs-box">Type the weight and the size of the box. Shippo prices the label from exactly what you type.</p>}
       <Note msg={msg} id="labels" />
     </Panel>
   );

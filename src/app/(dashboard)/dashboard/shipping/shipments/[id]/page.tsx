@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { card, fmtDay } from "@/components/sales-ui";
 import { getShipment } from "@/lib/shipping-service";
 import { listContacts } from "@/lib/shipping-contacts";
-import { getOrganization, hasShipFromAddress } from "@/lib/queries";
+import { getOrganization } from "@/lib/queries";
+import { shippingAddressOf } from "@/lib/org-addresses";
 import { resolveShippo } from "@/lib/shippo-connection";
 import { addressLines } from "@/lib/shipping-address-rules";
 import { docLabel, isOrderKind, statusLabel } from "@/lib/shipping-rules";
@@ -25,6 +26,10 @@ export default async function ShipmentPage({ params }: { params: Promise<{ id: s
     name: d.shipTo.name, company: d.shipTo.company ?? "", street1: d.shipTo.street1, street2: d.shipTo.street2 ?? "", city: d.shipTo.city, state: d.shipTo.state, zip: d.shipTo.zip,
     phone: d.shipTo.phone ?? "", email: s.buyerEmail ?? "", isResidential: s.toResidential,
   };
+  const ship = shippingAddressOf(orgRow);
+  const one = (name: string | null | undefined, company: string | null | undefined, city: string, state: string) => `${company || name || ""}${city ? `, ${city}${state ? ` ${state}` : ""}` : ""}`.trim();
+  const fromLine = ship ? one(ship.name, ship.company, ship.city, ship.state) : "";
+  const toLine = d.shipTo.street1 ? one(d.shipTo.name, d.shipTo.company, d.shipTo.city, d.shipTo.state) : "";
   const names: string[] = s.emailAttachments ? (JSON.parse(s.emailAttachments) as string[]) : [];
   const title = s.buyerCompany || s.toCompany || s.toName || "Shipment";
   return (
@@ -66,7 +71,9 @@ export default async function ShipmentPage({ params }: { params: Promise<{ id: s
         canWrite={canWrite}
         shippoReady={shippo.ok}
         shippoWhy={shippo.ok ? null : shippo.message}
-        fromReady={hasShipFromAddress(orgRow)}
+        fromReady={!!shippingAddressOf(orgRow)}
+        fromLine={fromLine}
+        toLine={toLine}
         addressProblem={d.addressProblem}
       />
 
