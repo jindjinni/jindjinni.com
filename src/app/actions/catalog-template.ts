@@ -55,11 +55,18 @@ export async function fillDefaultPrices(_prev: CatalogTemplateActionState, _form
   const r = await applyDefaultPricesForOrg(org.organizationId);
   revalidatePath("/dashboard/purchasing/products");
   if (!r.hasTemplate) return { error: "No default catalog has been published yet." };
-  const more = r.settingsFilled.length > 0 ? ` Also filled in: ${r.settingsFilled.join(", ")}.` : "";
-  if (r.priced === 0 && r.tiersAdded === 0 && r.settingsFilled.length === 0) {
+  const bits: string[] = [];
+  if (r.priced) bits.push(`priced ${r.priced} product${r.priced === 1 ? "" : "s"}`);
+  if (r.productsWithExpiry) bits.push(`set the expiry options on ${r.productsWithExpiry} product${r.productsWithExpiry === 1 ? "" : "s"}`);
+  if (r.rangesAdded) bits.push(`added ${r.rangesAdded} month range${r.rangesAdded === 1 ? "" : "s"}`);
+  if (r.conditionsAdded) bits.push(`added ${r.conditionsAdded} condition${r.conditionsAdded === 1 ? "" : "s"}`);
+  if (r.tiersAdded) bits.push(`added ${r.tiersAdded} bonus tier${r.tiersAdded === 1 ? "" : "s"}`);
+  if (r.detailsFilled) bits.push(`filled in blank details (NDC, code, brand) on ${r.detailsFilled} product${r.detailsFilled === 1 ? "" : "s"}`);
+  if (r.settingsFilled.length) bits.push(`filled in ${r.settingsFilled.join(", ")}`);
+  if (r.hidden) bits.push(`hid ${r.hidden} leftover condition/month range${r.hidden === 1 ? "" : "s"} that are not in the default (hidden, not deleted)`);
+  if (bits.length === 0) {
     return { message: `Nothing to fill in: ${r.alreadyPriced} products already have a price${r.notInDefault ? ` and ${r.notInDefault} have no default price` : ""}.` };
   }
-  const parts = [`priced ${r.priced} product${r.priced === 1 ? "" : "s"}`];
-  if (r.tiersAdded) parts.push(`added ${r.tiersAdded} bonus tier${r.tiersAdded === 1 ? "" : "s"}`);
-  return { message: `Done: ${parts.join(" and ")}. ${r.alreadyPriced} that already had a price were left alone.${more}` };
+  const note = r.matched ? " Because this company has no quotations yet, its conditions, month ranges and brands were matched to the default." : "";
+  return { message: `Done: ${bits.join("; ")}. ${r.alreadyPriced} products that already had a price were left alone.${note}` };
 }

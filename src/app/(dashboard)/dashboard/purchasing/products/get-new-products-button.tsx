@@ -30,7 +30,7 @@ export function GetNewProductsButton({ available }: { available: number }) {
       >
         {pPending ? "Filling in…" : "Use the default prices and settings"}
       </button>
-      <p className="text-xs text-slate-400">Fills in the default price on products that are still $0, plus the bonus tiers, payment terms, receiving form, email wording and menus you haven&rsquo;t set yourself. Anything you set yourself is never changed.</p>
+      <p className="text-xs text-slate-400">Fills in the default price on products that are still $0, their expiry options, NDCs and brands, the month ranges and conditions, plus the bonus tiers, payment terms, receiving form, email wording and menus you haven&rsquo;t set yourself. A company with no quotations yet is matched fully to the default (leftovers are hidden, never deleted). Anything you set yourself is never changed.</p>
       {pState?.error && <p className="text-sm text-red-600 dark:text-red-400">{pState.error}</p>}
       {pState?.message && <p data-testid="use-default-prices-msg" className="text-sm text-emerald-700 dark:text-emerald-400">{pState.message}</p>}
     </form>

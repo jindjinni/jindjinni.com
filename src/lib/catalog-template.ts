@@ -26,6 +26,7 @@ import {
   purchasingProductConditions,
   purchasingProductMultipliers,
   purchasingProducts,
+  purchasingQuotations,
   purchasingReceiptSettings,
   accountsSettings,
   receivingEmailTemplates,
@@ -120,6 +121,8 @@ export type LoadedTemplate = {
 export const rangeKey = (r: { label: string; minMonths: number | null; maxMonths: number | null }) =>
   `${r.label.trim().toLowerCase()}|${r.minMonths ?? ""}|${r.maxMonths ?? ""}`;
 const lc = (s: string) => s.trim().toLowerCase();
+/** Two ranges can share a label and differ only in their multiplier, so the multiplier is part of the match. */
+const rangeKeyM = (r: { label: string; minMonths: number | null; maxMonths: number | null; defaultMultiplier: number }) => `${rangeKey(r)}|${r.defaultMultiplier}`;
 
 /** Platform admins are listed in the PLATFORM_ADMIN_EMAILS environment variable (comma separated). */
 export function isPlatformAdminEmail(email: string | null | undefined): boolean {
@@ -618,10 +621,10 @@ export async function addNewProductsForOrg(organizationId: string): Promise<AddN
     const conds = await db.select({ id: purchasingConditions.id, name: purchasingConditions.name }).from(purchasingConditions).where(eq(purchasingConditions.organizationId, organizationId));
     const condId = new Map(conds.map((c) => [lc(c.name), c.id]));
     const ranges = await db.select().from(purchasingExpirationRanges).where(eq(purchasingExpirationRanges.organizationId, organizationId));
-    const rangeByKey = new Map(ranges.map((r) => [rangeKey(r), r.id]));
+    const rangeByKey = new Map(ranges.map((r) => [rangeKeyM(r), r.id]));
     const rangeId = (i: number) => {
       const tr = t.data.ranges[i];
-      return tr ? rangeByKey.get(rangeKey(tr)) : undefined;
+      return tr ? rangeByKey.get(rangeKeyM(tr)) : undefined;
     };
     await insertProducts(organizationId, plan.products, { catId, condId, rangeId });
   }
@@ -636,7 +639,21 @@ export async function addNewProductsForOrg(organizationId: string): Promise<AddN
 // "Use the default prices" for a company that already exists
 // ---------------------------------------------------------------------------
 
-export type ApplyPricesResult = { hasTemplate: boolean; priced: number; alreadyPriced: number; notInDefault: number; tiersAdded: number; settingsFilled: string[] };
+export type ApplyPricesResult = {
+  hasTemplate: boolean;
+  priced: number;
+  alreadyPriced: number;
+  notInDefault: number;
+  tiersAdded: number;
+  settingsFilled: string[];
+  /** The company has not made a quotation yet, so its lists were matched to the default (leftovers hidden, never deleted). */
+  matched: boolean;
+  conditionsAdded: number;
+  rangesAdded: number;
+  hidden: number;
+  productsWithExpiry: number;
+  detailsFilled: number;
+};
 
 /**
  * Fills in the default catalog's price for every product this company has at $0 (matched by name), plus the general
@@ -646,7 +663,8 @@ export type ApplyPricesResult = { hasTemplate: boolean; priced: number; alreadyP
  */
 export async function applyDefaultPricesForOrg(organizationId: string): Promise<ApplyPricesResult> {
   const t = await getLatestTemplate();
-  if (!t) return { hasTemplate: false, priced: 0, alreadyPriced: 0, notInDefault: 0, tiersAdded: 0, settingsFilled: [] };
+  if (!t) return { hasTemplate: false, priced: 0, alreadyPriced: 0, notInDefault: 0, tiersAdded: 0, settingsFilled: [], matched: false, conditionsAdded: 0, rangesAdded: 0, hidden: 0, productsWithExpiry: 0, detailsFilled: 0 };
+  const sync = await syncStructure(organizationId, t);
   const priceBy = new Map(t.data.products.filter((p) => (p.price ?? 0) > 0).map((p) => [lc(p.name), p.price as number]));
   const mine = await db
     .select({ id: purchasingProducts.id, name: purchasingProducts.name, price: purchasingProducts.standardPrice })
@@ -680,5 +698,136 @@ export async function applyDefaultPricesForOrg(organizationId: string): Promise<
     }
   }
   const settingsFilled = await applySettings(organizationId, t.data.settings, { overwriteDefaults: false });
-  return { hasTemplate: true, priced, alreadyPriced, notInDefault, tiersAdded, settingsFilled };
+  return { hasTemplate: true, priced, alreadyPriced, notInDefault, tiersAdded, settingsFilled, ...sync };
+}
+
+type SyncCounts = Pick<ApplyPricesResult, "matched" | "conditionsAdded" | "rangesAdded" | "hidden" | "productsWithExpiry" | "detailsFilled">;
+
+/**
+ * Brings a company's condition list, month ranges and per-product expiry options (and blank NDC / code / notes /
+ * brand) in line with the default catalog. Always only ADDS and fills blanks. When the company has not made a
+ * quotation yet it also aligns what it can safely align -- conditions, month ranges, brands, products' "never
+ * expires" and active flags -- and HIDES (never deletes) conditions and month ranges that are not in the default.
+ */
+async function syncStructure(organizationId: string, t: LoadedTemplate): Promise<SyncCounts> {
+  const d = t.data;
+  const out: SyncCounts = { matched: false, conditionsAdded: 0, rangesAdded: 0, hidden: 0, productsWithExpiry: 0, detailsFilled: 0 };
+  const [q] = await db.select({ id: purchasingQuotations.id }).from(purchasingQuotations).where(eq(purchasingQuotations.organizationId, organizationId)).limit(1);
+  const fresh = !q;
+  out.matched = fresh;
+
+  // Conditions
+  const conds = await db.select().from(purchasingConditions).where(eq(purchasingConditions.organizationId, organizationId));
+  const condByName = new Map(conds.map((c) => [lc(c.name), c]));
+  let condSort = conds.length;
+  const condId = new Map(conds.map((c) => [lc(c.name), c.id]));
+  const wantedConds = new Set(d.conditions.map((c) => lc(c.name)));
+  for (const c of d.conditions) {
+    const have = condByName.get(lc(c.name));
+    if (!have) {
+      const id = newId("pcond");
+      await db.insert(purchasingConditions).values({ id, organizationId, name: c.name, multiplier: c.multiplier, sortOrder: condSort++, active: c.active });
+      condId.set(lc(c.name), id);
+      out.conditionsAdded++;
+    } else if (fresh && (have.multiplier !== c.multiplier || have.active !== c.active)) {
+      await db.update(purchasingConditions).set({ multiplier: c.multiplier, active: c.active }).where(and(eq(purchasingConditions.id, have.id), eq(purchasingConditions.organizationId, organizationId)));
+    }
+  }
+  if (fresh && d.conditions.length > 0) {
+    for (const c of conds) {
+      if (!wantedConds.has(lc(c.name)) && c.active) {
+        await db.update(purchasingConditions).set({ active: false }).where(and(eq(purchasingConditions.id, c.id), eq(purchasingConditions.organizationId, organizationId)));
+        out.hidden++;
+      }
+    }
+  }
+
+  // Month ranges
+  const ranges = await db.select().from(purchasingExpirationRanges).where(eq(purchasingExpirationRanges.organizationId, organizationId));
+  const rangeByKey = new Map(ranges.map((r) => [rangeKeyM(r), r]));
+  let rangeSort = ranges.length;
+  const rangeIdAt = new Map<number, string>();
+  const wantedRanges = new Set(d.ranges.map((r) => rangeKeyM(r)));
+  for (const [i, r] of d.ranges.entries()) {
+    const have = rangeByKey.get(rangeKeyM(r));
+    if (!have) {
+      const id = newId("prange");
+      await db.insert(purchasingExpirationRanges).values({ id, organizationId, label: r.label, minMonths: r.minMonths, maxMonths: r.maxMonths, defaultMultiplier: r.defaultMultiplier, sortOrder: rangeSort++, active: r.active });
+      rangeIdAt.set(i, id);
+      out.rangesAdded++;
+    } else {
+      rangeIdAt.set(i, have.id);
+      if (fresh && have.active !== r.active) {
+        await db.update(purchasingExpirationRanges).set({ active: r.active }).where(and(eq(purchasingExpirationRanges.id, have.id), eq(purchasingExpirationRanges.organizationId, organizationId)));
+      }
+    }
+  }
+  if (fresh && d.ranges.length > 0) {
+    for (const r of ranges) {
+      if (!wantedRanges.has(rangeKeyM(r)) && r.active) {
+        await db.update(purchasingExpirationRanges).set({ active: false }).where(and(eq(purchasingExpirationRanges.id, r.id), eq(purchasingExpirationRanges.organizationId, organizationId)));
+        out.hidden++;
+      }
+    }
+  }
+
+  // Brands
+  const cats = await db.select().from(purchasingCategories).where(eq(purchasingCategories.organizationId, organizationId));
+  const catId = new Map(cats.map((c) => [lc(c.name), c.id]));
+  let catSort = cats.length;
+  for (const name of new Set(d.products.map((p) => p.category).filter((c): c is string => !!c))) {
+    if (catId.has(lc(name))) continue;
+    const id = newId("pcat");
+    await db.insert(purchasingCategories).values({ id, organizationId, name, sortOrder: catSort++ });
+    catId.set(lc(name), id);
+  }
+
+  // Products: expiry options, conditions and blank details
+  const mine = await db.select().from(purchasingProducts).where(and(eq(purchasingProducts.organizationId, organizationId), isNull(purchasingProducts.archivedAt)));
+  const mineBy = new Map<string, typeof mine>();
+  for (const p of mine) mineBy.set(lc(p.name), [...(mineBy.get(lc(p.name)) ?? []), p]);
+  const haveMult = new Set((await db.select({ p: purchasingProductMultipliers.productId }).from(purchasingProductMultipliers).where(eq(purchasingProductMultipliers.organizationId, organizationId))).map((r) => r.p));
+  const haveLink = new Set((await db.select({ p: purchasingProductConditions.productId }).from(purchasingProductConditions).where(eq(purchasingProductConditions.organizationId, organizationId))).map((r) => r.p));
+  const multRows: (typeof purchasingProductMultipliers.$inferInsert)[] = [];
+  const linkRows: (typeof purchasingProductConditions.$inferInsert)[] = [];
+  for (const tp of d.products) {
+    for (const p of mineBy.get(lc(tp.name)) ?? []) {
+      if (!haveMult.has(p.id)) {
+        const seen = new Set<string>();
+        let any = false;
+        for (const m of tp.ranges) {
+          const rid = rangeIdAt.get(m.r);
+          if (!rid || seen.has(rid)) continue;
+          seen.add(rid);
+          multRows.push({ id: newId("pmult"), organizationId, productId: p.id, expirationRangeId: rid, multiplier: m.multiplier });
+          any = true;
+        }
+        if (any) out.productsWithExpiry++;
+      }
+      if (!haveLink.has(p.id)) {
+        const seen = new Set<string>();
+        for (const cn of tp.conditions) {
+          const cid = condId.get(lc(cn));
+          if (!cid || seen.has(cid)) continue;
+          seen.add(cid);
+          linkRows.push({ id: newId("pprodcond"), organizationId, productId: p.id, conditionId: cid });
+        }
+      }
+      const patch: Partial<typeof purchasingProducts.$inferInsert> = {};
+      if (!p.ndc && tp.ndc) patch.ndc = tp.ndc;
+      if (!p.productCode && tp.productCode) patch.productCode = tp.productCode;
+      if (!p.notes && tp.notes) patch.notes = tp.notes;
+      const wantCat = tp.category ? catId.get(lc(tp.category)) : undefined;
+      if (wantCat && (!p.categoryId || (fresh && p.categoryId !== wantCat))) patch.categoryId = wantCat;
+      if (fresh && p.noExpiration !== tp.noExpiration) patch.noExpiration = tp.noExpiration;
+      if (fresh && p.active !== tp.active) patch.active = tp.active;
+      if (Object.keys(patch).length > 0) {
+        await db.update(purchasingProducts).set(patch).where(and(eq(purchasingProducts.id, p.id), eq(purchasingProducts.organizationId, organizationId)));
+        out.detailsFilled++;
+      }
+    }
+  }
+  for (const rows of chunk(multRows)) await db.insert(purchasingProductMultipliers).values(rows);
+  for (const rows of chunk(linkRows)) await db.insert(purchasingProductConditions).values(rows);
+  return out;
 }
