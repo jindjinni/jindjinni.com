@@ -9,6 +9,9 @@ import { db } from "@/db/client";
 import { organizations, purchasingAuditLog, purchasingQuotations, quotationPayoutLinks, receivingPackages } from "@/db/schema";
 import { decryptBank, encryptBank } from "@/lib/bank-crypto";
 import { newId } from "@/lib/ids";
+import { featureOn } from "@/lib/features";
+import { isHeldBack } from "@/lib/tenant";
+import { operationHeld } from "@/lib/second-business-rules";
 import { appUrl } from "@/lib/password-reset";
 import {
   customerLinkState, detailsFromJson, detailsToJson, hashLinkToken, linkUrl, looksLikeLinkToken, newLinkToken, staffLinkState,
@@ -136,6 +139,9 @@ export async function publicLinkByToken(token: string): Promise<PublicLink | nul
     .select({
       link: quotationPayoutLinks,
       companyName: organizations.name,
+      parent: organizations.parentOrganizationId,
+      closedAt: organizations.closedAt,
+      approval: organizations.approvalStatus,
       number: purchasingQuotations.quotationNumber,
       customer: purchasingQuotations.customerNameSnapshot,
     })
@@ -145,6 +151,14 @@ export async function publicLinkByToken(token: string): Promise<PublicLink | nul
     .where(eq(quotationPayoutLinks.tokenHash, hashLinkToken(token)))
     .limit(1);
   if (!r) return null;
+  // A company that is closed, suspended, banned or not approved (or whose main company is), or that has the feature switched off, stops its
+  // links working at once: the customer sees the same "isn't valid" page as for a made-up link, and nothing about the company.
+  if (r.closedAt) return null;
+  if (r.parent) {
+    const [main] = await db.select({ closedAt: organizations.closedAt, approval: organizations.approvalStatus }).from(organizations).where(eq(organizations.id, r.parent)).limit(1);
+    if (!main || main.closedAt || isHeldBack(main.approval) || operationHeld(r.parent, r.approval)) return null;
+  } else if (isHeldBack(r.approval)) return null;
+  if (!(await featureOn("payout-links", r.link.organizationId))) return null;
   const paid = await orderIsPaid(r.link.organizationId, r.link.quotationId);
   const state = customerLinkState(r.link, paid, Date.now());
   return {
