@@ -25,6 +25,10 @@ export default async function PurchasingShippingSettingsPage() {
         Labels you make in the Shipping department go the other way (your company is always the sender). That address is in{" "}
         <Link href="/dashboard/shipping/settings" className="font-medium text-emerald-800 underline dark:text-emerald-300">Shipping → Shipping settings</Link>.
       </p>
+      <p className="mt-2 max-w-2xl text-sm text-slate-600 dark:text-slate-400">
+        The email that carries the label to the customer is explained in{" "}
+        <Link href="/dashboard/settings/email-flow" className="font-medium text-emerald-800 underline dark:text-emerald-300">Settings → How our emails work</Link>.
+      </p>
       {!hasOwnReceiving && !prefilled && (
         <p className="mt-3 max-w-2xl rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-300" data-testid="receive-empty">No receiving address is saved yet. Add it below before you make a customer&apos;s label.</p>
       )}

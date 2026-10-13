@@ -31,7 +31,7 @@ export default async function EmailSettingsPage() {
   return (
     <div className="max-w-3xl">
       <h1 className="text-xl font-bold text-slate-900 dark:text-slate-50">Email Settings</h1>
-      <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">Who customer emails come from, and the copies and links that go with them.</p>
+      <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">Who customer emails come from, and the copies and links that go with them. <Link href="/dashboard/settings/email-flow" className="font-medium text-emerald-700 underline dark:text-emerald-400">See how all the emails fit together</Link>.</p>
       <p className="mt-4 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300" data-testid="cs-mailbox-link">
         {conn
           ? <>Customer emails are sent from <strong>{conn.accountEmail}</strong>{conn.status !== "ACTIVE" ? ", but that sign-in needs to be renewed" : ""}. </>

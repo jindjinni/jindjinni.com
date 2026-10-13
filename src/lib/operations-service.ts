@@ -1,6 +1,8 @@
 // Reading and changing which operation sides (Wholesale, Distribution) a company runs. Every query is scoped by organizationId.
 // The old three-way answer (organizations.operation_type) is kept in step on every change so older screens keep working.
 
+import { getOrganization } from "@/lib/queries";
+import { purchasingReceiveAddress, shippingAddressOf } from "@/lib/org-addresses";
 import { and, count, eq, inArray, isNotNull, or } from "drizzle-orm";
 import { db } from "@/db/client";
 import { documentTemplates, mailboxes, organizations, purchasingProducts, purchasingPurchaseOrders, purchasingQuotations, purchasingSuppliers, salesBuyers, shippoConnections } from "@/db/schema";
@@ -167,5 +169,6 @@ export async function stepProgressOf(organizationId: string): Promise<StepProgre
     db.select({ c: count() }).from(documentTemplates).where(and(eq(documentTemplates.organizationId, organizationId), eq(documentTemplates.docType, "PURCHASE_ORDER"), eq(documentTemplates.department, "purchasing"))).then((r) => Number(r[0]?.c ?? 0) > 0),
     db.select({ c: count() }).from(mailboxes).where(and(eq(mailboxes.organizationId, organizationId), or(isNotNull(mailboxes.plannedEmail), isNotNull(mailboxes.accountEmail)))).then((r) => Number(r[0]?.c ?? 0) > 0),
   ]);
-  return { shippo, products, quotation, supplier, buyers, po, "po-look": poTemplate, emails };
+  const orgRow = await getOrganization(organizationId);
+  return { shippo, products, quotation, supplier, buyers, po, "po-look": poTemplate, emails, address: !!shippingAddressOf(orgRow), "receive-address": !!purchasingReceiveAddress(orgRow) };
 }

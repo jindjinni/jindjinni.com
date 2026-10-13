@@ -8,6 +8,7 @@
 // built -- at that point this should move to a dedicated
 // settings.business_profile.edit permission instead of a role check.
 
+import { fillShippingAddressFromProfile } from "@/lib/address-defaults";
 import { isAdmin } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
@@ -87,6 +88,8 @@ export async function updateBusinessProfile(
 
   await db.update(organizations).set({ name: legalName }).where(eq(organizations.id, org.organizationId));
   await db.update(businessProfiles).set(patch).where(eq(businessProfiles.organizationId, org.organizationId));
+  // Wholesale default: a company with no shipping address yet starts with this one (never overwrites a saved address).
+  await fillShippingAddressFromProfile(org.organizationId);
 
   // Only the fields that actually matter for "what changed" get logged --
   // field-by-field so an edit to one address line doesn't bury the others.

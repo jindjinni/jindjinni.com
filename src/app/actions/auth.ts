@@ -20,6 +20,7 @@ import {
   defaultConditionRows,
 } from "@/lib/ids";
 import { setupNewOrgCatalog } from "@/lib/catalog-template";
+import { fillShippingAddressFromProfile } from "@/lib/address-defaults";
 import { extractBusinessProfileIdentityFields } from "@/lib/business-profile-form";
 import { encodeLogoFile } from "@/lib/logo-validation";
 import { consumeSignupVerificationCode } from "@/lib/signup-verification";
@@ -265,6 +266,8 @@ export async function signUpOrganization(
     logoUpdatedAt: new Date().toISOString(),
   });
   await saveVerification(orgId, verification.data);
+  // Wholesale default: the shipping address starts as the business address, so labels work from day one.
+  await fillShippingAddressFromProfile(orgId);
   // "Both": the second operation is created next to the first, empty and separate, and the owner can open either one.
   if (splitOn && operation.type === "BOTH") {
     const second = await addOperation({ userId: userId, organizationId: orgId }, true, "distribution", secondPapers ?? undefined);

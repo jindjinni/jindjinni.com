@@ -331,6 +331,7 @@ export function settingsSectionsFor(role: string): SettingsSection[] {
   ];
   out.push({ href: "/dashboard/settings/business-profile", label: "Business profile", blurb: "Your company's official details." });
   out.push({ href: "/dashboard/settings/appearance", label: "Appearance", blurb: "Your company's color theme." });
+  out.push({ href: "/dashboard/settings/email-flow", label: "How our emails work", blurb: "Who sends each email, to whom, and when." });
   if (isAdmin(role)) {
     out.push({ href: "/dashboard/settings/menus", label: "Menus", blurb: "Which departments show in the top bar, their order and names." });
     out.push({ href: "/dashboard/settings/company-profile", label: "Company profile", blurb: "Your details, account status and payment status." });

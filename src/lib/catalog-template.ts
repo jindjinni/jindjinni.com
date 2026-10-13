@@ -13,6 +13,7 @@
 // catalog tables (no customers, quotations, receiving history or recall lot
 // lists), and publishing is refused if the wording contains the
 // publisher's own company name / email / phone.
+import { fillShippingAddressFromProfile } from "@/lib/address-defaults";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import {
@@ -722,6 +723,7 @@ export async function applyDefaultPricesForOrg(organizationId: string): Promise<
     }
   }
   const settingsFilled = await applySettings(organizationId, t.data.settings, { overwriteDefaults: false });
+  if ((await fillShippingAddressFromProfile(organizationId)).filled) settingsFilled.push("your shipping address (from your business profile)");
   return { hasTemplate: true, priced, alreadyPriced, notInDefault, tiersAdded, settingsFilled, ...sync };
 }
 

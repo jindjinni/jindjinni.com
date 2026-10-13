@@ -25,6 +25,9 @@ export default async function CompanyEmailsPage() {
         Give each department its own email address. Customers and suppliers then see mail from your company, not from a shared sender, and replies come back to the right team.
         Use addresses on your company&rsquo;s own web address, like <strong>purchasing@{plan.domain ?? PLACEHOLDER_DOMAIN}</strong>, so people recognise who is writing.
       </p>
+      <p className="mt-2 max-w-3xl text-sm text-slate-600 dark:text-slate-400">
+        Not sure which email comes from where? <Link href="/dashboard/settings/email-flow" className="font-medium text-emerald-700 underline dark:text-emerald-400">Read how our emails work</Link>.
+      </p>
       <p className="mt-2 text-sm text-slate-500 dark:text-slate-400" data-testid="emails-progress">
         {connected} of {plan.rows.length} connected.
       </p>
