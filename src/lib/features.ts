@@ -102,6 +102,12 @@ export const FEATURES: FeatureDef[] = [
     blurb: "Receiving -> Intake form: the agent ticks options (packaging issues, damage, adjustment details, outcome, recommended adjustment, customer warning level) instead of typing, with a Custom note on each list. Each company can hide options or add its own in Receiving -> Form settings.",
     defaultStage: "mothership",
   },
+  {
+    key: "payout-links",
+    label: "Customer payment-details links",
+    blurb: "Purchasing -> a quotation: send the customer a private link where they enter the direct-deposit details we pay them with (PayPal, Cash App or Venmo). The details are stored encrypted, only owners, admins and Accounts can see them, and they are erased when the order is marked Paid.",
+    defaultStage: "mothership",
+  },
 ];
 
 export const featureDef = (key: string) => FEATURES.find((f) => f.key === key);

@@ -31,6 +31,9 @@ import { ShippingLabelSection } from "./shipping-label-section";
 import { ActionButton } from "@/components/action-button";
 import type { PriceTables } from "@/lib/purchasing-price";
 import { listRecalls } from "@/lib/receiving-recall-service";
+import { featureOn } from "@/lib/features";
+import { linkSummaryForQuotation, paidBeforeFor } from "@/lib/payout-link-service";
+import { PayoutLinkCard } from "./payout-link-card";
 
 // Buying several labels at once can take a little while.
 export const maxDuration = 60;
@@ -68,6 +71,9 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
         }));
 
   // Live tracking: what Shippo last told us about each box, and whether the news is old enough to ask again.
+  const payoutLinksOn = canWritePurchasing(org.role, org.access) && !org.viewAs && (await featureOn("payout-links", org.organizationId));
+  const payoutSummary = payoutLinksOn ? await linkSummaryForQuotation(org.organizationId, quotation.id) : null;
+  const payoutPaidBefore = payoutLinksOn ? await paidBeforeFor(org.organizationId, quotation.id) : { paidOrders: 0, lastPaidDay: null, otherOrders: 0 };
   const trackRows = await trackingForQuotations(org.organizationId, [quotation.id]);
   const labelName = new Map(labels.map((l) => [l.trackingNumber ?? "", labels.length > 1 ? `Label ${l.labelNumber}` : null]));
   const labelLink = new Map(labels.filter((l) => l.trackingNumber).map((l) => [l.trackingNumber as string, l.trackingUrl]));
@@ -220,6 +226,8 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
           </dl>
         </div>
       )}
+
+      {payoutLinksOn && <PayoutLinkCard quotationId={quotation.id} summary={payoutSummary} customerEmail={quotation.customerEmailSnapshot ?? ""} paidBefore={payoutPaidBefore} />}
 
       <div className="mt-6 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <table className="w-full text-left text-sm">

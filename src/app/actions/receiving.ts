@@ -53,6 +53,7 @@ import { storage, STORAGE_NOT_CONNECTED } from "@/lib/receiving-storage";
 import { auditReceiving, deleteIntakeLog, refreshIntakeLogPrice, writeIntakeLog } from "@/lib/receiving-service";
 import { finalPayout } from "@/lib/receiving-rules";
 import { paidBlockerFor, shouldAutoNeedToBePaid } from "@/lib/paid-gate";
+import { eraseDetailsWhenPaid } from "@/lib/payout-link-service";
 import { isShipmentLocked } from "@/lib/receiving-test-lock";
 import { clearNearHolds, listChecks, openNearHolds, rowIsRecalled, type RecallCheckView } from "@/lib/receiving-recall-service";
 import { autoCheckRowLots } from "@/lib/receiving-recall-auto";
@@ -457,6 +458,8 @@ async function applyAccountsFields(org: CurrentOrg, p: typeof receivingPackages.
     .update(receivingPackages)
     .set({ ...set, updatedAt: sql`(current_timestamp)` })
     .where(and(eq(receivingPackages.id, p.id), eq(receivingPackages.organizationId, org.organizationId)));
+  // Becoming Paid (Step 10 or the board): the customer's payment details are not needed any more.
+  if (set.paidAt) await eraseDetailsWhenPaid(org.organizationId, p.quotationId);
   return { ok: true };
 }
 

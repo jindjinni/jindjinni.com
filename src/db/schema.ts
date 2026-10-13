@@ -4152,6 +4152,47 @@ export const websiteRequestPayouts = sqliteTable(
 );
 
 /**
+ * "Where should we pay you?" links. Purchasing sends a customer one private link tied to ONE quotation/order; the customer types their
+ * direct-deposit details on a public page and they are stored here ENCRYPTED (bank-crypto.ts). Only the hash of the link's token is used to
+ * find a row (the link itself is kept encrypted too so staff can copy it again). A new link for the same order cancels the older one.
+ * The details are erased when the order is marked Paid (last 4 digits and dates stay). Never log or return payloadEnc.
+ */
+export const quotationPayoutLinks = sqliteTable(
+  "quotation_payout_links",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    quotationId: text("quotation_id").notNull(),
+    tokenHash: text("token_hash").notNull(),
+    tokenEnc: text("token_enc"),
+    status: text("status", { enum: ["OPEN", "SUBMITTED", "CANCELLED"] }).notNull().default("OPEN"),
+    expiresAt: text("expires_at").notNull(),
+    createdByUserId: text("created_by_user_id"),
+    /** Why Purchasing asked: first order / never paid / banking changed / other (see payout-link-rules.ts). */
+    reason: text("reason"),
+    reasonNote: text("reason_note"),
+    method: text("method"),
+    payloadEnc: text("payload_enc"),
+    accountLast4: text("account_last4"),
+    accountType: text("account_type"),
+    submittedAt: text("submitted_at"),
+    cancelledAt: text("cancelled_at"),
+    erasedAt: text("erased_at"),
+    erasedByUserId: text("erased_by_user_id"),
+    erasedReason: text("erased_reason"),
+    emailedTo: text("emailed_to"),
+    emailedAt: text("emailed_at"),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("quotation_payout_links_token_unique").on(t.tokenHash),
+    index("quotation_payout_links_quote_idx").on(t.organizationId, t.quotationId),
+  ],
+);
+
+/**
  * An order a pharmacy placed on the company's storefront or website. The order itself is an ordinary Sales order (salesDocumentId); this
  * row is the pharmacy-side record: its short reference, the key that makes a double submit return the same order, and who placed it.
  * The prices and quantities live only on the Sales order, set by the server from the pharmacy's own price sheet.

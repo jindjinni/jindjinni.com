@@ -10,6 +10,7 @@ import { isDay, isUsTimeZone, MAX_BUSINESS_DAYS } from "@/lib/payment-due";
 import { newId } from "@/lib/ids";
 import { auditReceiving } from "@/lib/receiving-service";
 import { paidBlockerFor } from "@/lib/paid-gate";
+import { eraseDetailsWhenPaid } from "@/lib/payout-link-service";
 
 export type AccountsActionState = { ok?: boolean; error?: string };
 
@@ -49,6 +50,7 @@ export async function markOrderPaid(packageId: string): Promise<AccountsActionSt
   if (res.rowsAffected === 0) return { error: "This order isn't waiting to be paid." };
 
   await auditReceiving(org, p.quotationId, "accounts", "Paid in Accounts (payment receipt attached)");
+  await eraseDetailsWhenPaid(org.organizationId, p.quotationId);
   revalidatePath("/dashboard/accounts", "layout");
   revalidatePath("/dashboard/receiving", "layout");
   revalidatePath("/dashboard/purchasing/quotations");
@@ -99,3 +101,4 @@ export async function removeClosureDay(id: string): Promise<AccountsActionState>
   revalidatePath("/dashboard/customer-service", "layout");
   return { ok: true };
 }
+
