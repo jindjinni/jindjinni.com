@@ -1,6 +1,7 @@
 // Data access layer -- every function here takes an explicit organizationId
 // and filters by it. Pages call these instead of touching `db` directly, so
 // there is exactly one place that has to get tenant-scoping right.
+import { sortCustomersAlphabetically } from "@/lib/customer-search";
 import { getReceivingStatusByQuotation } from "@/lib/receiving-queries";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db/client";
@@ -660,9 +661,9 @@ export async function getPurchasingCustomers(organizationId: string, opts: { inc
   const rows = await db
     .select()
     .from(purchasingCustomers)
-    .where(eq(purchasingCustomers.organizationId, organizationId))
-    .orderBy(purchasingCustomers.firstName);
-  return opts.includeArchived ? rows : rows.filter((r) => !r.archivedAt);
+    .where(eq(purchasingCustomers.organizationId, organizationId));
+  // Always alphabetical (A-Z by displayed name, ignoring capitals) -- SQL's own ordering puts lower-case names last.
+  return sortCustomersAlphabetically(opts.includeArchived ? rows : rows.filter((r) => !r.archivedAt));
 }
 
 export async function getPurchasingCustomer(organizationId: string, customerId: string) {

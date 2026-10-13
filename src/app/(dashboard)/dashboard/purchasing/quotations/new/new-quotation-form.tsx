@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { createPurchasingQuotation } from "@/app/actions/purchasing";
+import { CustomerPicker, type PickerCustomer } from "@/components/customer-picker";
 import { AddressAutocompleteFields } from "@/components/address-autocomplete-fields";
 
 type ActionState = { error?: string } | undefined;
@@ -9,7 +10,7 @@ type ActionState = { error?: string } | undefined;
 const inputClass =
   "rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-emerald-600 dark:border-slate-700 dark:bg-slate-800";
 
-type Customer = { id: string; firstName: string; lastName: string | null; noAddress?: boolean };
+type Customer = PickerCustomer;
 
 export function NewQuotationForm({
   customers,
@@ -19,6 +20,7 @@ export function NewQuotationForm({
   preselectedCustomerId?: string;
 }) {
   const [mode, setMode] = useState<"existing" | "new">(preselectedCustomerId ? "existing" : "new");
+  const [pickedId, setPickedId] = useState(preselectedCustomerId ?? "");
   const [state, formAction, pending] = useActionState<ActionState, FormData>(createPurchasingQuotation, undefined);
 
   return (
@@ -38,19 +40,7 @@ export function NewQuotationForm({
       )}
 
       {mode === "existing" ? (
-        <label className="mt-3 flex flex-col gap-1 text-sm">
-          <span className="text-slate-600 dark:text-slate-400">Choose customer</span>
-          <select name="customerId" required defaultValue={preselectedCustomerId ?? ""} className={`min-w-[14rem] ${inputClass}`}>
-            <option value="" disabled>
-              Choose a customer
-            </option>
-            {customers.map((c) => (
-              <option key={c.id} value={c.id}>
-                {[c.firstName, c.lastName].filter(Boolean).join(" ")}{c.noAddress ? " — address not added yet" : ""}
-              </option>
-            ))}
-          </select>
-        </label>
+        <CustomerPicker customers={customers} defaultId={pickedId} onChange={setPickedId} />
       ) : (
         <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="flex flex-col gap-1 text-sm">
@@ -95,7 +85,7 @@ export function NewQuotationForm({
 
       <button
         type="submit"
-        disabled={pending}
+        disabled={pending || (mode === "existing" && !pickedId)}
         className="mt-4 rounded-md bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800 disabled:opacity-60"
       >
         {pending ? "Starting..." : "Start quotation"}

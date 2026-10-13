@@ -61,6 +61,7 @@ import { applyExpiryRulesForOrg } from "@/lib/purchasing-expiry-plan";
 import { extractNdc } from "@/lib/purchasing-ndc";
 import { refreshGeneratedReceipt } from "@/lib/purchasing-receipt-docs";
 import { CustomerDedupeIndex } from "@/lib/purchasing-customer-dedupe";
+import { duplicateCustomerMessage, findDuplicateCustomer } from "@/lib/purchasing-customer-lookup";
 import { customerValidationError, missingCustomerFields } from "@/lib/purchasing-customer-rules";
 import { pickLabelRate, type ShippoAddress } from "@/lib/shippo";
 import { parseCarrier, parseLabelCount, CARRIER_NAME } from "@/lib/shipping-labels";
@@ -150,6 +151,17 @@ export async function createPurchasingCustomer(
   });
   if (invalid) return { error: invalid };
 
+  const duplicate = await findDuplicateCustomer(org.organizationId, {
+    firstName,
+    lastName: trimmed(formData, "lastName"),
+    email: trimmed(formData, "email"),
+    phone: trimmed(formData, "phone"),
+    street1: trimmed(formData, "addressStreet1"),
+    city: trimmed(formData, "addressCity"),
+    zip: trimmed(formData, "addressZip"),
+  });
+  if (duplicate) return { error: duplicateCustomerMessage(duplicate) };
+
   const customerId = newId("pcust");
   await db.insert(purchasingCustomers).values({
     id: customerId,
@@ -198,6 +210,23 @@ export async function updatePurchasingCustomer(
     zip: trimmed(formData, "addressZip"),
   });
   if (invalid) return { error: invalid };
+
+  const duplicate = await findDuplicateCustomer(
+    org.organizationId,
+    {
+      firstName,
+      lastName: trimmed(formData, "lastName"),
+      email: trimmed(formData, "email"),
+      phone: trimmed(formData, "phone"),
+      street1: trimmed(formData, "addressStreet1"),
+      city: trimmed(formData, "addressCity"),
+      zip: trimmed(formData, "addressZip"),
+    },
+    customerId,
+  );
+  if (duplicate) {
+    return { error: `These details would make this customer a duplicate (${duplicate.reason.charAt(0).toLowerCase()}${duplicate.reason.slice(1)}). Nothing was saved -- fix the details, or open the other customer instead.` };
+  }
 
   await db
     .update(purchasingCustomers)
@@ -1250,6 +1279,17 @@ export async function createPurchasingQuotation(
     });
     if (invalid) return { error: invalid };
 
+    const duplicate = await findDuplicateCustomer(org.organizationId, {
+      firstName,
+      lastName: trimmed(formData, "newCustomerLastName"),
+      email: trimmed(formData, "newCustomerEmail"),
+      phone: trimmed(formData, "newCustomerPhone"),
+      street1: trimmed(formData, "newCustomerAddressStreet1"),
+      city: trimmed(formData, "newCustomerAddressCity"),
+      zip: trimmed(formData, "newCustomerAddressZip"),
+    });
+    if (duplicate) return { error: duplicateCustomerMessage(duplicate) };
+
     customerId = newId("pcust");
     const newCustomerRow = {
       id: customerId,
@@ -2172,6 +2212,9 @@ export async function importPurchasingCustomers(
       lastName: purchasingCustomers.lastName,
       email: purchasingCustomers.email,
       phone: purchasingCustomers.phone,
+      street1: purchasingCustomers.addressStreet1,
+      city: purchasingCustomers.addressCity,
+      zip: purchasingCustomers.addressZip,
     })
     .from(purchasingCustomers)
     .where(eq(purchasingCustomers.organizationId, org.organizationId));
@@ -2219,7 +2262,12 @@ export async function importPurchasingCustomers(
     }
 
     const phoneValue = phoneCol ? row[phoneCol]?.trim() || null : null;
-    const dup = dedupe.find({ firstName, lastName, email, phone: phoneValue });
+    const rowAddress = {
+      street1: street1Col ? row[street1Col]?.trim() || null : null,
+      city: cityCol ? row[cityCol]?.trim() || null : null,
+      zip: zipCol ? row[zipCol]?.trim() || null : null,
+    };
+    const dup = dedupe.find({ firstName, lastName, email, phone: phoneValue, ...rowAddress });
     if (dup) {
       skipped++;
       skippedDetails.push(`Row ${rowNumber}: ${`${firstName} ${lastName}`.trim()} skipped as a duplicate -- ${dup.reason}.`);
@@ -2241,7 +2289,7 @@ export async function importPurchasingCustomers(
       addressState: stateCol ? row[stateCol]?.trim() || null : null,
       addressZip: zipCol ? row[zipCol]?.trim() || null : null,
     });
-    dedupe.add(newCustomerId, { firstName, lastName, email, phone: phoneValue });
+    dedupe.add(newCustomerId, { firstName, lastName, email, phone: phoneValue, ...rowAddress });
     inserted++;
   }
 

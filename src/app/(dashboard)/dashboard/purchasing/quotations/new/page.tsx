@@ -18,6 +18,8 @@ export default async function NewQuotationPage({
     id: c.id,
     firstName: c.firstName,
     lastName: c.lastName,
+    email: c.email,
+    phone: c.phone,
     noAddress: !hasFullAddress({ street1: c.addressStreet1, city: c.addressCity, state: c.addressState, zip: c.addressZip }),
   }));
 

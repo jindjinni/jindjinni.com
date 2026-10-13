@@ -2,6 +2,8 @@ import Link from "next/link";
 import { requireOrg } from "@/lib/tenant";
 import { getPurchasingCustomers, getPurchasingQuotationCountsByCustomer, purchasingCustomerName } from "@/lib/queries";
 import { missingContactDetails, missingCustomerFields } from "@/lib/purchasing-customer-rules";
+import { customerSearchText } from "@/lib/customer-search";
+import { CustomerListSearch } from "./customer-list-search";
 import { AddCustomerForm } from "./add-customer-form";
 import { ImportSpreadsheetForm } from "../import-spreadsheet-form";
 import { importPurchasingCustomers } from "@/app/actions/purchasing";
@@ -25,7 +27,7 @@ export default async function PurchasingCustomersPage() {
       <ImportSpreadsheetForm
         action={importPurchasingCustomers}
         title="Import from CSV/Excel"
-        columnsHelp={"Required columns: Name (or First Name; Last Name is optional), Address, City, State, Zip. Rows missing any of these are skipped and listed. Optional: Email, Phone, Reference #. Duplicates are never added: someone with the same email, or the same name and phone, is skipped and shown in the list below."}
+        columnsHelp={"Required column: Name (or First Name; Last Name is optional). Everything else is optional and can be added later: Email, Phone, Address, City, State, Zip, Reference #. Duplicates are never added: someone with the same email, the same name and phone, the same name and address, or the same phone and address is skipped and shown in the list below."}
         templateFilename="customers-template.csv"
         templateHeaders={["First Name", "Last Name", "Email", "Phone", "Address", "City", "State", "Zip"]}
         templateSampleRow={["Jordan", "Alvarez", "jordan@example.com", "555-010-0100", "123 Main St", "Springfield", "IL", "62701"]}
@@ -33,7 +35,9 @@ export default async function PurchasingCustomersPage() {
 
       <AddCustomerForm />
 
-      <div className="mt-6 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <CustomerListSearch total={customers.length} />
+
+      <div className="mt-3 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-slate-200 text-slate-500 dark:border-slate-800 dark:text-slate-400">
             <tr>
@@ -53,7 +57,7 @@ export default async function PurchasingCustomersPage() {
               </tr>
             )}
             {customers.map((c) => (
-              <tr key={c.id} className="border-b border-slate-100 last:border-0 dark:border-slate-800">
+              <tr key={c.id} data-customer-row data-search={customerSearchText(c, true)} className="border-b border-slate-100 last:border-0 dark:border-slate-800">
                 <td className="px-4 py-3">
                   <Link
                     href={`/dashboard/purchasing/customers/${c.id}`}
