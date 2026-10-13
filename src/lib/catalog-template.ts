@@ -691,10 +691,34 @@ export async function applyDefaultPricesForOrg(organizationId: string): Promise<
   }
   let tiersAdded = 0;
   if (t.data.bonusTiers && t.data.bonusTiers.length > 0) {
-    const [has] = await db.select({ id: purchasingBonusTiers.id }).from(purchasingBonusTiers).where(eq(purchasingBonusTiers.organizationId, organizationId)).limit(1);
-    if (!has) {
+    const have = await db.select().from(purchasingBonusTiers).where(eq(purchasingBonusTiers.organizationId, organizationId));
+    if (have.length === 0) {
       await insertBonusTiers(organizationId, t.data.bonusTiers);
       tiersAdded = t.data.bonusTiers.length;
+    } else if (sync.matched) {
+      // No quotations yet: line the tiers up with the default. Missing ones are added, ones that aren't in the default are hidden.
+      const tierKey = (x: { thresholdAmount: number; bonusAmount: number }) => `${x.thresholdAmount}|${x.bonusAmount}`;
+      const haveBy = new Map(have.map((x) => [tierKey(x), x]));
+      const wanted = new Set(t.data.bonusTiers.map(tierKey));
+      let sort = have.length;
+      for (const x of t.data.bonusTiers) {
+        const cur = haveBy.get(tierKey(x));
+        if (!cur) {
+          await db.insert(purchasingBonusTiers).values({ id: newId("pbonus"), organizationId, thresholdAmount: x.thresholdAmount, bonusAmount: x.bonusAmount, description: x.description, sortOrder: sort++, active: x.active });
+          tiersAdded++;
+        } else if (cur.active !== x.active || (!cur.description && x.description)) {
+          await db
+            .update(purchasingBonusTiers)
+            .set({ active: x.active, description: cur.description ?? x.description })
+            .where(and(eq(purchasingBonusTiers.id, cur.id), eq(purchasingBonusTiers.organizationId, organizationId)));
+        }
+      }
+      for (const cur of have) {
+        if (!wanted.has(tierKey(cur)) && cur.active) {
+          await db.update(purchasingBonusTiers).set({ active: false }).where(and(eq(purchasingBonusTiers.id, cur.id), eq(purchasingBonusTiers.organizationId, organizationId)));
+          sync.hidden++;
+        }
+      }
     }
   }
   const settingsFilled = await applySettings(organizationId, t.data.settings, { overwriteDefaults: false });
