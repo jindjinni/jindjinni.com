@@ -7,12 +7,12 @@
 import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db/client";
-import { organizations, purchasingQuotations } from "@/db/schema";
+import { purchasingQuotations } from "@/db/schema";
 import { requireOrg, type CurrentOrg } from "@/lib/tenant";
 import { canRevealBankDetails, canWritePurchasing } from "@/lib/permissions";
 import { featureOn } from "@/lib/features";
 import { sendDeptEmail } from "@/lib/mail-system";
-import { cancelLink, erasePaymentDetails, linkAddressFor, linkSummaryForQuotation, makeLink, noteEmailed, revealLinkDetails } from "@/lib/payout-link-service";
+import { cancelLink, erasePaymentDetails, linkAddressFor, linkSummaryForQuotation, makeLink, noteEmailed, receiptCompanyName, revealLinkDetails } from "@/lib/payout-link-service";
 import { cleanReason, linkEmailContent, type PayoutDetails } from "@/lib/payout-link-rules";
 
 type Gate = { org: CurrentOrg } | { error: string };
@@ -83,8 +83,7 @@ async function composeEmail(organizationId: string, quotationId: string) {
     .where(and(eq(purchasingQuotations.id, quotationId), eq(purchasingQuotations.organizationId, organizationId)))
     .limit(1);
   if (!q) return { error: "That order wasn't found." };
-  const [org] = await db.select({ name: organizations.name }).from(organizations).where(eq(organizations.id, organizationId)).limit(1);
-  return { linkId: s.id, to: q.email ?? "", mail: linkEmailContent({ companyName: org?.name ?? "Our company", quotationNumber: q.number, customerName: q.name, url, reason: s.reason }) };
+  return { linkId: s.id, to: q.email ?? "", mail: linkEmailContent({ companyName: await receiptCompanyName(organizationId), quotationNumber: q.number, customerName: q.name, url, reason: s.reason }) };
 }
 
 /** Sends it. Only runs when a person presses Send. The wording is built again on the server; only the address can be changed. */

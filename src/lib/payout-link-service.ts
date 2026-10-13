@@ -11,12 +11,20 @@ import { decryptBank, encryptBank } from "@/lib/bank-crypto";
 import { newId } from "@/lib/ids";
 import { featureOn } from "@/lib/features";
 import { isHeldBack } from "@/lib/tenant";
+import { getBusinessProfile, getQuotationProfile, resolveBusinessDocumentIdentity } from "@/lib/queries";
 import { operationHeld } from "@/lib/second-business-rules";
 import { appUrl } from "@/lib/password-reset";
 import {
   customerLinkState, detailsFromJson, detailsToJson, hashLinkToken, linkUrl, looksLikeLinkToken, newLinkToken, staffLinkState,
   type CustomerLinkState, type PayoutDetails, type StaffLinkState,
 } from "@/lib/payout-link-rules";
+
+/** The company name exactly as it is printed on that company's quotation receipt (its Quotation company name, else its business name), so the customer sees ONE name everywhere. */
+export async function receiptCompanyName(organizationId: string): Promise<string> {
+  const [o] = await db.select({ name: organizations.name }).from(organizations).where(eq(organizations.id, organizationId)).limit(1);
+  const [profile, quotationProfile] = await Promise.all([getBusinessProfile(organizationId), getQuotationProfile(organizationId)]);
+  return resolveBusinessDocumentIdentity(o?.name ?? "Our company", profile, quotationProfile).displayName;
+}
 
 const aadFor = (organizationId: string, linkId: string) => `${organizationId}|plink|${linkId}`;
 const tokAad = (organizationId: string, linkId: string) => `${organizationId}|plink-token|${linkId}`;
@@ -55,7 +63,7 @@ export async function linkAddressFor(organizationId: string, linkId: string): Pr
     .limit(1);
   if (!r || r.status !== "OPEN" || !r.tokenEnc || Date.parse(r.expiresAt) <= Date.now()) return null;
   const token = decryptBank(r.tokenEnc, tokAad(organizationId, r.id));
-  return token && looksLikeLinkToken(token) ? linkUrl(appUrl(), token) : null;
+  return token && looksLikeLinkToken(token) ? linkUrl(appUrl(), token, await receiptCompanyName(organizationId)) : null;
 }
 
 export type MakeLinkResult = { ok: true; linkId: string; url: string } | { ok: false; error: string };
@@ -92,7 +100,7 @@ export async function makeLink(organizationId: string, userId: string, quotation
     id, organizationId, quotationId, tokenHash: t.tokenHash, tokenEnc: encryptBank(t.token, tokAad(organizationId, id)), status: "OPEN", expiresAt: t.expiresAt, createdByUserId: userId, reason: opts.reason, reasonNote: opts.reasonNote ?? null,
   });
   await audit(organizationId, userId, quotationId, "payment_link_made", `Made a payment-details link for ${q.number} (${opts.reason}${opts.reasonNote ? ": " + opts.reasonNote : ""})${received.length ? " (the earlier details were erased)" : ""}`);
-  return { ok: true, linkId: id, url: linkUrl(appUrl(), t.token) };
+  return { ok: true, linkId: id, url: linkUrl(appUrl(), t.token, await receiptCompanyName(organizationId)) };
 }
 
 /** Ends the waiting link (the customer's page then says it is closed). Details already sent are kept unless erased separately. */
@@ -138,7 +146,6 @@ export async function publicLinkByToken(token: string): Promise<PublicLink | nul
   const [r] = await db
     .select({
       link: quotationPayoutLinks,
-      companyName: organizations.name,
       parent: organizations.parentOrganizationId,
       closedAt: organizations.closedAt,
       approval: organizations.approvalStatus,
@@ -162,7 +169,7 @@ export async function publicLinkByToken(token: string): Promise<PublicLink | nul
   const paid = await orderIsPaid(r.link.organizationId, r.link.quotationId);
   const state = customerLinkState(r.link, paid, Date.now());
   return {
-    id: r.link.id, state, companyName: r.companyName, quotationNumber: r.number, customerName: r.customer, expiresAt: r.link.expiresAt,
+    id: r.link.id, state, companyName: await receiptCompanyName(r.link.organizationId), quotationNumber: r.number, customerName: r.customer, expiresAt: r.link.expiresAt,
     receivedLine: r.link.status === "SUBMITTED" && r.link.accountLast4 ? `${r.link.accountType === "savings" ? "Savings" : "Checking"} account ending ${r.link.accountLast4}` : null,
   };
 }

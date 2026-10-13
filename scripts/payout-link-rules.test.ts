@@ -1,7 +1,7 @@
 // "Where should we pay you?" links: the customer's fields, the three methods, the link token and the states.
 import assert from "node:assert/strict";
 import {
-  FINTECH_NOTE, METHOD_HELP, PAYOUT_METHODS, addressLine, cleanPayoutDetails, customerLinkState, detailsFromJson, detailsToJson, hashLinkToken, linkEmailContent, linkUrl,
+  companySlug, FINTECH_NOTE, METHOD_HELP, PAYOUT_METHODS, addressLine, cleanPayoutDetails, customerLinkState, detailsFromJson, detailsToJson, hashLinkToken, linkEmailContent, linkUrl,
   looksLikeLinkToken, maskedPayoutLine, LINK_REASONS, ONE_TIME_TEXT, cleanReason, reasonCustomerLine, reasonLabel, newLinkToken, staffLinkState, LINK_VALID_DAYS,
 } from "../src/lib/payout-link-rules";
 
@@ -108,4 +108,13 @@ assert.match(FINTECH_NOTE, /PayPal, Cash App, Venmo and Chime/);
 assert.match(FINTECH_NOTE, /customer service/);
 assert.deepEqual(Object.keys(METHOD_HELP).sort(), PAYOUT_METHODS.map((m) => m.key).sort());
 assert.equal(maskedPayoutLine("bank", "checking", "1234"), "Bank account - Checking account ending 1234");
+assert.equal(companySlug("USA Test Strips Center"), "usa-test-strips-center");
+assert.equal(companySlug("Receipt Name & Co."), "receipt-name-and-co");
+assert.equal(companySlug("  Caf\u00e9 -- Ni\u00f1o!! "), "cafe-nino");
+assert.equal(companySlug("***"), "company");
+assert.equal(companySlug(null), "company");
+assert.ok(companySlug("a".repeat(120)).length <= 50);
+const tok = "A".repeat(43);
+assert.equal(linkUrl("https://jindjinni.com/", tok, "USA Test Strips Center"), `https://jindjinni.com/payment-details/usa-test-strips-center/${tok}`);
+assert.equal(linkUrl("https://jindjinni.com", tok), `https://jindjinni.com/payment-details/${tok}`);
 console.log("payout-link-rules ok");

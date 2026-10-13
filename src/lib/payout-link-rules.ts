@@ -133,7 +133,14 @@ export function newLinkToken(nowMs: number): { token: string; tokenHash: string;
 }
 /** 43 characters of letters, digits, "-" and "_". Anything else is refused before it touches the database. */
 export const looksLikeLinkToken = (t: string) => /^[A-Za-z0-9_-]{43}$/.test(t);
-export const linkUrl = (base: string, token: string) => `${base.replace(/\/+$/, "")}/payment-details/${token}`;
+/** The company's name as a web-address word: "USA Test Strips Center" -> "usa-test-strips-center". Only for looks; the token decides everything. */
+export function companySlug(name: string | null | undefined): string {
+  const s = String(name ?? "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/&/g, " and ").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 50).replace(/-+$/g, "");
+  return s || "company";
+}
+/** The address the customer opens. With a company name it reads .../payment-details/usa-test-strips-center/<token>, so the link names the company they deal with. */
+export const linkUrl = (base: string, token: string, companyName?: string | null) =>
+  `${base.replace(/\/+$/, "")}/payment-details/${companyName ? companySlug(companyName) + "/" : ""}${token}`;
 
 export type LinkRow = { status: string; expiresAt: string; erasedAt: string | null };
 /** What the CUSTOMER's page does with a link. */

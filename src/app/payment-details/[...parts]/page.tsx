@@ -1,17 +1,34 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { publicLinkByToken } from "@/lib/payout-link-service";
+import { companySlug } from "@/lib/payout-link-rules";
 import { PaymentDetailsForm } from "./payment-form";
 
-export const metadata: Metadata = { title: "Payment details", robots: { index: false, follow: false }, referrer: "no-referrer" };
+/** The address is /payment-details/<token> (older links) or /payment-details/<company-name>/<token>. The LAST piece is the token; anything longer is not a link. */
+function split(parts: string[] | undefined): { token: string; company?: string } {
+  const p = (parts ?? []).map((x) => { try { return decodeURIComponent(x); } catch { return ""; } });
+  if (p.length === 1) return { token: p[0] };
+  if (p.length === 2) return { token: p[1], company: p[0] };
+  return { token: "" };
+}
+const PRIVATE = { robots: { index: false, follow: false }, referrer: "no-referrer" } as const;
+/** The browser tab says "Payment details - <company>" for a real link and just "Payment details" for anything else. */
+export async function generateMetadata({ params }: { params: Promise<{ parts: string[] }> }): Promise<Metadata> {
+  const { token } = split((await params).parts);
+  const link = await publicLinkByToken(token);
+  return { title: link ? `Payment details - ${link.companyName}` : "Payment details", ...PRIVATE };
+}
 export const dynamic = "force-dynamic";
 
 /**
  * The page a customer reaches from the private link we sent. The company, the order and the customer's name come from the link's token only.
  * A link that is wrong, ended, expired or already used for a paid order shows a plain message and never says which company it belonged to.
  */
-export default async function PaymentDetailsPage({ params }: { params: Promise<{ token: string }> }) {
-  const { token } = await params;
+export default async function PaymentDetailsPage({ params }: { params: Promise<{ parts: string[] }> }) {
+  const { token, company } = split((await params).parts);
   const link = await publicLinkByToken(token);
+  // The address always names the company the customer deals with (the name printed on the quotation): an older plain link or a wrong name is sent to it.
+  if (link && company !== companySlug(link.companyName)) redirect(`/payment-details/${companySlug(link.companyName)}/${token}`);
   const shell = (name: string | null, body: React.ReactNode) => (
     <div className="auth-theme relative flex min-h-full flex-1 flex-col overflow-x-clip bg-white">
       <header className="border-b border-line/70 bg-white">
@@ -20,7 +37,7 @@ export default async function PaymentDetailsPage({ params }: { params: Promise<{
         </div>
       </header>
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-10 sm:px-6 sm:py-14">{body}</main>
-      <footer className="px-4 pb-8 text-center text-xs font-semibold text-muted">Powered by jindjinni</footer>
+      <footer className="px-4 pb-8 text-center text-xs font-semibold text-muted" data-testid="pl-footer">{name ? `Private and encrypted. ${name} is the only company that can see what you send.` : ""}</footer>
     </div>
   );
   const message = (title: string, text: string) => shell(link?.companyName ?? null, (
