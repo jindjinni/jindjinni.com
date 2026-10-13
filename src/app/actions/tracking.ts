@@ -3,9 +3,9 @@
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { requireOrg } from "@/lib/tenant";
-import { canViewPurchasing, isAdmin } from "@/lib/permissions";
+import { canViewPurchasing, isAdmin, isPurchasingManager } from "@/lib/permissions";
 import { getPurchasingQuotationWithItems } from "@/lib/queries";
-import { syncQuotationTracking, turnOnLiveTracking } from "@/lib/tracking-service";
+import { refreshCompanyTracking, syncQuotationTracking, turnOnLiveTracking } from "@/lib/tracking-service";
 
 export type TrackingActionState = { ok?: boolean; error?: string };
 
@@ -33,4 +33,18 @@ export async function enableLiveTracking(): Promise<TrackingActionState> {
   const res = await turnOnLiveTracking(org.organizationId, origin);
   revalidatePath("/dashboard/purchasing/tracking");
   return res.ok ? { ok: true } : { error: res.error };
+}
+
+export type RefreshAllState = { ok?: boolean; error?: string; started?: number; refreshed?: number; failed?: number; remaining?: number };
+
+/** Updates every order's tracking now (a few at a time, within about 40 seconds; press again if some remain). Purchasing managers only. */
+export async function refreshAllTracking(): Promise<RefreshAllState> {
+  const org = await requireOrg();
+  if (!isPurchasingManager(org.role)) return { error: "Only a Purchasing manager can update all tracking." };
+  const res = await refreshCompanyTracking(org.organizationId, { budgetMs: 40_000 });
+  revalidatePath("/dashboard/purchasing/tracking");
+  revalidatePath("/dashboard/purchasing/quotations");
+  revalidatePath("/dashboard/receiving", "layout");
+  if (!res.connected) return { error: "Shippo isn't connected, so packages can't be checked yet. An owner or admin connects it in Purchasing → Settings → Connectors." };
+  return { ok: true, started: res.started, refreshed: res.refreshed, failed: res.failed, remaining: res.remaining };
 }

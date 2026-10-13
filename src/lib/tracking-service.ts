@@ -231,7 +231,7 @@ export async function sweepTracking(limit = 150): Promise<{ added: number; refre
         sql`not exists (select 1 from purchasing_tracking t where t.quotation_id = ${purchasingQuotations.id})`,
       ),
     )
-    .limit(50);
+    .limit(400);
   let added = 0;
   for (const q of untracked) {
     await ensureTrackers(q.organizationId, q.id);
@@ -305,4 +305,86 @@ export async function trackingForQuotations(organizationId: string, quotationIds
     .from(purchasingTracking)
     .where(and(eq(purchasingTracking.organizationId, organizationId), inArray(purchasingTracking.quotationId, quotationIds)))
     .orderBy(asc(purchasingTracking.createdAt), asc(purchasingTracking.trackingNumber));
+}
+
+/** Where a company's tracking stands, in plain counts (for the Shipment Tracking page). Archived orders are left out. */
+export type TrackingHealth = { withNumber: number; followed: number; notFollowedYet: number; checked: number; notChecked: number; problems: number; delivered: number; moving: number; lastChecked: string | null };
+export async function trackingHealth(organizationId: string): Promise<TrackingHealth> {
+  const [withNumber] = await db
+    .select({ n: sql<number>`count(*)` })
+    .from(purchasingQuotations)
+    .where(and(eq(purchasingQuotations.organizationId, organizationId), isNull(purchasingQuotations.archivedAt), or(sql`${purchasingQuotations.trackingNumber} is not null and ${purchasingQuotations.trackingNumber} <> ''`, sql`${purchasingQuotations.labelTrackingNumber} is not null and ${purchasingQuotations.labelTrackingNumber} <> ''`)));
+  const [t] = await db
+    .select({
+      followed: sql<number>`count(distinct ${purchasingTracking.quotationId})`,
+      checked: sql<number>`sum(case when ${purchasingTracking.lastCheckedAt} is not null and ${purchasingTracking.lastError} is null then 1 else 0 end)`,
+      notChecked: sql<number>`sum(case when ${purchasingTracking.lastCheckedAt} is null then 1 else 0 end)`,
+      problems: sql<number>`sum(case when ${purchasingTracking.lastError} is not null then 1 else 0 end)`,
+      delivered: sql<number>`sum(case when ${purchasingTracking.status} = 'Delivered' then 1 else 0 end)`,
+      moving: sql<number>`sum(case when ${purchasingTracking.lastCheckedAt} is not null and ${purchasingTracking.status} not in ('Delivered','Returned','Unknown') then 1 else 0 end)`,
+      last: sql<string | null>`max(${purchasingTracking.lastCheckedAt})`,
+    })
+    .from(purchasingTracking)
+    .innerJoin(purchasingQuotations, eq(purchasingQuotations.id, purchasingTracking.quotationId))
+    .where(and(eq(purchasingTracking.organizationId, organizationId), isNull(purchasingQuotations.archivedAt)));
+  const total = Number(withNumber?.n ?? 0);
+  const followed = Number(t?.followed ?? 0);
+  return {
+    withNumber: total,
+    followed,
+    notFollowedYet: Math.max(0, total - followed),
+    checked: Number(t?.checked ?? 0),
+    notChecked: Number(t?.notChecked ?? 0),
+    problems: Number(t?.problems ?? 0),
+    delivered: Number(t?.delivered ?? 0),
+    moving: Number(t?.moving ?? 0),
+    lastChecked: t?.last ?? null,
+  };
+}
+
+/**
+ * Brings a company's tracking up to date now: starts following every order that has a number but no tracker (no limit, it only
+ * writes rows), then asks Shippo about the boxes never checked, those with a problem and the stale ones, a few at a time, until
+ * the time budget is spent. Never throws. `remaining` > 0 means press it again (the nightly check also finishes the rest).
+ */
+export async function refreshCompanyTracking(organizationId: string, opts: { budgetMs?: number; onlyQuotationIds?: string[] } = {}): Promise<{ started: number; refreshed: number; failed: number; remaining: number; connected: boolean }> {
+  const deadline = Date.now() + (opts.budgetMs ?? 40_000);
+  const ids = opts.onlyQuotationIds
+    ? opts.onlyQuotationIds
+    : (
+        await db
+          .select({ id: purchasingQuotations.id })
+          .from(purchasingQuotations)
+          .where(
+            and(
+              eq(purchasingQuotations.organizationId, organizationId),
+              isNull(purchasingQuotations.archivedAt),
+              or(sql`${purchasingQuotations.trackingNumber} is not null and ${purchasingQuotations.trackingNumber} <> ''`, sql`${purchasingQuotations.labelTrackingNumber} is not null and ${purchasingQuotations.labelTrackingNumber} <> ''`),
+              sql`not exists (select 1 from purchasing_tracking t where t.quotation_id = ${purchasingQuotations.id})`,
+            ),
+          )
+      ).map((r) => r.id);
+  let started = 0;
+  for (const id of ids) {
+    try {
+      await ensureTrackers(organizationId, id);
+      started++;
+    } catch {
+      // one bad row never stops the rest
+    }
+  }
+  const access = await resolveShippo(organizationId);
+  if (!access.ok) return { started, refreshed: 0, failed: 0, remaining: 0, connected: false };
+  const base = and(eq(purchasingTracking.organizationId, organizationId), notInArray(purchasingTracking.status, ["Delivered", "Returned"]));
+  const scope = opts.onlyQuotationIds ? and(base, inArray(purchasingTracking.quotationId, opts.onlyQuotationIds)) : base;
+  const due = (await db.select().from(purchasingTracking).where(scope).orderBy(asc(purchasingTracking.lastCheckedAt))).filter((r) => isStale(r) || r.lastError);
+  let refreshed = 0;
+  let failed = 0;
+  let i = 0;
+  for (; i < due.length && Date.now() < deadline; i += 5) {
+    const results = await Promise.all(due.slice(i, i + 5).map((r) => refreshTracker(r, access.client)));
+    refreshed += results.filter(Boolean).length;
+    failed += results.filter((ok) => !ok).length;
+  }
+  return { started, refreshed, failed, remaining: Math.max(0, due.length - i), connected: true };
 }

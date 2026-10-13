@@ -7,12 +7,14 @@
 // listed in the report; new customers are added automatically.
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { purchasingCustomers, purchasingQuotations, purchasingAuditLog } from "@/db/schema";
 import { requireOrg, type CurrentOrg } from "@/lib/tenant";
 import { canWritePurchasing } from "@/lib/permissions";
 import { newId } from "@/lib/ids";
+import { refreshCompanyTracking } from "@/lib/tracking-service";
 import { CustomerDedupeIndex } from "@/lib/purchasing-customer-dedupe";
 import { parseSpreadsheetFile, type ParsedSheet } from "@/lib/spreadsheet-import";
 import {
@@ -247,6 +249,20 @@ export async function importQuotations(_prev: QuotationImportState, formData: Fo
     const chunk = quoteValues.slice(i, i + 50);
     await db.insert(purchasingQuotations).values(chunk);
     imported += chunk.length;
+  }
+
+  // Start following every imported package right away (after the answer is sent, so the upload isn't kept waiting). What
+  // doesn't fit in the time is picked up by "Update all tracking now" and the nightly check.
+  const trackIds = quoteValues.filter((q) => q.trackingNumber).map((q) => q.id);
+  if (trackIds.length > 0) {
+    const orgId = org.organizationId;
+    after(async () => {
+      try {
+        await refreshCompanyTracking(orgId, { onlyQuotationIds: trackIds, budgetMs: 45_000 });
+      } catch (e) {
+        console.error("[import] start tracking failed:", e);
+      }
+    });
   }
 
   await db.insert(purchasingAuditLog).values({
