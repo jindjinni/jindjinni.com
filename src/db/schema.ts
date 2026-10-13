@@ -1017,6 +1017,8 @@ export const purchasingQuotations = sqliteTable(
     importedItemsText: text("imported_items_text"),
     importedShippingAddress: text("imported_shipping_address"),
     importedAt: text("imported_at"),
+    /** One unique name per order for its receipt PDF (reference # + date + customer, no commas), so the right receipt always goes to the right order. Nullable: older orders get it by uploading the "Receipt File Name" column. */
+    receiptKey: text("receipt_key"),
     createdByUserId: text("created_by_user_id").references(() => users.id),
     archivedAt: text("archived_at"),
     ...timestamps,

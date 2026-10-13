@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { QuotationRowMenu } from "./quotation-row-menu";
 import { QuotationImportPanel } from "./quotation-import-panel";
+import { QuotationDeletePanel } from "./quotation-delete-panel";
 import { STATUS_LABELS } from "@/lib/receiving-rules";
 import { STATUS_PILL, chipClass } from "@/lib/receiving-ui";
 import { PILL_BASE, QUOTATION_STATUS_LABELS, QUOTATION_STATUS_PILL, totalPillClass } from "@/lib/purchasing-ui";
@@ -13,6 +14,8 @@ import { pillClass } from "@/lib/tracking-rules";
 export type QuotationSummaryRow = {
   id: string;
   quotationNumber: string;
+  /** The unique name for this order's receipt PDF (reference # + date + customer), when it has one. */
+  receiptKey?: string | null;
   quotationDate: string;
   status: string;
   grandTotal: number;
@@ -41,8 +44,11 @@ function csvEscape(value: string) {
   return value;
 }
 
-export function QuotationsTable({ quotations, canImport = false }: { quotations: QuotationSummaryRow[]; canImport?: boolean }) {
+export function QuotationsTable({ quotations, canImport = false, canDelete = false }: { quotations: QuotationSummaryRow[]; canImport?: boolean; canDelete?: boolean }) {
   const [showImport, setShowImport] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  // null = closed; "picked" = delete the ticked ones; "all" = delete every quotation.
+  const [deleting, setDeleting] = useState<null | { ids: string[] | null }>(null);
   const [search, setSearch] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
@@ -57,6 +63,7 @@ export function QuotationsTable({ quotations, canImport = false }: { quotations:
       if (!q) return true;
       return (
         row.quotationNumber.toLowerCase().includes(q) ||
+        (row.receiptKey ?? "").toLowerCase().includes(q) ||
         row.customerName.toLowerCase().includes(q) ||
         (row.email ?? "").toLowerCase().includes(q) ||
         (row.phone ?? "").toLowerCase().includes(q) ||
@@ -70,6 +77,25 @@ export function QuotationsTable({ quotations, canImport = false }: { quotations:
   const currentPage = Math.min(page, pageCount);
   const pageStart = (currentPage - 1) * pageSize;
   const visible = filtered.slice(pageStart, pageStart + pageSize);
+
+  const pageIds = visible.map((r) => r.id);
+  const allOnPageTicked = pageIds.length > 0 && pageIds.every((id) => selected.has(id));
+  function toggleOne(id: string) {
+    setSelected((cur) => {
+      const next = new Set(cur);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+  function togglePage() {
+    setSelected((cur) => {
+      const next = new Set(cur);
+      if (allOnPageTicked) pageIds.forEach((id) => next.delete(id));
+      else pageIds.forEach((id) => next.add(id));
+      return next;
+    });
+  }
 
   function goToPage(n: number) {
     setPage(Math.min(Math.max(1, n), pageCount));
@@ -86,6 +112,7 @@ export function QuotationsTable({ quotations, canImport = false }: { quotations:
       "Shipping Info",
       "Items Quoted For",
       "Tracking #",
+      "Receipt File Name",
     ];
     const lines = [header.join(",")];
     for (const row of filtered) {
@@ -100,6 +127,7 @@ export function QuotationsTable({ quotations, canImport = false }: { quotations:
           row.shippingInfo,
           row.itemsSummary,
           row.trackingNumber ?? "",
+          row.receiptKey ?? "",
         ]
           .map((v) => csvEscape(String(v)))
           .join(","),
@@ -162,7 +190,7 @@ export function QuotationsTable({ quotations, canImport = false }: { quotations:
               setSearch(e.target.value);
               setPage(1);
             }}
-            placeholder="Search by reference, customer, email, phone, or tracking #..."
+            placeholder="Search by reference, customer, email, phone, tracking #, or receipt file name..."
             className="w-full rounded-lg border-0 bg-white py-2.5 pl-9 pr-3 text-sm text-slate-900 outline-none ring-1 ring-emerald-300 placeholder:text-slate-400 focus:ring-2 focus:ring-white"
           />
         </div>
@@ -233,13 +261,64 @@ export function QuotationsTable({ quotations, canImport = false }: { quotations:
           >
             Export
           </button>
+          {canDelete && quotations.length > 0 && (
+            <button
+              type="button"
+              data-testid="qdel-all"
+              onClick={() => setDeleting({ ids: null })}
+              className="rounded-md border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950/40"
+            >
+              Delete all…
+            </button>
+          )}
         </div>
       </div>
+
+      {canDelete && selected.size > 0 && (
+        <div data-testid="qsel-bar" className="mt-3 flex flex-wrap items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm dark:border-red-900 dark:bg-red-950/30">
+          <span className="font-medium text-red-900 dark:text-red-200">
+            {selected.size} selected
+          </span>
+          {filtered.length > pageIds.length && filtered.some((r) => !selected.has(r.id)) && (
+            <button
+              type="button"
+              data-testid="qsel-all-matching"
+              onClick={() => setSelected(new Set(filtered.map((r) => r.id)))}
+              className="text-xs text-red-800 underline dark:text-red-300"
+            >
+              Select all {filtered.length} matching
+            </button>
+          )}
+          <button
+            type="button"
+            data-testid="qsel-delete"
+            onClick={() => setDeleting({ ids: [...selected] })}
+            className="rounded-md bg-red-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-800"
+          >
+            Delete selected…
+          </button>
+          <button type="button" onClick={() => setSelected(new Set())} className="text-xs text-slate-600 underline dark:text-slate-300">
+            Clear
+          </button>
+        </div>
+      )}
+      {canDelete && deleting && (
+        <QuotationDeletePanel
+          ids={deleting.ids}
+          onClose={() => setDeleting(null)}
+          onDeleted={() => setSelected(new Set())}
+        />
+      )}
 
       <div className="mt-4 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-emerald-100 dark:border-slate-800">
             <tr>
+              {canDelete && (
+                <th className="w-8 px-3 py-3">
+                  <input type="checkbox" aria-label="Select all on this page" data-testid="qsel-page" checked={allOnPageTicked} onChange={togglePage} />
+                </th>
+              )}
               <th className="whitespace-nowrap px-4 py-3">Date</th>
               <th className="whitespace-nowrap px-4 py-3">Reference #</th>
               <th className="whitespace-nowrap px-4 py-3">Status</th>
@@ -258,7 +337,7 @@ export function QuotationsTable({ quotations, canImport = false }: { quotations:
           <tbody>
             {visible.length === 0 && (
               <tr>
-                <td colSpan={13} className="px-4 py-10 text-center text-slate-400">
+                <td colSpan={canDelete ? 14 : 13} className="px-4 py-10 text-center text-slate-400">
                   {quotations.length === 0 ? "No quotations yet -- generate one above." : "No matches for that search."}
                 </td>
               </tr>
@@ -268,6 +347,11 @@ export function QuotationsTable({ quotations, canImport = false }: { quotations:
                 key={row.id}
                 className="border-b border-slate-100 align-top last:border-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/60"
               >
+                {canDelete && (
+                  <td className="px-3 py-3.5">
+                    <input type="checkbox" aria-label={`Select ${row.quotationNumber}`} data-testid="qsel-row" checked={selected.has(row.id)} onChange={() => toggleOne(row.id)} />
+                  </td>
+                )}
                 <td className="whitespace-nowrap px-4 py-3.5 text-slate-700 dark:text-slate-300">{row.quotationDate}</td>
                 <td className="whitespace-nowrap bg-emerald-50/70 px-4 py-3.5 dark:bg-emerald-950/30">
                   <Link
@@ -276,6 +360,11 @@ export function QuotationsTable({ quotations, canImport = false }: { quotations:
                   >
                     {row.quotationNumber}
                   </Link>
+                  {row.receiptKey && (
+                    <span data-testid="row-receipt-key" className="mt-0.5 block text-[11px] font-normal text-slate-500 dark:text-slate-400" title="Receipt file name">
+                      {row.receiptKey}
+                    </span>
+                  )}
                   {row.imported && (
                     <span className="ml-2 rounded-full bg-sky-100 px-2 py-0.5 text-xs text-sky-800 dark:bg-sky-950 dark:text-sky-300">
                       Imported

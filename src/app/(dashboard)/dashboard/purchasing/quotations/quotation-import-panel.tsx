@@ -7,6 +7,7 @@ import {
   importQuotations,
   type QuotationImportState,
 } from "@/app/actions/purchasing-import";
+import { ReceiptKeyForm } from "./receipt-key-form";
 import { IMPORT_TEMPLATE_HEADERS, IMPORT_TEMPLATE_SAMPLE } from "@/lib/purchasing-quotation-import";
 
 const csvCell = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
@@ -106,7 +107,7 @@ export function QuotationImportPanel({ onClose }: { onClose: () => void }) {
           <p className="mt-0.5 max-w-2xl text-xs text-slate-600">
             For orders that came through your other quotation website. Use a CSV or Excel file with the same columns as your Airtable
             &ldquo;OVERALL ORDERS&rdquo; table. Reference #, Customer Name and Total Price are required. Orders already in the list (same
-            reference # or tracking #) are skipped and shown in the report. New customers are added automatically.
+            reference # or tracking #) are skipped and shown in the report. New customers are added automatically. An optional <strong>Receipt File Name</strong> column (one unique name per order) is saved on each new order.
           </p>
         </div>
         <div className="flex gap-2">
@@ -196,6 +197,8 @@ export function QuotationImportPanel({ onClose }: { onClose: () => void }) {
           </button>
         </div>
       )}
+
+      <ReceiptKeyForm />
     </div>
   );
 }

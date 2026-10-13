@@ -7,7 +7,7 @@
 // listed in the report; new customers are added automatically.
 
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { purchasingCustomers, purchasingQuotations, purchasingAuditLog } from "@/db/schema";
 import { requireOrg, type CurrentOrg } from "@/lib/tenant";
@@ -17,6 +17,7 @@ import { CustomerDedupeIndex } from "@/lib/purchasing-customer-dedupe";
 import { parseSpreadsheetFile, type ParsedSheet } from "@/lib/spreadsheet-import";
 import {
   planQuotationImport,
+  planReceiptKeyUpdate,
   splitName,
   type ImportPlan,
   type ImportPlanEntry,
@@ -209,7 +210,12 @@ export async function importQuotations(_prev: QuotationImportState, formData: Fo
     await db.insert(purchasingCustomers).values(customerValues.slice(i, i + 100));
   }
 
-  // 2) Quotations.
+  // 2) Quotations. A Receipt File Name that another order already has is left blank rather than doubled.
+  const takenKeys = new Set(
+    (await db.select({ k: purchasingQuotations.receiptKey }).from(purchasingQuotations).where(eq(purchasingQuotations.organizationId, org.organizationId)))
+      .map((r) => r.k?.toLowerCase())
+      .filter((k): k is string => !!k),
+  );
   const quoteValues = newRows.map((row) => {
     const a = assignment.get(row.rowNumber)!;
     const customerId = "existingId" in a ? a.existingId : createdIds.get(a.key)!;
@@ -231,6 +237,7 @@ export async function importQuotations(_prev: QuotationImportState, formData: Fo
       importedItemsText: row.itemsText || null,
       importedShippingAddress: row.shippingRaw || null,
       importedAt: nowIso,
+      receiptKey: row.receiptKey && !takenKeys.has(row.receiptKey.toLowerCase()) ? row.receiptKey : null,
       createdByUserId: org.userId,
       createdAt: `${row.date} 12:00:00`,
     };
@@ -267,4 +274,63 @@ export async function importQuotations(_prev: QuotationImportState, formData: Fo
     lines,
     linesTruncated: truncated,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Add the Receipt File Name to orders that are already in the list. Fills in that one field and nothing else.
+// ---------------------------------------------------------------------------
+
+export type ReceiptKeyLine = { rowNumber: number; reference: string; result: "updated" | "same" | "skipped"; detail: string };
+export type ReceiptKeyState =
+  | undefined
+  | { error: string }
+  | { kind: "done"; fileName: string; updated: number; same: number; skipped: number; lines: ReceiptKeyLine[]; linesTruncated: boolean };
+
+export async function addReceiptFileNames(_prev: ReceiptKeyState, formData: FormData): Promise<ReceiptKeyState> {
+  const org = await requireWriter();
+  const read = await readSheet(formData);
+  if ("error" in read) return { error: read.error };
+  const existing = await db
+    .select({ id: purchasingQuotations.id, quotationNumber: purchasingQuotations.quotationNumber, receiptKey: purchasingQuotations.receiptKey })
+    .from(purchasingQuotations)
+    .where(eq(purchasingQuotations.organizationId, org.organizationId));
+  const plan = planReceiptKeyUpdate(read.sheet, existing);
+  if (!plan.ok) return { error: plan.error };
+
+  let updated = 0;
+  for (const e of plan.entries) {
+    if (e.status !== "update") continue;
+    await db
+      .update(purchasingQuotations)
+      .set({ receiptKey: e.receiptKey })
+      .where(and(eq(purchasingQuotations.id, e.quotationId), eq(purchasingQuotations.organizationId, org.organizationId)));
+    updated++;
+  }
+  if (updated > 0) {
+    await db.insert(purchasingAuditLog).values({
+      id: newId("paudit"),
+      organizationId: org.organizationId,
+      userId: org.userId,
+      recordType: "quotation_import",
+      recordId: read.fileName.slice(0, 120),
+      fieldName: "receipt_file_name",
+      previousValue: null,
+      newValue: String(updated),
+      note: `Added the Receipt File Name to ${updated} existing order(s) from ${read.fileName}; ${plan.counts.skip} row(s) skipped.`,
+    });
+  }
+  revalidatePath("/dashboard/purchasing/quotations");
+
+  const lines: ReceiptKeyLine[] = plan.entries
+    .flatMap((e): ReceiptKeyLine[] =>
+      e.status === "skip"
+        ? [{ rowNumber: e.rowNumber, reference: e.reference, result: "skipped", detail: e.reason }]
+        : e.status === "same"
+          ? []
+          : e.previous
+            ? [{ rowNumber: e.rowNumber, reference: e.reference, result: "updated", detail: `Replaced "${e.previous}".` }]
+            : [],
+    )
+    .slice(0, REPORT_ROW_CAP);
+  return { kind: "done", fileName: read.fileName, updated, same: plan.counts.same, skipped: plan.counts.skip, lines, linesTruncated: plan.counts.skip > REPORT_ROW_CAP };
 }

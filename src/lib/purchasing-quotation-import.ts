@@ -41,6 +41,7 @@ const COLUMN_ALIASES = {
   shipping: ["shipping info", "shipping address", "address", "customer address"],
   items: ["items quoted for", "items quoted", "items", "products", "product list"],
   tracking: ["order tracking number", "tracking number", "tracking #", "tracking", "customer tracking number"],
+  receiptKey: ["receipt file name", "receipt key", "receipt file", "receipt name", "unique receipt name", "unique id"],
 } as const;
 type ColumnKey = keyof typeof COLUMN_ALIASES;
 
@@ -66,6 +67,12 @@ export function detectCarrier(tracking: string): Carrier {
   if (/^(94|93|92|91|95)\d{18,24}$/.test(t) || /^[A-Z]{2}\d{9}US$/.test(t) || /^420\d{5}(94|93|92)\d{18,22}$/.test(t)) return "USPS";
   if (/^\d{12}$/.test(t) || /^\d{15}$/.test(t) || /^\d{20}$/.test(t) || /^96\d{20}$/.test(t)) return "FedEx";
   return "Other";
+}
+
+/** "REF-1_20261005_Diana_Mota.pdf" or "REF-1, 20261005" -> the stored receipt key (no .pdf ending, no commas, one space at a time). Null when blank. */
+export function cleanReceiptKey(raw: string | undefined | null): string | null {
+  const k = (raw ?? "").replace(/,/g, "").replace(/\s+/g, " ").trim().replace(/\.pdf$/i, "").trim();
+  return k ? k.slice(0, 200) : null;
 }
 
 export function normalizeTracking(raw: string | undefined | null): string {
@@ -148,6 +155,8 @@ export type ImportRow = {
   itemsText: string;
   tracking: string;
   carrier: Carrier | null;
+  /** The optional "Receipt File Name" column, with commas and the .pdf ending removed. Null when the file has none. */
+  receiptKey: string | null;
   warnings: string[];
 };
 
@@ -183,6 +192,7 @@ export function planQuotationImport(sheet: ParsedSheet, existing: ImportExisting
 
   const seenRefs = new Set<string>();
   const seenTracking = new Set<string>();
+  const seenReceiptKeys = new Set<string>();
   const entries: ImportPlanEntry[] = [];
 
   sheet.rows.forEach((raw, i) => {
@@ -234,6 +244,12 @@ export function planQuotationImport(sheet: ParsedSheet, existing: ImportExisting
     if (!shippingRaw) warnings.push("No shipping address.");
     else if (!address.parsed) warnings.push("Shipping address couldn't be split into street/city/state/ZIP; it's kept as written.");
 
+    let receiptKey = cleanReceiptKey(get(raw, "receiptKey"));
+    if (receiptKey && seenReceiptKeys.has(receiptKey.toLowerCase())) {
+      warnings.push(`Receipt File Name "${receiptKey}" is already on another row in this file, so it was left blank here.`);
+      receiptKey = null;
+    }
+    if (receiptKey) seenReceiptKeys.add(receiptKey.toLowerCase());
     seenRefs.add(refKey);
     if (tracking) seenTracking.add(tracking);
     entries.push({
@@ -251,6 +267,7 @@ export function planQuotationImport(sheet: ParsedSheet, existing: ImportExisting
         itemsText: get(raw, "items").replace(/\r/g, "").trim(),
         tracking,
         carrier: tracking ? detectCarrier(tracking) : null,
+        receiptKey,
         warnings,
       },
     });
@@ -264,4 +281,61 @@ export function planQuotationImport(sheet: ParsedSheet, existing: ImportExisting
   };
   if (counts.total === 0) return { ok: false, error: "That file doesn't have any usable rows." };
   return { ok: true, entries, counts };
+}
+
+
+// ---------------------------------------------------------------------------
+// "Add the Receipt File Name to orders that are already imported": a sheet with just a reference number and a
+// Receipt File Name per row. Only that one field is filled in on the matching order -- nothing else is touched.
+// ---------------------------------------------------------------------------
+
+export type ReceiptKeyExisting = { id: string; quotationNumber: string; receiptKey: string | null };
+
+export type ReceiptKeyEntry =
+  | { status: "update"; rowNumber: number; reference: string; quotationId: string; receiptKey: string; previous: string | null }
+  | { status: "same"; rowNumber: number; reference: string }
+  | { status: "skip"; rowNumber: number; reference: string; reason: string };
+
+export type ReceiptKeyPlan =
+  | { ok: false; error: string }
+  | { ok: true; entries: ReceiptKeyEntry[]; counts: { total: number; update: number; same: number; skip: number } };
+
+export function planReceiptKeyUpdate(sheet: ParsedSheet, existing: ReceiptKeyExisting[]): ReceiptKeyPlan {
+  if (sheet.rows.length === 0) return { ok: false, error: "That file doesn't have any data rows." };
+  if (sheet.rows.length > MAX_IMPORT_ROWS) return { ok: false, error: `That file has ${sheet.rows.length} rows. Use up to ${MAX_IMPORT_ROWS} at a time.` };
+  const refCol = findColumn(sheet.headers, [...COLUMN_ALIASES.reference]);
+  const keyCol = findColumn(sheet.headers, [...COLUMN_ALIASES.receiptKey]);
+  const missing = [!refCol && "Customer Reference Number", !keyCol && "Receipt File Name"].filter(Boolean);
+  if (missing.length > 0) {
+    return { ok: false, error: `Couldn't find the ${missing.join(" and ")} column${missing.length > 1 ? "s" : ""}. Found: ${sheet.headers.join(", ") || "(no headers)"}.` };
+  }
+  const byRef = new Map(existing.map((q) => [q.quotationNumber.trim().toLowerCase(), q]));
+  // Who owns each key right now (a key can only belong to one order).
+  const owner = new Map<string, string>();
+  for (const q of existing) if (q.receiptKey) owner.set(q.receiptKey.toLowerCase(), q.id);
+  const seenRef = new Set<string>();
+  const entries: ReceiptKeyEntry[] = [];
+  const pending = new Map<string, string>(); // key -> quotation id, for keys assigned earlier in this same file
+
+  sheet.rows.forEach((raw, i) => {
+    const rowNumber = i + 2;
+    const reference = (raw[refCol!] ?? "").replace(/\s+/g, " ").trim();
+    const key = cleanReceiptKey(raw[keyCol!]);
+    if (!reference && !key) return;
+    if (!reference) return void entries.push({ status: "skip", rowNumber, reference: "", reason: "Missing Customer Reference Number." });
+    if (!key) return void entries.push({ status: "skip", rowNumber, reference, reason: "Missing Receipt File Name." });
+    const refKey = reference.toLowerCase();
+    if (seenRef.has(refKey)) return void entries.push({ status: "skip", rowNumber, reference, reason: "This reference number appears more than once in the file." });
+    seenRef.add(refKey);
+    const q = byRef.get(refKey);
+    if (!q) return void entries.push({ status: "skip", rowNumber, reference, reason: "No order with this reference number is in your Quotation Summary." });
+    const taken = owner.get(key.toLowerCase()) ?? pending.get(key.toLowerCase());
+    if (taken && taken !== q.id) return void entries.push({ status: "skip", rowNumber, reference, reason: `The name "${key}" already belongs to a different order, and every order needs its own.` });
+    if (q.receiptKey && q.receiptKey.toLowerCase() === key.toLowerCase() && q.receiptKey === key) return void entries.push({ status: "same", rowNumber, reference });
+    pending.set(key.toLowerCase(), q.id);
+    entries.push({ status: "update", rowNumber, reference, quotationId: q.id, receiptKey: key, previous: q.receiptKey });
+  });
+
+  const count = (s: ReceiptKeyEntry["status"]) => entries.filter((e) => e.status === s).length;
+  return { ok: true, entries, counts: { total: entries.length, update: count("update"), same: count("same"), skip: count("skip") } };
 }

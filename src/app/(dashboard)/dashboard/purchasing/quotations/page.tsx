@@ -1,5 +1,5 @@
 import { requireOrg } from "@/lib/tenant";
-import { canWritePurchasing } from "@/lib/permissions";
+import { canWritePurchasing, isPurchasingManager } from "@/lib/permissions";
 import { getPurchasingQuotationsSummary } from "@/lib/queries";
 import { QuotationsTable } from "./quotations-table";
 
@@ -15,7 +15,7 @@ export default async function PurchasingQuotationsPage() {
     // (10 columns) has real room. Capped at max-w-[100rem] so it doesn't stretch edge-to-edge on an ultra-wide monitor.
     <div className="w-full">
       <div className="mx-auto max-w-[100rem]">
-        <QuotationsTable quotations={quotations} canImport={canWritePurchasing(org.role, org.access)} />
+        <QuotationsTable quotations={quotations} canImport={canWritePurchasing(org.role, org.access)} canDelete={isPurchasingManager(org.role)} />
       </div>
     </div>
   );
