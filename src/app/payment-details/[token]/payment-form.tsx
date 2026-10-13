@@ -4,7 +4,7 @@ import { useActionState, useState } from "react";
 import { submitPayoutDetailsAction } from "@/app/actions/payout-link-public";
 import { AuthError, AuthField, authBtnPrimary } from "@/components/auth/auth-ui";
 import { HumanCheck } from "@/components/human-check";
-import { CAUTION_TEXT, ONE_TIME_TEXT, PAYOUT_METHODS } from "@/lib/payout-link-rules";
+import { CAUTION_TEXT, FINTECH_NOTE, METHOD_HELP, ONE_TIME_TEXT, PAYOUT_METHODS, type PayoutMethod } from "@/lib/payout-link-rules";
 
 const empty = { method: "", holderName: "", street1: "", street2: "", city: "", state: "", zip: "", phone: "", email: "", bankName: "", routingNumber: "", accountNumber: "", accountType: "", confirmDetails: false };
 
@@ -32,7 +32,8 @@ export function PaymentDetailsForm({ token }: { token: string }) {
       </div>
       <fieldset>
         <legend className="mb-2 text-sm font-medium">How do you want to be paid? Choose one.</legend>
-        <div className="grid gap-3 sm:grid-cols-3">
+        <p className="mb-3 rounded-xl bg-mint p-3 text-sm text-ink" data-testid="pl-fintech-note">{FINTECH_NOTE}</p>
+        <div className="grid gap-3 sm:grid-cols-4">
           {PAYOUT_METHODS.map((m) => (
             <label key={m.key} className={radio}>
               <input type="radio" name="method" value={m.key} checked={v.method === m.key} required onChange={() => setV((o) => ({ ...o, method: m.key }))} data-testid={`pl-method-${m.key}`} />
@@ -40,6 +41,7 @@ export function PaymentDetailsForm({ token }: { token: string }) {
             </label>
           ))}
         </div>
+        {v.method && <p className="mt-3 text-sm text-muted" data-testid="pl-method-help">{METHOD_HELP[v.method as PayoutMethod]}</p>}
       </fieldset>
       <div className="grid gap-5 sm:grid-cols-2">
         <div className="sm:col-span-2"><AuthField label="Full name of the account holder" hint="The real name of the person who owns the account"><input {...on("holderName")} required maxLength={100} autoComplete="off" data-testid="pl-holder" /></AuthField></div>
@@ -56,7 +58,7 @@ export function PaymentDetailsForm({ token }: { token: string }) {
       </fieldset>
       <fieldset className="grid gap-5 sm:grid-cols-2">
         <legend className="mb-2 text-sm font-medium">Bank details</legend>
-        <div className="sm:col-span-2"><AuthField label="Bank name"><input {...on("bankName")} required maxLength={100} autoComplete="off" data-testid="pl-bank" /></AuthField></div>
+        <div className="sm:col-span-2"><AuthField label="Bank name" hint={v.method && v.method !== "bank" ? "The bank name your app shows next to the routing number" : undefined}><input {...on("bankName")} required maxLength={100} autoComplete="off" data-testid="pl-bank" /></AuthField></div>
         <AuthField label="Routing number" hint={routingBad ? undefined : "Exactly 9 digits"}><input {...on("routingNumber")} required inputMode="numeric" maxLength={14} autoComplete="off" data-testid="pl-routing" aria-invalid={routingBad} />{routingBad && <span className="text-xs font-semibold text-red-700" role="alert" data-testid="pl-routing-warn">A routing number has exactly 9 digits (you typed {routingDigits}). It will not go through otherwise.</span>}</AuthField>
         <AuthField label="Account number" hint="4 to 17 digits"><input {...on("accountNumber")} required inputMode="numeric" maxLength={22} autoComplete="off" data-testid="pl-account" /></AuthField>
         <div className="sm:col-span-2">

@@ -1,15 +1,15 @@
 // "Where should we pay you?" links: the customer's fields, the three methods, the link token and the states.
 import assert from "node:assert/strict";
 import {
-  PAYOUT_METHODS, addressLine, cleanPayoutDetails, customerLinkState, detailsFromJson, detailsToJson, hashLinkToken, linkEmailContent, linkUrl,
+  FINTECH_NOTE, METHOD_HELP, PAYOUT_METHODS, addressLine, cleanPayoutDetails, customerLinkState, detailsFromJson, detailsToJson, hashLinkToken, linkEmailContent, linkUrl,
   looksLikeLinkToken, maskedPayoutLine, LINK_REASONS, ONE_TIME_TEXT, cleanReason, reasonCustomerLine, reasonLabel, newLinkToken, staffLinkState, LINK_VALID_DAYS,
 } from "../src/lib/payout-link-rules";
 
 const good = { method: "paypal", holderName: "Jane Q Public", street1: "12 Main St", street2: "", city: "Austin", state: "tx", zip: "78701", phone: "(512) 555-0100", email: "Jane@Example.com", bankName: "Chase", accountNumber: "123456789", routingNumber: "021000021", accountType: "Checking" };
 
 // only the three methods the company pays through
-assert.deepEqual(PAYOUT_METHODS.map((m) => m.key), ["paypal", "cashapp", "venmo"]);
-for (const m of ["paypal", "cashapp", "venmo"]) assert.ok(cleanPayoutDetails({ ...good, method: m }).ok, m);
+assert.deepEqual(PAYOUT_METHODS.map((m) => m.key), ["bank", "paypal", "cashapp", "venmo"]);
+for (const m of ["bank", "paypal", "cashapp", "venmo"]) assert.ok(cleanPayoutDetails({ ...good, method: m }).ok, m);
 for (const m of ["chime", "ach", "", "zelle"]) assert.equal(cleanPayoutDetails({ ...good, method: m }).ok, false, m);
 
 // every method needs the same bank fields
@@ -21,7 +21,7 @@ if (ok.ok) {
   assert.equal(ok.value.accountType, "checking");
   assert.equal(addressLine(ok.value), "12 Main St, Austin, TX 78701");
 }
-for (const m of ["paypal", "cashapp", "venmo"]) {
+for (const m of ["bank", "paypal", "cashapp", "venmo"]) {
   assert.equal(cleanPayoutDetails({ ...good, method: m, routingNumber: "" }).ok, false);
   assert.equal(cleanPayoutDetails({ ...good, method: m, accountNumber: "" }).ok, false);
 }
@@ -102,4 +102,9 @@ assert.match(reasonLabel("new_customer")!, /haven't worked/);
 assert.equal(reasonLabel("zzz"), null);
 const m2 = linkEmailContent({ companyName: "Co", quotationNumber: "Q-2", customerName: "Sam", url: "https://x.test/payment-details/z", reason: "new_customer" });
 assert.ok(m2.text.includes(reasonCustomerLine("new_customer")) && m2.html.includes("first order together"));
+// the explanations on the form
+assert.match(FINTECH_NOTE, /PayPal, Cash App and Venmo/);
+assert.match(FINTECH_NOTE, /customer service/);
+assert.deepEqual(Object.keys(METHOD_HELP).sort(), PAYOUT_METHODS.map((m) => m.key).sort());
+assert.equal(maskedPayoutLine("bank", "checking", "1234"), "Bank account - Checking account ending 1234");
 console.log("payout-link-rules ok");

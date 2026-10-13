@@ -105,7 +105,7 @@ export const FEATURES: FeatureDef[] = [
   {
     key: "payout-links",
     label: "Customer payment-details links",
-    blurb: "Purchasing -> a quotation: send the customer a private link where they enter the direct-deposit details we pay them with (PayPal, Cash App or Venmo). The details are stored encrypted, only owners, admins and Accounts can see them, and they are erased when the order is marked Paid.",
+    blurb: "Purchasing -> a quotation: send the customer a private link where they enter the direct-deposit details we pay them with (a bank account, PayPal, Cash App or Venmo). The details are stored encrypted, only owners, admins and Accounts can see them, and they are erased when the order is marked Paid.",
     defaultStage: "mothership",
   },
 ];

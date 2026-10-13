@@ -1,17 +1,27 @@
 // "Where should we pay you?" links: the pure rules (no database, no encryption), so they can be tested alone.
 // A customer opens a private link tied to ONE quotation/order and types the direct-deposit details we pay them with. Every method the
-// company pays through (PayPal, Cash App, Venmo) is paid as a direct deposit, so EVERY method needs the same details: holder name, address,
+// company pays through (a regular bank account, PayPal, Cash App, Venmo) is paid as a direct deposit, so EVERY method needs the same details: holder name, address,
 // phone, email, bank name, routing number, account number and account type. Messages are for the customer and never repeat a number back.
 
 import { createHash, randomBytes } from "node:crypto";
 import { routingOk } from "@/lib/bank-rules";
 
 export const PAYOUT_METHODS = [
+  { key: "bank", label: "Bank account" },
   { key: "paypal", label: "PayPal" },
   { key: "cashapp", label: "Cash App" },
   { key: "venmo", label: "Venmo" },
 ] as const;
 export type PayoutMethod = (typeof PAYOUT_METHODS)[number]["key"];
+/** What the customer reads about each way to be paid. The three apps are explained because many people don't know they have a routing and account number. */
+export const FINTECH_NOTE =
+  "PayPal, Cash App and Venmo are payment apps that also give you their own routing number and account number, so you can be paid by direct deposit without sharing your regular bank account. If you don't know where to find those numbers, ask that app's customer service and they will show you.";
+export const METHOD_HELP: Record<PayoutMethod, string> = {
+  bank: "Your regular checking or savings account at a bank or credit union. Use the name of that bank, and the routing and account numbers printed on your checks or shown in your online banking.",
+  paypal: "Use the routing number and account number that PayPal gives you for direct deposit. The bank name is the one PayPal shows next to those numbers.",
+  cashapp: "Use the routing number and account number that Cash App gives you for direct deposit. The bank name is the one Cash App shows next to those numbers.",
+  venmo: "Use the routing number and account number that Venmo gives you for direct deposit. The bank name is the one Venmo shows next to those numbers.",
+};
 export const methodLabel = (key: string | null | undefined) => PAYOUT_METHODS.find((m) => m.key === key)?.label ?? "Direct deposit";
 
 /** How long a link works. */
@@ -53,7 +63,7 @@ const one = (v: unknown, max: number) => String(v ?? "").replace(/[\r\n\t]+/g, "
 /** Checks and cleans what the customer typed. */
 export function cleanPayoutDetails(input: PayoutDetailsInput): { ok: true; value: PayoutDetails } | { ok: false; error: string } {
   const method = one(input.method, 20).toLowerCase();
-  if (!PAYOUT_METHODS.some((m) => m.key === method)) return { ok: false, error: "Choose how you want to be paid: PayPal, Cash App or Venmo." };
+  if (!PAYOUT_METHODS.some((m) => m.key === method)) return { ok: false, error: "Choose how you want to be paid: a bank account, PayPal, Cash App or Venmo." };
   const holderName = one(input.holderName, 100);
   if (holderName.length < 2) return { ok: false, error: "Enter the full name of the account holder." };
   if (/\d/.test(holderName)) return { ok: false, error: "The account holder's name should not contain numbers." };
@@ -160,7 +170,7 @@ export function linkEmailContent(p: { companyName: string; quotationNumber: stri
   const text = [
     `Hello ${p.customerName},`,
     "",
-    `We are ready to pay you for order ${p.quotationNumber}. ${reasonCustomerLine(p.reason)} Please use the private link below to tell us where to send your payment by direct deposit (PayPal, Cash App or Venmo):`,
+    `We are ready to pay you for order ${p.quotationNumber}. ${reasonCustomerLine(p.reason)} Please use the private link below to tell us where to send your payment by direct deposit (your bank account, PayPal, Cash App or Venmo):`,
     "",
     p.url,
     "",
@@ -171,6 +181,6 @@ export function linkEmailContent(p: { companyName: string; quotationNumber: stri
     p.companyName,
   ].join("\n");
   const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  const html = `<p>Hello ${esc(p.customerName)},</p><p>We are ready to pay you for order <strong>${esc(p.quotationNumber)}</strong>. ${esc(reasonCustomerLine(p.reason))} Please use the private link below to tell us where to send your payment by direct deposit (PayPal, Cash App or Venmo):</p><p><a href="${esc(p.url)}">${esc(p.url)}</a></p><p>The link works for ${days} days and only for this order. The link can be used only <strong>one time</strong>: once you press Submit you cannot change anything, so please double check every detail before you send it.</p><p><strong>Please do not reply to this email with your bank details.</strong> Only type them on the page above.</p><p>Thank you,<br>${esc(p.companyName)}</p>`;
+  const html = `<p>Hello ${esc(p.customerName)},</p><p>We are ready to pay you for order <strong>${esc(p.quotationNumber)}</strong>. ${esc(reasonCustomerLine(p.reason))} Please use the private link below to tell us where to send your payment by direct deposit (your bank account, PayPal, Cash App or Venmo):</p><p><a href="${esc(p.url)}">${esc(p.url)}</a></p><p>The link works for ${days} days and only for this order. The link can be used only <strong>one time</strong>: once you press Submit you cannot change anything, so please double check every detail before you send it.</p><p><strong>Please do not reply to this email with your bank details.</strong> Only type them on the page above.</p><p>Thank you,<br>${esc(p.companyName)}</p>`;
   return { subject, text, html };
 }
