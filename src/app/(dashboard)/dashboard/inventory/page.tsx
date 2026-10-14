@@ -2,8 +2,10 @@ import { requireOrg } from "@/lib/tenant";
 import { canWriteInventory } from "@/lib/permissions";
 import { getInventory } from "@/lib/inventory-service";
 import { featureOn } from "@/lib/features";
-import { reservedByDrafts } from "@/lib/sales-service";
+import { reservedByDrafts, sellableProducts } from "@/lib/sales-service";
 import { groupStock, totalsOf } from "@/lib/inventory-rules";
+import { MANUAL_CONDITIONS } from "@/lib/inventory-conditions";
+import { normKey } from "@/lib/inventory-rules";
 import { StockList, type BrandView } from "./stock-list";
 
 export const dynamic = "force-dynamic";
@@ -25,6 +27,10 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
       heldByProduct[pk] = (heldByProduct[pk] ?? 0) + n;
     }
   }
+  // "Fix name" (flag `inventory-fix-name`): only for people who may change Inventory, with the company's product list to choose from.
+  const mayChange = canWriteInventory(org.role, org.access);
+  const [canFix, canEdit] = mayChange ? await Promise.all([featureOn("inventory-fix-name", org.organizationId), featureOn("inventory-edit-stock", org.organizationId)]) : [false, false];
+  const catalog = canFix || canEdit ? (await sellableProducts(org.organizationId)).map((p) => ({ id: p.id, key: p.key, name: p.name, brand: p.brand })) : undefined;
   const totals = totalsOf(snap.lines);
   const brands: BrandView[] = groupStock(snap.lines).map((b) => ({
     key: b.key,
@@ -56,10 +62,15 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
         estLow: l.estLow,
         estHigh: l.estHigh,
         hasEstimate: !!l.estimate,
+        lots: l.lots.map((lot) => {
+          const m = l.layers.filter((x) => normKey(x.lot) === normKey(lot.lot) && (x.expiry ?? "") === (lot.expiry ?? "") && (x.expiryEnd ?? "") === (lot.expiryEnd ?? "") && x.quantity > 0 && x.unitCost != null);
+          const u = m.reduce((n, x) => n + x.quantity, 0);
+          return { lot: lot.lot, expiry: lot.expiry, expiryEnd: lot.expiryEnd, quantity: lot.quantity, cost: u > 0 ? Math.round((m.reduce((n, x) => n + (x.unitCost as number) * x.quantity, 0) / u) * 100) / 100 : null };
+        }),
         received: l.layers.filter((x) => x.source === "RECEIVED").reduce((n, x) => n + x.quantity, 0),
         manual: l.layers.filter((x) => x.source === "MANUAL").reduce((n, x) => n + x.quantity, 0),
       })),
     })),
   }));
-  return <StockList key={by} brands={brands} totals={totals} today={snap.today} heldTotal={showHolds ? Object.entries(heldByProduct).reduce((n, [pk, v]) => n + Math.min(v, Math.max(0, snap.lines.filter((l) => l.productKey === pk).reduce((m, l) => m + l.quantity, 0))), 0) : null} by={by} canWrite={canWriteInventory(org.role, org.access)} />;
+  return <StockList key={by} brands={brands} totals={totals} today={snap.today} heldTotal={showHolds ? Object.entries(heldByProduct).reduce((n, [pk, v]) => n + Math.min(v, Math.max(0, snap.lines.filter((l) => l.productKey === pk).reduce((m, l) => m + l.quantity, 0))), 0) : null} by={by} canWrite={mayChange} catalog={canFix ? catalog : undefined} edit={canEdit && catalog ? { catalog, conditions: [...MANUAL_CONDITIONS] } : undefined} />;
 }

@@ -126,6 +126,18 @@ export const FEATURES: FeatureDef[] = [
     blurb: "A sent (or part-paid, or paid) invoice can be changed at any time by Sales, Accounts, Admin and the Owner: remove an item, change a quantity or price, fix an address. Units come back into or leave Inventory by themselves, payments already recorded stay, the earlier version is kept, and the updated invoice can be emailed. Also adds the right-click menu on the invoice list.",
     defaultStage: "mothership",
   },
+  {
+    key: "inventory-fix-name",
+    label: "Inventory: correct a product's name in Live Stock",
+    blurb: "A Fix name button on each product in Live Stock for the Owner, Admin, Purchasing Managers and anyone given work in Inventory: pick the right product from your list (or type a name) and all of that product's stock moves to it with the same quantities, dating, lots and costs. Recorded in the movements history; drafts holding it follow the new name.",
+    defaultStage: "mothership",
+  },
+  {
+    key: "inventory-edit-stock",
+    label: "Inventory: edit stock lines in Live Stock (reconciliation)",
+    blurb: "An Edit button on each stock line in Live Stock for the Owner, Admin, Purchasing Managers and anyone given work in Inventory: correct the quantity, condition, expiration or month range, lot number, cost or product of each lot, with a required reason. Done with adjustment rows in the movements history (Receiving's records and imports are never changed); refused if it would leave less than open invoices are holding.",
+    defaultStage: "mothership",
+  },
 ];
 
 export const featureDef = (key: string) => FEATURES.find((f) => f.key === key);

@@ -1,7 +1,9 @@
 "use client";
 
+import { FixName, type CatalogChoice } from "./fix-name";
+import { EditLine, type LotView } from "./edit-line";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { expirySpan, MONEY, rangeLabel } from "@/lib/inventory-rules";
 import { conditionChip } from "@/lib/inventory-ui";
 
@@ -21,6 +23,8 @@ export type LineView = {
   hasEstimate: boolean;
   received: number;
   manual: number;
+  /** The exact lots behind this line (for the Edit panel). */
+  lots: LotView[];
 };
 export type ProductView = { key: string; productName: string; quantity: number; held: number | null; costValue: number; estLow: number | null; estHigh: number | null; lines: LineView[] };
 export type BrandView = { key: string; brand: string; quantity: number; held: number | null; costValue: number; estLow: number | null; estHigh: number | null; products: ProductView[] };
@@ -36,10 +40,11 @@ const GROUP_CLASS = (key: string) =>
       ? "bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-100"
       : "bg-sky-100 text-sky-900 dark:bg-sky-900/40 dark:text-sky-100";
 
-export function StockList({ brands, totals, today, by, heldTotal, canWrite }: { brands: BrandView[]; totals: Totals; today: string; heldTotal: number | null; by: "months" | "range"; canWrite: boolean }) {
+export function StockList({ brands, totals, today, by, heldTotal, canWrite, catalog, edit }: { brands: BrandView[]; totals: Totals; today: string; heldTotal: number | null; by: "months" | "range"; canWrite: boolean; /** Present only when this person may correct a product's name (flag `inventory-fix-name`). */ catalog?: CatalogChoice[]; /** Present only when this person may edit stock lines (flag `inventory-edit-stock`). */ edit?: { catalog: CatalogChoice[]; conditions: string[] } }) {
   const [q, setQ] = useState("");
   const [cond, setCond] = useState("");
   const [grp, setGrp] = useState("");
+  const [editing, setEditing] = useState<string | null>(null);
 
   const conditions = useMemo(() => [...new Set(brands.flatMap((b) => b.products.flatMap((p) => p.lines.map((l) => l.condition))))].sort(), [brands]);
   const groups = useMemo(() => {
@@ -164,7 +169,8 @@ export function StockList({ brands, totals, today, by, heldTotal, canWrite }: { 
                       </thead>
                       <tbody>
                         {p.lines.map((l) => (
-                          <tr key={l.key} data-testid="inv-line" className="border-t border-slate-200 align-top dark:border-slate-800">
+                          <Fragment key={l.key}>
+                          <tr data-testid="inv-line" className="border-t border-slate-200 align-top dark:border-slate-800">
                             <td className="py-2 pr-3"><span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${conditionChip(l.condition)}`} data-testid="inv-line-cond">{l.condition}</span></td>
                             <td className="py-2 pr-3">
                               <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${GROUP_CLASS(l.groupKey)}`} data-testid="inv-line-group">{l.groupLabel}</span>
@@ -179,14 +185,22 @@ export function StockList({ brands, totals, today, by, heldTotal, canWrite }: { 
                               {l.costKnownUnits > 0 && l.costKnownUnits < l.quantity && <span className="block text-[11px] text-slate-500">cost known for {nf.format(l.costKnownUnits)}</span>}
                             </td>
                             <td className="py-2 pr-3 text-right tabular-nums" data-testid="inv-line-est">{rangeLabel(l.estLow, l.estHigh) || <span className="text-slate-400">{l.hasEstimate ? "-" : "not set"}</span>}</td>
-                            <td className="py-2 text-xs text-slate-600 dark:text-slate-300">{l.lotCount} {l.lotCount === 1 ? "lot" : "lots"}</td>
+                            <td className="py-2 text-xs text-slate-600 dark:text-slate-300">
+                              {l.lotCount} {l.lotCount === 1 ? "lot" : "lots"}
+                              {edit && <button type="button" onClick={() => setEditing(editing === l.key ? null : l.key)} className="ml-3 font-medium text-emerald-800 underline dark:text-emerald-300" data-testid="inv-edit" aria-expanded={editing === l.key}>{editing === l.key ? "Close" : "Edit"}</button>}
+                            </td>
                           </tr>
+                          {edit && editing === l.key && (
+                            <tr><td colSpan={6} className="pb-3"><EditLine productKey={p.key} productName={p.productName} condition={l.condition} lots={l.lots} conditions={edit.conditions} catalog={edit.catalog} onDone={() => setEditing(null)} /></td></tr>
+                          )}
+                          </Fragment>
                         ))}
                       </tbody>
                     </table>
                     <Link href={`/dashboard/inventory/p/${encodeURIComponent(p.key)}`} className="mt-1 inline-block text-sm font-medium text-emerald-800 underline dark:text-emerald-300" data-testid="inv-details-link">
                       Lots, serial numbers and history
                     </Link>
+                    {catalog && <FixName productKey={p.key} productName={p.productName} units={p.quantity} catalog={catalog} />}
                   </div>
                 </details>
               ))}

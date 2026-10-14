@@ -21,6 +21,7 @@ import {
   allocateTake,
   buildLines,
   estimateKey,
+  layerIdOf,
   normalizeExpiry,
   normKey,
   productKeyOf,
@@ -403,6 +404,235 @@ export async function returnSaleDetailed(org: { organizationId: string; userId: 
 /** Puts back what a sale took out (an invoice voided): see `returnSaleDetailed`. Returns the number of units. */
 export async function returnSale(org: { organizationId: string; userId: string }, refType: string, refId: string, note: string): Promise<number> {
   return (await returnSaleDetailed(org, refType, refId, note)).units;
+}
+
+// ---- correcting a product's name ----------------------------------------------------------------------------------
+
+export type NameFix = { ok: true; units: number; lines: number; toKey: string; toName: string; toProductId: string | null; fromName: string } | { ok: false; error: string };
+
+/**
+ * A product was received, added or imported under the wrong name but the quantities are right. This moves ALL of that product's
+ * stock to the right product: for every exact layer (condition, expiration or month range, lot) it writes one ADJUSTMENT that takes
+ * the units off the old name and one that puts the same units, with the same cost, on the new one. Nothing from Receiving is touched
+ * (its records keep the name they were received under), the quantities and dating are unchanged, and the two rows per layer show in
+ * the movements history with a note. `target` is a catalog product, or a typed name for stock that has no catalog entry.
+ */
+export async function correctProductName(
+  org: { organizationId: string; userId: string },
+  fromKey: string,
+  target: { productId?: string | null; name?: string | null },
+): Promise<NameFix> {
+  const inv = await getInventory(org.organizationId);
+  const mine = inv.layers.filter((l) => l.productKey === fromKey);
+  if (!mine.length) return { ok: false, error: "That product wasn't found in stock." };
+  const fromName = clean(mine[0].productName);
+
+  let toId: string | null = null;
+  let toName: string;
+  let toBrand: string | null;
+  if (target.productId) {
+    const [p] = await db
+      .select({ id: purchasingProducts.id, name: purchasingProducts.name, category: purchasingCategories.name })
+      .from(purchasingProducts)
+      .leftJoin(purchasingCategories, eq(purchasingCategories.id, purchasingProducts.categoryId))
+      .where(and(eq(purchasingProducts.organizationId, org.organizationId), eq(purchasingProducts.id, target.productId)))
+      .limit(1);
+    if (!p) return { ok: false, error: "Choose the correct product from the list." };
+    toId = p.id;
+    toName = clean(p.name);
+    toBrand = clean(p.category) || brandFor(p.name);
+  } else {
+    toName = clean(target.name).replace(/\s+/g, " ");
+    if (toName.length < 2 || toName.length > 160) return { ok: false, error: "Type the product's name (2 to 160 characters), or choose it from the list." };
+    toBrand = brandFor(toName);
+  }
+  const toKey = productKeyOf(toId, toName);
+  if (toKey === fromKey) return { ok: false, error: "That is already this product. Choose a different one." };
+
+  // What is really in stock on each exact layer.
+  const byLayer = new Map<string, { first: StockLayer; net: number; costUnits: number; costSum: number }>();
+  for (const l of mine) {
+    const id = layerIdOf(l);
+    const g = byLayer.get(id) ?? { first: l, net: 0, costUnits: 0, costSum: 0 };
+    g.net += l.quantity;
+    if (l.quantity > 0 && l.unitCost != null) { g.costUnits += l.quantity; g.costSum += l.unitCost * l.quantity; }
+    byLayer.set(id, g);
+  }
+  const moving = [...byLayer.values()].filter((g) => g.net > 0);
+  if (!moving.length) return { ok: false, error: "There is no stock under that name to move." };
+
+  const note = `Name corrected: "${fromName}" to "${toName}"`.slice(0, 300);
+  const rows: (typeof inventoryMovements.$inferInsert)[] = [];
+  for (const g of moving) {
+    const l = g.first;
+    const cost = g.costUnits > 0 ? Math.round((g.costSum / g.costUnits) * 100) / 100 : null;
+    const common = { organizationId: org.organizationId, kind: "ADJUSTMENT" as const, condition: l.condition, expirationDate: l.expiry, expirationEndDate: l.expiryEnd ?? null, lotNumber: l.lot, note, refType: "name_fix", refId: fromKey, createdByUserId: org.userId };
+    rows.push({ ...common, id: newId("invmove"), productId: l.productId, productKey: fromKey, productName: l.productName, brand: l.brand, quantity: -g.net, unitCost: cost });
+    rows.push({ ...common, id: newId("invmove"), productId: toId, productKey: toKey, productName: toName, brand: toBrand, quantity: g.net, unitCost: cost });
+  }
+  await db.insert(inventoryMovements).values(rows);
+
+  // The estimated selling prices follow, unless the right product already has its own.
+  const have = await getEstimates(org.organizationId);
+  for (const [k, e] of have) {
+    if (!k.startsWith(`${fromKey}|`)) continue;
+    const condKey = k.slice(fromKey.length + 1);
+    if (!have.has(`${toKey}|${condKey}`)) await saveEstimate(org, toKey, condKey, e.low, e.high);
+  }
+  return { ok: true, units: moving.reduce((n, g) => n + g.net, 0), lines: moving.length, toKey, toName, toProductId: toId, fromName };
+}
+
+// ---- correcting stock lines ---------------------------------------------------------------------------------------
+
+export type StockLineEdit = {
+  /** The exact layer being corrected (as Live Stock shows it). */
+  from: { condition: string; expiry: string | null; expiryEnd: string | null; lot: string | null };
+  /** What it should be. `expiry` is typed text (8/2027-6/2028, 8/2027, 8/15/2027); blank cost keeps the cost it had. */
+  to: { condition: string; expiry: string; lot: string; quantity: number; unitCost: number | string | null };
+};
+
+export type StockFix = { ok: true; changed: number; rows: number } | { ok: false; error: string };
+
+/**
+ * Reconciliation: a count, a grading or an import turned out wrong. Corrects whole lots of one product -- quantity, condition,
+ * expiration (date or month range), lot number, cost, and optionally the product itself -- by writing ADJUSTMENT movements: the old
+ * layer is taken to zero and the corrected one is put in its place (or, when only the quantity changed, just the difference). Nothing
+ * Receiving recorded is changed, so receipts, serial numbers and the audit trail stay as they were, and every change is in the
+ * movements history with the reason. All the rows are checked first; one bad row changes nothing. A change that would leave fewer
+ * units of a product and condition than open invoices are holding is refused.
+ * `held` is what drafts hold, "productKey|condition" -> units (Sales owns that number).
+ */
+export async function correctStockLines(
+  org: { organizationId: string; userId: string },
+  productKey: string,
+  target: { productId?: string | null; name?: string | null } | null,
+  edits: StockLineEdit[],
+  reason: string,
+  allowedConditions: string[],
+  held: Record<string, number>,
+): Promise<StockFix> {
+  const why = clean(reason).replace(/\s+/g, " ");
+  if (why.length < 3) return { ok: false, error: "Say why you are correcting this (for example: recount, graded wrong, import mistake)." };
+  if (why.length > 200) return { ok: false, error: "Keep the reason to 200 characters or fewer." };
+  if (!edits.length) return { ok: false, error: "Nothing to change." };
+  const inv = await getInventory(org.organizationId);
+  const mine = inv.layers.filter((l) => l.productKey === productKey);
+  if (!mine.length) return { ok: false, error: "That product wasn't found in stock." };
+  const first = mine[0];
+
+  // Which product the corrected lots belong to.
+  let toId: string | null = first.productId;
+  let toName = clean(first.productName);
+  let toBrand: string | null = first.brand;
+  let toNoExpiry = false;
+  if (target && (target.productId || clean(target.name))) {
+    if (target.productId) {
+      const [p] = await db
+        .select({ id: purchasingProducts.id, name: purchasingProducts.name, category: purchasingCategories.name, noExpiration: purchasingProducts.noExpiration })
+        .from(purchasingProducts)
+        .leftJoin(purchasingCategories, eq(purchasingCategories.id, purchasingProducts.categoryId))
+        .where(and(eq(purchasingProducts.organizationId, org.organizationId), eq(purchasingProducts.id, target.productId)))
+        .limit(1);
+      if (!p) return { ok: false, error: "Choose the correct product from the list." };
+      toId = p.id; toName = clean(p.name); toBrand = clean(p.category) || brandFor(p.name); toNoExpiry = !!p.noExpiration;
+    } else {
+      toId = null; toName = clean(target.name).replace(/\s+/g, " ");
+      if (toName.length < 2 || toName.length > 160) return { ok: false, error: "Type the product's name (2 to 160 characters), or choose it from the list." };
+      toBrand = brandFor(toName);
+    }
+  }
+  const toKey = productKeyOf(toId, toName);
+
+  const net = new Map<string, { net: number; costUnits: number; costSum: number; layer: StockLayer }>();
+  for (const l of mine) {
+    const id = layerIdOf(l);
+    const g = net.get(id) ?? { net: 0, costUnits: 0, costSum: 0, layer: l };
+    g.net += l.quantity;
+    if (l.quantity > 0 && l.unitCost != null) { g.costUnits += l.quantity; g.costSum += l.unitCost * l.quantity; }
+    net.set(id, g);
+  }
+
+  const rows: (typeof inventoryMovements.$inferInsert)[] = [];
+  const delta = new Map<string, number>(); // "productKey|condKey" -> change in units
+  const bump = (k: string, n: number) => delta.set(k, (delta.get(k) ?? 0) + n);
+  const seen = new Set<string>();
+  const movedConditions = new Map<string, { fromCond: string; toCond: string }>();
+  let units = 0;
+  for (const [i, e] of edits.entries()) {
+    const at = `Row ${i + 1}`;
+    const fromId = layerIdOf({ productKey, condition: e.from.condition, expiry: normalizeExpiry(e.from.expiry), expiryEnd: normalizeExpiry(e.from.expiryEnd), lot: clean(e.from.lot) || null });
+    if (seen.has(fromId)) return { ok: false, error: `${at}: that lot is listed twice.` };
+    seen.add(fromId);
+    const old = net.get(fromId);
+    if (!old) return { ok: false, error: `${at}: this lot changed while you were editing. Reload the page and try again.` };
+    const condIn = clean(e.to.condition);
+    const unchangedCond = normKey(condIn) === normKey(e.from.condition);
+    const condition = unchangedCond ? e.from.condition : allowedConditions.find((c) => c.toLowerCase() === condIn.toLowerCase());
+    if (!condition) return { ok: false, error: `${at}: choose a condition from the list.` };
+    const qty = Number(e.to.quantity);
+    if (!Number.isInteger(qty) || qty < 0 || qty > 1_000_000) return { ok: false, error: `${at}: the quantity must be a whole number of 0 or more.` };
+    const read = parseExpiryInput(e.to.expiry);
+    if (!read.ok) return { ok: false, error: `${at}: ${read.error}` };
+    const expiry = toNoExpiry ? null : read.from;
+    const expiryEnd = toNoExpiry ? null : read.to;
+    const lot = clean(e.to.lot) || null;
+    if (lot && lot.length > 80) return { ok: false, error: `${at}: the lot number is too long.` };
+    const oldCost = old.costUnits > 0 ? Math.round((old.costSum / old.costUnits) * 100) / 100 : null;
+    let cost = oldCost;
+    let costChanged = false;
+    if (e.to.unitCost !== null && e.to.unitCost !== undefined && String(e.to.unitCost).trim() !== "") {
+      const c = Number(e.to.unitCost);
+      if (!Number.isFinite(c) || c < 0 || c > 1_000_000) return { ok: false, error: `${at}: the cost must be a number of 0 or more.` };
+      cost = Math.round(c * 100) / 100;
+      costChanged = cost !== oldCost;
+    }
+    const toLayer = layerIdOf({ productKey: toKey, condition, expiry, expiryEnd, lot });
+    const fromKeyCond = `${productKey}|${normKey(e.from.condition)}`;
+    const toKeyCond = `${toKey}|${normKey(condition)}`;
+    const l = old.layer;
+    const note = `Correction: ${why}`.slice(0, 300);
+    const base = { organizationId: org.organizationId, kind: "ADJUSTMENT" as const, note, refType: "stock_fix", refId: productKey, createdByUserId: org.userId };
+    const oldRow = (q: number) => ({ ...base, id: newId("invmove"), productId: l.productId, productKey, productName: l.productName, brand: l.brand, condition: l.condition, expirationDate: l.expiry, expirationEndDate: l.expiryEnd ?? null, lotNumber: l.lot, quantity: q, unitCost: oldCost });
+    const newRow = (q: number) => ({ ...base, id: newId("invmove"), productId: toId, productKey: toKey, productName: toName, brand: toBrand, condition, expirationDate: expiry, expirationEndDate: expiryEnd, lotNumber: lot, quantity: q, unitCost: cost });
+    if (toLayer === fromId) {
+      if (!costChanged && qty === old.net) continue;
+      if (!costChanged) { rows.push({ ...oldRow(qty - old.net), unitCost: oldCost }); bump(fromKeyCond, qty - old.net); }
+      else { if (old.net !== 0) rows.push(oldRow(-old.net)); if (qty !== 0) rows.push(newRow(qty)); bump(fromKeyCond, qty - old.net); }
+      units += Math.abs(qty - old.net);
+    } else {
+      if (old.net !== 0) rows.push(oldRow(-old.net));
+      if (qty > 0) rows.push(newRow(qty));
+      bump(fromKeyCond, -old.net); bump(toKeyCond, qty);
+      units += Math.max(Math.abs(old.net), qty);
+      movedConditions.set(`${normKey(e.from.condition)}>${normKey(condition)}`, { fromCond: e.from.condition, toCond: condition });
+    }
+  }
+  if (!rows.length) return { ok: false, error: "Nothing was changed." };
+
+  // Units that open invoices are holding can't be taken away from under them.
+  const totals = new Map<string, number>();
+  for (const l of inv.layers) { const k = `${l.productKey}|${normKey(l.condition)}`; totals.set(k, (totals.get(k) ?? 0) + l.quantity); }
+  for (const [k, d] of delta) {
+    if (d >= 0) continue;
+    const h = held[k] ?? 0;
+    if (h > 0 && (totals.get(k) ?? 0) + d < h) {
+      const [, cond] = k.split("|");
+      return { ok: false, error: `Open invoices are holding ${h} ${h === 1 ? "unit" : "units"} of ${first.productName} (${cond}). Change or finish those first, then correct the stock.` };
+    }
+  }
+
+  await db.insert(inventoryMovements).values(rows);
+
+  // Estimated selling prices follow a product or condition change, unless the new one has its own.
+  if (toKey !== productKey || movedConditions.size) {
+    const have = await getEstimates(org.organizationId);
+    for (const e of edits) {
+      const cond = clean(e.to.condition) || e.from.condition;
+      const fromEst = have.get(`${productKey}|${normKey(e.from.condition)}`);
+      if (fromEst && !have.has(`${toKey}|${normKey(cond)}`)) await saveEstimate(org, toKey, normKey(cond), fromEst.low, fromEst.high);
+    }
+  }
+  return { ok: true, changed: units, rows: rows.length };
 }
 
 /** Removes movement rows made a moment ago in the same request (undoing a sale whose email failed). */

@@ -391,6 +391,31 @@ export async function reservedByDrafts(organizationId: string, excludeDocId?: st
   return buildReserved(rows.filter((r) => r.id !== excludeDocId));
 }
 
+/**
+ * A product's name was corrected in Inventory: draft invoices and open sales orders that hold it follow the new name, so their holds
+ * still match the stock. Sent invoices keep the name they were sent with (they are a record of what was sold).
+ */
+export async function retargetHeldLines(organizationId: string, fromKey: string, to: { key: string; productId: string | null; name: string }): Promise<number> {
+  const rows = await db
+    .select({ lineId: salesDocumentLines.id })
+    .from(salesDocumentLines)
+    .innerJoin(salesDocuments, eq(salesDocuments.id, salesDocumentLines.documentId))
+    .where(
+      and(
+        eq(salesDocuments.organizationId, organizationId),
+        eq(salesDocumentLines.productKey, fromKey),
+        or(
+          and(eq(salesDocuments.kind, "INVOICE"), eq(salesDocuments.status, "DRAFT")),
+          and(eq(salesDocuments.kind, "SALES_ORDER"), inArray(salesDocuments.status, [...SO_HOLDING_STATUSES])),
+        ),
+      ),
+    );
+  for (let i = 0; i < rows.length; i += 200) {
+    await db.update(salesDocumentLines).set({ productKey: to.key, productId: to.productId, productName: to.name }).where(inArray(salesDocumentLines.id, rows.slice(i, i + 200).map((r) => r.lineId)));
+  }
+  return rows.length;
+}
+
 /** Live stock and what drafts hold, as of today: everything the editor needs to show "in stock" beside each item. */
 export async function salesStockContext(organizationId: string, excludeDocId?: string | null): Promise<{ stock: StockMap; reserved: Reserved; today: string }> {
   const [inv, reserved] = await Promise.all([getInventory(organizationId), reservedByDrafts(organizationId, excludeDocId)]);
