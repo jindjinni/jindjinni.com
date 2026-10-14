@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireOrg } from "@/lib/tenant";
 import { canWriteInventory } from "@/lib/permissions";
 import { MANUAL_CONDITIONS } from "@/lib/inventory-conditions";
-import { addManualStock, correctProductName, correctStockLines, saveEstimate, type ManualLineInput, type StockLineEdit } from "@/lib/inventory-service";
+import { addManualStock, correctProductName, correctStockLines, saveEstimate, setProductBrand, type ManualLineInput, type StockLineEdit } from "@/lib/inventory-service";
 import { heldByProductCondition, reservedByDrafts, retargetHeldLines } from "@/lib/sales-service";
 import { featureOn } from "@/lib/features";
 import { normKey } from "@/lib/inventory-rules";
@@ -71,4 +71,18 @@ export async function correctStockAction(input: { productKey: string; productId?
   revalidatePath("/dashboard/inventory", "layout");
   revalidatePath("/dashboard/sales", "layout");
   return { ok: true, message: `Corrected. It is recorded in the movements history.` };
+}
+
+/** Change brand: files one product under the right brand (category) in Live Stock. No units move. Blank puts it back under its original brand. */
+export async function setProductBrandAction(input: { productKey: string; brand: string; knownBrands: string[] }): Promise<InventoryActionState> {
+  const org = await requireOrg();
+  if (!canWriteInventory(org.role, org.access)) return { error: "Only a Purchasing Manager, Admin, the Owner, or someone given work in Inventory can change a product's brand." };
+  if (!(await featureOn("inventory-fix-name", org.organizationId))) return { error: "Changing a product's brand isn't turned on for your company yet." };
+  const known = Array.isArray(input?.knownBrands) ? input.knownBrands.map((b) => String(b).slice(0, 60)).slice(0, 500) : [];
+  const res = await setProductBrand(org, String(input?.productKey ?? ""), String(input?.brand ?? "").slice(0, 80), known);
+  if (!res.ok) return { error: res.error };
+  await logActivity(org, "STOCK_CHANGE", res.reset ? `Put a product back under its original brand (${res.brand})` : `Moved a product in stock from ${res.fromBrand} to ${res.brand}`, null);
+  revalidatePath("/dashboard/inventory", "layout");
+  revalidatePath("/dashboard/sales", "layout");
+  return { ok: true, message: res.reset ? `Back under ${res.brand}.` : `Now filed under ${res.brand}.` };
 }

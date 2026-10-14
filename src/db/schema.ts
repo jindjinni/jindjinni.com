@@ -2253,6 +2253,25 @@ export const inventoryEstimates = sqliteTable(
   (t) => [uniqueIndex("inventory_estimates_unique").on(t.organizationId, t.productKey, t.conditionKey)],
 );
 
+/**
+ * Which brand (category) Live Stock files a product under when the brand it was received, added or imported with was wrong. One row per
+ * product; it is a label on top of the stock (no units move), and removing it puts the product back under its original brand.
+ */
+export const inventoryBrandOverrides = sqliteTable(
+  "inventory_brand_overrides",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    productKey: text("product_key").notNull(),
+    brand: text("brand").notNull(),
+    updatedByUserId: text("updated_by_user_id"),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex("inventory_brand_overrides_unique").on(t.organizationId, t.productKey)],
+);
+
 // ---------------------------------------------------------------------------
 // Sales department. Quotations and invoices to wholesale buyers, fed by Inventory (live stock beside each item; units are
 // held by a DRAFT invoice and taken out of Inventory when the invoice is SENT). Buyers carry an uploaded price sheet so

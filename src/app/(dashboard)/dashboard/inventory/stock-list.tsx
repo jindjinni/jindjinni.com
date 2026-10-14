@@ -1,6 +1,6 @@
 "use client";
 
-import { FixName, type CatalogChoice } from "./fix-name";
+import { FixBrand, FixName, type CatalogChoice } from "./fix-name";
 import { EditLine, type LotView } from "./edit-line";
 import Link from "next/link";
 import { Fragment, useMemo, useState } from "react";
@@ -40,7 +40,7 @@ const GROUP_CLASS = (key: string) =>
       ? "bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-100"
       : "bg-sky-100 text-sky-900 dark:bg-sky-900/40 dark:text-sky-100";
 
-export function StockList({ brands, totals, today, by, heldTotal, canWrite, catalog, edit }: { brands: BrandView[]; totals: Totals; today: string; heldTotal: number | null; by: "months" | "range"; canWrite: boolean; /** Present only when this person may correct a product's name (flag `inventory-fix-name`). */ catalog?: CatalogChoice[]; /** Present only when this person may edit stock lines (flag `inventory-edit-stock`). */ edit?: { catalog: CatalogChoice[]; conditions: string[] } }) {
+export function StockList({ brands, totals, today, by, heldTotal, canWrite, catalog, brandChoices, edit }: { brands: BrandView[]; totals: Totals; today: string; heldTotal: number | null; by: "months" | "range"; canWrite: boolean; /** Present only when this person may correct a product's name (flag `inventory-fix-name`). */ catalog?: CatalogChoice[]; /** Brands to choose from for Change brand (same switch as Fix name). */ brandChoices?: string[]; /** Present only when this person may edit stock lines (flag `inventory-edit-stock`). */ edit?: { catalog: CatalogChoice[]; conditions: string[] } }) {
   const [q, setQ] = useState("");
   const [cond, setCond] = useState("");
   const [grp, setGrp] = useState("");
@@ -201,6 +201,7 @@ export function StockList({ brands, totals, today, by, heldTotal, canWrite, cata
                       Lots, serial numbers and history
                     </Link>
                     {catalog && <FixName productKey={p.key} productName={p.productName} units={p.quantity} catalog={catalog} />}
+                    {brandChoices && <FixBrand productKey={p.key} productName={p.productName} brand={b.brand} brands={brandChoices} />}
                   </div>
                 </details>
               ))}

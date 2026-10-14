@@ -72,5 +72,5 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
       })),
     })),
   }));
-  return <StockList key={by} brands={brands} totals={totals} today={snap.today} heldTotal={showHolds ? Object.entries(heldByProduct).reduce((n, [pk, v]) => n + Math.min(v, Math.max(0, snap.lines.filter((l) => l.productKey === pk).reduce((m, l) => m + l.quantity, 0))), 0) : null} by={by} canWrite={mayChange} catalog={canFix ? catalog : undefined} edit={canEdit && catalog ? { catalog, conditions: [...MANUAL_CONDITIONS] } : undefined} />;
+  return <StockList key={by} brands={brands} totals={totals} today={snap.today} heldTotal={showHolds ? Object.entries(heldByProduct).reduce((n, [pk, v]) => n + Math.min(v, Math.max(0, snap.lines.filter((l) => l.productKey === pk).reduce((m, l) => m + l.quantity, 0))), 0) : null} by={by} canWrite={mayChange} catalog={canFix ? catalog : undefined} brandChoices={canFix ? [...new Set([...brands.map((x) => x.brand), ...(catalog ?? []).map((c) => c.brand)].filter((x) => x && x !== "Other"))].sort((a, c) => a.localeCompare(c)) : undefined} edit={canEdit && catalog ? { catalog, conditions: [...MANUAL_CONDITIONS] } : undefined} />;
 }

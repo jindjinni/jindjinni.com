@@ -9,7 +9,7 @@
 
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db/client";
-import { inventoryEstimates, inventoryMovements, purchasingCategories, purchasingExpirationRanges, purchasingProducts, receivingItems } from "@/db/schema";
+import { inventoryBrandOverrides, inventoryEstimates, inventoryMovements, purchasingCategories, purchasingExpirationRanges, purchasingProducts, receivingItems } from "@/db/schema";
 import { newId } from "@/lib/ids";
 import { getReceivedItems } from "@/lib/receiving-queries";
 import { dayOf, heldReason } from "@/lib/receiving-daily";
@@ -92,6 +92,12 @@ function receivedDates(r: { expirationDate: string | null; expirationEarliest: s
   return { expiry: start, expiryEnd: start && latest && latest > start ? latest : null };
 }
 
+/** Products re-filed under another brand: productKey -> brand. */
+export async function getBrandOverrides(organizationId: string): Promise<Map<string, string>> {
+  const rows = await db.select({ productKey: inventoryBrandOverrides.productKey, brand: inventoryBrandOverrides.brand }).from(inventoryBrandOverrides).where(eq(inventoryBrandOverrides.organizationId, organizationId));
+  return new Map(rows.map((r) => [r.productKey, r.brand]));
+}
+
 /** Receiving's accepted units as layers. */
 export async function receivedLayers(organizationId: string): Promise<StockLayer[]> {
   const rows: Awaited<ReturnType<typeof getReceivedItems>>["rows"] = [];
@@ -152,7 +158,12 @@ export async function getInventory(organizationId: string, opts: { groupBy?: "mo
     movementLayers(organizationId),
   ]);
   const today = todayIn(terms.timeZone);
-  const layers = [...received, ...moves];
+  // A product the team re-filed under another brand shows there everywhere (Live Stock, the Sales editor); the units themselves don't move.
+  const overrides = await getBrandOverrides(organizationId);
+  const layers = [...received, ...moves].map((l) => {
+    const b = overrides.get(l.productKey);
+    return b ? { ...l, brand: b } : l;
+  });
   return { today, ranges, estimates, layers, lines: buildLines(layers, today, ranges, estimates, { groupBy: opts.groupBy }) };
 }
 
@@ -404,6 +415,34 @@ export async function returnSaleDetailed(org: { organizationId: string; userId: 
 /** Puts back what a sale took out (an invoice voided): see `returnSaleDetailed`. Returns the number of units. */
 export async function returnSale(org: { organizationId: string; userId: string }, refType: string, refId: string, note: string): Promise<number> {
   return (await returnSaleDetailed(org, refType, refId, note)).units;
+}
+
+// ---- re-filing a product under another brand ---------------------------------------------------------------------
+
+export type BrandFix = { ok: true; brand: string; fromBrand: string; reset: boolean } | { ok: false; error: string };
+
+/**
+ * A product sits under the wrong brand (category) in Live Stock because of how it was received, added or imported. This files it under
+ * the right one. No units move and no Receiving record changes: it is one label per product. `brand` blank puts the product back under the
+ * brand it came in with. A typed brand that matches an existing one in different capitals uses the existing spelling.
+ */
+export async function setProductBrand(org: { organizationId: string; userId: string }, productKey: string, brandIn: string, knownBrands: string[]): Promise<BrandFix> {
+  const inv = await getInventory(org.organizationId);
+  const mine = inv.layers.filter((l) => l.productKey === productKey);
+  if (!mine.length) return { ok: false, error: "That product wasn't found in stock." };
+  const fromBrand = clean(mine[0].brand) || "Other";
+  const wanted = clean(brandIn).replace(/\s+/g, " ");
+  const existing = await db.select({ id: inventoryBrandOverrides.id }).from(inventoryBrandOverrides).where(and(eq(inventoryBrandOverrides.organizationId, org.organizationId), eq(inventoryBrandOverrides.productKey, productKey))).limit(1);
+  if (!wanted) {
+    if (existing[0]) await db.delete(inventoryBrandOverrides).where(eq(inventoryBrandOverrides.id, existing[0].id));
+    return { ok: true, brand: fromBrand, fromBrand, reset: true };
+  }
+  if (wanted.length < 2 || wanted.length > 60) return { ok: false, error: "A brand name is 2 to 60 characters." };
+  const brand = [...knownBrands, ...inv.layers.map((l) => clean(l.brand))].find((b) => b && b.toLowerCase() === wanted.toLowerCase()) ?? wanted;
+  if (brand.toLowerCase() === fromBrand.toLowerCase()) return { ok: false, error: `It is already under ${fromBrand}.` };
+  if (existing[0]) await db.update(inventoryBrandOverrides).set({ brand, updatedByUserId: org.userId, updatedAt: new Date().toISOString() }).where(eq(inventoryBrandOverrides.id, existing[0].id));
+  else await db.insert(inventoryBrandOverrides).values({ id: newId("invbrand"), organizationId: org.organizationId, productKey, brand, updatedByUserId: org.userId });
+  return { ok: true, brand, fromBrand, reset: false };
 }
 
 // ---- correcting a product's name ----------------------------------------------------------------------------------

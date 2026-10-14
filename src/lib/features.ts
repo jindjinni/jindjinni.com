@@ -128,8 +128,8 @@ export const FEATURES: FeatureDef[] = [
   },
   {
     key: "inventory-fix-name",
-    label: "Inventory: correct a product's name in Live Stock",
-    blurb: "A Fix name button on each product in Live Stock for the Owner, Admin, Purchasing Managers and anyone given work in Inventory: pick the right product from your list (or type a name) and all of that product's stock moves to it with the same quantities, dating, lots and costs. Recorded in the movements history; drafts holding it follow the new name.",
+    label: "Inventory: correct a product's name or brand in Live Stock",
+    blurb: "Fix name and Change brand buttons on each product in Live Stock for the Owner, Admin, Purchasing Managers and anyone given work in Inventory: pick the right product from your list (or type a name) and all of that product's stock moves to it with the same quantities, dating, lots and costs (recorded in the movements history; drafts holding it follow the new name), or file the product under the right brand (category) with no units moving.",
     defaultStage: "mothership",
   },
   {
