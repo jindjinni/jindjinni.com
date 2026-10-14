@@ -63,7 +63,7 @@ export async function DocNewPage({ kind, buyerId }: { kind: Kind; buyerId?: stri
           : "Pick the buyer, then add items. Beside each item you'll see how many you have in stock and how many are still available to sell."}
       </p>
       <div className="mt-4">
-        <DocEditor kind={kind} docId={null} number={null} base={baseOf(kind)} initial={initial} buyers={data.buyers} products={data.products} conditions={data.conditions} stock={data.stock} reserved={data.reserved} buyerPrices={data.buyerPrices} />
+        <DocEditor kind={kind} docId={null} number={null} base={baseOf(kind)} initial={initial} buyers={data.buyers} products={data.products} conditions={data.conditions} stock={data.stock} reserved={data.reserved} buyerPrices={data.buyerPrices} picker={data.picker} />
       </div>
     </div>
   );
@@ -144,7 +144,7 @@ export async function DocDetailPage({ kind, id, revise }: { kind: Kind; id: stri
         ) : (
           actions
         )}
-        <DocEditor revise={revising} kind={kind} docId={doc.id} number={doc.number} base={baseOf(kind)} initial={initial} buyers={data.buyers} products={data.products} conditions={data.conditions} stock={data.stock} reserved={data.reserved} buyerPrices={data.buyerPrices} />
+        <DocEditor revise={revising} kind={kind} docId={doc.id} number={doc.number} base={baseOf(kind)} initial={initial} buyers={data.buyers} products={data.products} conditions={data.conditions} stock={data.stock} reserved={data.reserved} buyerPrices={data.buyerPrices} picker={data.picker} />
       </div>
     );
   }

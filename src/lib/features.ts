@@ -114,6 +114,12 @@ export const FEATURES: FeatureDef[] = [
     blurb: "Inventory -> Import Stock: a company moving over loads what it holds today from an Excel or CSV file. The file is read and shown first, nothing is saved until the person confirms, the same file can't be imported twice, and an import can be undone (reversing entries, nothing deleted). Same permissions as Manual Add.",
     defaultStage: "mothership",
   },
+  {
+    key: "invoice-stock-picker",
+    label: "Sales: stock browser and exact expirations on invoice lines",
+    blurb: "In the Sales editor: a closed, expandable Browse stock list grouped by brand and product to add items from, a choice of the exact expiration month or month range on each line (or a typed date or month range), and Live Stock showing how many units invoices are holding and what is still available.",
+    defaultStage: "mothership",
+  },
 ];
 
 export const featureDef = (key: string) => FEATURES.find((f) => f.key === key);

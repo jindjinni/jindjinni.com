@@ -1,6 +1,8 @@
 import { requireOrg } from "@/lib/tenant";
 import { canWriteInventory } from "@/lib/permissions";
 import { getInventory } from "@/lib/inventory-service";
+import { featureOn } from "@/lib/features";
+import { reservedByDrafts } from "@/lib/sales-service";
 import { groupStock, totalsOf } from "@/lib/inventory-rules";
 import { StockList, type BrandView } from "./stock-list";
 
@@ -14,11 +16,21 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
   // ?by=range groups by the exact month or month range written on the product, instead of the company's price buckets
   const by = sp.by === "range" ? "range" : "months";
   const snap = await getInventory(org.organizationId, { groupBy: by });
+  // With the invoice stock picker on, units that draft invoices and open sales orders are holding show right here, so nobody sells them twice.
+  const showHolds = await featureOn("invoice-stock-picker", org.organizationId);
+  const heldByProduct: Record<string, number> = {};
+  if (showHolds) {
+    for (const [k, n] of Object.entries(await reservedByDrafts(org.organizationId))) {
+      const pk = k.split("|")[0];
+      heldByProduct[pk] = (heldByProduct[pk] ?? 0) + n;
+    }
+  }
   const totals = totalsOf(snap.lines);
   const brands: BrandView[] = groupStock(snap.lines).map((b) => ({
     key: b.key,
     brand: b.brand,
     quantity: b.quantity,
+    held: showHolds ? b.products.reduce((n, p) => n + Math.min(heldByProduct[p.key] ?? 0, Math.max(0, p.quantity)), 0) : null,
     costValue: b.costValue,
     estLow: b.estLow,
     estHigh: b.estHigh,
@@ -26,6 +38,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
       key: p.key,
       productName: p.productName,
       quantity: p.quantity,
+      held: showHolds ? Math.min(heldByProduct[p.key] ?? 0, Math.max(0, p.quantity)) : null,
       costValue: p.costValue,
       estLow: p.estLow,
       estHigh: p.estHigh,
@@ -48,5 +61,5 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
       })),
     })),
   }));
-  return <StockList key={by} brands={brands} totals={totals} today={snap.today} by={by} canWrite={canWriteInventory(org.role, org.access)} />;
+  return <StockList key={by} brands={brands} totals={totals} today={snap.today} heldTotal={showHolds ? Object.entries(heldByProduct).reduce((n, [pk, v]) => n + Math.min(v, Math.max(0, snap.lines.filter((l) => l.productKey === pk).reduce((m, l) => m + l.quantity, 0))), 0) : null} by={by} canWrite={canWriteInventory(org.role, org.access)} />;
 }

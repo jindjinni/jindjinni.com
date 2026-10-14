@@ -8,6 +8,8 @@ import { normKey } from "@/lib/inventory-rules";
 import { dateLabel, docWord, dueLabel, refLabel, type DocKind } from "@/lib/sales-doc-ui";
 import { availability, computeTotals, dueDateFor, lineAmount, reserveKey, TERMS_OPTIONS, type Reserved, type StockMap } from "@/lib/sales-rules";
 import { card, field, fmtMoney, ghostBtn, primaryBtn } from "@/components/sales-ui";
+import { ExpiryField } from "@/components/expiry-field";
+import { StockBrowser, type PickedStock } from "./stock-browser";
 
 export type EditorBuyer = { id: string; name: string; contact: string; email: string; phone: string; billing: string; shipping: string; terms: string; notes: string };
 export type EditorProduct = { id: string; key: string; name: string; brand: string; code?: string | null };
@@ -53,8 +55,11 @@ export function DocEditor(props: {
   stock: StockMap;
   reserved: Reserved;
   buyerPrices: Record<string, Record<string, number>>;
+  /** Flag `invoice-stock-picker`: Browse stock, exact expirations and typed dates. */
+  picker?: boolean;
 }) {
   const { kind, docId, base, buyers, products, conditions, stock, reserved, buyerPrices } = props;
+  const picker = !!props.picker;
   const isInvoice = kind === "INVOICE";
   const isPo = kind === "PURCHASE_ORDER";
   const isSo = kind === "SALES_ORDER";
@@ -86,9 +91,27 @@ export function DocEditor(props: {
     }
     const a = availability(stock, mine, l.productKey, l.condition, l.groupKey);
     const cond = stock[l.productKey]?.conditions[normKey(l.condition)];
-    const groups = (cond?.groups ?? []).map((g) => ({ ...g, ...availability(stock, mine, l.productKey, l.condition, g.key) }));
+    const groups = ((picker ? cond?.exact : cond?.groups) ?? []).map((g) => ({ ...g, ...availability(stock, mine, l.productKey, l.condition, g.key) }));
     return { ...a, groups, anyCondition: Object.values(stock[l.productKey]?.conditions ?? {}) };
   };
+
+  // Everything held right now for the stock browser: other drafts, plus every line on this document.
+  const heldNow: Reserved = { ...reserved };
+  for (const o of lines) {
+    if (!o.productKey) continue;
+    const k = reserveKey(o.productKey, o.condition, o.groupKey);
+    heldNow[k] = (heldNow[k] ?? 0) + (Number(o.quantity) || 0);
+  }
+
+  function addFromStock(pk: PickedStock) {
+    const p = products.find((x) => x.key === pk.productKey);
+    const price = buyerPrices[h.buyerId]?.[`${pk.productKey}|${normKey(pk.condition)}`];
+    const filled = { productKey: pk.productKey, productId: p?.id || null, productName: stock[pk.productKey]?.productName ?? p?.name ?? "", condition: pk.condition, groupKey: pk.groupKey, groupLabel: pk.groupLabel, quantity: pk.quantity, unitPrice: price != null ? String(price) : "", ndc: p?.code ?? "" };
+    setLines((ls) => {
+      const empty = ls.find((l) => !l.productKey);
+      return empty ? ls.map((l) => (l.rid === empty.rid ? { ...l, ...filled } : l)) : [...ls, { ...blankLine(), ...filled }];
+    });
+  }
 
   const short = isInvoice || isSo ? lines.filter((l) => l.productKey && (Number(l.quantity) || 0) > stockFor(l).available) : [];
 
@@ -231,6 +254,7 @@ export function DocEditor(props: {
             {short.length === 1 ? "One item asks" : `${short.length} items ask`} for more than is available. {isSo ? "You can save the draft, but check the stock before you confirm it: the invoice can't be sent until the stock is there." : "You can save the draft, but it can't be sent until the stock is there."}
           </p>
         )}
+        {picker && !isPo && <StockBrowser stock={stock} held={heldNow} onAdd={addFromStock} />}
         {lines.map((l, i) => (
           <LineRow
             key={l.rid}
@@ -241,6 +265,7 @@ export function DocEditor(props: {
             stock={stock}
             avail={l.productKey ? stockFor(l) : null}
             showStock={true}
+            picker={picker}
             canRemove={lines.length > 1}
             buyerPrice={l.productKey && h.buyerId ? buyerPrices[h.buyerId]?.[`${l.productKey}|${normKey(l.condition)}`] ?? null : null}
             onPickProduct={(p) => pickProduct(l.rid, p)}
@@ -300,6 +325,8 @@ export function DocEditor(props: {
   );
 }
 
+const TYPED = "__typed";
+
 type Avail = { onHand: number; held: number; available: number; groups: { key: string; label: string; onHand: number; from: string | null; to: string | null; available: number; held: number }[]; anyCondition: { condition: string; onHand: number }[] };
 
 function LineRow(props: {
@@ -310,6 +337,7 @@ function LineRow(props: {
   stock: StockMap;
   avail: Avail | null;
   showStock: boolean;
+  picker: boolean;
   canRemove: boolean;
   buyerPrice: number | null;
   onPickProduct: (p: EditorProduct) => void;
@@ -330,6 +358,8 @@ function LineRow(props: {
   const over = !!avail && qty > avail.available;
   const condOptions = [...new Set([...(avail?.anyCondition.map((c) => c.condition) ?? []), ...props.conditions])];
   const rid = l.rid;
+  // A line with no stock group but a dating text is a date or month range typed by hand.
+  const typed = !l.groupKey && l.groupLabel !== null;
 
   return (
     <div className={`${card} grid gap-4 lg:grid-cols-[1fr_16rem]`} data-testid="de-line">
@@ -376,11 +406,26 @@ function LineRow(props: {
             </select>
           </div>
           <div className="sm:col-span-2">
-            <label htmlFor={`de-group-${rid}`} className="text-xs font-medium text-slate-700 dark:text-slate-300">Dating</label>
-            <select id={`de-group-${rid}`} value={l.groupKey ?? ""} onChange={(e) => { const g = avail?.groups.find((x) => x.key === e.target.value); props.onPatch({ groupKey: g ? g.key : null, groupLabel: g ? g.label : null }); }} className={`${field} mt-1`} data-testid="de-group" disabled={!avail}>
+            <label htmlFor={`de-group-${rid}`} className="text-xs font-medium text-slate-700 dark:text-slate-300">{props.picker ? "Expiration" : "Dating"}</label>
+            <select
+              id={`de-group-${rid}`}
+              value={props.picker && typed ? TYPED : l.groupKey ?? ""}
+              onChange={(e) => {
+                if (e.target.value === TYPED) return props.onPatch({ groupKey: null, groupLabel: "" });
+                const g = avail?.groups.find((x) => x.key === e.target.value);
+                props.onPatch({ groupKey: g ? g.key : null, groupLabel: g ? g.label : null });
+              }}
+              className={`${field} mt-1`}
+              data-testid="de-group"
+              disabled={!avail}
+            >
               <option value="">Any dating (earliest first)</option>
               {avail?.groups.map((g) => <option key={g.key} value={g.key}>{g.label} · {g.available} available</option>)}
+              {props.picker && <option value={TYPED}>Type a date or month range…</option>}
             </select>
+            {props.picker && typed && (
+              <ExpiryField id={`de-typed-${rid}`} className="mt-1" value={l.groupLabel ?? ""} onChange={(t) => props.onPatch({ groupKey: null, groupLabel: t })} testid="de-typed" />
+            )}
           </div>
           <div>
             <label htmlFor={`de-qty-${rid}`} className="text-xs font-medium text-slate-700 dark:text-slate-300">Quantity</label>

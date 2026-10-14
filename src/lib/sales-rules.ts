@@ -110,20 +110,28 @@ export function afterPayment(doc: { total: number; amountPaid: number }, amount:
 // ---- stock beside each item --------------------------------------------------------------------------------------
 
 export type StockGroup = { key: string; label: string; onHand: number; from: string | null; to: string | null };
-export type StockCondition = { condition: string; onHand: number; groups: StockGroup[] };
+/** `groups` are the company's price buckets; `exact` are the exact months and month ranges (keys start with "x:"). */
+export type StockCondition = { condition: string; onHand: number; groups: StockGroup[]; exact: StockGroup[] };
 /** product key -> condition key -> what is on hand (only quantities above zero). Plain data, so it can go to the browser. */
 export type StockMap = Record<string, { productName: string; brand: string; conditions: Record<string, StockCondition> }>;
 
-export function buildStockMap(lines: StockLine[]): StockMap {
+export function buildStockMap(lines: StockLine[], exactLines: StockLine[] = []): StockMap {
   const out: StockMap = {};
   for (const l of lines) {
     if (l.quantity <= 0) continue;
     const p = (out[l.productKey] ??= { productName: l.productName, brand: l.brand, conditions: {} });
     const ck = normKey(l.condition);
-    const c = (p.conditions[ck] ??= { condition: l.condition, onHand: 0, groups: [] });
+    const c = (p.conditions[ck] ??= { condition: l.condition, onHand: 0, groups: [], exact: [] });
     c.onHand += l.quantity;
     c.groups.push({ key: l.group.key, label: l.group.label, onHand: l.quantity, from: l.expiryFrom, to: l.expiryTo });
   }
+  // The same stock again, grouped by the exact month or month range. Units that have no date or are expired can't be picked by date.
+  for (const l of exactLines) {
+    if (l.quantity <= 0 || !l.group.key.startsWith("x:")) continue;
+    const c = out[l.productKey]?.conditions[normKey(l.condition)];
+    if (c) c.exact.push({ key: l.group.key, label: l.group.label, onHand: l.quantity, from: l.expiryFrom, to: l.expiryTo });
+  }
+  for (const p of Object.values(out)) for (const c of Object.values(p.conditions)) c.exact.sort((a, b) => (a.from ?? "").localeCompare(b.from ?? "") || (a.to ?? "").localeCompare(b.to ?? ""));
   return out;
 }
 
@@ -159,7 +167,7 @@ export function availability(stock: StockMap, reserved: Reserved, productKey: st
   }
   const total = cond?.onHand ?? 0;
   if (!groupKey) return { onHand: total, held: heldAll, available: Math.max(0, total - heldAll) };
-  const g = cond?.groups.find((x) => x.key === groupKey)?.onHand ?? 0;
+  const g = (groupKey.startsWith("x:") ? cond?.exact : cond?.groups)?.find((x) => x.key === groupKey)?.onHand ?? 0;
   return { onHand: g, held: heldGroup, available: Math.max(0, Math.min(g - heldGroup, total - heldAll)) };
 }
 

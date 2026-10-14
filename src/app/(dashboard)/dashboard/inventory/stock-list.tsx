@@ -22,8 +22,8 @@ export type LineView = {
   received: number;
   manual: number;
 };
-export type ProductView = { key: string; productName: string; quantity: number; costValue: number; estLow: number | null; estHigh: number | null; lines: LineView[] };
-export type BrandView = { key: string; brand: string; quantity: number; costValue: number; estLow: number | null; estHigh: number | null; products: ProductView[] };
+export type ProductView = { key: string; productName: string; quantity: number; held: number | null; costValue: number; estLow: number | null; estHigh: number | null; lines: LineView[] };
+export type BrandView = { key: string; brand: string; quantity: number; held: number | null; costValue: number; estLow: number | null; estHigh: number | null; products: ProductView[] };
 export type Totals = { units: number; lines: number; products: number; costValue: number; estLow: number | null; estHigh: number | null; oversold: number };
 
 const control = "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900";
@@ -36,7 +36,7 @@ const GROUP_CLASS = (key: string) =>
       ? "bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-100"
       : "bg-sky-100 text-sky-900 dark:bg-sky-900/40 dark:text-sky-100";
 
-export function StockList({ brands, totals, today, by, canWrite }: { brands: BrandView[]; totals: Totals; today: string; by: "months" | "range"; canWrite: boolean }) {
+export function StockList({ brands, totals, today, by, heldTotal, canWrite }: { brands: BrandView[]; totals: Totals; today: string; heldTotal: number | null; by: "months" | "range"; canWrite: boolean }) {
   const [q, setQ] = useState("");
   const [cond, setCond] = useState("");
   const [grp, setGrp] = useState("");
@@ -63,7 +63,7 @@ export function StockList({ brands, totals, today, by, canWrite }: { brands: Bra
             const v = lines.map(f).filter((x): x is number => x != null);
             return v.length ? v.reduce((n, x) => n + x, 0) : null;
           };
-          products.push({ ...p, lines, quantity: lines.reduce((n, l) => n + l.quantity, 0), costValue: lines.reduce((n, l) => n + l.costValue, 0), estLow: sum((l) => l.estLow), estHigh: sum((l) => l.estHigh) });
+          products.push({ ...p, lines, quantity: lines.reduce((n, l) => n + l.quantity, 0), held: p.held, costValue: lines.reduce((n, l) => n + l.costValue, 0), estLow: sum((l) => l.estLow), estHigh: sum((l) => l.estHigh) });
         }
       }
       if (products.length) {
@@ -71,7 +71,7 @@ export function StockList({ brands, totals, today, by, canWrite }: { brands: Bra
           const v = products.map(f).filter((x): x is number => x != null);
           return v.length ? v.reduce((n, x) => n + x, 0) : null;
         };
-        out.push({ ...b, products, quantity: products.reduce((n, p) => n + p.quantity, 0), costValue: products.reduce((n, p) => n + p.costValue, 0), estLow: sum((p) => p.estLow), estHigh: sum((p) => p.estHigh) });
+        out.push({ ...b, products, quantity: products.reduce((n, p) => n + p.quantity, 0), held: b.held != null ? products.reduce((n, p) => n + (p.held ?? 0), 0) : null, costValue: products.reduce((n, p) => n + p.costValue, 0), estLow: sum((p) => p.estLow), estHigh: sum((p) => p.estHigh) });
       }
     }
     return out;
@@ -94,7 +94,7 @@ export function StockList({ brands, totals, today, by, canWrite }: { brands: Bra
       </div>
 
       <dl className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="inv-summary">
-        <Tile label="Units in stock" value={nf.format(totals.units)} testid="inv-units" note={`${totals.products} ${totals.products === 1 ? "product" : "products"} · ${totals.lines} ${totals.lines === 1 ? "line" : "lines"}`} />
+        <Tile label="Units in stock" value={nf.format(totals.units)} testid="inv-units" note={heldTotal != null ? `${nf.format(heldTotal)} held on invoices · ${nf.format(Math.max(0, totals.units - heldTotal))} available to sell` : `${totals.products} ${totals.products === 1 ? "product" : "products"} · ${totals.lines} ${totals.lines === 1 ? "line" : "lines"}`} />
         <Tile label="Cost value" value={MONEY.format(totals.costValue)} testid="inv-cost" note="what the stock cost" />
         <Tile label="Estimated value" value={rangeLabel(totals.estLow, totals.estHigh) || "Not set"} testid="inv-est" note="from your estimated prices" />
         <Tile label="As of" value={today} testid="inv-today" note="expiration groups follow today" />
@@ -140,7 +140,7 @@ export function StockList({ brands, totals, today, by, canWrite }: { brands: Bra
             <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/60">
               <span aria-hidden className="text-[10px] text-slate-400 transition group-open:rotate-90">▶</span>
               <span className="min-w-[8rem] text-base font-semibold text-slate-900 dark:text-slate-50" data-testid="inv-brand-name">{b.brand}</span>
-              <Totals qty={b.quantity} cost={b.costValue} low={b.estLow} high={b.estHigh} />
+              <Totals qty={b.quantity} held={b.held} cost={b.costValue} low={b.estLow} high={b.estHigh} />
             </summary>
             <div className="border-t border-slate-100 bg-stone-50/60 dark:border-slate-800 dark:bg-slate-950/40">
               {b.products.map((p) => (
@@ -148,7 +148,7 @@ export function StockList({ brands, totals, today, by, canWrite }: { brands: Bra
                   <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-4 gap-y-1 py-2.5 pl-9 pr-4 hover:bg-white dark:hover:bg-slate-900">
                     <span aria-hidden className="text-[10px] text-slate-400 transition group-open/p:rotate-90">▶</span>
                     <span className="min-w-[10rem] flex-1 text-sm font-semibold text-slate-900 dark:text-slate-50" data-testid="inv-product-name">{p.productName}</span>
-                    <Totals qty={p.quantity} cost={p.costValue} low={p.estLow} high={p.estHigh} />
+                    <Totals qty={p.quantity} held={p.held} cost={p.costValue} low={p.estLow} high={p.estHigh} />
                   </summary>
                   <div className="overflow-x-auto pb-3 pl-9 pr-4">
                     <table className="w-full min-w-[640px] text-left text-sm" data-testid="inv-lines">
@@ -208,11 +208,12 @@ function Tile({ label, value, note, testid }: { label: string; value: string; no
   );
 }
 
-function Totals({ qty, cost, low, high }: { qty: number; cost: number; low: number | null; high: number | null }) {
+function Totals({ qty, held, cost, low, high }: { qty: number; held: number | null; cost: number; low: number | null; high: number | null }) {
   const est = rangeLabel(low, high);
   return (
     <span className="flex flex-wrap items-center gap-x-4 gap-y-0.5 text-xs text-slate-600 dark:text-slate-300">
       <span><strong className={`tabular-nums ${qty < 0 ? "text-red-700 dark:text-red-300" : ""}`} data-testid="inv-total-qty">{nf.format(qty)}</strong> in stock</span>
+      {held != null && held > 0 && <span className="rounded-full bg-amber-100 px-2 py-0.5 font-medium text-amber-900 dark:bg-amber-900/40 dark:text-amber-100" data-testid="inv-held">{nf.format(held)} held on invoices · {nf.format(Math.max(0, qty - held))} available</span>}
       <span>cost <strong className="tabular-nums">{MONEY.format(cost)}</strong></span>
       {est && <span>est. <strong className="tabular-nums">{est}</strong></span>}
     </span>

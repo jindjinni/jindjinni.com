@@ -315,7 +315,11 @@ export function allocateTake(
   const net = new Map<string, Take & { _cost: number; _units: number }>();
   for (const l of layers) {
     if (l.productKey !== want.productKey || normKey(l.condition) !== wantedCond) continue;
-    if (want.groupKey && expiryGroupFor(l.expiry, today, ranges).key !== want.groupKey) continue;
+    if (want.groupKey) {
+      // "x:2027-08|2028-06" names an exact month or month range; any other key is one of the company's price buckets.
+      const gk = want.groupKey.startsWith("x:") ? rangeGroupFor(l.expiry, l.expiryEnd, today).key : expiryGroupFor(l.expiry, today, ranges).key;
+      if (gk !== want.groupKey) continue;
+    }
     const k = `${l.expiry ?? ""}|${l.expiryEnd ?? ""}|${normKey(l.lot)}`;
     const t = net.get(k) ?? { productKey: l.productKey, productId: l.productId, productName: l.productName, brand: l.brand, condition: l.condition, expiry: l.expiry, expiryEnd: l.expiryEnd ?? null, lot: l.lot, quantity: 0, unitCost: null, _cost: 0, _units: 0 };
     t.quantity += l.quantity;

@@ -30,7 +30,8 @@ import { todayIn } from "@/lib/payment-due";
 import { featureOn } from "@/lib/features";
 import { getPaymentTerms } from "@/lib/accounts-queries";
 import { discardMovements, deductStockMany, getInventory, returnSale } from "@/lib/inventory-service";
-import { normKey, productKeyOf, takesExpiryText } from "@/lib/inventory-rules";
+import { buildLines, normKey, productKeyOf, takesExpiryText } from "@/lib/inventory-rules";
+import { expiryDisplay, parseExpiryInput } from "@/lib/expiry-range-rules";
 import {
   afterPayment,
   buildReserved,
@@ -393,7 +394,20 @@ export async function reservedByDrafts(organizationId: string, excludeDocId?: st
 /** Live stock and what drafts hold, as of today: everything the editor needs to show "in stock" beside each item. */
 export async function salesStockContext(organizationId: string, excludeDocId?: string | null): Promise<{ stock: StockMap; reserved: Reserved; today: string }> {
   const [inv, reserved] = await Promise.all([getInventory(organizationId), reservedByDrafts(organizationId, excludeDocId)]);
-  return { stock: buildStockMap(inv.lines), reserved, today: inv.today };
+  // The same layers grouped by exact month / month range, so a line can name the dates it wants.
+  const exact = buildLines(inv.layers, inv.today, inv.ranges, inv.estimates, { groupBy: "range" });
+  return { stock: buildStockMap(inv.lines, exact), reserved, today: inv.today };
+}
+
+/** Units held on drafts per product and condition ("productKey|condition" -> units), for Live Stock's Held / Available. */
+export function heldByProductCondition(reserved: Reserved): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [k, n] of Object.entries(reserved)) {
+    const [productKey, cond] = k.split("|");
+    const key = `${productKey}|${cond}`;
+    out[key] = (out[key] ?? 0) + n;
+  }
+  return out;
 }
 
 export type DocInput = {
@@ -462,6 +476,15 @@ async function prepareDocument(org: Org, input: DocInput): Promise<({ ok: true }
   if (!isDayText(input.docDate)) return { ok: false, error: "Enter the date." };
   const bad = validateLines(input.lines);
   if (bad) return { ok: false, error: bad };
+  // A line with no stock group but a dating text is a date or month range the person typed: read it again here and keep its tidy form.
+  const lineIn = input.lines.map((l) => ({ ...l }));
+  for (const [i, l] of lineIn.entries()) {
+    if (l.groupKey || !l.groupLabel?.trim()) continue;
+    const r = parseExpiryInput(l.groupLabel);
+    if (!r.ok || !r.from) return { ok: false, error: `Item ${i + 1}: ${r.ok ? "type the expiration as a date or a month range, like 8/2027-6/2028." : r.error}` };
+    l.groupLabel = expiryDisplay(r.from, r.to);
+  }
+  input = { ...input, lines: lineIn };
   const nums = [input.discount, input.shipping, input.tax, input.otherCharges].map(money0);
   if (nums.some((n) => Number.isNaN(n) || n < 0 || n > 10_000_000)) return { ok: false, error: "Discount, shipping, tax and other charges must be $0 or more." };
   const [discount, shipping, tax, otherCharges] = nums.map(round2);
@@ -786,6 +809,8 @@ export async function sendDocument(org: Org, id: string, opts: { mailer: Mailer 
   }
 
   const now = new Date().toISOString();
+  // A date or month range that was typed on the line (no stock group, but a dating text) prints exactly as typed.
+  for (const [i, l] of lines.entries()) if (!l.groupKey && l.groupLabel && !hasNdcColumn(doc.kind)) expiryTexts[i] = l.groupLabel;
   // Write the expiration text first, so the PDF that goes out shows it.
   for (const [i, l] of lines.entries()) await db.update(salesDocumentLines).set({ expiryText: expiryTexts[i] ?? l.expiryText }).where(eq(salesDocumentLines.id, l.id));
 

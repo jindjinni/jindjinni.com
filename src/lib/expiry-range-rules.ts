@@ -103,3 +103,15 @@ export function describeExpiry(r: ExpiryRead): string {
   const [y, m, d] = r.from.split("-").map(Number);
   return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 }
+
+/**
+ * The short words an expiration prints as on a document: a range "8/2027 – 6/2028", one month "8/2027", one day "8/15/2028".
+ * (The same dates typed back through `parseExpiryInput` give the same result, so a saved line can be edited again.)
+ */
+export function expiryDisplay(from: string | null | undefined, to: string | null | undefined): string {
+  if (!from) return "";
+  const rt = rangeText(from, to);
+  if (rt) return rt;
+  if (isLastDayOfMonth(from)) return monthText(from);
+  return `${+from.slice(5, 7)}/${+from.slice(8, 10)}/${from.slice(0, 4)}`;
+}
