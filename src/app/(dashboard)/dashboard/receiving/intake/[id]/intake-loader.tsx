@@ -54,6 +54,7 @@ export async function IntakeFormFor({ id, focus }: { id: string; focus?: "accoun
     picks: cleanPicks(pkg.intakePicks, data.formConfig),
   };
   const picksOn = await featureOn("receiving-picks", org.organizationId);
+  const recallSimple = await featureOn("recall-simple", org.organizationId);
 
   return (
     <IntakeForm
@@ -84,6 +85,7 @@ export async function IntakeFormFor({ id, focus }: { id: string; focus?: "accoun
       started={data.started}
       formConfig={data.formConfig}
       picksOn={picksOn}
+      recallSimple={recallSimple}
       catalog={catalog}
       saved={{
         accountsStatus: pkg.accountsStatus ?? "",

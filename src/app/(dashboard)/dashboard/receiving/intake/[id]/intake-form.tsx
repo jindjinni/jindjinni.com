@@ -37,6 +37,7 @@ import { Choice, PhotoAddContext, PhotoSlot, Row, Step, YN, YN_RISK, field } fro
 import { ItemAdjustmentCard, itemFactsOf, toItemState, type ItemState } from "./item-card";
 import { ReceiptPreview, ReceivedItemsGrid } from "./receiving-table";
 import { RecallCheck } from "./recall-check";
+import { RecallCheckSimple } from "./recall-check-simple";
 import { ScanStation } from "./scan-station";
 import { NumbersTab, numbersFor } from "./numbers-tab";
 import type { SerialView } from "@/lib/receiving-serial-service";
@@ -109,6 +110,8 @@ type Props = {
   formConfig: ReceivingFormConfig;
   /** The pick lists replace the typed notes (feature `receiving-picks`). */
   picksOn: boolean;
+  /** The simpler Recall check screen (feature `recall-simple`). */
+  recallSimple?: boolean;
   catalog: CatalogProduct[];
   saved: {
     accountsStatus: string;
@@ -742,21 +745,39 @@ export function IntakeForm(props: Props) {
 
           </div>
           <div role="tabpanel" id="s6panel-recall" aria-labelledby="s6tab-recall" hidden={step6Tab !== "recall"}>
-          <RecallCheck
-            packageId={packageId}
-            items={items}
-            editable={editable}
-            isAdminUser={props.isAdminUser}
-            photoReading={props.photoReading}
-            recalls={recalls}
-            onRecalls={setRecalls}
-            checks={recallChecks}
-            onChecks={setRecallChecks}
-            onPatchMany={patchMany}
-            onError={setError}
-            focus={recallFocus}
-            onBack={() => setStep6Tab("items")}
-          />
+          {props.recallSimple ? (
+            <RecallCheckSimple
+              packageId={packageId}
+              items={items}
+              editable={editable}
+              isAdminUser={props.isAdminUser}
+              photoReading={props.photoReading}
+              recalls={recalls}
+              onRecalls={setRecalls}
+              checks={recallChecks}
+              onChecks={setRecallChecks}
+              onPatchMany={patchMany}
+              onError={setError}
+              focus={recallFocus}
+              onBack={() => setStep6Tab("items")}
+            />
+          ) : (
+            <RecallCheck
+              packageId={packageId}
+              items={items}
+              editable={editable}
+              isAdminUser={props.isAdminUser}
+              photoReading={props.photoReading}
+              recalls={recalls}
+              onRecalls={setRecalls}
+              checks={recallChecks}
+              onChecks={setRecallChecks}
+              onPatchMany={patchMany}
+              onError={setError}
+              focus={recallFocus}
+              onBack={() => setStep6Tab("items")}
+            />
+          )}
           </div>
           {scanItemId && items.find((i) => i.id === scanItemId) && (
             <RowScanDialog

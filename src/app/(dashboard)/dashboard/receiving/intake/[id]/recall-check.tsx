@@ -275,7 +275,7 @@ export function RecallCheck({
 
 // ---- admin: the recalls and the lists they match against --------------------------
 
-function ManageRecalls({ recalls, onRecalls, onError }: { recalls: RecallView[]; onRecalls: (r: RecallView[]) => void; onError: (m: string) => void }) {
+export function ManageRecalls({ recalls, onRecalls, onError }: { recalls: RecallView[]; onRecalls: (r: RecallView[]) => void; onError: (m: string) => void }) {
   const [open, setOpen] = useState(false);
   const [notice, setNotice] = useState("");
   const [pending, start] = useTransition();

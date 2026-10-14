@@ -115,6 +115,12 @@ export const FEATURES: FeatureDef[] = [
     defaultStage: "mothership",
   },
   {
+    key: "recall-simple",
+    label: "Receiving: simpler Recall check",
+    blurb: "Receiving -> intake form -> Step 6 Recall check: one step at a time. Pick the product (each shows Needs a check / Checked / Recalled), type or scan the number, press Check, then open that product's manufacturer page and say Affected or Not affected. Other recalls, the checks already made and the admin lists stay closed until opened. Off = the full Recall check screen as before.",
+    defaultStage: "mothership",
+  },
+  {
     key: "quotation-delete",
     label: "Delete quotations",
     blurb: "Purchasing -> Quotations: tick quotations and delete them, or delete all. Quotations with nothing received, paid or shipped are erased for good; any that already have received stock, a payment or a bought label are hidden in Settings -> Archive instead.",
