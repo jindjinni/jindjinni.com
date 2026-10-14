@@ -30,7 +30,7 @@ import { todayIn } from "@/lib/payment-due";
 import { featureOn } from "@/lib/features";
 import { getPaymentTerms } from "@/lib/accounts-queries";
 import { discardMovements, deductStockMany, getInventory, returnSale } from "@/lib/inventory-service";
-import { expirySpan, normKey, productKeyOf } from "@/lib/inventory-rules";
+import { normKey, productKeyOf, takesExpiryText } from "@/lib/inventory-rules";
 import {
   afterPayment,
   buildReserved,
@@ -772,8 +772,7 @@ export async function sendDocument(org: Org, id: string, opts: { mailer: Mailer 
     }
     movementIds = taken.results.flatMap((r) => r.movementIds);
     for (const r of taken.results) {
-      const dates = r.takes.map((t) => t.expiry).filter((x): x is string => !!x).sort();
-      expiryTexts.push(dates.length ? expirySpan(dates[0], dates[dates.length - 1]) : null);
+      expiryTexts.push(takesExpiryText(r.takes));
     }
   } else if (hasNdcColumn(doc.kind)) {
     // A purchase order we received (or the sales order made from it) names what the buyer wants by NDC; there is no stock expiry to print on it and nothing leaves Inventory until the invoice is sent.
@@ -782,8 +781,7 @@ export async function sendDocument(org: Org, id: string, opts: { mailer: Mailer 
     const preview = await deductStockMany(org, inputs, { dryRun: true });
     for (const [i] of lines.entries()) {
       const r = preview.ok ? preview.results[i] : null;
-      const dates = (r?.takes ?? []).map((t) => t.expiry).filter((x): x is string => !!x).sort();
-      expiryTexts.push(dates.length ? expirySpan(dates[0], dates[dates.length - 1]) : null);
+      expiryTexts.push(takesExpiryText(r?.takes ?? []));
     }
   }
 

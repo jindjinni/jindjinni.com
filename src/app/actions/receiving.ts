@@ -58,6 +58,7 @@ import { isShipmentLocked } from "@/lib/receiving-test-lock";
 import { clearNearHolds, listChecks, openNearHolds, rowIsRecalled, type RecallCheckView } from "@/lib/receiving-recall-service";
 import { autoCheckRowLots } from "@/lib/receiving-recall-auto";
 import { flagsFromString, isCounterfeitSuspect } from "@/lib/receiving-serial-rules";
+import { parseExpiryInput } from "@/lib/expiry-range-rules";
 
 export type ReceivingActionState = {
   error?: string;
@@ -318,17 +319,27 @@ async function applyItem(org: CurrentOrg, packageId: string, raw: ItemInput, not
   const entryType = pick(raw.expirationEntryType, ["SINGLE", "RANGE", "MULTIPLE", "NA"] as const);
 
   const lotsIn = Array.isArray(raw.lots) ? (raw.lots as Record<string, unknown>[]).slice(0, MAX_LOTS) : [];
+  // A lot's date box holds a day, a month or a month range ("8/2027-6/2028"); it is read here with the same rules the page
+  // shows, and a box that can't be read stops the save instead of quietly saving no date.
+  let lotDateError: string | null = null;
   const lots = lotsIn
-    .map((l, i) => ({
-      label: text(l?.label, 80),
-      lotNumber: text(l?.lotNumber, 60),
-      expirationDate: dateOrNull(l?.expirationDate),
-      expirationEndDate: dateOrNull(l?.expirationEndDate),
-      quantity: intOrNull(l?.quantity),
-      sortOrder: i,
-    }))
+    .map((l, i) => {
+      let expirationDate = dateOrNull(l?.expirationDate);
+      let expirationEndDate = dateOrNull(l?.expirationEndDate);
+      const typed = typeof l?.expiryText === "string" ? l.expiryText.trim() : "";
+      if (typed) {
+        const r = parseExpiryInput(typed);
+        if (!r.ok) lotDateError = lotDateError ?? r.error;
+        else {
+          expirationDate = r.from;
+          expirationEndDate = r.to;
+        }
+      }
+      return { label: text(l?.label, 80), lotNumber: text(l?.lotNumber, 60), expirationDate, expirationEndDate, quantity: intOrNull(l?.quantity), sortOrder: i };
+    })
     // A row the agent never touched isn't saved.
     .filter((l) => l.label || l.lotNumber || l.expirationDate || l.expirationEndDate || l.quantity != null);
+  if (lotDateError) return `${cur.name}: ${lotDateError}`;
   for (const l of lots) {
     if (l.expirationDate && l.expirationEndDate && l.expirationEndDate < l.expirationDate) {
       return `${cur.name}: an expiration range ends before it starts.`;

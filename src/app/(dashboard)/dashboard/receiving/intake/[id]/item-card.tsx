@@ -11,9 +11,12 @@ import {
   lotsMismatch,
   type ItemFacts,
 } from "@/lib/receiving-rules";
+import { ExpiryField } from "@/components/expiry-field";
+import { parseExpiryInput, toInputText } from "@/lib/expiry-range-rules";
 import { Choice, PhotoSlot, YN_RISK, YN_NA, field, type ChoiceOption } from "./intake-parts";
 
-export type LotState = { label: string; lotNumber: string; expirationDate: string; expirationEndDate: string; quantity: string };
+/** `expiryText` is what the person typed in the lot's one date box (a day, a month or a month range); the dates beside it are what that text reads as. */
+export type LotState = { label: string; lotNumber: string; expirationDate: string; expirationEndDate: string; quantity: string; expiryText?: string };
 export type ItemState = {
   id: string;
   quotedItemId: string | null;
@@ -202,7 +205,7 @@ export function ItemDetailsPanel({
         {(entry === "RANGE" || entry === "MULTIPLE") && (
           <div className="mt-2 space-y-2">
             {item.lots.map((l, idx) => (
-              <div key={idx} className="grid gap-2 rounded-lg border border-slate-200 p-2 sm:grid-cols-[1fr_1fr_1fr_1fr_5rem_auto] dark:border-slate-700">
+              <div key={idx} className="grid gap-2 rounded-lg border border-slate-200 p-2 sm:grid-cols-[1fr_1fr_2fr_5rem_auto] dark:border-slate-700">
                 <div>
                   <label className={small} htmlFor={`lotno-${item.id}-${idx}`}>Lot Number</label>
                   <input id={`lotno-${item.id}-${idx}`} className={field} maxLength={60} disabled={!editable} value={l.lotNumber} onChange={(e) => setLot(idx, { lotNumber: e.target.value })} />
@@ -211,13 +214,18 @@ export function ItemDetailsPanel({
                   <label className={small} htmlFor={`lotlabel-${item.id}-${idx}`}>Label (optional)</label>
                   <input id={`lotlabel-${item.id}-${idx}`} className={field} maxLength={80} disabled={!editable} value={l.label} onChange={(e) => setLot(idx, { label: e.target.value })} />
                 </div>
-                <div>
-                  <label className={small} htmlFor={`lotdate-${item.id}-${idx}`}>{entry === "RANGE" ? "Earliest Expiration" : "Expiration"}</label>
-                  <input id={`lotdate-${item.id}-${idx}`} type="date" className={field} disabled={!editable} value={l.expirationDate} onChange={(e) => setLot(idx, { expirationDate: e.target.value })} />
-                </div>
-                <div>
-                  <label className={small} htmlFor={`lotend-${item.id}-${idx}`}>{entry === "RANGE" ? "Latest Expiration" : "End (optional)"}</label>
-                  <input id={`lotend-${item.id}-${idx}`} type="date" className={field} disabled={!editable} value={l.expirationEndDate} onChange={(e) => setLot(idx, { expirationEndDate: e.target.value })} />
+                <div className="sm:col-span-2">
+                  <label className={small} htmlFor={`lotdate-${item.id}-${idx}`}>{entry === "RANGE" ? "Expiration (month range or date)" : "Expiration (date or month range)"}</label>
+                  <ExpiryField
+                    id={`lotdate-${item.id}-${idx}`}
+                    disabled={!editable}
+                    value={l.expiryText ?? toInputText(l.expirationDate, l.expirationEndDate)}
+                    testid="lot-exp"
+                    onChange={(t) => {
+                      const r = parseExpiryInput(t);
+                      setLot(idx, { expiryText: t, expirationDate: r.ok ? (r.from ?? "") : "", expirationEndDate: r.ok ? (r.to ?? "") : "" });
+                    }}
+                  />
                 </div>
                 <div>
                   <label className={small} htmlFor={`lotqty-${item.id}-${idx}`}>Qty</label>

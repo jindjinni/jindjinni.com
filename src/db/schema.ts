@@ -2214,7 +2214,9 @@ export const inventoryMovements = sqliteTable(
     productName: text("product_name").notNull(),
     brand: text("brand"),
     condition: text("condition").notNull(),
-    expirationDate: text("expiration_date"), // YYYY-MM-DD, null = no expiration date
+    expirationDate: text("expiration_date"), // YYYY-MM-DD, null = no expiration date. For a month range this is the FIRST month's last day.
+    /** The last month's last day when the stock carries a month range (8/2027-6/2028); null for one date. */
+    expirationEndDate: text("expiration_end_date"),
     lotNumber: text("lot_number"),
     /** Signed: positive adds stock, negative takes it out. */
     quantity: integer("quantity").notNull(),

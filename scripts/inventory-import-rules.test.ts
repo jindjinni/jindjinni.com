@@ -1,6 +1,6 @@
 // Inventory -> Import Stock: reading a spreadsheet of opening stock.
 import assert from "node:assert/strict";
-import { parseQuantity, parseMoney, parseStockDate, guessStockColumns, readStockRows, importFingerprint, templateCsv, MAX_IMPORT_ROWS, type ImportProduct } from "../src/lib/inventory-import-rules";
+import { parseQuantity, parseMoney, parseStockDate, parseStockExpiry, guessStockColumns, readStockRows, importFingerprint, templateCsv, MAX_IMPORT_ROWS, type ImportProduct } from "../src/lib/inventory-import-rules";
 import { parseSpreadsheetFile } from "../src/lib/spreadsheet-import";
 
 // quantity: whole numbers only
@@ -32,6 +32,15 @@ assert.equal(d("Sept 2027"), "2027-09-30");
 assert.equal(d("46630"), "2027-08-31", "an Excel date number");
 assert.equal(d(""), null);
 assert.ok(!parseStockDate("").error, "empty is fine");
+// month ranges
+assert.deepEqual(parseStockExpiry("8/2027-6/2028"), { date: "2027-08-31", end: "2028-06-30" });
+assert.deepEqual(parseStockExpiry("5/27 to 11/28"), { date: "2027-05-31", end: "2028-11-30" });
+assert.deepEqual(parseStockExpiry("August 2027 to June 2028"), { date: "2027-08-31", end: "2028-06-30" });
+assert.deepEqual(parseStockExpiry("2027-05-31"), { date: "2027-05-31", end: null });
+assert.deepEqual(parseStockExpiry("05/2027"), { date: "2027-05-31", end: null });
+assert.deepEqual(parseStockExpiry(""), { date: null, end: null });
+assert.ok(parseStockExpiry("6/2028-8/2027").error?.includes("starts after"));
+assert.ok(parseStockExpiry("soon-ish").error);
 for (const bad of ["2027-13-01", "2027-02-30", "13/2027", "soon", "2027-8-99", "1999-01-01", "Foo 2027"]) assert.ok(parseStockDate(bad).error, bad);
 
 // columns are found by the headings people use
@@ -131,6 +140,7 @@ assert.match(importFingerprint(Buffer.from("abc")), /^imp_[0-9a-f]{32}$/);
 const tpl = parseSpreadsheetFile(Buffer.from(templateCsv(["Dexcom G7 Sensor", "Omnipod 5 Pods"])), "t.csv");
 const rt = readStockRows(tpl, guessStockColumns(tpl.headers), products, opts);
 assert.equal(rt.error, undefined);
-assert.deepEqual([rt.counts.ok, rt.counts.problem, rt.counts.match], [2, 0, 0]);
+assert.deepEqual([rt.counts.ok, rt.counts.problem, rt.counts.match], [3, 0, 0]);
+assert.deepEqual([rt.rows[2].expiry, rt.rows[2].expiryEnd], ["2027-08-31", "2028-06-30"], "the sample file's range line reads back as a range");
 
 console.log("inventory-import-rules ok");

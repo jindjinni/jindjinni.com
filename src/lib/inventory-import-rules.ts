@@ -6,6 +6,7 @@ import { createHash } from "node:crypto";
 import { findColumn, type ParsedSheet } from "@/lib/spreadsheet-import";
 import { matchProduct } from "@/lib/sales-rules";
 import { normKey } from "@/lib/inventory-rules";
+import { parseExpiryInput } from "@/lib/expiry-range-rules";
 
 export const MAX_IMPORT_ROWS = 2000;
 export const MAX_IMPORT_FILE_BYTES = 5 * 1024 * 1024;
@@ -121,6 +122,19 @@ export function parseStockDate(raw: string): { date: string | null; error?: stri
   return bad;
 }
 
+/**
+ * An expiration cell that may be one date (any shape parseStockDate reads) or a month range such as "8/2027-6/2028",
+ * "5/27 to 11/28" or "Aug 2027 - Jun 2028". `end` is the last month of a range (its last day), null for a single date.
+ */
+export function parseStockExpiry(raw: string): { date: string | null; end: string | null; error?: string } {
+  const one = parseStockDate(raw);
+  if (!one.error) return { date: one.date, end: null };
+  const r = parseExpiryInput(clean(raw));
+  if (r.ok && r.kind === "range") return { date: r.from, end: r.to };
+  if (!r.ok && /first date is after/.test(r.error)) return { date: null, end: null, error: `the expiration range "${clean(raw).slice(0, 30)}" starts after it ends (put the earlier month first)` };
+  return { date: null, end: null, error: `the expiration date "${clean(raw).slice(0, 30)}" isn't a date (use 2027-05-31, 05/2027, or a month range like 8/2027-6/2028)` };
+}
+
 // ---- rows --------------------------------------------------------------------------------------------------------
 
 export type ImportProduct = { id: string; name: string; brand: string; noExpiration: boolean };
@@ -136,6 +150,8 @@ export type ImportRow = {
   condition: string;
   quantity: number | null;
   expiry: string | null;
+  /** The last month of a month range (its last day); null when the line has one date. */
+  expiryEnd: string | null;
   lot: string | null;
   unitCost: number | null;
   estLow: number | null;
@@ -211,12 +227,14 @@ export function readStockRows(sheet: ParsedSheet, mapIn: StockColumnMap, product
     // quantity, expiry, lot, prices
     const q = parseQuantity(cell("quantity"));
     if (q.error) problems.push(q.error);
-    const e = parseStockDate(cell("expiration"));
+    const e = parseStockExpiry(cell("expiration"));
     if (e.error) problems.push(e.error);
     let expiry = e.date;
+    let expiryEnd = e.end;
     if (product?.noExpiration && expiry) {
       notes.push("this product never expires, so the date was ignored");
       expiry = null;
+      expiryEnd = null;
     }
     if (expiry && expiry < opts.today) notes.push("this expiration date has already passed");
     if (product && !product.noExpiration && !expiry && !e.error) notes.push("no expiration date");
@@ -234,7 +252,7 @@ export function readStockRows(sheet: ParsedSheet, mapIn: StockColumnMap, product
     else counts.problem += 1;
     rows.push({
       rowNo, rawProduct, productId: product?.id ?? null, productName: product?.name ?? null, brand: product?.brand ?? null, noExpiration: !!product?.noExpiration,
-      condition, quantity: q.value, expiry, lot, unitCost: cost.value, estLow: low.value, estHigh: high.value, problems, notes, status,
+      condition, quantity: q.value, expiry, expiryEnd, lot, unitCost: cost.value, estLow: low.value, estHigh: high.value, problems, notes, status,
     });
   });
   if (!rows.length) return fail("I couldn't find any stock lines in that file.");
@@ -251,6 +269,6 @@ export const IMPORT_REF_TYPE = "stock_import";
 export function templateCsv(productNames: string[]): string {
   const head = ["Product", "Condition", "Quantity", "Expiration date", "Lot number", "Cost per unit", "Estimated lowest price", "Estimated highest price"];
   const names = productNames.length ? productNames.slice(0, 2) : ["Example product A", "Example product B"];
-  const lines = [head, [names[0], "Mint", "50", "2027-08-31", "LOT123", "12.50", "14.00", "16.00"], [names[1] ?? names[0], "Dinged", "10", "2027-02", "", "", "", ""]];
+  const lines = [head, [names[0], "Mint", "50", "2027-08-31", "LOT123", "12.50", "14.00", "16.00"], [names[1] ?? names[0], "Dinged", "10", "2027-02", "", "", "", ""], [names[0], "Mint", "25", "8/2027-6/2028", "", "", "", ""]];
   return lines.map((l) => l.map((c) => (/[",\n]/.test(c) ? `"${c.replace(/"/g, '""')}"` : c)).join(",")).join("\r\n") + "\r\n";
 }

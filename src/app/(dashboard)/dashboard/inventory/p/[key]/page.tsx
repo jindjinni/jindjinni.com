@@ -1,3 +1,4 @@
+import { rangeText } from "@/lib/expiry-range-rules";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { and, eq, inArray } from "drizzle-orm";
@@ -70,7 +71,7 @@ export default async function InventoryProductPage({ params }: { params: Promise
                   {l.lots.map((lot, i) => (
                     <tr key={i} className="border-t border-slate-100 dark:border-slate-800" data-testid="ip-lot">
                       <td className="py-1.5 pr-3">{lot.lot ?? <span className="text-slate-400">no lot number</span>}</td>
-                      <td className="py-1.5 pr-3 tabular-nums">{lot.expiry ?? "none"}</td>
+                      <td className="py-1.5 pr-3 tabular-nums">{rangeText(lot.expiry, lot.expiryEnd) ?? lot.expiry ?? "none"}</td>
                       <td className="py-1.5 text-right font-semibold tabular-nums">{nf.format(lot.quantity)}</td>
                     </tr>
                   ))}

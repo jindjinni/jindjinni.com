@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { commitStockImportAction, previewStockImportAction, type StockPreview } from "@/app/actions/inventory-import";
+import { rangeText } from "@/lib/expiry-range-rules";
 import { FIELD_LABEL, STOCK_FIELDS, type StockColumnMap, type StockField } from "@/lib/inventory-import-rules";
 
 type Product = { id: string; name: string; brand: string; noExpiration: boolean };
@@ -202,7 +203,7 @@ export function ImportForm({ products, conditions, template }: { products: Produ
                       </td>
                       <td className="py-2 pr-3">{r.condition}</td>
                       <td className="py-2 pr-3 text-right tabular-nums">{r.quantity ?? ""}</td>
-                      <td className="py-2 pr-3 tabular-nums">{r.noExpiration ? "None" : r.expiry ?? ""}</td>
+                      <td className="py-2 pr-3 tabular-nums">{r.noExpiration ? "None" : rangeText(r.expiry, r.expiryEnd) ?? r.expiry ?? ""}</td>
                       <td className="py-2 pr-3">{r.lot ?? ""}</td>
                       <td className="py-2 pr-3 text-right tabular-nums">{money(r.unitCost)}</td>
                       <td className="py-2">

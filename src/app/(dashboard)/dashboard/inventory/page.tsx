@@ -8,9 +8,12 @@ export const dynamic = "force-dynamic";
 
 // Live Stock: everything in stock right now, by brand, then product, then lines of the same condition and expiration
 // group. Receiving's accepted units are read live; manual adds and sales are applied on top.
-export default async function InventoryPage() {
+export default async function InventoryPage({ searchParams }: { searchParams: Promise<{ by?: string }> }) {
   const org = await requireOrg();
-  const snap = await getInventory(org.organizationId);
+  const sp = await searchParams;
+  // ?by=range groups by the exact month or month range written on the product, instead of the company's price buckets
+  const by = sp.by === "range" ? "range" : "months";
+  const snap = await getInventory(org.organizationId, { groupBy: by });
   const totals = totalsOf(snap.lines);
   const brands: BrandView[] = groupStock(snap.lines).map((b) => ({
     key: b.key,
@@ -45,5 +48,5 @@ export default async function InventoryPage() {
       })),
     })),
   }));
-  return <StockList brands={brands} totals={totals} today={snap.today} canWrite={canWriteInventory(org.role, org.access)} />;
+  return <StockList key={by} brands={brands} totals={totals} today={snap.today} by={by} canWrite={canWriteInventory(org.role, org.access)} />;
 }

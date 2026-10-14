@@ -36,7 +36,7 @@ const GROUP_CLASS = (key: string) =>
       ? "bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-100"
       : "bg-sky-100 text-sky-900 dark:bg-sky-900/40 dark:text-sky-100";
 
-export function StockList({ brands, totals, today, canWrite }: { brands: BrandView[]; totals: Totals; today: string; canWrite: boolean }) {
+export function StockList({ brands, totals, today, by, canWrite }: { brands: BrandView[]; totals: Totals; today: string; by: "months" | "range"; canWrite: boolean }) {
   const [q, setQ] = useState("");
   const [cond, setCond] = useState("");
   const [grp, setGrp] = useState("");
@@ -83,7 +83,7 @@ export function StockList({ brands, totals, today, canWrite }: { brands: BrandVi
         <div>
           <h1 className="text-xl font-bold text-slate-900 dark:text-slate-50">Live Stock</h1>
           <p className="mt-1 max-w-2xl text-sm text-slate-600 dark:text-slate-400">
-            What is in stock right now, by brand and product. Stock arrives by itself from Receiving (only good items: no recalls, no counterfeit holds, nothing going back). Products of the same condition and expiration group share one line.
+            What is in stock right now, by brand and product. Stock arrives by itself from Receiving (only good items: no recalls, no counterfeit holds, nothing going back). Products of the same condition and expiration group share one line. Switch to &quot;Month / month range&quot; to group by the exact month or month range on the product (like 8/2027 - 6/2028).
           </p>
         </div>
         {canWrite && (
@@ -113,6 +113,10 @@ export function StockList({ brands, totals, today, canWrite }: { brands: BrandVi
           <option value="">Every condition</option>
           {conditions.map((c) => <option key={c} value={c}>{c}</option>)}
         </select>
+        <div className="inline-flex overflow-hidden rounded-lg border border-slate-300 text-sm dark:border-slate-700" role="group" aria-label="Group expiration by" data-testid="inv-groupby">
+          <Link href="/dashboard/inventory" replace aria-current={by === "months" ? "true" : undefined} className={`px-3 py-2 ${by === "months" ? "bg-emerald-700 font-semibold text-white" : "bg-white text-slate-700 hover:bg-slate-50 dark:bg-slate-900 dark:text-slate-200"}`} data-testid="inv-by-months">Price buckets</Link>
+          <Link href="/dashboard/inventory?by=range" replace aria-current={by === "range" ? "true" : undefined} className={`border-l border-slate-300 px-3 py-2 dark:border-slate-700 ${by === "range" ? "bg-emerald-700 font-semibold text-white" : "bg-white text-slate-700 hover:bg-slate-50 dark:bg-slate-900 dark:text-slate-200"}`} data-testid="inv-by-range">Month / month range</Link>
+        </div>
         <label htmlFor="inv-grp" className="sr-only">Expiration group</label>
         <select id="inv-grp" value={grp} onChange={(e) => setGrp(e.target.value)} className={control} data-testid="inv-grp">
           <option value="">Every expiration group</option>

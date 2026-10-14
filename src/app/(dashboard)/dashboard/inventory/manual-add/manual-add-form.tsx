@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { addStockAction } from "@/app/actions/inventory";
+import { ExpiryField } from "@/components/expiry-field";
 
 type Product = { id: string; name: string; brand: string; noExpiration: boolean };
 type Row = { rid: number; brand: string; productId: string; condition: string; quantity: string; expiry: string; lot: string; unitCost: string; estLow: string; estHigh: string };
@@ -86,9 +87,9 @@ export function ManualAddForm({ brands, products, conditions }: { brands: string
                   <input id={`ma-qty-${r.rid}`} inputMode="numeric" value={r.quantity} onChange={(e) => set(r.rid, { quantity: e.target.value.replace(/[^\d]/g, "") })} className={`${field} mt-1`} placeholder="e.g. 50" data-testid="ma-qty" />
                 </div>
                 <div>
-                  <label htmlFor={`ma-exp-${r.rid}`} className="text-xs font-medium text-slate-700 dark:text-slate-300">Expiration date</label>
-                  <input id={`ma-exp-${r.rid}`} type="date" value={product?.noExpiration ? "" : r.expiry} disabled={!!product?.noExpiration} onChange={(e) => set(r.rid, { expiry: e.target.value })} className={`${field} mt-1 disabled:opacity-50`} data-testid="ma-exp" />
-                  {product?.noExpiration && <p className="mt-1 text-[11px] text-slate-500">This product doesn&apos;t expire.</p>}
+                  <label htmlFor={`ma-exp-${r.rid}`} className="text-xs font-medium text-slate-700 dark:text-slate-300">Expiration (month range or date)</label>
+                  <ExpiryField id={`ma-exp-${r.rid}`} className="mt-1" value={r.expiry} noExpiration={!!product?.noExpiration} onChange={(t) => set(r.rid, { expiry: t })} testid="ma-exp" />
+                  {product?.noExpiration && <p className="text-[11px] text-slate-500">This product doesn&apos;t expire.</p>}
                 </div>
                 <div>
                   <label htmlFor={`ma-lot-${r.rid}`} className="text-xs font-medium text-slate-700 dark:text-slate-300">Lot number (optional)</label>

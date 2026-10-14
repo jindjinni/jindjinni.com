@@ -9,6 +9,7 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { addReceivingItem, setReceivingItemProduct } from "@/app/actions/receiving";
 import type { CatalogProduct, PackagePhoto, QuotedLine } from "@/lib/receiving-queries";
+import { parseExpiryInput, rangeText } from "@/lib/expiry-range-rules";
 import { CONDITION_OPTIONS, expirationMonth, formatDateUS, parseDateInput, suggestDisposition } from "@/lib/receiving-rules";
 import { ItemDetailsPanel, type ItemState } from "./item-card";
 
@@ -119,7 +120,7 @@ const RETURN_PILLS: PillOption[] = [
 ];
 
 /** A date typed like Airtable shows it (8/20/2027). Saved as a real date when you leave the cell; stays red until it is one. */
-function DateCell({ id, label, value, disabled, onCommit }: { id: string; label: string; value: string; disabled: boolean; onCommit: (iso: string) => void }) {
+function DateCell({ id, label, value, disabled, onCommit, onRange }: { id: string; label: string; value: string; disabled: boolean; onCommit: (iso: string) => void; onRange: (from: string, to: string) => void }) {
   const [draft, setDraft] = useState<string | null>(null);
   const [bad, setBad] = useState(false);
   return (
@@ -129,11 +130,11 @@ function DateCell({ id, label, value, disabled, onCommit }: { id: string; label:
       aria-invalid={bad}
       inputMode="numeric"
       autoComplete="off"
-      placeholder="M/D/YYYY"
-      maxLength={10}
+      placeholder="M/D/YYYY or 8/2027-6/2028"
+      maxLength={30}
       disabled={disabled}
       value={draft ?? formatDateUS(value)}
-      title={bad ? "Type the date like 8/20/2027" : undefined}
+      title={bad ? "Type a date like 8/20/2027, a month like 8/2027, or a month range like 8/2027-6/2028" : undefined}
       onChange={(e) => {
         setDraft(e.target.value);
         setBad(false);
@@ -149,6 +150,16 @@ function DateCell({ id, label, value, disabled, onCommit }: { id: string; label:
         const iso = parseDateInput(t);
         if (iso) {
           onCommit(iso);
+          setDraft(null);
+          return;
+        }
+        // a month ("8/2027" = the last day of August) or a month range ("8/2027-6/2028")
+        const r = parseExpiryInput(t);
+        if (r.ok && r.from && r.to) {
+          onRange(r.from, r.to);
+          setDraft(null);
+        } else if (r.ok && r.from) {
+          onCommit(r.from);
           setDraft(null);
         } else setBad(true);
       }}
@@ -483,6 +494,15 @@ export function ReceivedItemsGrid({
     patch(item.id, p);
   }
 
+  /** A month range typed in the date cell: the line becomes "A date range" with one lot holding the whole quantity. */
+  function onDateRange(item: ItemState, from: string, to: string) {
+    const lot0 = item.lots[0];
+    const lots = lot0
+      ? item.lots.map((l, i) => (i === 0 ? { ...l, expirationDate: from, expirationEndDate: to, expiryText: undefined } : l))
+      : [{ label: "", lotNumber: item.lotNumber, expirationDate: from, expirationEndDate: to, quantity: item.quantityReceived }];
+    patch(item.id, { expirationEntryType: "RANGE", lots });
+  }
+
   function onDate(item: ItemState, value: string) {
     const p: Partial<ItemState> = { expirationDate: value };
     if (!item.expirationEntryType || item.expirationEntryType === "NA") p.expirationEntryType = "SINGLE";
@@ -621,10 +641,10 @@ export function ReceivedItemsGrid({
                     <td className={td}>
                       {multi ? (
                         <button type="button" onClick={() => setOpen((o) => ({ ...o, [it.id]: true }))} className="h-9 px-2 text-left text-xs font-medium text-amber-800 underline dark:text-amber-300">
-                          {it.expirationEntryType === "RANGE" ? "Date range" : "Several lots"} (see details)
+                          {it.expirationEntryType === "RANGE" ? (rangeText(it.lots[0]?.expirationDate, it.lots[0]?.expirationEndDate) ?? "Date range") : "Several lots"} (see details)
                         </button>
                       ) : (
-                        <DateCell id={`exp-${it.id}`} label={`Expiration Date, ${label}`} value={it.expirationDate} disabled={!editable || notReceived} onCommit={(iso) => onDate(it, iso)} />
+                        <DateCell id={`exp-${it.id}`} label={`Expiration Date, ${label}`} value={it.expirationDate} disabled={!editable || notReceived} onCommit={(iso) => onDate(it, iso)} onRange={(a, b) => onDateRange(it, a, b)} />
                       )}
                     </td>
                     <td className={`${td} px-2 text-slate-800 dark:text-slate-100`}>{month || <span className="text-slate-300 dark:text-slate-600">&nbsp;</span>}</td>

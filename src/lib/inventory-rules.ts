@@ -8,6 +8,7 @@
 // on the day you look (today is passed in).
 
 import { brandLabel, groupByBrand, type BrandBlock } from "@/lib/receiving-brand";
+import { rangeText } from "@/lib/expiry-range-rules";
 
 export type LayerSource = "RECEIVED" | "MANUAL" | "SALE" | "ADJUSTMENT";
 
@@ -20,8 +21,10 @@ export type StockLayer = {
   productName: string;
   brand: string | null;
   condition: string;
-  /** YYYY-MM-DD, or null when the product has no expiration date. */
+  /** YYYY-MM-DD, or null when the product has no expiration date. For a month range, the first month's last day (the earliest). */
   expiry: string | null;
+  /** The last month's last day when this stock has a month range (8/2027-6/2028); null/absent for one date. */
+  expiryEnd?: string | null;
   lot: string | null;
   /** Signed. */
   quantity: number;
@@ -49,6 +52,10 @@ export type ExpiryGroup = { key: string; label: string; /** Sort position: lower
 
 const clean = (v: string | null | undefined) => (v ?? "").trim();
 export const normKey = (v: string | null | undefined) => clean(v).toLowerCase().replace(/\s+/g, " ");
+
+/** One exact layer: product + condition + expiration (date or month range) + lot. Everything that nets stock uses this. */
+export const layerIdOf = (l: { productKey: string; condition: string; expiry: string | null; expiryEnd?: string | null; lot: string | null }) =>
+  `${l.productKey}|${normKey(l.condition)}|${(l.expiry ?? "").slice(0, 10)}|${(l.expiryEnd ?? "").slice(0, 10)}|${normKey(l.lot)}`;
 
 /** A stable key for a product: the catalog id when there is one, otherwise its normalised name. */
 export const productKeyOf = (productId: string | null | undefined, name: string) => (productId ? productId : `name:${normKey(name)}`);
@@ -95,11 +102,21 @@ export function expiryGroupFor(expiry: string | null, today: string, ranges: Exp
   return { key: "gap", label: "Other dates", rank: 900_000 };
 }
 
+/** "Group by exact dates": a single date falls in its month, a month range is its own group ("8/2027 - 6/2028"); earlier first. */
+export function rangeGroupFor(expiry: string | null, expiryEnd: string | null | undefined, today: string): ExpiryGroup {
+  if (!expiry) return { key: "none", label: "No expiration date", rank: -1 };
+  const last = expiryEnd && expiryEnd > expiry ? expiryEnd : expiry;
+  if (last < today) return { key: "expired", label: "Expired", rank: 1_000_000 };
+  const rt = expiryEnd && expiryEnd > expiry ? rangeText(expiry, expiryEnd) : null;
+  const key = `x:${expiry.slice(0, 7)}${rt ? `|${expiryEnd!.slice(0, 7)}` : ""}`;
+  return { key, label: rt ?? monthYear(expiry), rank: Number(expiry.slice(0, 4)) * 12 + Number(expiry.slice(5, 7)) + (rt ? 0.5 : 0) };
+}
+
 export type Estimate = { low: number | null; high: number | null };
 /** Estimates are looked up by product + condition. */
 export const estimateKey = (productKey: string, condition: string) => `${productKey}|${normKey(condition)}`;
 
-export type StockLot = { lot: string | null; expiry: string | null; quantity: number };
+export type StockLot = { lot: string | null; expiry: string | null; expiryEnd: string | null; quantity: number };
 
 export type StockLine = {
   key: string;
@@ -129,10 +146,10 @@ const cents = (n: number) => Math.round(n * 100);
 const money = (n: number) => cents(n) / 100;
 
 /** Adds up all the layers into lines. Lines with nothing left are dropped (unless `keepEmpty`); an oversold line (below zero) is kept so it is seen. */
-export function buildLines(layers: StockLayer[], today: string, ranges: ExpiryRange[], estimates: Map<string, Estimate>, opts: { keepEmpty?: boolean } = {}): StockLine[] {
+export function buildLines(layers: StockLayer[], today: string, ranges: ExpiryRange[], estimates: Map<string, Estimate>, opts: { keepEmpty?: boolean; groupBy?: "months" | "range" } = {}): StockLine[] {
   const lines = new Map<string, StockLine & { _lots: Map<string, StockLot> }>();
   for (const l of layers) {
-    const group = expiryGroupFor(l.expiry, today, ranges);
+    const group = opts.groupBy === "range" ? rangeGroupFor(l.expiry, l.expiryEnd, today) : expiryGroupFor(l.expiry, today, ranges);
     const cond = clean(l.condition) || "Unspecified";
     const key = `${l.productKey}|${normKey(cond)}|${group.key}`;
     let line = lines.get(key);
@@ -167,10 +184,11 @@ export function buildLines(layers: StockLayer[], today: string, ranges: ExpiryRa
     }
     if (l.expiry) {
       if (!line.expiryFrom || l.expiry < line.expiryFrom) line.expiryFrom = l.expiry;
-      if (!line.expiryTo || l.expiry > line.expiryTo) line.expiryTo = l.expiry;
+      const last = l.expiryEnd && l.expiryEnd > l.expiry ? l.expiryEnd : l.expiry;
+      if (!line.expiryTo || last > line.expiryTo) line.expiryTo = last;
     }
-    const lotKey = `${normKey(l.lot)}|${l.expiry ?? ""}`;
-    const lot = line._lots.get(lotKey) ?? { lot: clean(l.lot) || null, expiry: l.expiry, quantity: 0 };
+    const lotKey = `${normKey(l.lot)}|${l.expiry ?? ""}|${l.expiryEnd ?? ""}`;
+    const lot = line._lots.get(lotKey) ?? { lot: clean(l.lot) || null, expiry: l.expiry, expiryEnd: l.expiryEnd ?? null, quantity: 0 };
     lot.quantity += l.quantity;
     line._lots.set(lotKey, lot);
     line.layers.push(l);
@@ -276,7 +294,7 @@ export function totalsOf(lines: StockLine[]) {
 
 // ---- taking stock out (Sales) -----------------------------------------------------------------------------------
 
-export type Take = { productKey: string; productId: string | null; productName: string; brand: string | null; condition: string; expiry: string | null; lot: string | null; quantity: number; /** The average cost of the units in that layer, so taking them out takes their cost out too. */ unitCost: number | null };
+export type Take = { productKey: string; productId: string | null; productName: string; brand: string | null; condition: string; expiry: string | null; expiryEnd: string | null; lot: string | null; quantity: number; /** The average cost of the units in that layer, so taking them out takes their cost out too. */ unitCost: number | null };
 
 export type AllocateOk = { ok: true; takes: Take[] };
 export type AllocateFail = { ok: false; available: number; wanted: number };
@@ -298,8 +316,8 @@ export function allocateTake(
   for (const l of layers) {
     if (l.productKey !== want.productKey || normKey(l.condition) !== wantedCond) continue;
     if (want.groupKey && expiryGroupFor(l.expiry, today, ranges).key !== want.groupKey) continue;
-    const k = `${l.expiry ?? ""}|${normKey(l.lot)}`;
-    const t = net.get(k) ?? { productKey: l.productKey, productId: l.productId, productName: l.productName, brand: l.brand, condition: l.condition, expiry: l.expiry, lot: l.lot, quantity: 0, unitCost: null, _cost: 0, _units: 0 };
+    const k = `${l.expiry ?? ""}|${l.expiryEnd ?? ""}|${normKey(l.lot)}`;
+    const t = net.get(k) ?? { productKey: l.productKey, productId: l.productId, productName: l.productName, brand: l.brand, condition: l.condition, expiry: l.expiry, expiryEnd: l.expiryEnd ?? null, lot: l.lot, quantity: 0, unitCost: null, _cost: 0, _units: 0 };
     t.quantity += l.quantity;
     // Cost of what is left: every layer that carries a cost counts, including the negative ones that took cost out.
     if (l.unitCost != null) {
@@ -351,4 +369,24 @@ export function expirySpan(from: string | null, to: string | null): string {
   const a = monthYear(from);
   const b = monthYear(to);
   return !to || a === b ? a : `${a} - ${b}`;
+}
+
+/** What to print for stock dates: "8/2027 - 6/2028" for a month range, otherwise the usual "Mar 2027". */
+export function expiryLabel(from: string | null, to: string | null | undefined): string {
+  if (!from) return "";
+  return rangeText(from, to) ?? monthYear(from);
+}
+
+/**
+ * The expiration text printed on an invoice line for the layers it took: one month range prints as "8/2027 - 6/2028",
+ * one date as "Mar 2027", and several layers as the whole span ("Mar 2027 - Jun 2028").
+ */
+export function takesExpiryText(takes: { expiry: string | null; expiryEnd?: string | null }[]): string | null {
+  const have = takes.filter((t): t is { expiry: string; expiryEnd?: string | null } => !!t.expiry);
+  if (!have.length) return null;
+  const from = have.map((t) => t.expiry).sort()[0];
+  const to = have.map((t) => (t.expiryEnd && t.expiryEnd > t.expiry ? t.expiryEnd : t.expiry)).sort().slice(-1)[0];
+  const sameLayer = have.every((t) => t.expiry === have[0].expiry && (t.expiryEnd ?? null) === (have[0].expiryEnd ?? null));
+  if (sameLayer) return expiryLabel(have[0].expiry, have[0].expiryEnd);
+  return expirySpan(from, to);
 }

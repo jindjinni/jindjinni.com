@@ -1,5 +1,6 @@
 "use client";
 
+import { rangeText } from "@/lib/expiry-range-rules";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -11,6 +12,7 @@ export type HistoryRow = {
   brand: string;
   condition: string;
   expiry: string | null;
+  expiryEnd: string | null;
   lot: string | null;
   quantity: number;
   detail: string;
@@ -64,7 +66,7 @@ export function HistoryList({ rows }: { rows: HistoryRow[] }) {
                   <td className="px-3 py-2"><span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${KIND[r.kind].cls}`}>{KIND[r.kind].label}</span></td>
                   <td className="px-3 py-2"><span className="font-medium text-slate-900 dark:text-slate-50">{r.productName}</span>{r.brand && <span className="block text-xs text-slate-500">{r.brand}</span>}</td>
                   <td className="px-3 py-2">{r.condition}</td>
-                  <td className="whitespace-nowrap px-3 py-2 tabular-nums">{r.expiry ?? "none"}{r.lot && <span className="block text-xs text-slate-500">lot {r.lot}</span>}</td>
+                  <td className="whitespace-nowrap px-3 py-2 tabular-nums">{rangeText(r.expiry, r.expiryEnd) ?? r.expiry ?? "none"}{r.lot && <span className="block text-xs text-slate-500">lot {r.lot}</span>}</td>
                   <td className={`px-3 py-2 text-right font-semibold tabular-nums ${r.quantity < 0 ? "text-red-700 dark:text-red-300" : ""}`}>{r.quantity > 0 ? `+${r.quantity}` : r.quantity}</td>
                   <td className="px-3 py-2 text-xs text-slate-600 dark:text-slate-300">
                     {r.href ? <Link href={r.href} className="underline">{r.detail}</Link> : r.detail}

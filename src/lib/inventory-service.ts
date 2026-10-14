@@ -13,6 +13,7 @@ import { inventoryEstimates, inventoryMovements, purchasingCategories, purchasin
 import { newId } from "@/lib/ids";
 import { getReceivedItems } from "@/lib/receiving-queries";
 import { dayOf, heldReason } from "@/lib/receiving-daily";
+import { parseExpiryInput } from "@/lib/expiry-range-rules";
 import { brandFor } from "@/lib/receiving-serial-rules";
 import { getPaymentTerms } from "@/lib/accounts-queries";
 import { todayIn } from "@/lib/payment-due";
@@ -78,6 +79,18 @@ async function costsBySourceItem(organizationId: string, ids: string[]): Promise
   return out;
 }
 
+/**
+ * The dates of a received row: one date, or a range when Receiving recorded an earliest and a latest that differ
+ * (the "A date range" entry). The earliest is `expiry` (what selling and near-expiry follow), the latest is `expiryEnd`.
+ */
+function receivedDates(r: { expirationDate: string | null; expirationEarliest: string | null; expirationLatest: string | null }): { expiry: string | null; expiryEnd: string | null } {
+  const first = normalizeExpiry(r.expirationDate) ?? normalizeExpiry(r.expirationEarliest);
+  const earliest = normalizeExpiry(r.expirationEarliest);
+  const latest = normalizeExpiry(r.expirationLatest);
+  const start = earliest && first && earliest < first ? earliest : first;
+  return { expiry: start, expiryEnd: start && latest && latest > start ? latest : null };
+}
+
 /** Receiving's accepted units as layers. */
 export async function receivedLayers(organizationId: string): Promise<StockLayer[]> {
   const rows: Awaited<ReturnType<typeof getReceivedItems>>["rows"] = [];
@@ -96,7 +109,7 @@ export async function receivedLayers(organizationId: string): Promise<StockLayer
     productName: clean(r.productName),
     brand: clean(r.brand) || brandFor(r.productName),
     condition: clean(r.condition) || "Unspecified",
-    expiry: normalizeExpiry(r.expirationDate) ?? normalizeExpiry(r.expirationEarliest),
+    ...receivedDates(r),
     lot: clean(r.lotNumber) || null,
     quantity: r.quantityAccepted as number,
     unitCost: r.sourceItemId ? costs.get(r.sourceItemId) ?? null : null,
@@ -119,6 +132,7 @@ export async function movementLayers(organizationId: string): Promise<StockLayer
     brand: m.brand,
     condition: m.condition,
     expiry: normalizeExpiry(m.expirationDate),
+    expiryEnd: normalizeExpiry(m.expirationEndDate),
     lot: clean(m.lotNumber) || null,
     quantity: m.quantity,
     unitCost: m.unitCost,
@@ -128,7 +142,7 @@ export async function movementLayers(organizationId: string): Promise<StockLayer
 }
 
 /** Everything the Stock screens need, as of today in the company's time zone. */
-export async function getInventory(organizationId: string): Promise<InventorySnapshot> {
+export async function getInventory(organizationId: string, opts: { groupBy?: "months" | "range" } = {}): Promise<InventorySnapshot> {
   const [terms, ranges, estimates, received, moves] = await Promise.all([
     getPaymentTerms(organizationId),
     getExpiryRanges(organizationId),
@@ -138,7 +152,7 @@ export async function getInventory(organizationId: string): Promise<InventorySna
   ]);
   const today = todayIn(terms.timeZone);
   const layers = [...received, ...moves];
-  return { today, ranges, estimates, layers, lines: buildLines(layers, today, ranges, estimates) };
+  return { today, ranges, estimates, layers, lines: buildLines(layers, today, ranges, estimates, { groupBy: opts.groupBy }) };
 }
 
 // ---- manual add ---------------------------------------------------------------------------------------------------
@@ -187,9 +201,11 @@ export async function addManualStock(
     const condition = clean(l.condition);
     if (!condition || !allowedConditions.some((c) => c.toLowerCase() === condition.toLowerCase())) return { ok: false, error: `${at}: choose a condition.` };
     if (!Number.isInteger(l.quantity) || l.quantity <= 0 || l.quantity > 1_000_000) return { ok: false, error: `${at}: enter a quantity of 1 or more.` };
-    const expiryRaw = clean(l.expiry);
-    const expiry = expiryRaw ? normalizeExpiry(expiryRaw) : null;
-    if (expiryRaw && !expiry) return { ok: false, error: `${at}: the expiration date isn't a valid date.` };
+    // A single day, a single month, or a month range like 8/2027-6/2028.
+    const read = parseExpiryInput(l.expiry);
+    if (!read.ok) return { ok: false, error: `${at}: ${read.error}` };
+    const expiry = read.from;
+    const expiryEnd = read.to;
     const cost = num(l.unitCost);
     const low = num(l.estLow);
     const high = num(l.estHigh);
@@ -206,6 +222,7 @@ export async function addManualStock(
       brand: p.category ?? brandFor(p.name),
       condition: canonicalCondition(condition, allowedConditions),
       expirationDate: p.noExpiration ? null : expiry,
+      expirationEndDate: p.noExpiration ? null : expiryEnd,
       lotNumber: clean(l.lot) || null,
       quantity: l.quantity,
       unitCost: cost,
@@ -269,6 +286,7 @@ export async function deductStock(org: { organizationId: string; userId: string 
     brand: t.brand,
     condition: t.condition,
     expirationDate: t.expiry,
+    expirationEndDate: t.expiryEnd,
     lotNumber: t.lot,
     quantity: -t.quantity,
     unitCost: t.unitCost,
@@ -282,7 +300,7 @@ export async function deductStock(org: { organizationId: string; userId: string 
 }
 
 export type DeductManyResult =
-  | { ok: true; results: { movementIds: string[]; takes: { expiry: string | null; lot: string | null; quantity: number }[] }[] }
+  | { ok: true; results: { movementIds: string[]; takes: { expiry: string | null; expiryEnd: string | null; lot: string | null; quantity: number }[] }[] }
   | { ok: false; index: number; error: string; available: number };
 
 /**
@@ -295,7 +313,7 @@ export async function deductStockMany(org: { organizationId: string; userId: str
   const today = todayIn(terms.timeZone);
   const working: StockLayer[] = [...received, ...moves];
   const rows: (typeof inventoryMovements.$inferInsert)[] = [];
-  const results: { movementIds: string[]; takes: { expiry: string | null; lot: string | null; quantity: number }[] }[] = [];
+  const results: { movementIds: string[]; takes: { expiry: string | null; expiryEnd: string | null; lot: string | null; quantity: number }[] }[] = [];
   for (const [index, input] of inputs.entries()) {
     const plan = allocateTake(working, { productKey: input.productKey, condition: input.condition, groupKey: input.groupKey ?? null, quantity: input.quantity }, today, ranges);
     if (!plan.ok) return { ok: false, index, available: plan.available, error: plan.available <= 0 ? "None of that product is in stock." : `Only ${plan.available} in stock, ${plan.wanted} wanted.` };
@@ -313,6 +331,7 @@ export async function deductStockMany(org: { organizationId: string; userId: str
         brand: t.brand,
         condition: t.condition,
         expirationDate: t.expiry,
+        expirationEndDate: t.expiryEnd,
         lotNumber: t.lot,
         quantity: -t.quantity,
         unitCost: t.unitCost,
@@ -322,9 +341,9 @@ export async function deductStockMany(org: { organizationId: string; userId: str
         createdByUserId: org.userId,
       });
       // The next line must not take the same units again.
-      working.push({ source: "SALE", refId: id, productKey: t.productKey, productId: t.productId, productName: t.productName, brand: t.brand, condition: t.condition, expiry: t.expiry, lot: t.lot, quantity: -t.quantity, unitCost: t.unitCost, day: today });
+      working.push({ source: "SALE", refId: id, productKey: t.productKey, productId: t.productId, productName: t.productName, brand: t.brand, condition: t.condition, expiry: t.expiry, expiryEnd: t.expiryEnd, lot: t.lot, quantity: -t.quantity, unitCost: t.unitCost, day: today });
     }
-    results.push({ movementIds: ids, takes: plan.takes.map((t) => ({ expiry: t.expiry, lot: t.lot, quantity: t.quantity })) });
+    results.push({ movementIds: ids, takes: plan.takes.map((t) => ({ expiry: t.expiry, expiryEnd: t.expiryEnd, lot: t.lot, quantity: t.quantity })) });
   }
   if (!opts.dryRun && rows.length) await db.insert(inventoryMovements).values(rows);
   return { ok: true, results };
@@ -349,6 +368,7 @@ export async function returnSale(org: { organizationId: string; userId: string }
       brand: m.brand,
       condition: m.condition,
       expirationDate: m.expirationDate,
+      expirationEndDate: m.expirationEndDate,
       lotNumber: m.lotNumber,
       quantity: -m.quantity,
       unitCost: m.unitCost,

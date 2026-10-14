@@ -30,7 +30,7 @@ export async function importProducts(organizationId: string): Promise<ImportProd
   return rows.map((r) => ({ id: r.id, name: r.name, brand: (r.category ?? brandFor(r.name) ?? "Other").trim() || "Other", noExpiration: !!r.noExpiration }));
 }
 
-type RefRow = { id: string; kind: string; productKey: string; productId: string | null; productName: string; brand: string | null; condition: string; expirationDate: string | null; lotNumber: string | null; quantity: number; unitCost: number | null; refType: string | null; createdAt: string; createdByUserId: string | null; note: string | null };
+type RefRow = { id: string; kind: string; productKey: string; productId: string | null; productName: string; brand: string | null; condition: string; expirationDate: string | null; expirationEndDate: string | null; lotNumber: string | null; quantity: number; unitCost: number | null; refType: string | null; createdAt: string; createdByUserId: string | null; note: string | null };
 
 async function refRows(organizationId: string, refId: string): Promise<RefRow[]> {
   return db
@@ -39,8 +39,8 @@ async function refRows(organizationId: string, refId: string): Promise<RefRow[]>
     .where(and(eq(inventoryMovements.organizationId, organizationId), eq(inventoryMovements.refId, refId), inArray(inventoryMovements.refType, [IMPORT_REF_TYPE, UNDO_REF_TYPE])));
 }
 
-const layerKey = (m: { productKey: string; condition: string; expirationDate: string | null; lotNumber: string | null }) =>
-  `${m.productKey}|${normKey(m.condition)}|${(m.expirationDate ?? "").slice(0, 10)}|${normKey(m.lotNumber)}`;
+const layerKey = (m: { productKey: string; condition: string; expirationDate: string | null; expirationEndDate?: string | null; lotNumber: string | null }) =>
+  `${m.productKey}|${normKey(m.condition)}|${(m.expirationDate ?? "").slice(0, 10)}|${(m.expirationEndDate ?? "").slice(0, 10)}|${normKey(m.lotNumber)}`;
 
 /** Units of one import still in stock because of it: what was added minus what was reversed. */
 const netUnits = (rows: RefRow[]) => rows.reduce((n, r) => n + r.quantity, 0);
@@ -84,6 +84,7 @@ export async function commitStockImport(org: Org, rows: ImportRow[], meta: { fil
       brand: r.brand && r.brand !== "Other" ? r.brand : null,
       condition: r.condition,
       expirationDate: r.noExpiration ? null : r.expiry,
+      expirationEndDate: r.noExpiration ? null : r.expiryEnd,
       lotNumber: r.lot,
       quantity: r.quantity as number,
       unitCost: r.unitCost,
@@ -157,7 +158,7 @@ export async function undoStockImport(org: Org, refId: string): Promise<UndoResu
   const inv = await getInventory(org.organizationId);
   const have = new Map<string, number>();
   for (const l of inv.layers) {
-    const k = layerKey({ productKey: l.productKey, condition: l.condition, expirationDate: l.expiry, lotNumber: l.lot });
+    const k = layerKey({ productKey: l.productKey, condition: l.condition, expirationDate: l.expiry, expirationEndDate: l.expiryEnd ?? null, lotNumber: l.lot });
     have.set(k, (have.get(k) ?? 0) + l.quantity);
   }
   for (const [k, v] of outstanding) {
@@ -173,6 +174,7 @@ export async function undoStockImport(org: Org, refId: string): Promise<UndoResu
     brand: v.sample.brand,
     condition: v.sample.condition,
     expirationDate: v.sample.expirationDate,
+    expirationEndDate: v.sample.expirationEndDate,
     lotNumber: v.sample.lotNumber,
     quantity: -v.qty,
     unitCost: v.sample.unitCost,
