@@ -35,6 +35,8 @@ export const LINK_REASONS = [
   { key: "never_paid", label: "We haven't paid this customer before", customer: "We haven't sent you a payment before, so we need to know where to send it." },
   { key: "new_banking", label: "Their banking details changed", customer: "We want to make sure we have your current payment details, in case anything has changed." },
   { key: "other", label: "Another reason", customer: "We need your payment details for this order." },
+  // Only offered after details came in: Accounts or Purchasing looked at them and something is wrong.
+  { key: "details_wrong", label: "The details they sent were wrong", customer: "The payment details we received didn't look right (or didn't work), so please send them again, and double check each box this time." },
 ] as const;
 export type LinkReason = (typeof LINK_REASONS)[number]["key"];
 export const reasonLabel = (key: string | null | undefined) => LINK_REASONS.find((r) => r.key === key)?.label ?? null;
@@ -46,6 +48,41 @@ export function cleanReason(reason: unknown, note: unknown): { ok: true; reason:
   if (key === "other" && text.length < 3) return { ok: false, error: "Type a short reason for asking." };
   return { ok: true, reason: key as LinkReason, note: key === "other" && text ? text : null };
 }
+
+/** One line of the "does it look right?" review shown beside the details. "warn" = worth a call or email, "ok" = nothing found. */
+export type AccuracyCheck = { key: string; level: "ok" | "warn"; text: string };
+
+const NAME_NOISE = new Set(["llc", "inc", "co", "corp", "company", "ltd", "the", "and", "of", "pharmacy", "drug", "drugs", "rx"]);
+const nameTokens = (v: string) => v.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter((t) => t.length >= 3 && !NAME_NOISE.has(t));
+
+/**
+ * What can be checked without calling the bank: that the routing number is a real-looking one (9 digits that add up), that the account
+ * number is a believable length and not an obvious placeholder, and whether the account holder's name shares anything with the customer's
+ * name on the order. It catches typing mistakes and obvious junk; it can NOT prove the account exists or belongs to them.
+ */
+export function accuracyChecks(d: PayoutDetails, order: { customerName: string }): AccuracyCheck[] {
+  const out: AccuracyCheck[] = [];
+  out.push(
+    /^\d{9}$/.test(d.routingNumber) && routingOk(d.routingNumber)
+      ? { key: "routing", level: "ok", text: "The routing number is 9 digits and passes the bank routing check." }
+      : { key: "routing", level: "warn", text: "The routing number does not pass the bank routing check. Ask the customer to confirm it." },
+  );
+  const acct = d.accountNumber;
+  const same = /^(\d)\1+$/.test(acct);
+  const run = "01234567890123456789".includes(acct) || "98765432109876543210".includes(acct);
+  if (!/^\d{4,17}$/.test(acct)) out.push({ key: "account", level: "warn", text: "The account number is not 4 to 17 digits." });
+  else if (same || run) out.push({ key: "account", level: "warn", text: "The account number looks like a placeholder (all the same digit, or counting up or down). Ask the customer to confirm it." });
+  else if (acct.length < 6) out.push({ key: "account", level: "warn", text: "The account number is unusually short. Ask the customer to confirm it." });
+  else out.push({ key: "account", level: "ok", text: `The account number is ${acct.length} digits and does not look like a placeholder.` });
+  const a = nameTokens(d.holderName);
+  const b = nameTokens(order.customerName);
+  if (b.length === 0 || a.length === 0) out.push({ key: "name", level: "ok", text: "The account holder's name could not be compared with the customer's name." });
+  else if (a.some((t) => b.includes(t))) out.push({ key: "name", level: "ok", text: "The account holder's name matches the customer's name on this order." });
+  else out.push({ key: "name", level: "warn", text: `The account holder (${d.holderName}) does not share a name with the customer on this order (${order.customerName}). That can be fine (a business or family account); it is worth confirming.` });
+  return out;
+}
+/** What the checks above cannot do, said every time they are shown. */
+export const CHECKS_LIMIT = "These checks only catch typing mistakes and obvious junk. Nothing here can confirm the account is real or belongs to them. If anything is off, ask the customer to confirm or to send the details again.";
 
 export const CAUTION_TEXT = "PLEASE DOUBLE CHECK ALL DETAILS BEFORE SUBMITTING IT TO US. THANKS!";
 /** The link works ONE time: once the details are sent they cannot be changed from the link. A correction needs a new link from us. */

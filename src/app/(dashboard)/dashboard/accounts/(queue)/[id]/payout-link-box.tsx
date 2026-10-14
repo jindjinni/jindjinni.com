@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { erasePayoutLinkAction, revealPayoutLinkAction, type RevealPayoutView } from "@/app/actions/payout-links";
-import { addressLine, methodLabel } from "@/lib/payout-link-rules";
+import { addressLine, CHECKS_LIMIT, methodLabel } from "@/lib/payout-link-rules";
 
 const SHOW_SECONDS = 60;
 const btn = "rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800";
@@ -48,6 +48,22 @@ export function PayoutLinkBox({ quotationId, line, canReveal, erased }: { quotat
             {row("Account number", d.accountNumber, true, "plb-account")}
             {row("Account type", d.accountType === "savings" ? "Savings" : "Checking")}
           </dl>
+          {view?.checks && (
+            <div className="mt-3 rounded-md border border-slate-200 p-2 dark:border-slate-700" data-testid="plb-checks">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Does it look right?</p>
+              <ul className="mt-1 space-y-1 text-sm">
+                {view.checks.map((c) => (
+                  <li key={c.key} className={c.level === "warn" ? "font-medium text-amber-800 dark:text-amber-300" : "text-slate-700 dark:text-slate-200"} data-testid={`plb-check-${c.key}`} data-level={c.level}>
+                    <span aria-hidden>{c.level === "warn" ? "⚠ " : "✓ "}</span><span className="sr-only">{c.level === "warn" ? "Check: " : "OK: "}</span>{c.text}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-1 text-xs text-slate-500">{CHECKS_LIMIT}</p>
+            </div>
+          )}
+          {view?.contact && (view.contact.email || view.contact.phone) && (
+            <p className="mt-2 text-sm text-slate-700 dark:text-slate-200" data-testid="plb-contact">To contact the customer on this order: <strong>{view.contact.name}</strong>{view.contact.email ? ` · ${view.contact.email}` : ""}{view.contact.phone ? ` · ${view.contact.phone}` : ""}</p>
+          )}
           <p className="mt-2 text-xs text-slate-500">Hides itself after {SHOW_SECONDS} seconds. Looking at these details is recorded. They are erased when you mark the order Paid.</p>
           <button type="button" className={`${btn} mt-2`} data-testid="plb-hide" onClick={() => setView(undefined)}>Hide</button>
         </div>

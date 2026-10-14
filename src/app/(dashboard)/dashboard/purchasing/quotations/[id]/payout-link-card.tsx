@@ -4,7 +4,8 @@ import { useState, useTransition } from "react";
 import {
   cancelPayoutLinkAction, copyPayoutLinkAction, makePayoutLinkAction, previewPayoutLinkEmailAction, sendPayoutLinkEmailAction,
 } from "@/app/actions/payout-links";
-import { LINK_REASONS, methodLabel, reasonLabel, STAFF_STATE_TEXT, type LinkReason, type StaffLinkState } from "@/lib/payout-link-rules";
+import { PayoutLinkBox } from "../../../accounts/(queue)/[id]/payout-link-box";
+import { LINK_REASONS, maskedPayoutLine, methodLabel, reasonLabel, STAFF_STATE_TEXT, type LinkReason, type StaffLinkState } from "@/lib/payout-link-rules";
 
 export type PayoutCardSummary = { state: StaffLinkState; reason: string | null; reasonNote: string | null; method: string | null; accountLast4: string | null; accountType: string | null; submittedAt: string | null; emailedTo: string | null; emailedAt: string | null; expiresAt: string } | null;
 
@@ -15,7 +16,7 @@ const btnMain = "rounded-md bg-emerald-700 px-3 py-1.5 text-sm font-medium text-
  * Purchasing: the private "where should we pay you?" link for this order. Staff make it, copy it or email it (a reviewed message, sent only
  * when a person presses Send). They see only "PayPal - Checking account ending 1234"; the full details are for Accounts.
  */
-export function PayoutLinkCard({ quotationId, summary, customerEmail, paidBefore }: { quotationId: string; summary: PayoutCardSummary; customerEmail: string; paidBefore: { paidOrders: number; lastPaidDay: string | null; otherOrders: number } }) {
+export function PayoutLinkCard({ quotationId, summary, customerEmail, paidBefore, canReveal = false }: { quotationId: string; summary: PayoutCardSummary; customerEmail: string; /** Owner, Admin and Accounts only: may open the full details here to check them before the package arrives. */ canReveal?: boolean; paidBefore: { paidOrders: number; lastPaidDay: string | null; otherOrders: number } }) {
   const [pending, start] = useTransition();
   const [url, setUrl] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -24,7 +25,7 @@ export function PayoutLinkCard({ quotationId, summary, customerEmail, paidBefore
   const state = summary?.state ?? "none";
   // The reason defaults to what the records suggest: never paid before -> "haven't paid", otherwise nothing is pre-picked for a customer we have paid.
   const suggested: LinkReason | "" = paidBefore.otherOrders === 0 ? "new_customer" : paidBefore.paidOrders === 0 ? "never_paid" : "";
-  const [reason, setReason] = useState<LinkReason | "">(suggested);
+  const [reason, setReason] = useState<LinkReason | "">(summary?.state === "received" ? "details_wrong" : suggested);
   const [note, setNote] = useState("");
   const run = (fn: () => Promise<void>) => start(async () => { setErr(null); setMsg(null); await fn(); });
 
@@ -67,17 +68,20 @@ export function PayoutLinkCard({ quotationId, summary, customerEmail, paidBefore
       {state === "received" && summary && (
         <p className="mt-1 text-sm font-medium text-slate-800 dark:text-slate-100" data-testid="pl-line">
           {methodLabel(summary.method)} - {summary.accountType === "savings" ? "Savings" : "Checking"} account ending {summary.accountLast4}
-          <span className="ml-2 text-xs font-normal text-slate-500">sent {summary.submittedAt?.slice(0, 10)}. Accounts can see the full details when it is time to pay. The link is used up; if something is wrong, press Ask for new details.</span>
+          <span className="ml-2 text-xs font-normal text-slate-500">sent {summary.submittedAt?.slice(0, 10)}. {canReveal ? "Open the full details below to check them." : "Accounts can see the full details when it is time to pay."} The link is used up; if something is wrong, press Ask for new details.</span>
         </p>
       )}
       {state === "waiting" && summary && (
         <p className="mt-1 text-xs text-slate-500">Works until {summary.expiresAt.slice(0, 10)}.{summary.emailedTo ? ` Emailed to ${summary.emailedTo} on ${summary.emailedAt?.slice(0, 10)}.` : ""}</p>
       )}
+      {(state === "received" || state === "erased") && summary && canReveal && (
+        <PayoutLinkBox quotationId={quotationId} line={maskedPayoutLine(summary.method, summary.accountType, summary.accountLast4)} canReveal erased={state === "erased"} />
+      )}
       {needsLink && (
         <fieldset className="mt-4" data-testid="pl-reasons">
           <legend className="text-sm font-medium text-slate-800 dark:text-slate-100">Why are you sending this link?</legend>
           <div className="mt-2 grid gap-2 sm:grid-cols-2">
-            {LINK_REASONS.map((r) => (
+            {LINK_REASONS.filter((r) => r.key !== "details_wrong").map((r) => (
               <label key={r.key} className="flex cursor-pointer items-start gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm has-[:checked]:border-emerald-700 has-[:checked]:bg-emerald-100 dark:border-slate-700 dark:bg-slate-900 dark:has-[:checked]:bg-emerald-900/30">
                 <input type="radio" name={`pl-reason-${quotationId}`} className="mt-0.5" checked={reason === r.key} onChange={() => setReason(r.key)} data-testid={`pl-reason-${r.key}`} />
                 <span>{r.label}</span>

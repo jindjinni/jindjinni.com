@@ -13,7 +13,7 @@ import { canRevealBankDetails, canWritePurchasing } from "@/lib/permissions";
 import { featureOn } from "@/lib/features";
 import { sendDeptEmail } from "@/lib/mail-system";
 import { cancelLink, erasePaymentDetails, linkAddressFor, linkSummaryForQuotation, makeLink, noteEmailed, receiptCompanyName, revealLinkDetails } from "@/lib/payout-link-service";
-import { cleanReason, linkEmailContent, type PayoutDetails } from "@/lib/payout-link-rules";
+import { accuracyChecks, cleanReason, linkEmailContent, type AccuracyCheck, type PayoutDetails } from "@/lib/payout-link-rules";
 
 type Gate = { org: CurrentOrg } | { error: string };
 
@@ -105,14 +105,21 @@ export async function sendPayoutLinkEmailAction(quotationId: string, to: string)
   return { message: `Sent to ${address}.` };
 }
 
-export type RevealPayoutView = { error?: string; details?: PayoutDetails };
+export type RevealPayoutView = { error?: string; details?: PayoutDetails; checks?: AccuracyCheck[]; contact?: { name: string; email: string | null; phone: string | null } };
 
 /** Shows the full details to one person who is allowed, once, and records that they looked. Nothing is kept on the page afterwards. */
 export async function revealPayoutLinkAction(quotationId: string): Promise<RevealPayoutView> {
   const g = await gate("bank");
   if ("error" in g) return { error: g.error };
   const r = await revealLinkDetails(g.org.organizationId, g.org.userId, quotationId);
-  return r.ok ? { details: r.details } : { error: r.error };
+  if (!r.ok) return { error: r.error };
+  // The customer as written on the order, so the review can compare names and staff know who to contact if something is off.
+  const [q] = await db
+    .select({ name: purchasingQuotations.customerNameSnapshot, email: purchasingQuotations.customerEmailSnapshot, phone: purchasingQuotations.customerPhoneSnapshot })
+    .from(purchasingQuotations)
+    .where(and(eq(purchasingQuotations.id, quotationId), eq(purchasingQuotations.organizationId, g.org.organizationId)))
+    .limit(1);
+  return { details: r.details, checks: accuracyChecks(r.details, { customerName: q?.name ?? "" }), contact: { name: q?.name ?? "", email: q?.email ?? null, phone: q?.phone ?? null } };
 }
 
 export async function erasePayoutLinkAction(quotationId: string): Promise<{ error?: string; erased?: boolean }> {

@@ -34,6 +34,9 @@ import { listRecalls } from "@/lib/receiving-recall-service";
 import { featureOn } from "@/lib/features";
 import { linkSummaryForQuotation, paidBeforeFor } from "@/lib/payout-link-service";
 import { PayoutLinkCard } from "./payout-link-card";
+import { PayoutLinkBox } from "../../../accounts/(queue)/[id]/payout-link-box";
+import { maskedPayoutLine } from "@/lib/payout-link-rules";
+import { canRevealBankDetails } from "@/lib/permissions";
 
 // Buying several labels at once can take a little while.
 export const maxDuration = 60;
@@ -71,8 +74,10 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
         }));
 
   // Live tracking: what Shippo last told us about each box, and whether the news is old enough to ask again.
-  const payoutLinksOn = canWritePurchasing(org.role, org.access) && !org.viewAs && (await featureOn("payout-links", org.organizationId));
-  const payoutSummary = payoutLinksOn ? await linkSummaryForQuotation(org.organizationId, quotation.id) : null;
+  const payoutFeature = !org.viewAs && (await featureOn("payout-links", org.organizationId));
+  const payoutCanReveal = payoutFeature && canRevealBankDetails(org.role, org.access);
+  const payoutLinksOn = payoutFeature && canWritePurchasing(org.role, org.access);
+  const payoutSummary = payoutLinksOn || payoutCanReveal ? await linkSummaryForQuotation(org.organizationId, quotation.id) : null;
   const payoutPaidBefore = payoutLinksOn ? await paidBeforeFor(org.organizationId, quotation.id) : { paidOrders: 0, lastPaidDay: null, otherOrders: 0 };
   const trackRows = await trackingForQuotations(org.organizationId, [quotation.id]);
   const labelName = new Map(labels.map((l) => [l.trackingNumber ?? "", labels.length > 1 ? `Label ${l.labelNumber}` : null]));
@@ -230,7 +235,13 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
         </div>
       )}
 
-      {payoutLinksOn && <PayoutLinkCard quotationId={quotation.id} summary={payoutSummary} customerEmail={quotation.customerEmailSnapshot ?? ""} paidBefore={payoutPaidBefore} />}
+      {payoutLinksOn && <PayoutLinkCard quotationId={quotation.id} summary={payoutSummary} customerEmail={quotation.customerEmailSnapshot ?? ""} paidBefore={payoutPaidBefore} canReveal={payoutCanReveal} />}
+      {!payoutLinksOn && payoutCanReveal && payoutSummary && (payoutSummary.state === "received" || payoutSummary.state === "erased") && (
+        <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 text-sm dark:border-slate-800 dark:bg-slate-900" data-testid="pl-readonly" aria-label="Payment details the customer sent">
+          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-50">Payment details the customer sent</h2>
+          <PayoutLinkBox quotationId={quotation.id} line={maskedPayoutLine(payoutSummary.method, payoutSummary.accountType, payoutSummary.accountLast4)} canReveal erased={payoutSummary.state === "erased"} />
+        </section>
+      )}
 
       <div className="mt-6 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <table className="w-full text-left text-sm">

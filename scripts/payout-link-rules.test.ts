@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import {
   companySlug, FINTECH_NOTE, METHOD_HELP, PAYOUT_METHODS, addressLine, cleanPayoutDetails, customerLinkState, detailsFromJson, detailsToJson, hashLinkToken, linkEmailContent, linkUrl,
-  looksLikeLinkToken, maskedPayoutLine, LINK_REASONS, ONE_TIME_TEXT, cleanReason, reasonCustomerLine, reasonLabel, newLinkToken, staffLinkState, LINK_VALID_DAYS,
+  accuracyChecks, looksLikeLinkToken, maskedPayoutLine, LINK_REASONS, ONE_TIME_TEXT, cleanReason, reasonCustomerLine, reasonLabel, newLinkToken, staffLinkState, LINK_VALID_DAYS,
 } from "../src/lib/payout-link-rules";
 
 const good = { method: "paypal", holderName: "Jane Q Public", street1: "12 Main St", street2: "", city: "Austin", state: "tx", zip: "78701", phone: "(512) 555-0100", email: "Jane@Example.com", bankName: "Chase", accountNumber: "123456789", routingNumber: "021000021", accountType: "Checking" };
@@ -93,7 +93,7 @@ assert.match(mail.text, /ONE time/);
 assert.match(ONE_TIME_TEXT, /ONE-TIME SUBMISSION/);
 assert.ok(mail.html.includes("&lt;Medical&gt;"));
 // why the link is sent
-assert.deepEqual(LINK_REASONS.map((r) => r.key), ["new_customer", "never_paid", "new_banking", "other"]);
+assert.deepEqual(LINK_REASONS.map((r) => r.key), ["new_customer", "never_paid", "new_banking", "other", "details_wrong"]);
 assert.deepEqual(cleanReason("new_banking", "ignored"), { ok: true, reason: "new_banking", note: null });
 assert.deepEqual(cleanReason("other", "  Moved   banks "), { ok: true, reason: "other", note: "Moved banks" });
 assert.equal(cleanReason("other", "").ok, false);
@@ -118,3 +118,16 @@ const tok = "A".repeat(43);
 assert.equal(linkUrl("https://jindjinni.com/", tok, "USA Test Strips Center"), `https://jindjinni.com/payment-details/usa-test-strips-center/${tok}`);
 assert.equal(linkUrl("https://jindjinni.com", tok), `https://jindjinni.com/payment-details/${tok}`);
 console.log("payout-link-rules ok");
+
+// ---- accuracy review ----
+{
+  const good = { method: "bank", holderName: "Jane Q Smith", street1: "1 Main St", street2: "", city: "Austin", state: "TX", zip: "78701", phone: "5125550100", email: "j@x.com", bankName: "Chase", accountNumber: "483920174", routingNumber: "021000021", accountType: "checking" } as const;
+  const by = (d: typeof good | Record<string, unknown>, name: string) => Object.fromEntries(accuracyChecks(d as never, { customerName: name }).map((c) => [c.key, c.level]));
+  assert.deepEqual(by(good, "Jane Smith"), { routing: "ok", account: "ok", name: "ok" });
+  assert.equal(by(good, "Pharmacy of Bob Jones LLC").name, "warn");
+  assert.equal(by({ ...good, routingNumber: "021000022" }, "Jane Smith").routing, "warn");
+  assert.equal(by({ ...good, accountNumber: "11111111" }, "Jane Smith").account, "warn");
+  assert.equal(by({ ...good, accountNumber: "123456789" }, "Jane Smith").account, "warn");
+  assert.equal(by({ ...good, accountNumber: "12345" }, "Jane Smith").account, "warn");
+  assert.equal(by(good, "").name, "ok");
+}
