@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireOrg, type CurrentOrg } from "@/lib/tenant";
 import { canWriteShipping } from "@/lib/permissions";
+import { featureOn } from "@/lib/features";
 import { createContact, importContacts, setContactHidden, updateContact, type ContactInput } from "@/lib/shipping-contacts";
 import {
   addBox, createOtherShipment, makeLabels, setShipTo, addFile, createShipment, followBoxAuto, refreshShipment, removeBox, removeFile, sendShippedEmail, setBoxStatusManual, setFileAttach, shippingOn, skipShippedEmail, updateShipment,
@@ -168,10 +169,12 @@ export async function setShipToAction(shipmentId: string, p: { contactId?: strin
 }
 
 /** Buys labels (one per box) from the company's own Shippo account. Runs only when a person presses the button. */
-export async function makeLabelsAction(shipmentId: string, p: { service: string; count: number; lengthIn: string; widthIn: string; heightIn: string; weightLb: string }): Promise<ShipResult> {
+export async function makeLabelsAction(shipmentId: string, p: { service: string; count: number; lengthIn: string; widthIn: string; heightIn: string; weightLb: string; size?: string; rememberSize?: boolean }): Promise<ShipResult> {
   const w = await writer();
   if ("error" in w) return { ok: false, error: w.error };
-  const res = await makeLabels(w.org, str(shipmentId), { service: p?.service, count: p?.count, parcel: { lengthIn: p?.lengthIn, widthIn: p?.widthIn, heightIn: p?.heightIn, weightLb: p?.weightLb } });
+  // A chosen size only counts while the company has "label-sizes" on; the server decides, whatever the page sent.
+  const sizesOn = await featureOn("label-sizes", w.org.organizationId);
+  const res = await makeLabels(w.org, str(shipmentId), { service: p?.service, count: p?.count, size: sizesOn ? (p?.size ?? "") : undefined, rememberSize: sizesOn && p?.rememberSize === true, parcel: { lengthIn: p?.lengthIn, widthIn: p?.widthIn, heightIn: p?.heightIn, weightLb: p?.weightLb } });
   refresh();
   return res.ok ? { ok: true, message: res.message } : { ok: false, error: res.error };
 }

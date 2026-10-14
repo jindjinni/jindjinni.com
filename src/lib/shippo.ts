@@ -141,10 +141,10 @@ export function shippoClient(key: string) {
       }),
 
     /** Purchases the label for a previously-quoted rate. This is a real charge against the company's Shippo account in live mode. */
-    createTransaction: (rateId: string): Promise<ShippoTransaction> =>
+    createTransaction: (rateId: string, labelFileType = "PDF"): Promise<ShippoTransaction> =>
       shippoFetch(key, "/transactions/", {
         method: "POST",
-        body: JSON.stringify({ rate: rateId, label_file_type: "PDF", async: false }),
+        body: JSON.stringify({ rate: rateId, label_file_type: labelFileType, async: false }),
       }),
 
     /** Shippo's current tracking for one package (carrier is "ups", "usps" or "fedex"). Throws a "Shippo request failed" error when it isn't known yet. */

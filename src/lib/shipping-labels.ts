@@ -56,7 +56,7 @@ export type ShippoDeps = {
     parcel: { lengthIn: number; widthIn: number; heightIn: number; weightLb: number };
   }) => Promise<ShippoShipment>;
   pickRate: (s: ShippoShipment, service: LabelCarrier) => ShippoRate | null;
-  createTransaction: (rateId: string) => Promise<ShippoTransaction>;
+  createTransaction: (rateId: string, labelFileType?: string) => Promise<ShippoTransaction>;
 };
 
 /** Buys one label: its own shipment, its own rate, its own tracking number. */
@@ -64,6 +64,7 @@ async function buyOne(
   deps: ShippoDeps,
   carrier: LabelCarrier,
   base: Parameters<ShippoDeps["createShipment"]>[0],
+  labelFileType?: string,
 ): Promise<BoughtLabel> {
   const shipment = await deps.createShipment(base);
   const rate = deps.pickRate(shipment, carrier);
@@ -73,7 +74,7 @@ async function buyOne(
         (carrier === "USPS_PRIORITY" ? " (Check that USPS is turned on in your Shippo carrier settings.)" : ""),
     );
   }
-  const tx = await deps.createTransaction(rate.object_id);
+  const tx = await (labelFileType ? deps.createTransaction(rate.object_id, labelFileType) : deps.createTransaction(rate.object_id));
   if (tx.status !== "SUCCESS" || !tx.label_url) {
     throw new Error(tx.messages?.map((m) => m.text).filter(Boolean).join("; ") || "Label purchase did not succeed.");
   }
@@ -98,12 +99,14 @@ export async function buyLabels(
   carrier: LabelCarrier,
   count: number,
   base: Parameters<ShippoDeps["createShipment"]>[0],
+  /** Shippo's label_file_type (a size). Left out = the full-page PDF, as Purchasing has always used. */
+  labelFileType?: string,
 ): Promise<{ labels: BoughtLabel[]; errors: string[] }> {
   const labels: BoughtLabel[] = [];
   const errors: string[] = [];
   for (let start = 0; start < count; start += BATCH_SIZE) {
     const size = Math.min(BATCH_SIZE, count - start);
-    const results = await Promise.allSettled(Array.from({ length: size }, () => buyOne(deps, carrier, base)));
+    const results = await Promise.allSettled(Array.from({ length: size }, () => buyOne(deps, carrier, base, labelFileType)));
     for (const r of results) {
       if (r.status === "fulfilled") labels.push(r.value);
       else errors.push(r.reason instanceof Error ? r.reason.message : "Label generation failed.");

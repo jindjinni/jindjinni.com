@@ -10,6 +10,7 @@ import { field, ghostBtn, primaryBtn } from "@/components/sales-ui";
 import { AddressFields, type AddressValue } from "../../addresses/address-fields";
 import { guessCarrier, MANUAL_STATUSES, pickAttachments, shippedEmail, statusLabel, type EmailItem } from "@/lib/shipping-rules";
 import { carrierTrackingLink, pillClass } from "@/lib/tracking-rules";
+import { LABEL_SIZES, labelSizeOf, labelSizeShort, type LabelSizeKey } from "@/lib/label-sizes";
 
 type Msg = { ok: boolean; text: string } | null;
 type R = { ok: true; message?: string } | { ok: false; error: string };
@@ -111,7 +112,7 @@ export function ShipToPanel({ shipmentId, address, lines, contactId, options, lo
 
 export type BoxView = {
   id: string; carrier: string; trackingNumber: string; status: string; statusDetails: string | null; location: string | null; eta: string | null; lastError: string | null;
-  followAuto: boolean; labelUrl: string | null; labelService: string | null; labelCost: number | null;
+  followAuto: boolean; labelUrl: string | null; labelService: string | null; labelCost: number | null; labelSize?: string | null;
 };
 
 export function BoxesPanel({ shipmentId, boxes, locked, canWrite, trackingConnected }: { shipmentId: string; boxes: BoxView[]; locked: boolean; canWrite: boolean; trackingConnected: boolean }) {
@@ -135,6 +136,7 @@ export function BoxesPanel({ shipmentId, boxes, locked, canWrite, trackingConnec
                   <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${pillClass(b.status)}`} data-testid="box-status">{statusLabel(b.status)}</span>
                   {link && <a href={link} target="_blank" rel="noreferrer" className="text-xs text-slate-600 underline dark:text-slate-400">Open on {b.carrier}</a>}
                   {b.labelUrl && <a href={b.labelUrl} target="_blank" rel="noreferrer" className="text-xs font-medium text-emerald-800 underline dark:text-emerald-300" data-testid="box-label">Open label to print</a>}
+                  {b.labelUrl && b.labelSize && <span className="text-xs text-slate-500" data-testid="box-label-size">({labelSizeShort(b.labelSize)} label)</span>}
                 </div>
                 <p className="text-xs text-slate-500">
                   {[b.labelService, b.labelCost != null ? `$${b.labelCost.toFixed(2)}` : null, b.statusDetails, b.location, b.eta ? `Expected ${b.eta.slice(0, 10)}` : null].filter(Boolean).join(" · ") || (trackingConnected ? "Waiting for the carrier's first update." : "")}
@@ -184,10 +186,12 @@ export function BoxesPanel({ shipmentId, boxes, locked, canWrite, trackingConnec
 // Labels
 // ---------------------------------------------------------------------------
 
-export function LabelsPanel({ shipmentId, canWrite, shippoReady, shippoWhy, fromReady, addressProblem, fromLine, toLine }: { shipmentId: string; canWrite: boolean; shippoReady: boolean; shippoWhy: string | null; fromReady: boolean; addressProblem: string | null; fromLine: string; toLine: string }) {
+export function LabelsPanel({ shipmentId, canWrite, shippoReady, shippoWhy, fromReady, addressProblem, fromLine, toLine, sizes }: { shipmentId: string; canWrite: boolean; shippoReady: boolean; shippoWhy: string | null; fromReady: boolean; addressProblem: string | null; fromLine: string; toLine: string; sizes: { saved: LabelSizeKey } | null }) {
   const { pending, msg, run } = useRun();
   const [service, setService] = useState("UPS_GROUND");
   const [count, setCount] = useState(1);
+  const [size, setSize] = useState<LabelSizeKey>(sizes?.saved ?? "letter");
+  const [remember, setRemember] = useState(false);
   // No default box: the weight and size are typed for every label and sent to Shippo as typed.
   const [len, setLen] = useState("");
   const [wid, setWid] = useState("");
@@ -209,12 +213,28 @@ export function LabelsPanel({ shipmentId, canWrite, shippoReady, shippoWhy, from
             <select id="lb-service" value={service} onChange={(e) => setService(e.target.value)} className={`${field} mt-1`} data-testid="lb-service">
               <option value="UPS_GROUND">UPS Ground</option><option value="USPS_PRIORITY">USPS Priority Mail</option>
             </select></div>
+          {sizes && (
+            <div className="min-w-56"><label htmlFor="lb-size" className={lab}>Label size</label>
+              <select id="lb-size" value={size} onChange={(e) => setSize(e.target.value as LabelSizeKey)} className={`${field} mt-1`} data-testid="lb-size">
+                {LABEL_SIZES.map((o) => <option key={o.key} value={o.key}>{o.name}</option>)}
+              </select>
+            </div>
+          )}
           <div><label htmlFor="lb-count" className={lab}>Labels</label><input id="lb-count" type="number" min={1} max={10} value={count} onChange={(e) => setCount(Number(e.target.value))} className={`${field} mt-1`} data-testid="lb-count" /></div>
           <div><label htmlFor="lb-len" className={lab}>Long (in)</label><input id="lb-len" inputMode="decimal" placeholder="Type it" value={len} onChange={(e) => setLen(e.target.value)} className={`${field} mt-1`} data-testid="lb-len" /></div>
           <div><label htmlFor="lb-wid" className={lab}>Wide (in)</label><input id="lb-wid" inputMode="decimal" placeholder="Type it" value={wid} onChange={(e) => setWid(e.target.value)} className={`${field} mt-1`} /></div>
           <div><label htmlFor="lb-hei" className={lab}>High (in)</label><input id="lb-hei" inputMode="decimal" placeholder="Type it" value={hei} onChange={(e) => setHei(e.target.value)} className={`${field} mt-1`} /></div>
           <div><label htmlFor="lb-wt" className={lab}>Weight (lb)</label><input id="lb-wt" inputMode="decimal" placeholder="Type it" value={wt} onChange={(e) => setWt(e.target.value)} className={`${field} mt-1`} data-testid="lb-wt" /></div>
-          <button type="button" disabled={pending || !!blocked || !typed} className={primaryBtn} data-testid="lb-make" onClick={() => run(() => makeLabelsAction(shipmentId, { service, count, lengthIn: len, widthIn: wid, heightIn: hei, weightLb: wt }))}>{pending ? "Making…" : "Make labels"}</button>
+          <button type="button" disabled={pending || !!blocked || !typed} className={primaryBtn} data-testid="lb-make" onClick={() => run(() => makeLabelsAction(shipmentId, { service, count, lengthIn: len, widthIn: wid, heightIn: hei, weightLb: wt, ...(sizes ? { size, rememberSize: remember } : {}) }))}>{pending ? "Making…" : "Make labels"}</button>
+        </div>
+      )}
+      {sizes && (
+        <div className="mt-2 space-y-1 text-xs text-slate-600 dark:text-slate-400" data-testid="lb-size-help">
+          <p>{labelSizeOf(size).fits} The label is drawn at this size when it is made, so choose it first. To get a different size later, a new label has to be made.</p>
+          {size !== sizes.saved && (
+            <label className="flex items-center gap-2"><input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} data-testid="lb-remember" />Use {labelSizeShort(size)} every time</label>
+          )}
+          {size === sizes.saved && sizes.saved !== "letter" && <p data-testid="lb-size-saved">This is your usual size.</p>}
         </div>
       )}
       {canWrite && !typed && !blocked && <p className="mt-2 text-xs text-slate-500" data-testid="lb-needs-box">Type the weight and the size of the box. Shippo prices the label from exactly what you type.</p>}

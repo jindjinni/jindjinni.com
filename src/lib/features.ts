@@ -91,6 +91,12 @@ export const FEATURES: FeatureDef[] = [
     defaultStage: "mothership",
   },
   {
+    key: "label-sizes",
+    label: "Label sizes for roll printers",
+    blurb: "Shipping -> a shipment -> Make shipping labels: choose the size the label is made at (4 x 6 inch for a roll/thermal printer, 4 x 8, A6, narrow, or a full page) and optionally keep that size for every label. Off = full page labels, as before.",
+    defaultStage: "mothership",
+  },
+  {
     key: "quotation-delete",
     label: "Delete quotations",
     blurb: "Purchasing -> Quotations: tick quotations and delete them, or delete all. Quotations with nothing received, paid or shipped are erased for good; any that already have received stock, a payment or a bought label are hidden in Settings -> Archive instead.",

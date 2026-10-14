@@ -4,7 +4,7 @@
 
 import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db/client";
-import { salesDocuments, salesDocumentLines, shipmentBoxes, shipmentFiles, shipments, users } from "@/db/schema";
+import { organizations, salesDocuments, salesDocumentLines, shipmentBoxes, shipmentFiles, shipments, users } from "@/db/schema";
 import { featureOn } from "@/lib/features";
 import { newId } from "@/lib/ids";
 import { sendDeptEmail } from "@/lib/mail-system";
@@ -15,6 +15,7 @@ import { safeFilename } from "@/lib/chat-rules";
 import { getDocument, renderPdf, resolveFrom, type Org } from "@/lib/sales-service";
 import { getOrganization } from "@/lib/queries";
 import { shippingAddressOf } from "@/lib/org-addresses";
+import { labelFileType, parseLabelSize } from "@/lib/label-sizes";
 import { pickLabelRate, type ShippoAddress } from "@/lib/shippo";
 import { noteShippoFailure, resolveShippo } from "@/lib/shippo-connection";
 import { buyLabels, CARRIER_NAME, failureMessage, parseCarrier, parseLabelCount, type ShippoDeps } from "@/lib/shipping-labels";
@@ -338,7 +339,7 @@ export async function followBoxAuto(org: Org, boxId: string): Promise<Result> {
 
 // ---- labels ----
 
-export type LabelInput = { service?: unknown; count?: unknown; parcel?: { lengthIn: unknown; widthIn: unknown; heightIn: unknown; weightLb: unknown } };
+export type LabelInput = { service?: unknown; count?: unknown; size?: unknown; rememberSize?: unknown; parcel?: { lengthIn: unknown; widthIn: unknown; heightIn: unknown; weightLb: unknown } };
 
 /**
  * Buys shipping labels for a shipment through the company's OWN Shippo account (UPS Ground or USPS Priority Mail, as in Purchasing).
@@ -374,7 +375,7 @@ export async function makeLabels(org: Org, shipmentId: string, input: LabelInput
     deps = {
       createShipment: (p) => shippo.client.createShipment(p).catch(note),
       pickRate: pickLabelRate,
-      createTransaction: (rateId) => shippo.client.createTransaction(rateId).catch(note),
+      createTransaction: (rateId, fileType) => shippo.client.createTransaction(rateId, fileType).catch(note),
     };
   }
   // Our company is always the sender in the Shipping department.
@@ -385,7 +386,9 @@ export async function makeLabels(org: Org, shipmentId: string, input: LabelInput
     name: to.name || to.company || "Receiving", company: to.company, street1: to.street1, street2: to.street2, city: to.city, state: to.state, zip: to.zip, country: to.country,
     phone: to.phone || s.toPhone || undefined, email: to.email || undefined, isResidential: s.toResidential,
   };
-  const { labels, errors } = await buyLabels(deps, carrier, count.count, { addressFrom, addressTo, addressReturn: addressFrom, parcel: parcel.parcel });
+  // The size the label is drawn at (4 x 6 for a roll printer). Only when the "label-sizes" setting is on for this company; otherwise the full page, as before.
+  const size = input.size === undefined ? undefined : parseLabelSize(input.size, orgRow?.shippingLabelSize);
+  const { labels, errors } = await buyLabels(deps, carrier, count.count, { addressFrom, addressTo, addressReturn: addressFrom, parcel: parcel.parcel }, size ? labelFileType(size) : undefined);
 
   // A paid label is never lost: save every one that was bought before reporting anything that failed.
   let made = 0;
@@ -400,16 +403,21 @@ export async function makeLabels(org: Org, shipmentId: string, input: LabelInput
     taken.add(tn);
     await db.insert(shipmentBoxes).values({
       id: newId("sbox"), organizationId: org.organizationId, shipmentId, position: pos++, carrier: carrier === "UPS_GROUND" ? "UPS" : "USPS", trackingNumber: tn,
-      labelUrl: l.labelUrl, labelService: CARRIER_NAME[carrier], labelCost: l.cost ?? null, labelTransactionId: l.transactionId, parcel: JSON.stringify(parcel.parcel),
+      labelUrl: l.labelUrl, labelService: CARRIER_NAME[carrier], labelCost: l.cost ?? null, labelTransactionId: l.transactionId, parcel: JSON.stringify(size ? { ...parcel.parcel, labelSize: size } : parcel.parcel),
     });
     made++;
   }
   if (made > 0) {
     await rollUpShipment(org.organizationId, shipmentId);
     await startFollowing(org.organizationId, shipmentId);
+    // "Use this size every time": remembered for the whole company, only after a label was really made at that size.
+    if (size && input.rememberSize === true && size !== orgRow?.shippingLabelSize) {
+      await db.update(organizations).set({ shippingLabelSize: size }).where(eq(organizations.id, org.organizationId));
+    }
   }
   if (errors.length > 0) {
-    const text = failureMessage(count.count, made, errors);
+    const odd = size && size !== "4x6" && size !== "letter" ? " If the carrier doesn't offer this label size, choose 4 × 6 in and try again." : "";
+    const text = failureMessage(count.count, made, errors) + (made === 0 ? odd : "");
     return made > 0 ? { ok: true, made, message: text } : { ok: false, error: text };
   }
   return { ok: true, made, message: `${made} ${made === 1 ? "label" : "labels"} made. ${made === 1 ? "It is" : "They are"} in the boxes below.` };

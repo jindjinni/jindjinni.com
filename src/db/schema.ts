@@ -54,6 +54,8 @@ export const organizations = sqliteTable("organizations", {
   shipFromCountry: text("ship_from_country").notNull().default("US"),
   shipFromPhone: text("ship_from_phone"),
   shipFromEmail: text("ship_from_email"),
+  // Shipping department: the label size this company prints on (see lib/label-sizes.ts). Null = full page.
+  shippingLabelSize: text("shipping_label_size"),
   // Purchasing receiving address: where customers ship their supplies TO (customer is the sender, we are the receiver). Empty = Purchasing uses the ship-from address above.
   receiveName: text("receive_name"),
   receiveCompany: text("receive_company"),

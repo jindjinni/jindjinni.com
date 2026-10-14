@@ -4,6 +4,8 @@ import { card, fmtDay } from "@/components/sales-ui";
 import { getShipment } from "@/lib/shipping-service";
 import { listContacts } from "@/lib/shipping-contacts";
 import { getOrganization } from "@/lib/queries";
+import { featureOn } from "@/lib/features";
+import { parseLabelSize } from "@/lib/label-sizes";
 import { shippingAddressOf } from "@/lib/org-addresses";
 import { resolveShippo } from "@/lib/shippo-connection";
 import { addressLines } from "@/lib/shipping-address-rules";
@@ -14,6 +16,16 @@ import { BoxesPanel, DetailsPanel, EmailPanel, FilesPanel, LabelsPanel, ShipToPa
 
 export const dynamic = "force-dynamic";
 
+/** The size a label was made at, read back from the box's saved parcel (older labels have none). */
+function labelSizeOfBox(parcel: string | null): string | null {
+  try {
+    const v = JSON.parse(parcel ?? "{}")?.labelSize;
+    return typeof v === "string" ? v : null;
+  } catch {
+    return null;
+  }
+}
+
 export default async function ShipmentPage({ params }: { params: Promise<{ id: string }> }) {
   const { org, canWrite } = await requireShipping();
   const { id } = await params;
@@ -21,7 +33,7 @@ export default async function ShipmentPage({ params }: { params: Promise<{ id: s
   if (!d) notFound();
   const s = d.shipment;
   const handled = s.emailStatus === "SENT" || s.emailStatus === "SKIPPED" || s.emailStatus === "SENDING";
-  const [contacts, orgRow, shippo] = await Promise.all([listContacts(org.organizationId), getOrganization(org.organizationId), resolveShippo(org.organizationId)]);
+  const [contacts, orgRow, shippo, sizesOn] = await Promise.all([listContacts(org.organizationId), getOrganization(org.organizationId), resolveShippo(org.organizationId), featureOn("label-sizes", org.organizationId)]);
   const addr = {
     name: d.shipTo.name, company: d.shipTo.company ?? "", street1: d.shipTo.street1, street2: d.shipTo.street2 ?? "", city: d.shipTo.city, state: d.shipTo.state, zip: d.shipTo.zip,
     phone: d.shipTo.phone ?? "", email: s.buyerEmail ?? "", isResidential: s.toResidential,
@@ -60,7 +72,7 @@ export default async function ShipmentPage({ params }: { params: Promise<{ id: s
 
       <BoxesPanel
         shipmentId={s.id}
-        boxes={d.boxes.map((b) => ({ id: b.id, carrier: b.carrier, trackingNumber: b.trackingNumber, status: b.status, statusDetails: b.statusDetails, location: b.location, eta: b.eta, lastError: b.lastError, followAuto: b.followAuto, labelUrl: b.labelUrl, labelService: b.labelService, labelCost: b.labelCost }))}
+        boxes={d.boxes.map((b) => ({ id: b.id, carrier: b.carrier, trackingNumber: b.trackingNumber, status: b.status, statusDetails: b.statusDetails, location: b.location, eta: b.eta, lastError: b.lastError, followAuto: b.followAuto, labelUrl: b.labelUrl, labelService: b.labelService, labelCost: b.labelCost, labelSize: sizesOn ? labelSizeOfBox(b.parcel) : null }))}
         locked={handled}
         canWrite={canWrite}
         trackingConnected={shippo.ok}
@@ -75,6 +87,7 @@ export default async function ShipmentPage({ params }: { params: Promise<{ id: s
         fromLine={fromLine}
         toLine={toLine}
         addressProblem={d.addressProblem}
+        sizes={sizesOn ? { saved: parseLabelSize(orgRow?.shippingLabelSize) } : null}
       />
 
       <FilesPanel
