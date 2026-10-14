@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireOrg } from "@/lib/tenant";
-import { canViewShipping, canWriteSales } from "@/lib/permissions";
+import { canEditSentInvoices, canViewShipping, canWriteSales } from "@/lib/permissions";
+import { featureOn } from "@/lib/features";
+import { reserveKey } from "@/lib/sales-rules";
 import { shipmentsForDocument, shippingOn } from "@/lib/shipping-service";
 import { canShipFrom, statusLabel } from "@/lib/shipping-rules";
 import { getDocument, salesOrdersOn } from "@/lib/sales-service";
@@ -84,8 +86,15 @@ export async function DocDetailPage({ kind, id, revise }: { kind: Kind; id: stri
   const target = doc.convertedToId ? await getDocument(org.organizationId, doc.convertedToId) : null;
   const convertedToKind = target?.doc.kind === "SALES_ORDER" ? "SALES_ORDER" : target?.doc.kind === "INVOICE" ? "INVOICE" : null;
   const revising = revEnabled && !!revise && canWrite && !isInvoice && (doc.status === "SENT" || doc.status === "ACCEPTED");
-  const history = isInvoice ? [] : await listRevisions(org.organizationId, "sales_doc", doc.id);
+  // A sent invoice can be changed at any time by Sales, Accounts, Admin and the Owner (flag `invoice-edit-sent`).
+  const canEditSent = isInvoice && canEditSentInvoices(org.role, org.access) && (await featureOn("invoice-edit-sent", org.organizationId));
+  const sentStatus = doc.status === "SENT" || doc.status === "PARTIALLY_PAID" || doc.status === "PAID";
+  const editingSent = canEditSent && sentStatus && !!revise;
+  const history = await listRevisions(org.organizationId, "sales_doc", doc.id);
   const data = await loadEditorData(org.organizationId, doc.status === "DRAFT" ? doc.id : null);
+  // The units this sent invoice already took out are not in the live count any more: give them back to the editor so its own items are not counted twice.
+  const editReserved = { ...data.reserved };
+  if (editingSent) for (const l of lines) { const k = reserveKey(l.productKey, l.condition, l.groupKey); editReserved[k] = (editReserved[k] ?? 0) - l.quantity; }
   const status = shownStatus(doc, data.today);
   const actions = (
     <DocActions
@@ -95,6 +104,7 @@ export async function DocDetailPage({ kind, id, revise }: { kind: Kind; id: stri
       canWrite={canWrite}
       canRevise={revEnabled}
       canMakeSo={soEnabled}
+      canEditSent={canEditSent}
       base={baseOf(kind)}
     />
   );
@@ -113,7 +123,7 @@ export async function DocDetailPage({ kind, id, revise }: { kind: Kind; id: stri
     </div>
   );
 
-  if ((doc.status === "DRAFT" && canWrite) || revising) {
+  if ((doc.status === "DRAFT" && canWrite) || revising || editingSent) {
     const initial: EditorInitial = {
       buyerId: doc.buyerId ?? "",
       company: doc.buyerCompany ?? "",
@@ -137,14 +147,18 @@ export async function DocDetailPage({ kind, id, revise }: { kind: Kind; id: stri
     return (
       <div className="max-w-5xl space-y-5">
         {head}
-        {revising ? (
+        {editingSent ? (
+          <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100" data-testid="doc-editing-sent">
+            You are changing an invoice the buyer already has. Remove an item, change a quantity or a price, or fix the details. Units that come off the invoice go back into Inventory, new units come out of it, payments already recorded stay, and the earlier version is kept. You can email the updated invoice when you save.
+          </p>
+        ) : revising ? (
           <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200" data-testid="doc-revising">
             You are revising a {word} the buyer already has. Change what needs changing (or nothing), write what is different below, and send it. They get the PDF and an email marked Revision {(doc.revision ?? 0) + 1}.
           </p>
         ) : (
           actions
         )}
-        <DocEditor revise={revising} kind={kind} docId={doc.id} number={doc.number} base={baseOf(kind)} initial={initial} buyers={data.buyers} products={data.products} conditions={data.conditions} stock={data.stock} reserved={data.reserved} buyerPrices={data.buyerPrices} picker={data.picker} />
+        <DocEditor revise={revising} editSent={editingSent} kind={kind} docId={doc.id} number={doc.number} base={baseOf(kind)} initial={initial} buyers={data.buyers} products={data.products} conditions={data.conditions} stock={data.stock} reserved={editingSent ? editReserved : data.reserved} buyerPrices={data.buyerPrices} picker={data.picker} />
       </div>
     );
   }
@@ -219,7 +233,7 @@ export async function DocDetailPage({ kind, id, revise }: { kind: Kind; id: stri
       </div>
       {history.length > 0 && (
         <div className={card} data-testid="doc-revisions">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Revisions sent</h2>
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{isInvoice ? "Changes made after sending" : "Revisions sent"}</h2>
           <ul className="mt-2 space-y-2 text-sm">
             {history.map((r) => (
               <li key={r.id} data-testid="doc-revision-row">

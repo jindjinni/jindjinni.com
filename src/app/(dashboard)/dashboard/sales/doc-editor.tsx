@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
-import { reviseDocumentAction, saveDocumentAction } from "@/app/actions/sales";
+import { editSentInvoiceAction, reviseDocumentAction, saveDocumentAction } from "@/app/actions/sales";
 import { normKey } from "@/lib/inventory-rules";
 import { dateLabel, docWord, dueLabel, refLabel, type DocKind } from "@/lib/sales-doc-ui";
 import { availability, computeTotals, dueDateFor, lineAmount, reserveKey, TERMS_OPTIONS, type Reserved, type StockMap } from "@/lib/sales-rules";
@@ -45,6 +45,8 @@ export function DocEditor(props: {
   kind: DocKind;
   /** Revising a document that was already sent: a note is required and saving sends the revision. */
   revise?: boolean;
+  /** Changing an invoice that was already sent: the note is optional, nothing needs sending, the units follow the items. */
+  editSent?: boolean;
   docId: string | null;
   number: string | null;
   base: string;
@@ -65,9 +67,10 @@ export function DocEditor(props: {
   const isSo = kind === "SALES_ORDER";
   const word = docWord(kind);
   const revising = !!props.revise && !!docId;
+  const editingSent = !!props.editSent && !!docId;
   const router = useRouter();
   const [revNote, setRevNote] = useState("");
-  const [revEmail, setRevEmail] = useState(true);
+  const [revEmail, setRevEmail] = useState(!props.editSent);
   const [h, setH] = useState(props.initial);
   const [lines, setLines] = useState<EditorLine[]>(() => (props.initial.lines.length ? props.initial.lines.map((l, i) => ({ ...l, rid: i + 1 })) : [{ ...blankLine(), rid: 1 }]));
   const [dueTouched, setDueTouched] = useState(false);
@@ -171,6 +174,13 @@ export function DocEditor(props: {
         internalNotes: h.internalNotes,
         lines: lines.map((l) => ({ productId: l.productId, productKey: l.productKey, productName: l.productName, condition: l.condition, groupKey: l.groupKey, groupLabel: l.groupLabel, quantity: Number(l.quantity), unitPrice: num(l.unitPrice), note: l.note || null, ndc: l.ndc || null })),
       };
+      if (editingSent && docId) {
+        const out = await editSentInvoiceAction(docId, { note: revNote, edits: doc, email: revEmail, to: h.email });
+        if (!out.ok) return setMsg({ ok: false, text: out.error });
+        router.replace(`${base}/${docId}`);
+        router.refresh();
+        return;
+      }
       if (revising && docId) {
         const out = await reviseDocumentAction(docId, { note: revNote, edits: doc, email: revEmail, to: h.email });
         if (!out.ok) return setMsg({ ok: false, text: out.error });
@@ -304,6 +314,18 @@ export function DocEditor(props: {
         </div>
       </div>
 
+      {editingSent && (
+        <div className={`${card} space-y-3 !border-amber-300 dark:!border-amber-900`} data-testid="de-edit-box">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-300">What changed (optional)</h2>
+          <p className="text-sm text-slate-600 dark:text-slate-400">For example &ldquo;Mint Dexcom G7 removed at the buyer&apos;s request&rdquo;. It is kept with the earlier version, and if you email the invoice it prints in a highlighted box at the top.</p>
+          <textarea id="de-revnote" rows={2} value={revNote} onChange={(e) => setRevNote(e.target.value)} className={field} data-testid="de-revnote" />
+          <label htmlFor="de-revemail" className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+            <input id="de-revemail" type="checkbox" checked={revEmail} onChange={(e) => setRevEmail(e.target.checked)} data-testid="de-revemail" />
+            Email the updated invoice{h.email ? ` to ${h.email}` : " (add their email address above)"}
+          </label>
+        </div>
+      )}
+
       {revising && (
         <div className={`${card} space-y-3 !border-red-300 dark:!border-red-900`} data-testid="de-revise-box">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-red-700 dark:text-red-300">Revision note (required)</h2>
@@ -317,8 +339,8 @@ export function DocEditor(props: {
       )}
 
       <div className="flex flex-wrap items-center gap-3">
-        <button type="button" onClick={save} disabled={pending} className={primaryBtn} data-testid="de-save">{pending ? "Saving…" : revising ? (revEmail ? "Save and send revision" : "Save revision") : docId ? "Save changes" : `Save ${word} as a draft`}</button>
-        <Link href={revising && docId ? `${base}/${docId}` : base === "/dashboard/sales/quotations" ? "/dashboard/sales" : base} className={ghostBtn}>Cancel</Link>
+        <button type="button" onClick={save} disabled={pending} className={primaryBtn} data-testid="de-save">{pending ? "Saving…" : editingSent ? (revEmail ? "Save and email updated invoice" : "Save changes") : revising ? (revEmail ? "Save and send revision" : "Save revision") : docId ? "Save changes" : `Save ${word} as a draft`}</button>
+        <Link href={(revising || editingSent) && docId ? `${base}/${docId}` : base === "/dashboard/sales/quotations" ? "/dashboard/sales" : base} className={ghostBtn}>Cancel</Link>
         {msg && <span className={`text-sm ${msg.ok ? "text-emerald-800 dark:text-emerald-300" : "text-red-700 dark:text-red-300"}`} data-testid={msg.ok ? "de-message" : "de-error"}>{msg.text}</span>}
       </div>
     </div>

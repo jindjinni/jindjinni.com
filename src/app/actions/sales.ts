@@ -6,7 +6,8 @@ import { db } from "@/db/client";
 import { salesPriceSheets, salesProfiles } from "@/db/schema";
 import { requireOrg, type CurrentOrg } from "@/lib/tenant";
 import { logActivity } from "@/lib/hr-service";
-import { canManageSalesSettings, canWriteSales } from "@/lib/permissions";
+import { canEditSentInvoices, canManageSalesSettings, canWriteSales } from "@/lib/permissions";
+import { featureOn } from "@/lib/features";
 import { encodeLogoFile } from "@/lib/logo-validation";
 import { sendDeptEmail } from "@/lib/mail-system";
 import { purchaseOrdersEnabled } from "@/lib/purchase-order-service";
@@ -20,6 +21,7 @@ import {
   deleteDraft,
   deletePriceItem,
   duplicateDocument,
+  editSentInvoice,
   ensureSalesProfile,
   getDocument,
   importBuyers,
@@ -302,6 +304,33 @@ export async function reviseDocumentAction(
   }
   refresh();
   return { ok: true, id, message: res.emailedTo ? `Revision ${res.revision} sent to ${res.emailedTo}.` : `Revision ${res.revision} saved.` };
+}
+
+/**
+ * Changes an invoice after it was sent (remove an item, fix a price, correct an address). Sales, Accounts, Admin and the Owner may do it at any
+ * time while the `invoice-edit-sent` switch is on; stock, payments and the kept earlier version are handled by `editSentInvoice`.
+ */
+export async function editSentInvoiceAction(
+  id: string,
+  opts: { note?: string; edits: Omit<DocInput, "kind" | "id">; email: boolean; to?: string; message?: string },
+): Promise<SalesResult> {
+  const org = await requireOrg();
+  if (!canEditSentInvoices(org.role, org.access)) return { ok: false, error: "Only Sales, Accounts, an Admin or the Owner can change a sent invoice." };
+  if (!(await featureOn("invoice-edit-sent", org.organizationId))) return { ok: false, error: "Editing a sent invoice isn't turned on for your company yet." };
+  const to = cleanText(opts?.to, 160);
+  if (opts?.email && to && !looksLikeEmail(to)) return { ok: false, error: "That email address doesn't look right." };
+  if (!opts?.edits) return { ok: false, error: "Nothing to save." };
+  const edits = { ...opts.edits, lines: Array.isArray(opts.edits.lines) ? opts.edits.lines.map((l) => ({ ...l, quantity: Number(l.quantity), unitPrice: Number(l.unitPrice) })) : [] };
+  const before = await getDocument(org.organizationId, id);
+  const res = await editSentInvoice(org, id, { edits, note: opts?.note, mailer: opts?.email ? mailer(org, id) : null, to: to || null, message: opts?.message ? String(opts.message).slice(0, 2000) : null });
+  if (!res.ok) return res;
+  if (before) await logActivity(org, "OTHER", `Changed sent invoice ${before.doc.number} for ${before.doc.buyerCompany ?? "a buyer"} (revision ${res.revision})`, { type: "sales_document", id });
+  revalidatePath("/dashboard/inventory", "layout");
+  refresh();
+  const bits: string[] = [res.emailedTo ? `Saved and emailed to ${res.emailedTo}.` : `Saved as revision ${res.revision}.`];
+  if (res.unitsBack || res.unitsOut) bits.push(`${res.unitsBack} ${res.unitsBack === 1 ? "unit" : "units"} came back into Inventory and ${res.unitsOut} ${res.unitsOut === 1 ? "unit" : "units"} went out for the new items.`);
+  if (res.overpaid > 0) bits.push(`The new total is $${res.overpaid.toFixed(2)} less than what was already paid, so that much is due back to the buyer.`);
+  return { ok: true, id, message: bits.join(" ") };
 }
 
 export async function voidDocumentAction(id: string): Promise<SalesResult> {

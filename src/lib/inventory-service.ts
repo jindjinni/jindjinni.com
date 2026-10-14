@@ -349,36 +349,60 @@ export async function deductStockMany(org: { organizationId: string; userId: str
   return { ok: true, results };
 }
 
-/** Puts back what a sale took out (an invoice voided): one positive ADJUSTMENT per sale row, same layer, same cost. */
-export async function returnSale(org: { organizationId: string; userId: string }, refType: string, refId: string, note: string): Promise<number> {
-  const sold = await db
+/**
+ * Puts back what a sale took out (an invoice voided, or its items changed after it was sent): one positive ADJUSTMENT per
+ * layer, same cost. Only what is still out is returned -- units already put back earlier (by an edit) are not put back twice,
+ * so a void after an edit returns exactly what the invoice holds now. The new rows' ids come back so a failed edit can undo them.
+ */
+export async function returnSaleDetailed(org: { organizationId: string; userId: string }, refType: string, refId: string, note: string): Promise<{ units: number; ids: string[] }> {
+  const rows = await db
     .select()
     .from(inventoryMovements)
-    .where(and(eq(inventoryMovements.organizationId, org.organizationId), eq(inventoryMovements.kind, "SALE"), eq(inventoryMovements.refType, refType), eq(inventoryMovements.refId, refId)));
-  const back = sold.filter((m) => m.quantity < 0);
-  if (!back.length) return 0;
-  await db.insert(inventoryMovements).values(
-    back.map((m) => ({
-      id: newId("invmove"),
-      organizationId: org.organizationId,
-      kind: "ADJUSTMENT" as const,
-      productId: m.productId,
-      productKey: m.productKey,
-      productName: m.productName,
-      brand: m.brand,
-      condition: m.condition,
-      expirationDate: m.expirationDate,
-      expirationEndDate: m.expirationEndDate,
-      lotNumber: m.lotNumber,
-      quantity: -m.quantity,
-      unitCost: m.unitCost,
-      note,
-      refType,
-      refId,
-      createdByUserId: org.userId,
-    })),
-  );
-  return back.reduce((n, m) => n - m.quantity, 0);
+    .where(and(eq(inventoryMovements.organizationId, org.organizationId), inArray(inventoryMovements.kind, ["SALE", "ADJUSTMENT"]), eq(inventoryMovements.refType, refType), eq(inventoryMovements.refId, refId)));
+  const layer = (m: (typeof rows)[number]) => [m.productKey, normKey(m.condition ?? ""), m.expirationDate ?? "", m.expirationEndDate ?? "", m.lotNumber ?? ""].join("|");
+  const out = new Map<string, { first: (typeof rows)[number]; n: number }>();
+  for (const m of rows) {
+    const key = layer(m);
+    if (m.kind === "SALE" && m.quantity < 0) {
+      const have = out.get(key);
+      if (have) have.n += -m.quantity;
+      else out.set(key, { first: m, n: -m.quantity });
+    }
+  }
+  for (const m of rows) {
+    if (m.kind === "ADJUSTMENT" && m.quantity > 0) {
+      const have = out.get(layer(m));
+      if (have) have.n -= m.quantity;
+    }
+  }
+  const back = [...out.values()].filter((x) => x.n > 0);
+  if (!back.length) return { units: 0, ids: [] };
+  const values = back.map(({ first: m, n }) => ({
+    id: newId("invmove"),
+    organizationId: org.organizationId,
+    kind: "ADJUSTMENT" as const,
+    productId: m.productId,
+    productKey: m.productKey,
+    productName: m.productName,
+    brand: m.brand,
+    condition: m.condition,
+    expirationDate: m.expirationDate,
+    expirationEndDate: m.expirationEndDate,
+    lotNumber: m.lotNumber,
+    quantity: n,
+    unitCost: m.unitCost,
+    note,
+    refType,
+    refId,
+    createdByUserId: org.userId,
+  }));
+  await db.insert(inventoryMovements).values(values);
+  return { units: values.reduce((n, v) => n + v.quantity, 0), ids: values.map((v) => v.id) };
+}
+
+/** Puts back what a sale took out (an invoice voided): see `returnSaleDetailed`. Returns the number of units. */
+export async function returnSale(org: { organizationId: string; userId: string }, refType: string, refId: string, note: string): Promise<number> {
+  return (await returnSaleDetailed(org, refType, refId, note)).units;
 }
 
 /** Removes movement rows made a moment ago in the same request (undoing a sale whose email failed). */

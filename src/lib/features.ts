@@ -120,6 +120,12 @@ export const FEATURES: FeatureDef[] = [
     blurb: "In the Sales editor: a closed, expandable Browse stock list grouped by brand and product to add items from, a choice of the exact expiration month or month range on each line (or a typed date or month range), and Live Stock showing how many units invoices are holding and what is still available.",
     defaultStage: "mothership",
   },
+  {
+    key: "invoice-edit-sent",
+    label: "Sales: edit an invoice after it was sent",
+    blurb: "A sent (or part-paid, or paid) invoice can be changed at any time by Sales, Accounts, Admin and the Owner: remove an item, change a quantity or price, fix an address. Units come back into or leave Inventory by themselves, payments already recorded stay, the earlier version is kept, and the updated invoice can be emailed. Also adds the right-click menu on the invoice list.",
+    defaultStage: "mothership",
+  },
 ];
 
 export const featureDef = (key: string) => FEATURES.find((f) => f.key === key);

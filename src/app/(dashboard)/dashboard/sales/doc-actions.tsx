@@ -9,7 +9,7 @@ import { card, field, fmtDay, fmtMoney, ghostBtn, primaryBtn } from "@/component
 export type ActionDoc = { id: string; kind: "QUOTATION" | "INVOICE" | "PURCHASE_ORDER" | "SALES_ORDER"; status: string; number: string; buyerEmail: string; total: number; amountPaid: number; convertedToId: string | null; convertedToKind?: "INVOICE" | "SALES_ORDER" | null; inventoryPosted: boolean; emailedTo: string | null; sentAt: string | null };
 export type ActionPayment = { id: string; amount: number; paidOn: string; method: string; note: string };
 
-export function DocActions({ doc, payments, today, canWrite, canRevise = false, canMakeSo = false, base }: { doc: ActionDoc; payments: ActionPayment[]; today: string; canWrite: boolean; canRevise?: boolean; canMakeSo?: boolean; base: string }) {
+export function DocActions({ doc, payments, today, canWrite, canRevise = false, canMakeSo = false, canEditSent = false, base }: { doc: ActionDoc; payments: ActionPayment[]; today: string; canWrite: boolean; canRevise?: boolean; canMakeSo?: boolean; canEditSent?: boolean; base: string }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -39,6 +39,9 @@ export function DocActions({ doc, payments, today, canWrite, canRevise = false, 
       <div className="flex flex-wrap items-center gap-2">
         <a href={`/api/sales/documents/${doc.id}/pdf`} target="_blank" rel="noreferrer" className={ghostBtn} data-testid="act-pdf">View PDF</a>
         <a href={`/api/sales/documents/${doc.id}/pdf?download=1`} className={ghostBtn} data-testid="act-pdf-download">Download PDF</a>
+        {isInvoice && canEditSent && (doc.status === "SENT" || doc.status === "PARTIALLY_PAID" || doc.status === "PAID") && (
+          <Link href={`${base}/${doc.id}?revise=1`} className={primaryBtn} data-testid="act-edit-sent">Edit invoice</Link>
+        )}
         {canWrite && !isDraft && doc.status !== "VOID" && (
           <button type="button" disabled={pending} onClick={() => run(() => duplicateDocumentAction(doc.id), (r) => router.push(`${base}/${r.id}`))} className={ghostBtn} data-testid="act-duplicate">Make a copy</button>
         )}
@@ -100,7 +103,7 @@ export function DocActions({ doc, payments, today, canWrite, canRevise = false, 
         <div className={`${card} space-y-3`} data-testid="act-payments">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Payments</h2>
-            <p className="text-sm tabular-nums text-slate-600 dark:text-slate-300">Paid {fmtMoney(doc.amountPaid)} of {fmtMoney(doc.total)}{owed > 0 ? <strong className="ml-2 text-slate-900 dark:text-slate-50" data-testid="act-owed">{fmtMoney(owed)} owed</strong> : <strong className="ml-2 text-green-700 dark:text-green-300" data-testid="act-paid-full">Paid in full</strong>}</p>
+            <p className="text-sm tabular-nums text-slate-600 dark:text-slate-300">Paid {fmtMoney(doc.amountPaid)} of {fmtMoney(doc.total)}{owed > 0 ? <strong className="ml-2 text-slate-900 dark:text-slate-50" data-testid="act-owed">{fmtMoney(owed)} owed</strong> : <strong className="ml-2 text-green-700 dark:text-green-300" data-testid="act-paid-full">Paid in full</strong>}{doc.amountPaid > doc.total + 0.004 && <strong className="ml-2 text-amber-800 dark:text-amber-300" data-testid="act-overpaid">{fmtMoney(Math.round((doc.amountPaid - doc.total) * 100) / 100)} due back to the buyer</strong>}</p>
           </div>
           {payments.length > 0 && (
             <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800" data-testid="act-payment-list">

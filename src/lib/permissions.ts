@@ -231,6 +231,14 @@ export function canWriteSales(role: string, access?: Access): boolean {
 }
 
 /**
+ * May change an invoice AFTER it was sent (remove an item, fix a price, correct an address): everyone who can write in Sales, plus the
+ * accountant and anyone given "work" in Accounts, because Accounts is who hears "they don't want that item". Admin and the Owner are included.
+ */
+export function canEditSentInvoices(role: string, access?: Access): boolean {
+  return canWriteSales(role, access) || role === "accountant" || works(access, "accounts");
+}
+
+/**
  * May open the Shipping department (orders waiting to go out, and the shipments with their boxes, tracking and shipped emails): everyone who can open
  * Sales or Accounts (they can look), Admin and the Owner, or anyone given Shipping.
  */

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireOrg } from "@/lib/tenant";
-import { canWriteSales } from "@/lib/permissions";
+import { canEditSentInvoices, canWriteSales } from "@/lib/permissions";
+import { featureOn } from "@/lib/features";
 import { listDocuments } from "@/lib/sales-service";
 import { getPaymentTerms } from "@/lib/accounts-queries";
 import { todayIn } from "@/lib/payment-due";
@@ -26,6 +27,7 @@ export async function DocsPage({ kind }: { kind: DocKind }) {
     web: d.source === "WEBSITE",
   }));
   const base = DOC_BASE[kind];
+  const canEditSent = kind === "INVOICE" && canEditSentInvoices(org.role, org.access) && (await featureOn("invoice-edit-sent", org.organizationId));
   const isInvoice = kind === "INVOICE";
   const isPo = kind === "PURCHASE_ORDER";
   const isSo = kind === "SALES_ORDER";
@@ -36,7 +38,7 @@ export async function DocsPage({ kind }: { kind: DocKind }) {
           <h1 className="text-xl font-bold text-slate-900 dark:text-slate-50">{docTitle(kind)}</h1>
           <p className="mt-1 max-w-2xl text-sm text-slate-600 dark:text-slate-400">
             {isInvoice
-              ? "Invoices to your buyers. A draft holds its units; sending it takes them out of Inventory."
+              ? `Invoices to your buyers. A draft holds its units; sending it takes them out of Inventory.${canEditSent ? " A sent invoice can still be changed: right-click it (or open it) and choose Edit invoice." : ""}`
               : isSo
                 ? "Orders you have agreed to fill. Make one from a sent quotation or a received purchase order (open it and press Make a sales order). It sets its units aside, can be confirmed to the buyer by email, and is then made into the invoice. Nothing leaves Inventory until the invoice is sent."
                 : isPo
@@ -50,7 +52,7 @@ export async function DocsPage({ kind }: { kind: DocKind }) {
           </Link>
         )}
       </div>
-      <DocList kind={kind} base={base} rows={rows} />
+      <DocList kind={kind} base={base} rows={rows} canEditSent={canEditSent} />
     </div>
   );
 }

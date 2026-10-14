@@ -29,7 +29,7 @@ import { brandFor } from "@/lib/receiving-serial-rules";
 import { todayIn } from "@/lib/payment-due";
 import { featureOn } from "@/lib/features";
 import { getPaymentTerms } from "@/lib/accounts-queries";
-import { discardMovements, deductStockMany, getInventory, returnSale } from "@/lib/inventory-service";
+import { discardMovements, deductStockMany, getInventory, returnSale, returnSaleDetailed } from "@/lib/inventory-service";
 import { buildLines, normKey, productKeyOf, takesExpiryText } from "@/lib/inventory-rules";
 import { expiryDisplay, parseExpiryInput } from "@/lib/expiry-range-rules";
 import {
@@ -893,6 +893,127 @@ export async function reviseDocument(
     await db.insert(salesDocumentLines).values(rows);
   }
   return { ok: true, revision, emailedTo: opts.mailer ? to : null };
+}
+
+// ---- changing an invoice after it was sent -----------------------------------------------------------------------
+
+export type EditInvoiceOutcome = { ok: true; revision: number; emailedTo: string | null; unitsBack: number; unitsOut: number; overpaid: number; status: string } | { ok: false; error: string };
+
+/** The part of an invoice line that decides which units it takes out of Inventory. */
+const stockSig = (l: { productKey: string; condition: string; groupKey: string | null; quantity: number }) => [l.productKey, normKey(l.condition), l.groupKey ?? "", l.quantity].join("|");
+
+/**
+ * Changes an invoice that was already sent (even one that is part-paid or paid): the distributor dropped an item, a price was
+ * wrong, an address changed. Whoever may edit sent invoices can do it at any time. What it does, all or nothing:
+ *  - if the items, quantities or stock dating changed, every unit this invoice took out is put back and the new items are taken out
+ *    (earliest first, or the exact dates chosen); if the stock can't cover the new items nothing is changed;
+ *  - a price-only or address-only change leaves Inventory alone;
+ *  - payments already recorded stay; the status follows the new total (paid in full / part paid / sent), and a total below what was
+ *    paid is reported as a credit due;
+ *  - the version before the change is kept with the note, the revision number goes up, and the updated PDF can be emailed first
+ *    (if the email is refused, nothing is changed).
+ */
+export async function editSentInvoice(
+  org: Org,
+  id: string,
+  opts: { edits: Omit<DocInput, "kind" | "id">; note?: unknown; mailer: Mailer | null; to?: string | null; message?: string | null },
+): Promise<EditInvoiceOutcome> {
+  const have = await getDocument(org.organizationId, id);
+  if (!have || have.doc.kind !== "INVOICE") return { ok: false, error: "That invoice wasn't found." };
+  const d = have.doc;
+  if (d.status === "DRAFT") return { ok: false, error: "This invoice hasn't been sent yet. Just edit it and send it." };
+  if (d.status === "VOID") return { ok: false, error: "A void invoice can't be changed. Make a copy of it instead." };
+  if (d.status !== "SENT" && d.status !== "PARTIALLY_PAID" && d.status !== "PAID") return { ok: false, error: "This invoice can't be changed." };
+
+  const prep = await prepareDocument(org, { ...opts.edits, kind: "INVOICE", id });
+  if (!prep.ok) return prep;
+  const now = new Date().toISOString();
+  const note = nz(cleanText(opts.note, 1000));
+  const revision = nextRevision(d.revision);
+  const rows = prep.lineRows(id);
+  // The invoice keeps the company details it was made with.
+  const header = { ...prep.header, fromName: d.fromName, fromAddress: d.fromAddress, fromEmail: d.fromEmail, fromPhone: d.fromPhone };
+
+  const paid = round2(d.amountPaid);
+  const status = paid <= 0 ? "SENT" : Math.round(paid * 100) >= Math.round(header.total * 100) ? "PAID" : "PARTIALLY_PAID";
+  const lastPaid = have.payments.map((p) => p.paidOn).sort().pop() ?? null;
+  const paidAt = status === "PAID" ? (d.paidAt ?? lastPaid ?? todayIn((await getPaymentTerms(org.organizationId)).timeZone)) : null;
+  const overpaid = Math.max(0, round2(paid - header.total));
+
+  // ---- stock ----
+  const before = have.lines.map(stockSig).sort().join("\n");
+  const after = rows.map((r) => stockSig({ productKey: r.productKey, condition: r.condition ?? "Mint", groupKey: r.groupKey ?? null, quantity: r.quantity })).sort().join("\n");
+  const stockChanged = !d.inventoryPosted || before !== after;
+  const undo: string[] = [];
+  const expiryTexts: (string | null)[] = [];
+  let unitsBack = 0;
+  let unitsOut = 0;
+  if (stockChanged) {
+    const back = await returnSaleDetailed(org, "sales_invoice", id, `Invoice ${d.number} changed`);
+    unitsBack = back.units;
+    undo.push(...back.ids);
+    const ctx = await salesStockContext(org.organizationId, id);
+    const asLines = rows.map((r) => ({ productKey: r.productKey, productName: r.productName, condition: r.condition ?? "Mint", groupKey: r.groupKey ?? null, quantity: r.quantity }));
+    const short = shortfalls(ctx.stock, ctx.reserved, asLines);
+    if (short.length) {
+      if (undo.length) await discardMovements(org.organizationId, undo);
+      const s = short[0];
+      return { ok: false, error: `Nothing was changed. ${s.productName}: only ${s.available} available, ${s.wanted} on this invoice.` };
+    }
+    const taken = await deductStockMany(
+      org,
+      asLines.map((l) => ({ productKey: l.productKey, condition: l.condition, groupKey: l.groupKey, quantity: l.quantity, refType: "sales_invoice", refId: id, note: `Invoice ${d.number} to ${header.buyerCompany ?? ""} (changed)`.trim() })),
+    );
+    if (!taken.ok) {
+      if (undo.length) await discardMovements(org.organizationId, undo);
+      return { ok: false, error: `Nothing was changed. ${asLines[taken.index]?.productName ?? "An item"}: ${taken.error}` };
+    }
+    undo.push(...taken.results.flatMap((r) => r.movementIds));
+    for (const r of taken.results) expiryTexts.push(takesExpiryText(r.takes));
+    unitsOut = rows.reduce((n, r) => n + r.quantity, 0);
+  } else {
+    // Same units as before: each line keeps the expiration text it already printed.
+    const olds = have.lines.map((l) => ({ sig: stockSig(l), text: l.expiryText, used: false }));
+    for (const r of rows) {
+      const sig = stockSig({ productKey: r.productKey, condition: r.condition ?? "Mint", groupKey: r.groupKey ?? null, quantity: r.quantity });
+      const o = olds.find((x) => !x.used && x.sig === sig);
+      if (o) o.used = true;
+      expiryTexts.push(o?.text ?? null);
+    }
+  }
+  // A date or month range that was typed on the line prints exactly as typed.
+  for (const [i, r] of rows.entries()) if (!r.groupKey && r.groupLabel) expiryTexts[i] = r.groupLabel;
+  const finalRows = rows.map((r, i) => ({ ...r, expiryText: expiryTexts[i] ?? null }));
+
+  const nextDoc: SalesDocument = { ...d, ...header, revision, revisionNote: note, revisedAt: now, status, paidAt, updatedAt: now };
+  const nextLines: SalesLine[] = finalRows.map((r) => ({ ...r, productId: r.productId ?? null, groupKey: r.groupKey ?? null, groupLabel: r.groupLabel ?? null, condition: r.condition ?? "Mint", expiryText: r.expiryText, note: r.note ?? null, ndc: r.ndc ?? null, unitPrice: r.unitPrice ?? 0, createdAt: now, updatedAt: now })) as SalesLine[];
+
+  // ---- the email goes first: if it is refused, nothing is changed ----
+  const to = nz(opts.to) ?? nz(nextDoc.buyerEmail);
+  if (opts.mailer) {
+    const fail = async (error: string): Promise<EditInvoiceOutcome> => {
+      if (undo.length) await discardMovements(org.organizationId, undo);
+      return { ok: false, error };
+    };
+    if (!to) return fail("Add the buyer's email address to send the updated invoice.");
+    if (!looksLikeEmail(to)) return fail("That email address doesn't look right.");
+    try {
+      const mail = await composeMail(org.organizationId, { doc: nextDoc, lines: nextLines, payments: have.payments }, opts.message);
+      const sent = await opts.mailer({ to, ...mail });
+      if (!sent.ok) return fail(`The email wasn't sent, so nothing was changed. ${sent.error}`);
+    } catch (e) {
+      return fail(`The email wasn't sent, so nothing was changed. ${e instanceof Error ? e.message : ""}`.trim());
+    }
+  }
+
+  await addRevisionRecord({ organizationId: org.organizationId, userId: org.userId, source: "sales_doc", documentId: id, revision, note: note ?? "Invoice edited.", before: { doc: have.doc, lines: have.lines }, emailedTo: opts.mailer ? to : null });
+  await db
+    .update(salesDocuments)
+    .set({ ...header, revision, revisionNote: note, revisedAt: now, status, paidAt, inventoryPosted: true, emailedTo: opts.mailer ? to : d.emailedTo, updatedAt: now })
+    .where(and(eq(salesDocuments.id, id), eq(salesDocuments.organizationId, org.organizationId)));
+  await db.delete(salesDocumentLines).where(eq(salesDocumentLines.documentId, id));
+  await db.insert(salesDocumentLines).values(finalRows);
+  return { ok: true, revision, emailedTo: opts.mailer ? to : null, unitsBack, unitsOut, overpaid, status };
 }
 
 /** Voids a quotation or an unpaid invoice. A sent invoice's units go back into Inventory. */
