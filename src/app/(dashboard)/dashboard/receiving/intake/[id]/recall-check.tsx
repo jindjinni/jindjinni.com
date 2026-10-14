@@ -14,7 +14,7 @@ import {
   type RecallActionState,
 } from "@/app/actions/receiving-recalls";
 import type { RecallCheckView, RecallView } from "@/lib/receiving-recall-service";
-import { RECALL_RESULT_LABELS, isRecalledResult, normalizeNumber, recallsForProduct } from "@/lib/receiving-recall";
+import { RECALL_RESULT_LABELS, isClearingCheck, isHitCleared, isRecalledResult, normalizeNumber, recallsForProduct } from "@/lib/receiving-recall";
 import type { ItemState } from "./item-card";
 import { field } from "./intake-parts";
 import { ScanTools } from "./scan-tools";
@@ -91,6 +91,16 @@ export function RecallCheck({
       const r = await removeRecallCheck(packageId, id);
       if (r.error) return onError(r.error);
       if (r.checks) onChecks(r.checks);
+      const p = r.itemPatch;
+      if (p) {
+        const upd: Partial<ItemState> = {};
+        if (p.needsReturn !== undefined) upd.needsReturn = p.needsReturn as ItemState["needsReturn"];
+        if (p.returnStatus !== undefined) upd.returnStatus = p.returnStatus as ItemState["returnStatus"];
+        if (p.quantityToReturn !== undefined) upd.quantityToReturn = p.quantityToReturn;
+        if (p.returnNotes !== undefined) upd.returnNotes = p.returnNotes;
+        const itemId = checks.find((c) => c.id === id)?.itemId;
+        if (itemId) onPatchMany({ [itemId]: upd });
+      }
     });
   }
 
@@ -189,7 +199,7 @@ export function RecallCheck({
               {rowChecks.map((c) => (
                 <li key={c.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
                   <span className="font-mono text-xs">{c.enteredNumber}</span>
-                  <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${isRecalledResult(c.result) ? "bg-red-100 text-red-900 dark:bg-red-900/40 dark:text-red-100" : c.note.startsWith("NEAR:") ? "bg-orange-100 text-orange-900 dark:bg-orange-900/40 dark:text-orange-100" : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"}`}>{c.note.startsWith("NEAR:") ? "Looks like a recalled number" : RECALL_RESULT_LABELS[c.result]}</span>
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${isRecalledResult(c.result) && !isHitCleared(c, rowChecks) ? "bg-red-100 text-red-900 dark:bg-red-900/40 dark:text-red-100" : c.note.startsWith("NEAR:") ? "bg-orange-100 text-orange-900 dark:bg-orange-900/40 dark:text-orange-100" : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"}`}>{c.note.startsWith("NEAR:") ? "Looks like a recalled number" : isClearingCheck(c) ? "Not affected (cleared by an Owner or Admin)" : isHitCleared(c, rowChecks) ? "Was on the list: cleared, not affected" : RECALL_RESULT_LABELS[c.result]}</span>
                   {c.recallName && <span className="text-xs text-slate-500">{c.recallName}</span>}
                   {editable && (
                     <button type="button" aria-label={`Remove check ${c.enteredNumber}`} className="ml-auto rounded px-1.5 text-xs text-slate-500 hover:bg-slate-100 hover:text-red-700 dark:hover:bg-slate-800" disabled={removing} onClick={() => removeCheck(c.id)}>

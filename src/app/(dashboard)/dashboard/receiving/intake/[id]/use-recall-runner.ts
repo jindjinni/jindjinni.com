@@ -55,6 +55,13 @@ export function useRecallRunner({
           title: `RECALLED: ${row.productName}`,
           lines: [...hits.map((h) => `${h.number} is on the recall list for ${h.recalls.join(", ")}.`), "Do not accept this product. The row is marked Needs To Be Returned: Yes (Return Requested)."],
         });
+      } else if ((r.results ?? []).some((x) => (x.cleared ?? []).length > 0)) {
+        const c = (r.results ?? []).filter((x) => (x.cleared ?? []).length > 0);
+        setOutcome({
+          tone: "ok",
+          title: `Already cleared: ${row.productName}`,
+          lines: c.map((x) => `${x.number} is on the recall list for ${(x.cleared ?? []).join(", ")}, but an Owner or Admin already recorded from the manufacturer's page that it is not affected.`),
+        });
       } else if ((r.near ?? []).length > 0) {
         setOutcome({
           tone: "bad",
@@ -124,10 +131,14 @@ export function useRecallRunner({
       if (r.error) return onError(r.error);
       took(r);
       applyPatch(row.id, r.itemPatch);
+      if (r.notice) {
+        setOutcome({ tone: "info", title: "Saved, but still held", lines: [r.notice] });
+        return;
+      }
       setOutcome(
         affected
           ? { tone: "bad", title: `RECALLED: ${row.productName}`, lines: ["Recorded as affected. The row is marked Needs To Be Returned: Yes (Return Requested)."] }
-          : { tone: "ok", title: "Recorded: not affected", lines: ["The manufacturer's page showed this number is not affected. This is saved with the shipment."] },
+          : { tone: "ok", title: "Recorded: not affected", lines: [r.itemPatch ? "The manufacturer's page showed this number is not affected. The recall hold is cleared and the return mark is taken off this row." : "The manufacturer's page showed this number is not affected. This is saved with the shipment."] },
       );
     });
   }

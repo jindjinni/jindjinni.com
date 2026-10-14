@@ -22,7 +22,7 @@ import type { EmailAttachment } from "@/lib/email";
 import { sendDeptEmail } from "@/lib/mail-system";
 import { getEmailTemplates, getReceivingPackage } from "@/lib/receiving-queries";
 import { buildCustomerEmail, buildPackagingWarning } from "@/lib/receiving-emails";
-import { isRecalledResult, rowRecallState } from "@/lib/receiving-recall";
+import { activeRecallHits, rowRecallState } from "@/lib/receiving-recall";
 import { buildDbLines, finalPayout, pickEmailTemplate, weekOf } from "@/lib/receiving-rules";
 import { storage } from "@/lib/receiving-storage";
 
@@ -86,7 +86,7 @@ export async function writeIntakeLog(org: OrgRef, packageId: string) {
     const m = i.productId ? meta.get(i.productId) : undefined;
     const rowChecks = checks.filter((c) => c.itemId === i.id);
     const recallState = rowRecallState(rowChecks);
-    const recallName = rowChecks.filter((c) => isRecalledResult(c.result) && c.recallName).map((c) => c.recallName as string)[0] ?? null;
+    const recallName = activeRecallHits(rowChecks).filter((c) => c.recallName).map((c) => c.recallName as string)[0] ?? null;
     for (const l of buildDbLines({
       quantityReceived: i.quantityReceived,
       needsReturn: i.needsReturn,

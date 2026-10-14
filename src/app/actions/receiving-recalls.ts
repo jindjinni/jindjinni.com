@@ -10,8 +10,9 @@ import { receivingItems, receivingPackages, receivingRecallChecks } from "@/db/s
 import { requireOrg, type CurrentOrg } from "@/lib/tenant";
 import { canWriteReceiving, isAdmin } from "@/lib/permissions";
 import { isRecalledResult } from "@/lib/receiving-recall";
+import { featureOn } from "@/lib/features";
 import { sniffReceiptType } from "@/lib/purchasing-receipt-docs";
-import { auditReceiving } from "@/lib/receiving-service";
+import { auditReceiving, writeIntakeLog } from "@/lib/receiving-service";
 import { markRowForReview } from "@/lib/receiving-serial-service";
 import { rescanReceivedStock } from "@/lib/receiving-recall-rescan";
 import {
@@ -23,6 +24,7 @@ import {
   markRowForReturn,
   previewNumbers,
   recordManualCheck,
+  releaseRecallReturn,
   runRecallCheck,
   saveRecall as saveRecallRow,
   setupDefaultRecalls,
@@ -41,7 +43,7 @@ export type RecallActionState = {
   checks?: RecallCheckView[];
   recalls?: RecallView[];
   /** Per number checked: which recalls it is on (empty = not on any list we have). */
-  results?: { number: string; recalls: string[] }[];
+  results?: { number: string; recalls: string[]; cleared?: string[] }[];
   /** Numbers that are close to (but not exactly) a recalled number: a person must compare the label with the notice. */
   near?: { number: string; listed: string; recall: string; kind: "LOOKALIKE" | "CONTAINS" }[];
   /** Recalls that apply to this product but have no list loaded, so "not on the list" proves nothing. */
@@ -66,6 +68,20 @@ async function requireRecallAdmin(): Promise<CurrentOrg> {
 function refresh(packageId?: string) {
   revalidatePath("/dashboard/receiving", "layout");
   if (packageId) revalidatePath(`/dashboard/receiving/intake/${packageId}`);
+}
+
+/**
+ * A recall answer on a shipment that was already submitted changes what Live Stock should show, so the received-stock lines
+ * are written again (flag recall-release). While a shipment is still being received, saving the form does this.
+ */
+async function syncLedger(org: CurrentOrg, packageId: string) {
+  if (!(await featureOn("recall-release", org.organizationId))) return;
+  const [p] = await db
+    .select({ status: receivingPackages.status })
+    .from(receivingPackages)
+    .where(and(eq(receivingPackages.id, packageId), eq(receivingPackages.organizationId, org.organizationId)))
+    .limit(1);
+  if (p && p.status !== "IN_PROGRESS") await writeIntakeLog(org, packageId);
 }
 
 /** The shipment and row belong to this company and the shipment is still being received. */
@@ -109,12 +125,13 @@ export async function checkRecall(packageId: string, itemId: string, input: stri
     itemPatch = { needsReturn: p.needsReturn, returnNotes: p.returnNotes };
     await auditReceiving(org, row.quotationId, "Recall check", `${row.productName}: ${line}`);
   }
+  await syncLedger(org, packageId);
   refresh(packageId);
   return {
     ok: true,
     near: nearList,
     unverified: r.unverified.map((u) => u.name),
-    results: r.numbers.map((n) => ({ number: n.number, recalls: n.matches.map((m) => m.recallName) })),
+    results: r.numbers.map((n) => ({ number: n.number, recalls: n.matches.map((m) => m.recallName), cleared: n.cleared.map((m) => m.recallName) })),
     checks: await listChecks(org.organizationId, packageId),
     itemPatch,
   };
@@ -125,17 +142,29 @@ export async function confirmRecallLookup(packageId: string, itemId: string, rec
   const org = await requireWriter();
   const row = await openRow(org, packageId, itemId);
   if ("error" in row) return { error: row.error };
-  const r = await recordManualCheck(org, packageId, itemId, String(recallId), String(number ?? "").slice(0, 80), !!affected);
+  const release = await featureOn("recall-release", org.organizationId);
+  const r = await recordManualCheck(org, packageId, itemId, String(recallId), String(number ?? "").slice(0, 80), !!affected, release && isAdmin(org.role));
   if ("error" in r) return { error: r.error };
   let itemPatch: RecallItemPatch | undefined;
+  let notice: string | undefined;
   const checks = await listChecks(org.organizationId, packageId);
   if (affected) {
     const n = checks.find((c) => c.itemId === itemId && c.recallId === recallId && c.result === "CONFIRMED_AFFECTED")?.enteredNumber ?? String(number);
     itemPatch = await markRowForReturn(org.organizationId, itemId, r.recallName, n);
+  } else if (r.cleared) {
+    itemPatch = (await releaseRecallReturn(org.organizationId, itemId)) ?? undefined;
+  } else if (r.needsAdmin && release) {
+    notice = "Saved. This number is on the recall list we hold, so an Owner or Admin has to record the manufacturer's answer before it stops holding the item.";
   }
-  await auditReceiving(org, row.quotationId, "Recall check", `${row.productName}: looked up on the manufacturer's page (${r.recallName}): ${affected ? "AFFECTED, marked for return" : "not affected"}.`);
+  await auditReceiving(
+    org,
+    row.quotationId,
+    "Recall check",
+    `${row.productName}: looked up on the manufacturer's page (${r.recallName}): ${affected ? "AFFECTED, marked for return" : r.cleared ? `not affected, recall-list hit cleared by ${org.role}${itemPatch ? ", return mark taken off" : ""}` : "not affected"}.`,
+  );
+  await syncLedger(org, packageId);
   refresh(packageId);
-  return { ok: true, checks, itemPatch };
+  return { ok: true, checks, itemPatch, notice };
 }
 
 /** Removes one recorded check (a mistyped number, say). The row's return setting is left as it is. */
@@ -151,7 +180,7 @@ export async function removeRecallCheck(packageId: string, checkId: string): Pro
   // A result that says "recalled", "affected" or "looks like a recalled number" can only be removed by an Owner or Admin,
   // so a receiver can't make a recall disappear. Plain "not on the list" results can still be removed (a mistyped number).
   const [chk] = await db
-    .select({ n: receivingRecallChecks.enteredNumber, result: receivingRecallChecks.result, note: receivingRecallChecks.note, recallName: receivingRecallChecks.recallName })
+    .select({ n: receivingRecallChecks.enteredNumber, itemId: receivingRecallChecks.itemId, result: receivingRecallChecks.result, note: receivingRecallChecks.note, recallName: receivingRecallChecks.recallName })
     .from(receivingRecallChecks)
     .where(and(eq(receivingRecallChecks.id, String(checkId)), eq(receivingRecallChecks.packageId, packageId), eq(receivingRecallChecks.organizationId, org.organizationId)))
     .limit(1);
@@ -162,8 +191,14 @@ export async function removeRecallCheck(packageId: string, checkId: string): Pro
   }
   await auditReceiving(org, p.quotationId, "Recall check", `Recall check removed: ${chk.n} (${chk.result}${chk.recallName ? `, ${chk.recallName}` : ""}) by ${org.role}${p.status !== "IN_PROGRESS" ? ", after the shipment was submitted" : ""}.`);
   await deleteCheck(org.organizationId, packageId, String(checkId));
+  // An Owner or Admin removing a stale recalled result: when nothing recalled is left on the row, the return mark the recall made comes off.
+  let itemPatch: RecallItemPatch | undefined;
+  if (protectedResult && (await featureOn("recall-release", org.organizationId))) {
+    itemPatch = (await releaseRecallReturn(org.organizationId, chk.itemId)) ?? undefined;
+    await syncLedger(org, packageId);
+  }
   refresh(packageId);
-  return { ok: true, checks: await listChecks(org.organizationId, packageId) };
+  return { ok: true, checks: await listChecks(org.organizationId, packageId), itemPatch };
 }
 
 /** Reads the lot / serial number off a photo of a label. The photo isn't stored. */

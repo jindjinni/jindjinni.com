@@ -1,7 +1,7 @@
 // Recall checks for Step 6 of receiving: the recall lists a company keeps, and the checks made on received rows.
 // Nothing here checks the signed-in user -- callers (the actions) do that and pass the company in.
 
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, not, or, isNull, like, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { receivingItems, receivingRecallChecks, receivingRecallNumbers, receivingRecalls } from "@/db/schema";
 import { newId } from "@/lib/ids";
@@ -11,7 +11,10 @@ import {
   nearMatches,
   type NearMatch,
   recallsForProduct,
-  isRecalledResult,
+  activeRecallHits,
+  CLEARED_NOTE,
+  isClearingCheck,
+  releasedReturn,
   normalizeNumber,
   numbersToCheck,
   parseRecallList,
@@ -138,7 +141,8 @@ export async function relevantRecalls(organizationId: string, productName: strin
 }
 
 export type CheckOutcome = {
-  numbers: { number: string; matches: { recallId: string; recallName: string }[]; near: NearMatch[] }[];
+  /** `matches` are the recall-list hits that still hold the row; `cleared` are hits an Owner or Admin already cancelled. */
+  numbers: { number: string; matches: { recallId: string; recallName: string }[]; cleared: { recallId: string; recallName: string }[]; near: NearMatch[] }[];
   recalled: boolean;
   /** Some number is close to (but not exactly) a recalled number: a person must look. */
   nearAny: boolean;
@@ -169,10 +173,20 @@ export async function runRecallCheck(
     nearAny: false,
     unverified: relevant.filter((r) => r.loaded === 0).map((r) => ({ id: r.id, name: r.name, manufacturer: r.manufacturer })),
   };
+  // Hits an Owner or Admin already cancelled for this row (the manufacturer's page said "Not affected") stay cancelled.
+  const clearing = (
+    await db
+      .select({ result: receivingRecallChecks.result, enteredNumber: receivingRecallChecks.enteredNumber, recallId: receivingRecallChecks.recallId, note: receivingRecallChecks.note })
+      .from(receivingRecallChecks)
+      .where(and(eq(receivingRecallChecks.itemId, itemId), eq(receivingRecallChecks.organizationId, org.organizationId), eq(receivingRecallChecks.result, "CONFIRMED_OK")))
+  ).filter(isClearingCheck);
   for (const n of numbers) {
-    const matches = matchNumber(n, index);
-    const near = matches.length === 0 ? nearMatches(n, index) : [];
-    outcome.numbers.push({ number: n, matches, near });
+    const allMatches = matchNumber(n, index);
+    const isCleared = (recallId: string) => clearing.some((c) => normalizeNumber(c.enteredNumber) === normalizeNumber(n) && c.recallId === recallId);
+    const matches = allMatches.filter((m) => !isCleared(m.recallId));
+    const cleared = allMatches.filter((m) => isCleared(m.recallId));
+    const near = allMatches.length === 0 ? nearMatches(n, index) : [];
+    outcome.numbers.push({ number: n, matches, cleared, near });
     if (matches.length > 0) outcome.recalled = true;
     if (near.length > 0) outcome.nearAny = true;
     // Checking the same number again replaces the earlier automatic result for it rather than piling up copies.
@@ -190,8 +204,8 @@ export async function runRecallCheck(
     // clears it or someone records the manufacturer's own answer.
     const nearNote = near.length > 0 ? `NEAR: ${near.map((k) => `${k.listed} (${k.recallName})`).join("; ")}` : null;
     const rows: { recallId: string | null; recallName: string | null; result: RecallResult; note?: string | null }[] =
-      matches.length > 0
-        ? matches.map((m) => ({ recallId: m.recallId, recallName: m.recallName, result: "ON_LIST" as const }))
+      allMatches.length > 0
+        ? allMatches.map((m) => ({ recallId: m.recallId, recallName: m.recallName, result: "ON_LIST" as const }))
         : [{ recallId: near[0]?.recallId ?? null, recallName: near[0]?.recallName ?? null, result: "NOT_ON_LIST" as const, note: nearNote }];
     for (const r of rows) {
       await db.insert(receivingRecallChecks).values({
@@ -219,7 +233,8 @@ export async function recordManualCheck(
   recallId: string,
   number: string,
   affected: boolean,
-): Promise<{ error: string } | { recallName: string }> {
+  canClear = false,
+): Promise<{ error: string } | { recallName: string; cleared: boolean; needsAdmin: boolean }> {
   const [recall] = await db
     .select({ id: receivingRecalls.id, name: receivingRecalls.name })
     .from(receivingRecalls)
@@ -228,15 +243,27 @@ export async function recordManualCheck(
   if (!recall) return { error: "That recall wasn't found." };
   const n = numbersToCheck(number)[0];
   if (!n) return { error: "Enter the lot or serial number you looked up (at least 4 letters or digits)." };
+  const sameNumber = and(
+    eq(receivingRecallChecks.itemId, itemId),
+    eq(receivingRecallChecks.organizationId, org.organizationId),
+    eq(receivingRecallChecks.enteredNumber, n),
+    eq(receivingRecallChecks.recallId, recallId),
+  );
+  // Is this number on the recall list for this row (and not already cancelled)?
+  const earlier = await db
+    .select({ result: receivingRecallChecks.result, enteredNumber: receivingRecallChecks.enteredNumber, recallId: receivingRecallChecks.recallId, note: receivingRecallChecks.note })
+    .from(receivingRecallChecks)
+    .where(sameNumber);
+  const listHitActive = activeRecallHits(earlier).some((c) => c.result === "ON_LIST");
+  const clears = !affected && canClear;
+  // A receiver's "Not affected" never erases an Owner's or Admin's earlier clearing answer; everything else is replaced by the newer answer.
   await db
     .delete(receivingRecallChecks)
     .where(
       and(
-        eq(receivingRecallChecks.itemId, itemId),
-        eq(receivingRecallChecks.organizationId, org.organizationId),
-        eq(receivingRecallChecks.enteredNumber, n),
-        eq(receivingRecallChecks.recallId, recallId),
+        sameNumber,
         inArray(receivingRecallChecks.result, ["CONFIRMED_AFFECTED", "CONFIRMED_OK"]),
+        affected || clears ? undefined : or(isNull(receivingRecallChecks.note), not(like(receivingRecallChecks.note, `${CLEARED_NOTE}%`))),
       ),
     );
   await db.insert(receivingRecallChecks).values({
@@ -248,9 +275,10 @@ export async function recordManualCheck(
     recallName: recall.name,
     enteredNumber: n,
     result: affected ? "CONFIRMED_AFFECTED" : "CONFIRMED_OK",
+    note: clears ? `${CLEARED_NOTE}: the manufacturer's page says this number is not affected.` : null,
     checkedByUserId: org.userId,
   });
-  return { recallName: recall.name };
+  return { recallName: recall.name, cleared: clears && listHitActive, needsAdmin: !affected && !canClear && listHitActive };
 }
 
 /**
@@ -481,13 +509,37 @@ export async function recallGateIssues(
   return out;
 }
 
-/** True when this row has a check that says the product is recalled (so it must stay marked for return). */
+/** True when this row has a check that still says the product is recalled (a list hit an Owner or Admin cancelled no longer counts). */
 export async function rowIsRecalled(organizationId: string, itemId: string): Promise<boolean> {
   const rows = await db
-    .select({ result: receivingRecallChecks.result })
+    .select({ result: receivingRecallChecks.result, enteredNumber: receivingRecallChecks.enteredNumber, recallId: receivingRecallChecks.recallId, note: receivingRecallChecks.note })
     .from(receivingRecallChecks)
     .where(and(eq(receivingRecallChecks.organizationId, organizationId), eq(receivingRecallChecks.itemId, itemId)));
-  return rows.some((r) => isRecalledResult(r.result));
+  return activeRecallHits(rows).length > 0;
+}
+
+/**
+ * After a recall hit was cancelled or removed: when nothing recalled is left on the row, take off the return mark the recall put
+ * there (only if it was made by the recall alone -- see `releasedReturn`). Returns what changed for the open form, or null.
+ */
+export async function releaseRecallReturn(
+  organizationId: string,
+  itemId: string,
+): Promise<{ needsReturn: string; returnStatus: string; quantityToReturn: string; returnNotes: string } | null> {
+  if (await rowIsRecalled(organizationId, itemId)) return null;
+  const [it] = await db
+    .select({ needsReturn: receivingItems.needsReturn, returnStatus: receivingItems.returnStatus, returnNotes: receivingItems.returnNotes })
+    .from(receivingItems)
+    .where(and(eq(receivingItems.id, itemId), eq(receivingItems.organizationId, organizationId)))
+    .limit(1);
+  if (!it) return null;
+  const rel = releasedReturn(it);
+  if (!rel) return null;
+  await db
+    .update(receivingItems)
+    .set({ needsReturn: rel.needsReturn, returnStatus: rel.returnStatus, quantityToReturn: null, returnNotes: null, updatedAt: sql`(current_timestamp)` })
+    .where(eq(receivingItems.id, itemId));
+  return { needsReturn: "NO", returnStatus: "NOT_APPLICABLE", quantityToReturn: "", returnNotes: "" };
 }
 
 void normalizeNumber;

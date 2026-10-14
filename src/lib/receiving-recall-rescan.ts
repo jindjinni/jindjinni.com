@@ -13,7 +13,7 @@ import {
   receivingRecallChecks,
 } from "@/db/schema";
 import { newId } from "@/lib/ids";
-import { matchNumber, normalizeNumber } from "@/lib/receiving-recall";
+import { isClearingCheck, matchNumber, normalizeNumber } from "@/lib/receiving-recall";
 import { loadIndex, markRowForReturn } from "@/lib/receiving-recall-service";
 import { auditReceiving, writeIntakeLog, type OrgRef } from "@/lib/receiving-service";
 
@@ -40,7 +40,7 @@ export async function rescanReceivedStock(org: OrgRef): Promise<{ hits: RescanHi
   const lots = await db.select({ itemId: receivingExpirationLots.itemId, lot: receivingExpirationLots.lotNumber }).from(receivingExpirationLots).where(eq(receivingExpirationLots.organizationId, org.organizationId));
   const serials = await db.select({ itemId: receivingItemSerials.itemId, serial: receivingItemSerials.serial, lot: receivingItemSerials.lot }).from(receivingItemSerials).where(eq(receivingItemSerials.organizationId, org.organizationId));
   const existing = await db
-    .select({ itemId: receivingRecallChecks.itemId, n: receivingRecallChecks.enteredNumber, recallId: receivingRecallChecks.recallId, result: receivingRecallChecks.result })
+    .select({ itemId: receivingRecallChecks.itemId, n: receivingRecallChecks.enteredNumber, recallId: receivingRecallChecks.recallId, result: receivingRecallChecks.result, note: receivingRecallChecks.note })
     .from(receivingRecallChecks)
     .where(eq(receivingRecallChecks.organizationId, org.organizationId));
 
@@ -58,7 +58,7 @@ export async function rescanReceivedStock(org: OrgRef): Promise<{ hits: RescanHi
       numbersLooked++;
       const matches = matchNumber(n, index);
       if (matches.length === 0) continue;
-      const fresh = matches.filter((m) => !existing.some((e) => e.itemId === r.itemId && e.n === n && e.recallId === m.recallId && (e.result === "ON_LIST" || e.result === "CONFIRMED_AFFECTED")));
+      const fresh = matches.filter((m) => !existing.some((e) => e.itemId === r.itemId && e.n === n && e.recallId === m.recallId && (e.result === "ON_LIST" || e.result === "CONFIRMED_AFFECTED" || isClearingCheck({ result: e.result, note: e.note }))));
       if (fresh.length === 0) continue;
       for (const m of fresh) {
         await db.insert(receivingRecallChecks).values({
@@ -73,7 +73,7 @@ export async function rescanReceivedStock(org: OrgRef): Promise<{ hits: RescanHi
           note: "Found when the recall list was updated",
           checkedByUserId: org.userId,
         });
-        existing.push({ itemId: r.itemId, n, recallId: m.recallId, result: "ON_LIST" });
+        existing.push({ itemId: r.itemId, n, recallId: m.recallId, result: "ON_LIST", note: null });
       }
       await markRowForReturn(org.organizationId, r.itemId, fresh[0].recallName, n);
       await auditReceiving(org, r.quotationId, "Recall check", `${r.product}: ${n} is on the recall list (${fresh.map((m) => m.recallName).join(", ")}), found when the list was updated. Marked for return.`);

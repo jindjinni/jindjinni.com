@@ -109,6 +109,12 @@ export const FEATURES: FeatureDef[] = [
     defaultStage: "mothership",
   },
   {
+    key: "recall-release",
+    label: "Receiving: clear a recall hit that the manufacturer says is not affected",
+    blurb: "Receiving -> Step 6 Recall check: when an Owner or Admin records 'Not affected' from the manufacturer's own page for a number that was on the recall list, that list hit stops holding the item, the return mark the recall put on it is taken off, and the item moves into Live Stock. Also refreshes Live Stock right after any recall check on a shipment that was already submitted. Off = a list hit keeps the item out of Live Stock.",
+    defaultStage: "mothership",
+  },
+  {
     key: "quotation-delete",
     label: "Delete quotations",
     blurb: "Purchasing -> Quotations: tick quotations and delete them, or delete all. Quotations with nothing received, paid or shipped are erased for good; any that already have received stock, a payment or a bought label are hidden in Settings -> Archive instead.",

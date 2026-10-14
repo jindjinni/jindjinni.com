@@ -198,10 +198,48 @@ export function recallsForProduct<T extends { keywords: string }>(productName: s
 
 export type RecallCheckLite = { itemId: string; result: RecallResult };
 
+/** The start of the note on a "Not affected" answer that an Owner or Admin recorded: it is what cancels a recall-list hit. */
+export const CLEARED_NOTE = "Cleared by an Owner or Admin";
+
+type CheckLike = { result: string; enteredNumber?: string | null; recallId?: string | null; note?: string | null };
+
+/** A manufacturer-page "Not affected" that an Owner or Admin recorded. */
+export const isClearingCheck = (c: CheckLike) => c.result === "CONFIRMED_OK" && !!c.note?.startsWith(CLEARED_NOTE);
+
+const hitKey = (c: CheckLike) => `${normalizeNumber(c.enteredNumber ?? "")}|${c.recallId ?? ""}`;
+
+/**
+ * Is this recall-LIST hit cancelled? Yes when an Owner or Admin recorded "Not affected" from the manufacturer's own page for the
+ * same number and the same recall. Only list hits can be cancelled this way; a manufacturer's "Affected" is replaced only by the
+ * newer answer from the manufacturer's page for that number.
+ */
+export function isHitCleared(c: CheckLike, all: CheckLike[]): boolean {
+  if (c.result !== "ON_LIST") return false;
+  const k = hitKey(c);
+  return all.some((x) => isClearingCheck(x) && hitKey(x) === k);
+}
+
+/** The recalled results still holding the row (a cancelled list hit no longer does). */
+export function activeRecallHits<T extends CheckLike>(checks: T[]): T[] {
+  return checks.filter((c) => isRecalledResult(c.result) && !isHitCleared(c, checks));
+}
+
 /** What the row shows: the worst thing any of its checks found. */
-export function rowRecallState(checks: { result: string }[]): "RECALLED" | "CHECKED" | "NONE" {
-  if (checks.some((c) => isRecalledResult(c.result))) return "RECALLED";
+export function rowRecallState(checks: CheckLike[]): "RECALLED" | "CHECKED" | "NONE" {
+  if (activeRecallHits(checks).length > 0) return "RECALLED";
   return checks.length > 0 ? "CHECKED" : "NONE";
+}
+
+/**
+ * The return mark a recall hit puts on a row (Needs return = Yes, Return Requested, every unit) -- taken off again only when
+ * it was made by the recall alone: the notes hold nothing but "RECALL:" lines and nothing has shipped back. Anything else
+ * (another reason, a return already shipped or done) is left exactly as it is.
+ */
+export function releasedReturn(row: { needsReturn: string | null; returnStatus: string | null; returnNotes: string | null }): { needsReturn: "NO"; returnStatus: "NOT_APPLICABLE"; quantityToReturn: null; returnNotes: null } | null {
+  if (row.needsReturn !== "YES" || row.returnStatus !== "RETURN_REQUESTED") return null;
+  const lines = (row.returnNotes ?? "").split("\n").map((l) => l.trim()).filter(Boolean);
+  if (lines.length === 0 || !lines.every((l) => l.startsWith("RECALL:"))) return null;
+  return { needsReturn: "NO", returnStatus: "NOT_APPLICABLE", quantityToReturn: null, returnNotes: null };
 }
 
 // ---- close matches -----------------------------------------------------------------------------------------------
