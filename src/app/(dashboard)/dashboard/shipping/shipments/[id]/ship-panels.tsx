@@ -8,7 +8,7 @@ import {
 } from "@/app/actions/shipping-dept";
 import { field, ghostBtn, primaryBtn } from "@/components/sales-ui";
 import { AddressFields, type AddressValue } from "../../addresses/address-fields";
-import { guessCarrier, MANUAL_STATUSES, pickAttachments, shippedEmail, statusLabel, type EmailItem } from "@/lib/shipping-rules";
+import { emailEditWarnings, guessCarrier, MANUAL_STATUSES, pickAttachments, shippedEmail, statusLabel, type EmailItem } from "@/lib/shipping-rules";
 import { carrierTrackingLink, pillClass } from "@/lib/tracking-rules";
 import { LABEL_SIZES, labelSizeOf, labelSizeShort, type LabelSizeKey } from "@/lib/label-sizes";
 
@@ -314,7 +314,7 @@ export function FilesPanel({ shipmentId, files, locked, canWrite }: { shipmentId
 export type EmailProps = {
   shipmentId: string; to: string; docKind: string; docNumber: string; reference: string | null; reason: string | null; company: string; contact: string | null; shipDate: string;
   boxes: { carrier: string; trackingNumber: string }[]; items: EmailItem[]; files: { id: string; filename: string; sizeBytes: number; attach: boolean }[]; sender: string;
-  hasOrder: boolean; hasInvoice: boolean; canSend: boolean;
+  hasOrder: boolean; hasInvoice: boolean; canSend: boolean; canEdit?: boolean;
 };
 
 export function EmailPanel(p: EmailProps) {
@@ -324,11 +324,16 @@ export function EmailPanel(p: EmailProps) {
   const [attachOrder, setAttachOrder] = useState(false);
   const [attachInvoice, setAttachInvoice] = useState(false);
   const [reason, setReason] = useState("");
+  // Hand-editing: while on, the boxes below hold the subject and message exactly as they will be sent.
+  const [editing, setEditing] = useState(false);
+  const [subj, setSubj] = useState("");
+  const [body, setBody] = useState("");
   const pick = pickAttachments(p.files, 0);
   const names = p.files.filter((f) => pick.use.includes(f.id)).map((f) => f.filename);
   if (attachOrder && p.hasOrder) names.push("Order.pdf");
   if (attachInvoice && p.hasInvoice) names.push("Invoice.pdf");
   const mail = shippedEmail({ company: p.company, contact: p.contact, docKind: p.docKind, docNumber: p.docNumber, reference: p.reference, shipDate: p.shipDate, boxes: p.boxes, items: p.items, attachmentNames: names, note, senderName: p.sender, reason: p.reason });
+  const warnings = editing ? emailEditWarnings(body, p.boxes) : [];
   const lab = "text-xs font-medium text-slate-700 dark:text-slate-300";
   return (
     <Panel title="Email to the buyer" id="email-panel">
@@ -336,17 +341,33 @@ export function EmailPanel(p: EmailProps) {
         <p className="text-sm text-slate-600 dark:text-slate-400" data-testid="email-needs-boxes">Add at least one box and the email appears here to review.</p>
       ) : (
         <div className="space-y-4">
+          {editing ? (
+            <div className="rounded-lg border-2 border-emerald-600 p-3 dark:border-emerald-700" data-testid="email-edit">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Editing the email. The buyer gets exactly what is written here.</p>
+              <label htmlFor="em-subject" className={`${lab} mt-2 block`}>Subject</label>
+              <input id="em-subject" value={subj} maxLength={200} onChange={(e) => setSubj(e.target.value)} className={`${field} mt-1`} data-testid="em-subject" />
+              <label htmlFor="em-body" className={`${lab} mt-3 block`}>Message</label>
+              <textarea id="em-body" value={body} maxLength={8000} rows={16} onChange={(e) => setBody(e.target.value)} className={`${field} mt-1 font-sans leading-relaxed`} data-testid="em-body" />
+              {warnings.map((w) => <p key={w} className="mt-2 rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-200" data-testid="em-warn">{w}</p>)}
+              <div className="mt-2 flex flex-wrap items-center gap-3">
+                <button type="button" className={ghostBtn} data-testid="em-reset" onClick={() => setEditing(false)}>Put the original wording back</button>
+                <span className="text-xs text-slate-500">Files you tick below are still attached. If you list them in the message, keep that line up to date yourself.</span>
+              </div>
+            </div>
+          ) : (
           <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800" data-testid="email-preview">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">What the buyer will get</p>
             <p className="mt-2 text-sm"><span className="text-slate-500">Subject: </span><span data-testid="email-subject">{mail.subject}</span></p>
             <pre className="mt-2 whitespace-pre-wrap font-sans text-sm text-slate-800 dark:text-slate-200" data-testid="email-body">{mail.text}</pre>
             {pick.left.length > 0 && <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">Too many or too large to attach: {pick.left.join(", ")}. Untick some files.</p>}
+            {p.canEdit && <button type="button" className={`${ghostBtn} mt-3`} data-testid="em-edit" onClick={() => { setSubj(mail.subject); setBody(mail.text); setEditing(true); }}>Edit this email</button>}
           </div>
+          )}
           {p.canSend && (
             <>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div><label htmlFor="em-to" className={lab}>Send to</label><input id="em-to" value={to} onChange={(e) => setTo(e.target.value)} placeholder="buyer@company.com" className={`${field} mt-1`} data-testid="em-to" /></div>
-                <div><label htmlFor="em-note" className={lab}>A note to the buyer (optional)</label><input id="em-note" value={note} maxLength={1000} onChange={(e) => setNote(e.target.value)} className={`${field} mt-1`} data-testid="em-note" /></div>
+                <div><label htmlFor="em-note" className={lab}>A note to the buyer (optional)</label><input id="em-note" value={note} maxLength={1000} disabled={editing} placeholder={editing ? "Type it into the message instead" : ""} onChange={(e) => setNote(e.target.value)} className={`${field} mt-1`} data-testid="em-note" /></div>
               </div>
               {(p.hasOrder || p.hasInvoice) && (
                 <div className="flex flex-wrap gap-5 text-sm">
@@ -356,7 +377,7 @@ export function EmailPanel(p: EmailProps) {
                 </div>
               )}
               <div className="flex flex-wrap items-center gap-3">
-                <button type="button" disabled={pending} className={primaryBtn} data-testid="em-send" onClick={() => run(() => sendShippedEmailAction(p.shipmentId, { to, note, attachOrder, attachInvoice }))}>{pending ? "Sending…" : "Send the email"}</button>
+                <button type="button" disabled={pending} className={primaryBtn} data-testid="em-send" onClick={() => run(() => sendShippedEmailAction(p.shipmentId, { to, note, attachOrder, attachInvoice, ...(editing ? { subject: subj, text: body } : {}) }))}>{pending ? "Sending…" : "Send the email"}</button>
                 <span className="text-xs text-slate-500">Nothing is sent until you press Send.</span>
               </div>
               <div className="flex flex-wrap items-end gap-3 border-t border-slate-200 pt-3 dark:border-slate-800">

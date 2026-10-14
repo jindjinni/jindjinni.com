@@ -33,7 +33,7 @@ export default async function ShipmentPage({ params }: { params: Promise<{ id: s
   if (!d) notFound();
   const s = d.shipment;
   const handled = s.emailStatus === "SENT" || s.emailStatus === "SKIPPED" || s.emailStatus === "SENDING";
-  const [contacts, orgRow, shippo, sizesOn] = await Promise.all([listContacts(org.organizationId), getOrganization(org.organizationId), resolveShippo(org.organizationId), featureOn("label-sizes", org.organizationId)]);
+  const [contacts, orgRow, shippo, sizesOn, emailEditOn] = await Promise.all([listContacts(org.organizationId), getOrganization(org.organizationId), resolveShippo(org.organizationId), featureOn("label-sizes", org.organizationId), featureOn("shipping-email-edit", org.organizationId)]);
   const addr = {
     name: d.shipTo.name, company: d.shipTo.company ?? "", street1: d.shipTo.street1, street2: d.shipTo.street2 ?? "", city: d.shipTo.city, state: d.shipTo.state, zip: d.shipTo.zip,
     phone: d.shipTo.phone ?? "", email: s.buyerEmail ?? "", isResidential: s.toResidential,
@@ -107,6 +107,7 @@ export default async function ShipmentPage({ params }: { params: Promise<{ id: s
             <>
               <p className="text-sm"><span className="text-slate-500">Subject: </span><span data-testid="email-sent-subject">{s.emailSubject}</span></p>
               <pre className="whitespace-pre-wrap font-sans text-sm text-slate-800 dark:text-slate-200" data-testid="email-sent-body">{s.emailBody}</pre>
+              {s.emailEdited && <p className="text-xs text-slate-500" data-testid="email-sent-edited">The wording was edited by hand before it was sent.</p>}
               {names.length > 0 && <p className="text-xs text-slate-500" data-testid="email-sent-files">Attached: {names.join(", ")}</p>}
             </>
           )}
@@ -131,6 +132,7 @@ export default async function ShipmentPage({ params }: { params: Promise<{ id: s
           hasOrder={!!s.documentId}
           hasInvoice={!!s.invoiceDocumentId && s.invoiceDocumentId !== s.documentId}
           canSend={canWrite}
+          canEdit={canWrite && emailEditOn}
         />
       )}
     </div>

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {
-  canShipFrom, checkTracking, cleanTracking, docLabel, emailReadiness, guessCarrier, isOrderKind, MAX_EMAIL_FILES, pickAttachments, shipmentStatus, shippedEmail, stageOf, STAGES,
+  canShipFrom, checkTracking, cleanEditedEmail, cleanTracking, emailEditWarnings, MAX_BODY, MAX_SUBJECT, docLabel, emailReadiness, guessCarrier, isOrderKind, MAX_EMAIL_FILES, pickAttachments, shipmentStatus, shippedEmail, stageOf, STAGES,
 } from "../src/lib/shipping-rules";
 import { addressLines, addressProblems, addressReady, checkParcel, cleanAddress, kindLabel, kindOne, parseUsAddress, stateCode } from "../src/lib/shipping-address-rules";
 import { candidatesFrom } from "../src/lib/shipping-contacts";
@@ -125,5 +125,21 @@ assert.deepEqual([cand[1].values.kind, cand[1].values.name, cand[1].values.isRes
 assert.equal(cand[2].values.kind, "SUPPLIER");
 assert.equal(cand[2].values.street1, null, "an address that can't be read is kept as a note, not guessed");
 assert.equal(cand[2].values.notes, "somewhere without a zip");
+
+// a hand-edited shipped email
+assert.deepEqual(cleanEditedEmail({ subject: "  Shipped\r\nBcc: x@y.z ", text: "Hi\r\nThere  \n\n" }), { ok: true, subject: "Shipped Bcc: x@y.z", text: "Hi\nThere" }, "the subject is one line (no header tricks) and line endings are tidied");
+assert.equal(cleanEditedEmail({ subject: "", text: "x" }).ok, false);
+assert.equal(cleanEditedEmail({ subject: "x", text: "   \n " }).ok, false);
+assert.equal(cleanEditedEmail({ subject: "x".repeat(MAX_SUBJECT + 1), text: "x" }).ok, false);
+assert.equal(cleanEditedEmail({ subject: "x", text: "y".repeat(MAX_BODY + 1) }).ok, false);
+assert.equal(cleanEditedEmail({ subject: "x", text: "y".repeat(MAX_BODY) }).ok, true);
+assert.equal(cleanEditedEmail({ subject: null, text: undefined }).ok, false);
+const bxs = [{ trackingNumber: "1Z999" }, { trackingNumber: "9400111" }];
+assert.deepEqual(emailEditWarnings("Tracking 1Z999 and 9400111", bxs), []);
+assert.equal(emailEditWarnings("Thanks!", bxs).length, 1, "all tracking numbers gone = one clear warning");
+assert.match(emailEditWarnings("Thanks!", bxs)[0], /tracking number isn't in the email/);
+assert.match(emailEditWarnings("Only 1Z999 here", bxs)[0], /1 of 2 tracking numbers/);
+assert.equal(emailEditWarnings("1Z999 9400111 total $12.50", bxs).length, 1, "a price warns");
+assert.deepEqual(emailEditWarnings("1Z999 9400111 save 5 dollars", bxs), []);
 
 console.log("shipping rules: ok");

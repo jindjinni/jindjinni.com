@@ -91,6 +91,12 @@ export const FEATURES: FeatureDef[] = [
     defaultStage: "mothership",
   },
   {
+    key: "shipping-email-edit",
+    label: "Edit the shipped email",
+    blurb: "Shipping -> a shipment -> Email to the buyer: an 'Edit this email' button turns the subject and the message into boxes you can change before pressing Send (warns if the tracking number is taken out), with 'put the original wording back'. Off = the email is reviewed but not editable.",
+    defaultStage: "mothership",
+  },
+  {
     key: "label-sizes",
     label: "Label sizes for roll printers",
     blurb: "Shipping -> a shipment -> Make shipping labels: choose the size the label is made at (4 x 6 inch for a roll/thermal printer, 4 x 8, A6, narrow, or a full page) and optionally keep that size for every label. Off = full page labels, as before.",

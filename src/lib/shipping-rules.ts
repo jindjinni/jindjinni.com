@@ -158,6 +158,29 @@ export function shippedEmail(i: ShippedEmailInput): { subject: string; text: str
   return { subject, text: lines.join("\n") };
 }
 
+export const MAX_SUBJECT = 200;
+export const MAX_BODY = 8000;
+
+/** A subject and message typed by hand. The subject is one line; anything empty or too long is refused with a plain message, never cut short. */
+export function cleanEditedEmail(i: { subject: unknown; text: unknown }): { ok: true; subject: string; text: string } | { ok: false; error: string } {
+  const subject = String(i.subject ?? "").replace(/[\r\n]+/g, " ").trim();
+  const text = String(i.text ?? "").replace(/\r\n?/g, "\n").replace(/\s+$/, "");
+  if (!subject) return { ok: false, error: "The subject can't be empty." };
+  if (subject.length > MAX_SUBJECT) return { ok: false, error: `The subject is too long (up to ${MAX_SUBJECT} letters).` };
+  if (!text.trim()) return { ok: false, error: "The email can't be empty." };
+  if (text.length > MAX_BODY) return { ok: false, error: `The email is too long (up to ${MAX_BODY} letters).` };
+  return { ok: true, subject, text };
+}
+
+/** Things worth a second look in a hand-edited email. These warn; they never block sending. */
+export function emailEditWarnings(text: string, boxes: { trackingNumber: string }[]): string[] {
+  const out: string[] = [];
+  const missing = boxes.filter((b) => b.trackingNumber && !text.includes(b.trackingNumber));
+  if (missing.length > 0) out.push(missing.length === boxes.length ? "The tracking number isn't in the email any more, so the buyer can't follow the package." : `${missing.length} of ${boxes.length} tracking numbers aren't in the email.`);
+  if (/\$\s?\d/.test(text)) out.push("The email shows a dollar amount. Shipped emails normally have no prices.");
+  return out;
+}
+
 export type Readiness = { ready: boolean; blockers: string[] };
 
 /** Can the shipped email be sent now? */

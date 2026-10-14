@@ -22,7 +22,7 @@ import { buyLabels, CARRIER_NAME, failureMessage, parseCarrier, parseLabelCount,
 import { addressProblems, checkParcel, cleanAddress, parseUsAddress, type CleanAddress } from "@/lib/shipping-address-rules";
 import { contactForSalesBuyer, createContact, getContact } from "@/lib/shipping-contacts";
 import {
-  canShipFrom, checkTracking, cleanTracking, docLabel, emailReadiness, guessCarrier, isCarrier, MANUAL_STATUSES, MAX_BOXES, MAX_FILE_BYTES, MAX_FILES, pickAttachments, shippedEmail, stageOf,
+  canShipFrom, checkTracking, cleanTracking, docLabel, emailReadiness, guessCarrier, isCarrier, MANUAL_STATUSES, MAX_BOXES, MAX_FILE_BYTES, MAX_FILES, pickAttachments, shippedEmail, stageOf, cleanEditedEmail,
   type Stage,
 } from "@/lib/shipping-rules";
 import { boxesOf, rollUpShipment, startFollowing, syncShipmentTracking, type BoxRow } from "@/lib/shipping-tracking";
@@ -483,7 +483,7 @@ export async function getFileForOrg(organizationId: string, fileId: string): Pro
 // The shipped email
 // ---------------------------------------------------------------------------
 
-export type EmailOptions = { to?: string; note?: string; attachOrder?: boolean; attachInvoice?: boolean };
+export type EmailOptions = { to?: string; note?: string; attachOrder?: boolean; attachInvoice?: boolean; /** The subject and message as edited by hand; sent exactly as typed (after the basic checks). */ edited?: { subject: unknown; text: unknown } };
 
 /** The exact email as it would go now (the same words the preview shows). */
 export function composeFromDetail(d: ShipmentDetail, opts: EmailOptions = {}) {
@@ -523,7 +523,13 @@ export async function sendShippedEmail(org: Org, shipmentId: string, opts: Email
   const to = (opts.to ?? d.shipment.buyerEmail ?? "").trim();
   const ready = emailReadiness({ to, boxCount: d.boxes.length, emailStatus: d.shipment.emailStatus });
   if (!ready.ready) return { ok: false, error: ready.blockers[0] };
-  const note = (opts.note ?? "").trim().slice(0, 1000);
+  let edited: { subject: string; text: string } | null = null;
+  if (opts.edited) {
+    const c = cleanEditedEmail(opts.edited);
+    if (!c.ok) return { ok: false, error: c.error };
+    edited = c;
+  }
+  const note = edited ? "" : (opts.note ?? "").trim().slice(0, 1000);
   const claim = await db
     .update(shipments)
     .set({ emailStatus: "SENDING", updatedAt: sql`(current_timestamp)` })
@@ -562,7 +568,10 @@ export async function sendShippedEmail(org: Org, shipmentId: string, opts: Email
       company: s.buyerCompany ?? "", contact: s.buyerContact, docKind: s.docKind, docNumber: s.docNumber, reference: s.reference, shipDate: s.shipDate,
       boxes: d.boxes.map((b) => ({ carrier: b.carrier, trackingNumber: b.trackingNumber })), items: d.items, attachmentNames: names, note, senderName: from.name, reason: s.reason,
     });
-    const args = { to, subject: mail.subject, text: mail.text, html: textToHtml(mail.text), fromName: from.name, replyTo: from.email, attachments };
+    // A hand-edited email goes out exactly as typed; otherwise it is the standard wording above.
+    const out = edited ?? mail;
+    const wasEdited = !!edited && (edited.subject !== mail.subject || edited.text !== mail.text);
+    const args = { to, subject: out.subject, text: out.text, html: textToHtml(out.text), fromName: from.name, replyTo: from.email, attachments };
     let result: { ok: true } | { ok: false; error: string };
     try {
       result = send ? await send(args) : await sendDeptEmail(org.organizationId, { dept: "shipping", relatedKind: "shipment", relatedId: shipmentId, by: { userId: org.userId, name: null } }, args).then((r) => (r.ok ? { ok: true as const } : { ok: false as const, error: r.error }));
@@ -576,7 +585,7 @@ export async function sendShippedEmail(org: Org, shipmentId: string, opts: Email
     await db
       .update(shipments)
       .set({
-        emailStatus: "SENT", emailTo: to, emailSubject: mail.subject, emailBody: mail.text, emailAttachments: names.length ? JSON.stringify(names) : null, emailNote: note || null,
+        emailStatus: "SENT", emailTo: to, emailSubject: out.subject, emailBody: out.text, emailEdited: wasEdited, emailAttachments: names.length ? JSON.stringify(names) : null, emailNote: note || null,
         emailByUserId: org.userId, emailByName: await nameOf(org.userId), emailAt: new Date().toISOString(), buyerEmail: s.buyerEmail || to, updatedAt: sql`(current_timestamp)`,
       })
       .where(and(eq(shipments.id, shipmentId), eq(shipments.organizationId, org.organizationId)));

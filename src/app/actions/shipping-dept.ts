@@ -126,10 +126,13 @@ export async function setFileAttachAction(fileId: string, attach: boolean): Prom
 }
 
 /** Emails the buyer that the order shipped. Nothing is sent by itself: this runs only when a person presses Send. */
-export async function sendShippedEmailAction(shipmentId: string, p: { to: string; note: string; attachOrder: boolean; attachInvoice: boolean }): Promise<ShipResult> {
+export async function sendShippedEmailAction(shipmentId: string, p: { to: string; note: string; attachOrder: boolean; attachInvoice: boolean; subject?: string; text?: string }): Promise<ShipResult> {
   const w = await writer();
   if ("error" in w) return { ok: false, error: w.error };
-  const res = await sendShippedEmail(w.org, str(shipmentId), { to: str(p?.to), note: str(p?.note), attachOrder: !!p?.attachOrder, attachInvoice: !!p?.attachInvoice });
+  // Hand-edited wording only counts while "Edit the shipped email" is on for this company; the server decides.
+  const wantsEdit = p?.subject !== undefined || p?.text !== undefined;
+  if (wantsEdit && !(await featureOn("shipping-email-edit", w.org.organizationId))) return { ok: false, error: "Editing the email isn't turned on for your company yet." };
+  const res = await sendShippedEmail(w.org, str(shipmentId), { to: str(p?.to), note: str(p?.note), attachOrder: !!p?.attachOrder, attachInvoice: !!p?.attachInvoice, ...(wantsEdit ? { edited: { subject: p?.subject, text: p?.text } } : {}) });
   if (!res.ok) return res;
   refresh();
   return { ok: true, message: `Sent to ${res.to}.` };
