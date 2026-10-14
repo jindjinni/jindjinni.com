@@ -2580,8 +2580,9 @@ export const shipments = sqliteTable(
     emailBody: text("email_body"),
     emailAttachments: text("email_attachments"),
     emailNote: text("email_note"),
-    /** The wording was changed by hand before it was sent (see shipping-rules cleanEditedEmail). */
-    emailEdited: integer("email_edited", { mode: "boolean" }).notNull().default(false),
+    /** The wording was changed by hand before it was sent (see shipping-rules cleanEditedEmail). Nullable on purpose: a NOT NULL
+     *  column added to a table that has rows makes drizzle plan `DELETE FROM shipments`, which safe-push refuses. */
+    emailEdited: integer("email_edited", { mode: "boolean" }).default(false),
     emailByUserId: text("email_by_user_id"),
     emailByName: text("email_by_name"),
     emailAt: text("email_at"),
