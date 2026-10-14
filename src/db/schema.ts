@@ -2580,9 +2580,8 @@ export const shipments = sqliteTable(
     emailBody: text("email_body"),
     emailAttachments: text("email_attachments"),
     emailNote: text("email_note"),
-    /** The wording was changed by hand before it was sent (see shipping-rules cleanEditedEmail). Nullable on purpose: a NOT NULL
-     *  column added to a table that has rows makes drizzle plan `DELETE FROM shipments`, which safe-push refuses. */
-    emailEdited: integer("email_edited", { mode: "boolean" }).default(false),
+    /** The wording was changed by hand before it was sent (see shipping-rules cleanEditedEmail). */
+    emailEdited: integer("email_edited", { mode: "boolean" }).notNull().default(false),
     emailByUserId: text("email_by_user_id"),
     emailByName: text("email_by_name"),
     emailAt: text("email_at"),
@@ -4252,4 +4251,27 @@ export const storefrontOrders = sqliteTable(
     uniqueIndex("storefront_orders_ref_unique").on(t.organizationId, t.reference),
     index("storefront_orders_buyer_idx").on(t.storefrontBuyerId, t.createdAt),
   ],
+);
+
+/**
+ * Box sizes the Shipping department uses again and again (length x width x height in inches, never a weight).
+ * One row per physical box (sides in any order = the same `dims_key`). Removed from the list = hidden, never deleted.
+ */
+export const shippingBoxSizes = sqliteTable(
+  "shipping_box_sizes",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    name: text("name"),
+    lengthIn: real("length_in").notNull(),
+    widthIn: real("width_in").notNull(),
+    heightIn: real("height_in").notNull(),
+    dimsKey: text("dims_key").notNull(),
+    hidden: integer("hidden", { mode: "boolean" }).notNull().default(false),
+    createdByUserId: text("created_by_user_id"),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex("shipping_box_sizes_key").on(t.organizationId, t.dimsKey)],
 );

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireOrg, type CurrentOrg } from "@/lib/tenant";
 import { canWriteShipping } from "@/lib/permissions";
 import { featureOn } from "@/lib/features";
+import { hideBoxSize, saveBoxSize } from "@/lib/shipping-box-sizes";
 import { createContact, importContacts, setContactHidden, updateContact, type ContactInput } from "@/lib/shipping-contacts";
 import {
   addBox, createOtherShipment, makeLabels, setShipTo, addFile, createShipment, followBoxAuto, refreshShipment, removeBox, removeFile, sendShippedEmail, setBoxStatusManual, setFileAttach, shippingOn, skipShippedEmail, updateShipment,
@@ -180,6 +181,32 @@ export async function makeLabelsAction(shipmentId: string, p: { service: string;
   const res = await makeLabels(w.org, str(shipmentId), { service: p?.service, count: p?.count, size: sizesOn ? (p?.size ?? "") : undefined, rememberSize: sizesOn && p?.rememberSize === true, parcel: { lengthIn: p?.lengthIn, widthIn: p?.widthIn, heightIn: p?.heightIn, weightLb: p?.weightLb } });
   refresh();
   return res.ok ? { ok: true, message: res.message } : { ok: false, error: res.error };
+}
+
+// ---- saved box sizes ----
+
+const BOX_SIZES_OFF = "Saved box sizes aren't turned on for your company yet.";
+
+/** Saves a box size (length, width, height; never a weight). */
+export async function saveBoxSizeAction(p: { lengthIn: string; widthIn: string; heightIn: string; name?: string }): Promise<ShipResult> {
+  const w = await writer();
+  if ("error" in w) return { ok: false, error: w.error };
+  if (!(await featureOn("box-sizes", w.org.organizationId))) return { ok: false, error: BOX_SIZES_OFF };
+  const res = await saveBoxSize(w.org, { lengthIn: p?.lengthIn, widthIn: p?.widthIn, heightIn: p?.heightIn, name: p?.name });
+  if (!res.ok) return res;
+  refresh();
+  return { ok: true, message: res.message };
+}
+
+/** Takes a saved size off the list. It is hidden, never deleted. */
+export async function hideBoxSizeAction(id: string): Promise<ShipResult> {
+  const w = await writer();
+  if ("error" in w) return { ok: false, error: w.error };
+  if (!(await featureOn("box-sizes", w.org.organizationId))) return { ok: false, error: BOX_SIZES_OFF };
+  const res = await hideBoxSize(w.org, str(id));
+  if (!res.ok) return res;
+  refresh();
+  return { ok: true };
 }
 
 // ---- address profiles ----

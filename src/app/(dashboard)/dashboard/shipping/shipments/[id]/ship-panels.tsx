@@ -3,13 +3,14 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import {
-  addBoxAction, followBoxAction, makeLabelsAction, refreshShipmentAction, removeBoxAction, removeShipmentFileAction, sendShippedEmailAction, setBoxStatusAction, setFileAttachAction,
+  addBoxAction, followBoxAction, hideBoxSizeAction, makeLabelsAction, saveBoxSizeAction, refreshShipmentAction, removeBoxAction, removeShipmentFileAction, sendShippedEmailAction, setBoxStatusAction, setFileAttachAction,
   setShipToAction, skipShippedEmailAction, updateShipmentAction, uploadShipmentFileAction,
 } from "@/app/actions/shipping-dept";
 import { field, ghostBtn, primaryBtn } from "@/components/sales-ui";
 import { AddressFields, type AddressValue } from "../../addresses/address-fields";
 import { emailEditWarnings, guessCarrier, MANUAL_STATUSES, pickAttachments, shippedEmail, statusLabel, type EmailItem } from "@/lib/shipping-rules";
 import { carrierTrackingLink, pillClass } from "@/lib/tracking-rules";
+import { parseBoxSize, sizeKey, sizeLabel } from "@/lib/box-size-rules";
 import { LABEL_SIZES, labelSizeOf, labelSizeShort, type LabelSizeKey } from "@/lib/label-sizes";
 
 type Msg = { ok: boolean; text: string } | null;
@@ -186,7 +187,7 @@ export function BoxesPanel({ shipmentId, boxes, locked, canWrite, trackingConnec
 // Labels
 // ---------------------------------------------------------------------------
 
-export function LabelsPanel({ shipmentId, canWrite, shippoReady, shippoWhy, fromReady, addressProblem, fromLine, toLine, sizes }: { shipmentId: string; canWrite: boolean; shippoReady: boolean; shippoWhy: string | null; fromReady: boolean; addressProblem: string | null; fromLine: string; toLine: string; sizes: { saved: LabelSizeKey } | null }) {
+export function LabelsPanel({ shipmentId, canWrite, shippoReady, shippoWhy, fromReady, addressProblem, fromLine, toLine, sizes, boxSizes }: { shipmentId: string; canWrite: boolean; shippoReady: boolean; shippoWhy: string | null; fromReady: boolean; addressProblem: string | null; fromLine: string; toLine: string; sizes: { saved: LabelSizeKey } | null; boxSizes?: { saved: { id: string; name: string | null; lengthIn: number; widthIn: number; heightIn: number }[]; recent: { lengthIn: number; widthIn: number; heightIn: number; count: number }[] } | null }) {
   const { pending, msg, run } = useRun();
   const [service, setService] = useState("UPS_GROUND");
   const [count, setCount] = useState(1);
@@ -198,6 +199,11 @@ export function LabelsPanel({ shipmentId, canWrite, shippoReady, shippoWhy, from
   const [hei, setHei] = useState("");
   const [wt, setWt] = useState("");
   const typed = [len, wid, hei, wt].every((v) => Number(v.trim()) > 0);
+  // Saved box sizes: they fill the three sides only. The weight is always typed for the box in hand.
+  const [sizeName, setSizeName] = useState("");
+  const fill = (d: { lengthIn: number; widthIn: number; heightIn: number }) => { setLen(String(d.lengthIn)); setWid(String(d.widthIn)); setHei(String(d.heightIn)); };
+  const typedSize = parseBoxSize({ lengthIn: len, widthIn: wid, heightIn: hei });
+  const alreadySaved = typedSize.ok && !!boxSizes?.saved.some((s) => sizeKey(s) === sizeKey(typedSize.size));
   const blocked = !shippoReady ? shippoWhy : !fromReady ? "Add your company's shipping address (with a phone and an email) in Shipping → Shipping settings first." : addressProblem ? `The address isn't complete. ${addressProblem}` : null;
   const lab = "text-xs font-medium text-slate-700 dark:text-slate-300";
   return (
@@ -207,6 +213,35 @@ export function LabelsPanel({ shipmentId, canWrite, shippoReady, shippoWhy, from
         <span className="font-medium">From (us):</span> {fromLine || "not set yet"} <span className="mx-1">→</span> <span className="font-medium">To:</span> {toLine || "not set yet"}
       </p>
       {blocked && <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200" data-testid="labels-blocked">{blocked}</p>}
+      {boxSizes && canWrite && (
+        <div className="mb-3 space-y-2" data-testid="box-sizes">
+          <div>
+            <p className={lab}>Saved box sizes <span className="font-normal text-slate-500">(click one to fill in the length, width and height)</span></p>
+            <div className="mt-1 flex flex-wrap gap-2">
+              {boxSizes.saved.length === 0 && <span className="text-xs text-slate-500" data-testid="bs-empty">None saved yet. Type a size below, then press &quot;Save this size&quot;.</span>}
+              {boxSizes.saved.map((s) => (
+                <span key={s.id} className="inline-flex items-center overflow-hidden rounded-full border border-slate-300 text-sm dark:border-slate-700" data-testid="bs-chip">
+                  <button type="button" className="px-3 py-1 hover:bg-slate-100 dark:hover:bg-slate-800" onClick={() => fill(s)} data-testid="bs-pick">{s.name ? `${s.name} · ` : ""}{sizeLabel(s)}</button>
+                  <button type="button" disabled={pending} aria-label={`Remove ${sizeLabel(s)} from the saved sizes`} title="Remove from the list" className="border-l border-slate-300 px-2 py-1 text-slate-500 hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800" onClick={() => run(() => hideBoxSizeAction(s.id))} data-testid="bs-hide">✕</button>
+                </span>
+              ))}
+            </div>
+          </div>
+          {boxSizes.recent.length > 0 && (
+            <div>
+              <p className={lab}>Used on earlier labels</p>
+              <div className="mt-1 flex flex-wrap gap-2">
+                {boxSizes.recent.map((s) => (
+                  <span key={`${s.lengthIn}x${s.widthIn}x${s.heightIn}`} className="inline-flex items-center overflow-hidden rounded-full border border-dashed border-slate-300 text-sm dark:border-slate-700" data-testid="bs-recent">
+                    <button type="button" className="px-3 py-1 hover:bg-slate-100 dark:hover:bg-slate-800" onClick={() => fill(s)} data-testid="bs-recent-pick">{sizeLabel(s)}{s.count > 1 ? ` · used ${s.count} times` : ""}</button>
+                    <button type="button" disabled={pending} className="border-l border-dashed border-slate-300 px-2 py-1 text-xs font-medium text-emerald-800 hover:bg-slate-100 dark:border-slate-700 dark:text-emerald-300 dark:hover:bg-slate-800" onClick={() => run(() => saveBoxSizeAction({ lengthIn: String(s.lengthIn), widthIn: String(s.widthIn), heightIn: String(s.heightIn) }))} data-testid="bs-recent-save">Save</button>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
       {canWrite && (
         <div className="grid gap-3 sm:grid-cols-[1.4fr_5rem_repeat(4,4.5rem)_auto] sm:items-end">
           <div><label htmlFor="lb-service" className={lab}>Service</label>
@@ -226,6 +261,13 @@ export function LabelsPanel({ shipmentId, canWrite, shippoReady, shippoWhy, from
           <div><label htmlFor="lb-hei" className={lab}>High (in)</label><input id="lb-hei" inputMode="decimal" placeholder="Type it" value={hei} onChange={(e) => setHei(e.target.value)} className={`${field} mt-1`} /></div>
           <div><label htmlFor="lb-wt" className={lab}>Weight (lb)</label><input id="lb-wt" inputMode="decimal" placeholder="Type it" value={wt} onChange={(e) => setWt(e.target.value)} className={`${field} mt-1`} data-testid="lb-wt" /></div>
           <button type="button" disabled={pending || !!blocked || !typed} className={primaryBtn} data-testid="lb-make" onClick={() => run(() => makeLabelsAction(shipmentId, { service, count, lengthIn: len, widthIn: wid, heightIn: hei, weightLb: wt, ...(sizes ? { size, rememberSize: remember } : {}) }))}>{pending ? "Making…" : "Make labels"}</button>
+        </div>
+      )}
+      {boxSizes && canWrite && typedSize.ok && !alreadySaved && (
+        <div className="mt-3 flex flex-wrap items-end gap-2" data-testid="bs-save-row">
+          <div><label htmlFor="bs-name" className={lab}>Name for this size (optional)</label><input id="bs-name" value={sizeName} maxLength={40} placeholder="For example: Medium" onChange={(e) => setSizeName(e.target.value)} className={`${field} mt-1`} data-testid="bs-name" /></div>
+          <button type="button" disabled={pending} className={ghostBtn} data-testid="bs-save" onClick={() => run(() => saveBoxSizeAction({ lengthIn: len, widthIn: wid, heightIn: hei, name: sizeName }), () => setSizeName(""))}>Save this size ({sizeLabel(typedSize.size)})</button>
+          <span className="text-xs text-slate-500">Only the size is saved, not the weight.</span>
         </div>
       )}
       {sizes && (

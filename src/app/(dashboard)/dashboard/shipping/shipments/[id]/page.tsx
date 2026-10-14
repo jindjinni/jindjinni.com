@@ -6,6 +6,7 @@ import { listContacts } from "@/lib/shipping-contacts";
 import { getOrganization } from "@/lib/queries";
 import { featureOn } from "@/lib/features";
 import { parseLabelSize } from "@/lib/label-sizes";
+import { listBoxSizes } from "@/lib/shipping-box-sizes";
 import { shippingAddressOf } from "@/lib/org-addresses";
 import { resolveShippo } from "@/lib/shippo-connection";
 import { addressLines } from "@/lib/shipping-address-rules";
@@ -33,7 +34,7 @@ export default async function ShipmentPage({ params }: { params: Promise<{ id: s
   if (!d) notFound();
   const s = d.shipment;
   const handled = s.emailStatus === "SENT" || s.emailStatus === "SKIPPED" || s.emailStatus === "SENDING";
-  const [contacts, orgRow, shippo, sizesOn, emailEditOn] = await Promise.all([listContacts(org.organizationId), getOrganization(org.organizationId), resolveShippo(org.organizationId), featureOn("label-sizes", org.organizationId), featureOn("shipping-email-edit", org.organizationId)]);
+  const [contacts, orgRow, shippo, sizesOn, emailEditOn, boxSizesOn] = await Promise.all([listContacts(org.organizationId), getOrganization(org.organizationId), resolveShippo(org.organizationId), featureOn("label-sizes", org.organizationId), featureOn("shipping-email-edit", org.organizationId), featureOn("box-sizes", org.organizationId)]);
   const addr = {
     name: d.shipTo.name, company: d.shipTo.company ?? "", street1: d.shipTo.street1, street2: d.shipTo.street2 ?? "", city: d.shipTo.city, state: d.shipTo.state, zip: d.shipTo.zip,
     phone: d.shipTo.phone ?? "", email: s.buyerEmail ?? "", isResidential: s.toResidential,
@@ -88,6 +89,7 @@ export default async function ShipmentPage({ params }: { params: Promise<{ id: s
         toLine={toLine}
         addressProblem={d.addressProblem}
         sizes={sizesOn ? { saved: parseLabelSize(orgRow?.shippingLabelSize) } : null}
+        boxSizes={boxSizesOn ? await listBoxSizes(org.organizationId) : null}
       />
 
       <FilesPanel

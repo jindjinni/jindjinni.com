@@ -91,6 +91,12 @@ export const FEATURES: FeatureDef[] = [
     defaultStage: "mothership",
   },
   {
+    key: "box-sizes",
+    label: "Saved box sizes",
+    blurb: "Shipping -> a shipment -> Make shipping labels: save the box sizes you use again and again (length x width x height, never the weight) and fill them in with one click, plus the sizes used on earlier labels. Removing a size only hides it.",
+    defaultStage: "mothership",
+  },
+  {
     key: "shipping-email-edit",
     label: "Edit the shipped email",
     blurb: "Shipping -> a shipment -> Email to the buyer: an 'Edit this email' button turns the subject and the message into boxes you can change before pressing Send (warns if the tracking number is taken out), with 'put the original wording back'. Off = the email is reviewed but not editable.",
