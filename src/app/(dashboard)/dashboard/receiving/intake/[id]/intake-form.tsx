@@ -878,7 +878,17 @@ export function IntakeForm(props: Props) {
               {items.length > 0 && !props.hideItemAdjust && (
                 <div className="mt-3 space-y-3" data-item-adjustments>
                   {items.map((it, idx) => it.productName.trim() ? (
-                    <ItemAdjustmentCard key={it.id} item={it} flagged={flags[idx]} editable={editable} onChange={(patch) => patchMany({ [it.id]: patch })} />
+                    <ItemAdjustmentCard key={it.id} item={it} flagged={flags[idx]} editable={editable} onChange={(patch) =>
+                      patchMany({
+                        [it.id]: {
+                          ...patch,
+                          // Return Required: Yes is a return: the Step 6 columns follow, so the units are not stock.
+                          ...(patch.returnRequired === "YES" && it.needsReturn !== "YES"
+                            ? { needsReturn: "YES" as const, returnStatus: it.returnStatus && it.returnStatus !== "NOT_APPLICABLE" ? it.returnStatus : ("RETURN_REQUESTED" as const), quantityToReturn: it.quantityToReturn || it.quantityReceived }
+                            : {}),
+                        },
+                      })
+                    } />
                   ) : null)}
                 </div>
               )}

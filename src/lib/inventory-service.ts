@@ -12,6 +12,7 @@ import { db } from "@/db/client";
 import { inventoryBrandOverrides, inventoryEstimates, inventoryMovements, purchasingCategories, purchasingExpirationRanges, purchasingProducts, receivingItems } from "@/db/schema";
 import { newId } from "@/lib/ids";
 import { getReceivedItems } from "@/lib/receiving-queries";
+import { returnMarkedInStep7 } from "@/lib/receiving-rules";
 import { dayOf, heldReason } from "@/lib/receiving-daily";
 import { parseExpiryInput } from "@/lib/expiry-range-rules";
 import { brandFor } from "@/lib/receiving-serial-rules";
@@ -98,6 +99,19 @@ export async function getBrandOverrides(organizationId: string): Promise<Map<str
   return new Map(rows.map((r) => [r.productKey, r.brand]));
 }
 
+/** The received product rows (by id) that say "Return Required: Yes". */
+async function returnMarkedItems(organizationId: string, ids: string[]): Promise<Set<string>> {
+  const out = new Set<string>();
+  for (let i = 0; i < ids.length; i += 400) {
+    const rows = await db
+      .select({ id: receivingItems.id })
+      .from(receivingItems)
+      .where(and(eq(receivingItems.organizationId, organizationId), eq(receivingItems.returnRequired, "YES"), inArray(receivingItems.id, ids.slice(i, i + 400))));
+    for (const r of rows) out.add(r.id);
+  }
+  return out;
+}
+
 /** Receiving's accepted units as layers. */
 export async function receivedLayers(organizationId: string): Promise<StockLayer[]> {
   const rows: Awaited<ReturnType<typeof getReceivedItems>>["rows"] = [];
@@ -106,7 +120,15 @@ export async function receivedLayers(organizationId: string): Promise<StockLayer
     rows.push(...page.rows);
     if (page.rows.length < 5000) break;
   }
-  const good = rows.filter((r) => !heldReason(r) && (r.quantityAccepted ?? 0) > 0 && clean(r.condition).toLowerCase() !== "expired");
+  // A line whose product row says "Return Required: Yes" (Step 7) is going back, even if its Step 6 answer was never changed.
+  const marked = await returnMarkedItems(organizationId, [...new Set(rows.map((r) => r.sourceItemId).filter((x): x is string => !!x))]);
+  const good = rows.filter(
+    (r) =>
+      !heldReason(r) &&
+      (r.quantityAccepted ?? 0) > 0 &&
+      clean(r.condition).toLowerCase() !== "expired" &&
+      !(r.sourceItemId && marked.has(r.sourceItemId) && returnMarkedInStep7(r.needsReturn, "YES")),
+  );
   const costs = await costsBySourceItem(organizationId, [...new Set(good.map((r) => r.sourceItemId).filter((x): x is string => !!x))]);
   return good.map((r) => ({
     source: "RECEIVED" as const,

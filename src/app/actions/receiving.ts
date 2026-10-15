@@ -46,6 +46,7 @@ import {
   ITEM_PHOTO_KINDS,
   MAX_PHOTOS_PER_KIND,
   finalStatusFor,
+  returnMarkedInStep7,
   STATUS_CHOICES,
   STATUS_LABELS,
   type StatusChoice,
@@ -380,6 +381,14 @@ async function applyItem(org: CurrentOrg, packageId: string, raw: ItemInput, not
       needsReturn = "PENDING_REVIEW";
       notes.push(`${cur.name}: a scanned unit looks suspect, so this product stays in review until an Owner or Admin clears it.`);
     }
+  }
+
+  // "Return Required? Yes" (Step 7) is a return like "Needs To Be Returned: Yes" (Step 6): the units go back, so they never count as stock.
+  if (wasReceived !== "NO" && returnMarkedInStep7(needsReturn, pick(raw.returnRequired, YES_NO))) {
+    needsReturn = "YES";
+    if (!returnStatus || returnStatus === "NOT_APPLICABLE") returnStatus = "RETURN_REQUESTED";
+    if (!toReturn || toReturn <= 0) toReturn = quantityReceived && quantityReceived > 0 ? quantityReceived : toReturn;
+    notes.push(`${cur.name}: Return Required is Yes, so this product is now marked Needs To Be Returned and is not counted as stock.`);
   }
 
   await db

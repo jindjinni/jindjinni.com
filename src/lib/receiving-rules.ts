@@ -377,6 +377,14 @@ export type DbLine = {
   quantityAccepted: number | null;
 };
 
+/**
+ * "Return Required? Yes" on a product line (Step 7) means the same as "Needs To Be Returned: Yes" (Step 6): those units
+ * are going back, so they are not stock. True when the line says return but its Step 6 answer does not already say so.
+ */
+export function returnMarkedInStep7(needsReturn?: string | null, returnRequired?: string | null): boolean {
+  return returnRequired === "YES" && needsReturn !== "YES";
+}
+
 /** How many of `quantity` count as accepted (null when still undecided). */
 export function acceptedQuantity(quantity: number, needsReturn?: string | null, quantityToReturn?: number | null): number | null {
   if (needsReturn === "PENDING_REVIEW") return null;
