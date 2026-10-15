@@ -45,7 +45,12 @@ export const STATUS_LABELS = {
   IN_PROGRESS: "In Progress",
   RECEIVING_COMPLETE: "Receiving Complete",
   RECEIVING_COMPLETE_WITH_DISCREPANCY: "Complete With Discrepancy",
+  NEEDS_REVIEW: "Needs To Be Reviewed",
 } as const;
+
+/** The statuses a person can set on a submitted shipment (feature `receiving-status-change`). */
+export const STATUS_CHOICES = ["RECEIVING_COMPLETE", "RECEIVING_COMPLETE_WITH_DISCREPANCY", "NEEDS_REVIEW"] as const;
+export type StatusChoice = (typeof STATUS_CHOICES)[number];
 
 export const ACCOUNTS_DECISION_LABELS: Record<AccountsDecision, string> = {
   NEED_TO_BE_REVIEWED: "Need to Be Reviewed",
@@ -234,6 +239,39 @@ export function finalStatusFor(s: ShipmentFacts, items: ItemFacts[] = [], notEnt
     s.adjustmentNeeded === "YES" ||
     discrepancyFlags(items).some(Boolean);
   return discrepancy ? "RECEIVING_COMPLETE_WITH_DISCREPANCY" : "RECEIVING_COMPLETE";
+}
+
+/**
+ * Why a shipment counts as a discrepancy, in plain words (the same tests as finalStatusFor).
+ * Empty = nothing flags it today.
+ */
+export function discrepancyReasons(s: ShipmentFacts, items: ItemFacts[] = [], notEnteredNames: string[] = []): string[] {
+  const out: string[] = [];
+  for (const n of notEnteredNames) out.push(`${n}: quoted, but nothing was entered as received`);
+  if (s.externalDamage === "YES") out.push("The outside of the package was damaged");
+  if (s.overallPackaging === "NOT_ACCEPTABLE") out.push("The packaging was marked Not acceptable");
+  if (s.quantityMatches === "NO") out.push('"Does quantity match what was quoted?" was answered No');
+  if (s.adjustmentNeeded === "YES") out.push("An adjustment to the quote was marked as needed");
+  const received = new Map<string, number>();
+  const quoted = new Map<string, number>();
+  for (const i of items) {
+    if (!i.quotedItemId) continue;
+    received.set(i.quotedItemId, (received.get(i.quotedItemId) ?? 0) + (i.quantityReceived ?? 0));
+    if (i.quotedQuantity != null) quoted.set(i.quotedItemId, i.quotedQuantity);
+  }
+  const flags = discrepancyFlags(items);
+  items.forEach((i, k) => {
+    if (!flags[k]) return;
+    const name = i.productName?.trim() || "A product";
+    if (i.codeMatches === "NO") out.push(`${name}: the code on the product doesn't match`);
+    else if (i.expirationQualifies === "NO") out.push(`${name}: the expiration date doesn't qualify`);
+    else if (i.itemSource === "EXTRA") out.push(`${name}: an extra product that wasn't on the quotation`);
+    else if (i.wasReceived === "NO") out.push(`${name}: marked as not received`);
+    else if (i.quotedItemId && quoted.has(i.quotedItemId)) out.push(`${name}: received ${received.get(i.quotedItemId)}, quoted ${quoted.get(i.quotedItemId)}`);
+    else if (i.wasReceived === "PARTIALLY") out.push(`${name}: only partly received`);
+    else out.push(`${name}: received ${i.quantityReceived}, quoted ${i.quotedQuantity}`);
+  });
+  return [...new Set(out)];
 }
 
 export function parseDamageTypes(raw: string | null | undefined): string[] {

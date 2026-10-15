@@ -46,6 +46,9 @@ import {
   ITEM_PHOTO_KINDS,
   MAX_PHOTOS_PER_KIND,
   finalStatusFor,
+  STATUS_CHOICES,
+  STATUS_LABELS,
+  type StatusChoice,
   quotedNotEntered,
   type PhotoKind,
 } from "@/lib/receiving-rules";
@@ -611,6 +614,36 @@ export async function submitReceiving(packageId: string, formData: FormData): Pr
   const notice = saved.notice || undefined;
   refresh(packageId);
   return { ok: true, id: packageId, notice, itemPatches: saved.itemPatches, recallChecks: await listChecks(org.organizationId, packageId) };
+}
+
+/**
+ * A person changes the status of a submitted shipment: Complete, Complete With Discrepancy or Needs To Be Reviewed
+ * (feature `receiving-status-change`). Whoever can work in Receiving may do it (Receiver, Admin, Owner, or custom access
+ * with Receiving "work"). It only changes the status label; the payment decision is left exactly as it is, so a status
+ * change never moves money by itself. Who changed it, from what and to what, goes in the order's history.
+ */
+export async function changeReceivingStatus(packageId: string, status: string, note?: string): Promise<ReceivingActionState> {
+  const org = await requireWriter();
+  if (!(await featureOn("receiving-status-change", org.organizationId))) return { error: "Changing the status isn't switched on for your company yet." };
+  const target = (STATUS_CHOICES as readonly string[]).includes(status) ? (status as StatusChoice) : null;
+  if (!target) return { error: "Choose Complete, Complete With Discrepancy or Needs To Be Reviewed." };
+  const p = await ownPackage(org.organizationId, packageId);
+  if (!p) return { error: "That shipment wasn't found." };
+  if (p.status === "IN_PROGRESS") return { error: "Submit receiving first. A shipment still in progress has no final status to change." };
+  if (p.status === target) return { ok: true, id: packageId };
+  const why = String(note ?? "").replace(/\s+/g, " ").trim().slice(0, 300);
+  await db
+    .update(receivingPackages)
+    .set({ status: target, updatedAt: sql`(current_timestamp)` })
+    .where(and(eq(receivingPackages.id, packageId), eq(receivingPackages.organizationId, org.organizationId)));
+  await auditReceiving(
+    org,
+    p.quotationId,
+    "receiving",
+    `Receiving status changed from ${STATUS_LABELS[p.status as keyof typeof STATUS_LABELS] ?? p.status} to ${STATUS_LABELS[target]}${why ? `: ${why}` : ""}`,
+  );
+  refresh(packageId);
+  return { ok: true, id: packageId };
 }
 
 /** Puts a submitted shipment back to In Progress so it can be corrected. */

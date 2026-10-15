@@ -22,6 +22,7 @@ export const STATUS_PILL: Record<string, string> = {
   IN_PROGRESS: "bg-yellow-100 text-yellow-900 dark:bg-yellow-900/40 dark:text-yellow-100",
   RECEIVING_COMPLETE: "bg-green-100 text-green-900 dark:bg-green-900/40 dark:text-green-100",
   RECEIVING_COMPLETE_WITH_DISCREPANCY: "bg-orange-100 text-orange-900 dark:bg-orange-900/40 dark:text-orange-100",
+  NEEDS_REVIEW: "bg-sky-100 text-sky-900 dark:bg-sky-900/40 dark:text-sky-100",
 };
 
 export const MONEY = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });

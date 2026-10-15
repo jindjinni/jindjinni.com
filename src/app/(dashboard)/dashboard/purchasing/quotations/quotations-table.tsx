@@ -27,7 +27,7 @@ export type QuotationSummaryRow = {
   archivedAt: string | null;
   imported?: boolean;
   receipt?: ReceiptState;
-  receiving?: { packageId: string; status: "IN_PROGRESS" | "RECEIVING_COMPLETE" | "RECEIVING_COMPLETE_WITH_DISCREPANCY" } | null;
+  receiving?: { packageId: string; status: "IN_PROGRESS" | "RECEIVING_COMPLETE" | "RECEIVING_COMPLETE_WITH_DISCREPANCY" | "NEEDS_REVIEW" } | null;
   receiptStamp?: string;
   receiptIsImage?: boolean;
   customerName: string;

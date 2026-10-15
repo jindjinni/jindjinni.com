@@ -56,6 +56,7 @@ export async function IntakeFormFor({ id, focus }: { id: string; focus?: "accoun
   const picksOn = await featureOn("receiving-picks", org.organizationId);
   const recallSimple = await featureOn("recall-simple", org.organizationId);
   const step6Simple = await featureOn("step6-simple", org.organizationId);
+  const statusChange = await featureOn("receiving-status-change", org.organizationId);
 
   return (
     <IntakeForm
@@ -88,6 +89,7 @@ export async function IntakeFormFor({ id, focus }: { id: string; focus?: "accoun
       picksOn={picksOn}
       recallSimple={recallSimple}
       step6Simple={step6Simple}
+      statusChange={statusChange}
       catalog={catalog}
       saved={{
         accountsStatus: pkg.accountsStatus ?? "",

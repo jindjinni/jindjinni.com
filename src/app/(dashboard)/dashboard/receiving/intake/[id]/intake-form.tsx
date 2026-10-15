@@ -19,6 +19,7 @@ import {
   STATUS_LABELS,
   computeMissingInfo,
   discrepancyFlags,
+  discrepancyReasons,
   finalPayout,
   finalStatusFor,
   formatMoney,
@@ -39,6 +40,7 @@ import { ReceiptPreview, ReceivedItemsGrid } from "./receiving-table";
 import { RecallCheck } from "./recall-check";
 import { RecallCheckSimple } from "./recall-check-simple";
 import { Step6Simple } from "./step6-simple";
+import { StatusChange } from "./status-change";
 import { ScanStation } from "./scan-station";
 import { NumbersTab, numbersFor } from "./numbers-tab";
 import type { SerialView } from "@/lib/receiving-serial-service";
@@ -116,6 +118,8 @@ type Props = {
   recallSimple?: boolean;
   /** The very simple Step 6: lot and serial numbers typed per product, a photo prompt, the recall check filling itself in (feature `step6-simple`). */
   step6Simple?: boolean;
+  /** Change the status of a submitted shipment, and show why it was flagged (feature `receiving-status-change`). */
+  statusChange?: boolean;
   catalog: CatalogProduct[];
   saved: {
     accountsStatus: string;
@@ -478,6 +482,9 @@ export function IntakeForm(props: Props) {
           </button>
         )}
       </header>
+      {props.statusChange && locked && (
+        <StatusChange packageId={packageId} status={status} reasons={discrepancyReasons(facts, namedFacts, notEntered.map((n) => n.name))} canChange={canWrite} />
+      )}
       {accountsFocus && saved.accountsStatus === "PAID" && (
         <div role="note" data-testid="paid-banner" className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-green-300 bg-green-50 px-4 py-3 text-green-950 dark:border-green-800 dark:bg-green-950/40 dark:text-green-100">
           <span aria-hidden="true" className="-rotate-3 rounded-md border-2 border-green-700 px-3 py-1 text-lg font-extrabold tracking-[0.25em] text-green-800 dark:border-green-400 dark:text-green-300">PAID</span>

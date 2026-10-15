@@ -121,6 +121,12 @@ export const FEATURES: FeatureDef[] = [
     defaultStage: "mothership",
   },
   {
+    key: "receiving-status-change",
+    label: "Receiving: change the status",
+    blurb: "Receiving -> a submitted shipment: a Change status box (Complete / Complete With Discrepancy / Needs To Be Reviewed, with an optional note) for the Receiver, Admin and Owner, plus a list of exactly why a shipment was flagged as a discrepancy. The change is recorded in the order's history and never moves the payment decision. Off = the status is only set when the shipment is submitted.",
+    defaultStage: "mothership",
+  },
+  {
     key: "step6-simple",
     label: "Receiving: very simple Step 6",
     blurb: "Receiving -> intake form -> Step 6: the Items received table, then one card per product where you type the lot numbers and serial numbers and take a photo of them. If the product has a recall, the recall check opens by itself with the number filled in, the manufacturer's page one click away, and Affected / Not affected. No tabs, no barcode or scan tools. Off = the Step 6 tabs as before.",

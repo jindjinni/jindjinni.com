@@ -1114,7 +1114,7 @@ export const purchasingQuotationDocuments = sqliteTable(
 // an order -- it points at the quotation and records what physically arrived).
 // ---------------------------------------------------------------------------
 
-export const RECEIVING_STATUSES = ["IN_PROGRESS", "RECEIVING_COMPLETE", "RECEIVING_COMPLETE_WITH_DISCREPANCY"] as const;
+export const RECEIVING_STATUSES = ["IN_PROGRESS", "RECEIVING_COMPLETE", "RECEIVING_COMPLETE_WITH_DISCREPANCY", "NEEDS_REVIEW"] as const;
 export const RECEIVING_PHOTO_KINDS = [
   "UNOPENED_PACKAGE",
   "SHIPPING_LABEL",
