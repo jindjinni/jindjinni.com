@@ -127,6 +127,12 @@ export const FEATURES: FeatureDef[] = [
     defaultStage: "mothership",
   },
   {
+    key: "receiving-hide-item-adjust",
+    label: "Receiving: hide the per-product adjustment boxes",
+    blurb: "Receiving -> intake form -> Step 7 Adjustments: the row of boxes for each product (Adjustment Required, Management Review, Return Required, Quotation Adjusted, Proposed Revised Amount, Reason, Notes) is hidden, so only Adjustment Needed / Details and the real Adjustment Quotation remain. Anything already saved in those boxes is kept (nothing is deleted). Off = the boxes show as before.",
+    defaultStage: "mothership",
+  },
+  {
     key: "step6-simple",
     label: "Receiving: very simple Step 6",
     blurb: "Receiving -> intake form -> Step 6: the Items received table, then one card per product where you type the lot numbers and serial numbers and take a photo of them. If the product has a recall, the recall check opens by itself with the number filled in, the manufacturer's page one click away, and Affected / Not affected. No tabs, no barcode or scan tools. Off = the Step 6 tabs as before.",

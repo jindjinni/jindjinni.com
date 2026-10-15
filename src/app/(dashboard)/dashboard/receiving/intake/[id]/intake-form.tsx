@@ -120,6 +120,8 @@ type Props = {
   step6Simple?: boolean;
   /** Change the status of a submitted shipment, and show why it was flagged (feature `receiving-status-change`). */
   statusChange?: boolean;
+  /** Hide the per-product adjustment boxes in Step 7 (feature `receiving-hide-item-adjust`); saved values are kept. */
+  hideItemAdjust?: boolean;
   catalog: CatalogProduct[];
   saved: {
     accountsStatus: string;
@@ -873,8 +875,8 @@ export function IntakeForm(props: Props) {
           {v.adjustmentNeeded === "YES" && (
             <>
               {!picksOn && <Row label="Adjustment Details">{textInput("adjustmentDetails", 3)}</Row>}
-              {items.length > 0 && (
-                <div className="mt-3 space-y-3">
+              {items.length > 0 && !props.hideItemAdjust && (
+                <div className="mt-3 space-y-3" data-item-adjustments>
                   {items.map((it, idx) => it.productName.trim() ? (
                     <ItemAdjustmentCard key={it.id} item={it} flagged={flags[idx]} editable={editable} onChange={(patch) => patchMany({ [it.id]: patch })} />
                   ) : null)}

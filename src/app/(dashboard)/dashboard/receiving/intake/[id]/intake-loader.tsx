@@ -57,6 +57,7 @@ export async function IntakeFormFor({ id, focus }: { id: string; focus?: "accoun
   const recallSimple = await featureOn("recall-simple", org.organizationId);
   const step6Simple = await featureOn("step6-simple", org.organizationId);
   const statusChange = await featureOn("receiving-status-change", org.organizationId);
+  const hideItemAdjust = await featureOn("receiving-hide-item-adjust", org.organizationId);
 
   return (
     <IntakeForm
@@ -90,6 +91,7 @@ export async function IntakeFormFor({ id, focus }: { id: string; focus?: "accoun
       recallSimple={recallSimple}
       step6Simple={step6Simple}
       statusChange={statusChange}
+      hideItemAdjust={hideItemAdjust}
       catalog={catalog}
       saved={{
         accountsStatus: pkg.accountsStatus ?? "",
