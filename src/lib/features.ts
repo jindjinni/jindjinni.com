@@ -121,6 +121,12 @@ export const FEATURES: FeatureDef[] = [
     defaultStage: "mothership",
   },
   {
+    key: "step6-simple",
+    label: "Receiving: very simple Step 6",
+    blurb: "Receiving -> intake form -> Step 6: the Items received table, then one card per product where you type the lot numbers and serial numbers and take a photo of them. If the product has a recall, the recall check opens by itself with the number filled in, the manufacturer's page one click away, and Affected / Not affected. No tabs, no barcode or scan tools. Off = the Step 6 tabs as before.",
+    defaultStage: "mothership",
+  },
+  {
     key: "quotation-delete",
     label: "Delete quotations",
     blurb: "Purchasing -> Quotations: tick quotations and delete them, or delete all. Quotations with nothing received, paid or shipped are erased for good; any that already have received stock, a payment or a bought label are hidden in Settings -> Archive instead.",

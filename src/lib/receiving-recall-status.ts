@@ -25,3 +25,15 @@ export function rowCheckStatus(recalls: RecallLike[], checks: CheckLike[]): RowS
   if (checks.length > 0) return { key: "checked", label: "Checked", tone: "ok" };
   return { key: "none", label: "No recall to check", tone: "muted" };
 }
+
+/**
+ * What the Items received table tag and the Verification Summary say about a row, on the simpler Recall check:
+ * the same answer as the Recall check tab. "Checked" only once the check is really finished (a loaded list was
+ * searched, or the manufacturer's page was answered); a product still waiting for that stays untagged, so the table
+ * never says "Checked" while the Recall check tab says "Needs a check".
+ */
+export function summaryRecallState(status: RowStatus["key"]): "RECALLED" | "CHECKED" | "NONE" {
+  if (status === "recalled") return "RECALLED";
+  if (status === "checked" || status === "cleared") return "CHECKED";
+  return "NONE";
+}

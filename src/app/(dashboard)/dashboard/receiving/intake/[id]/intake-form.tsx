@@ -38,6 +38,7 @@ import { ItemAdjustmentCard, itemFactsOf, toItemState, type ItemState } from "./
 import { ReceiptPreview, ReceivedItemsGrid } from "./receiving-table";
 import { RecallCheck } from "./recall-check";
 import { RecallCheckSimple } from "./recall-check-simple";
+import { Step6Simple } from "./step6-simple";
 import { ScanStation } from "./scan-station";
 import { NumbersTab, numbersFor } from "./numbers-tab";
 import type { SerialView } from "@/lib/receiving-serial-service";
@@ -45,6 +46,7 @@ import { severityOf } from "@/lib/receiving-serial-rules";
 import { RowScanDialog } from "./row-scan-dialog";
 import type { RecallCheckView, RecallView } from "@/lib/receiving-recall-service";
 import { recallsForProduct, rowRecallState } from "@/lib/receiving-recall";
+import { rowCheckStatus, summaryRecallState } from "@/lib/receiving-recall-status";
 import { needsRecallChecker } from "@/lib/recall-watch";
 
 export type FormValues = {
@@ -112,6 +114,8 @@ type Props = {
   picksOn: boolean;
   /** The simpler Recall check screen (feature `recall-simple`). */
   recallSimple?: boolean;
+  /** The very simple Step 6: lot and serial numbers typed per product, a photo prompt, the recall check filling itself in (feature `step6-simple`). */
+  step6Simple?: boolean;
   catalog: CatalogProduct[];
   saved: {
     accountsStatus: string;
@@ -274,13 +278,17 @@ export function IntakeForm(props: Props) {
       const hit = changed.find((i) => needsRecallChecker(i.productName));
       if (hit) {
         setRecallFocus((f) => ({ rowId: hit.id, n: (f?.n ?? 0) + 1 }));
-        setStep6Tab("recall");
+        if (!props.step6Simple) setStep6Tab("recall");
       }
     }
   }
   const recallStates: Record<string, "RECALLED" | "CHECKED"> = {};
   for (const it of props.items) {
-    const st = rowRecallState(recallChecks.filter((c) => c.itemId === it.id));
+    const mine = recallChecks.filter((c) => c.itemId === it.id);
+    // The simpler Recall check tells the table the same thing the Recall check tab says (flag `recall-simple`).
+    const st = props.recallSimple || props.step6Simple
+      ? summaryRecallState(rowCheckStatus(recallsForProduct(it.productName, recalls.filter((r) => r.active)), mine).key)
+      : rowRecallState(mine);
     if (st !== "NONE") recallStates[it.id] = st;
   }
   const scanFlagged = serials.filter((x) => severityOf(x.flags) === "stop").length;
@@ -674,6 +682,7 @@ export function IntakeForm(props: Props) {
         <Step n={6} id="step-6" title="Verify what arrived" note="Add a record for each product that arrived. Choose the product from the list (its NDC fills in), then enter the quantity, condition, lot number and expiration date.">
           <Row label="Items Quoted For This Order"><span className="whitespace-pre-line">{brief.itemsText}</span></Row>
           <Row label="Quotation / Invoice Photo (from Order)"><ReceiptPreview packageId={packageId} receipt={receipt} /></Row>
+          {!props.step6Simple && (
           <div role="tablist" aria-label="Step 6 sections" className="mt-6 flex flex-wrap gap-1 border-b border-slate-200 dark:border-slate-700">
             {([
               ["items", "Items received", ""],
@@ -696,7 +705,8 @@ export function IntakeForm(props: Props) {
               </button>
             ))}
           </div>
-          <div role="tabpanel" id="s6panel-items" aria-labelledby="s6tab-items" hidden={step6Tab !== "items"}>
+          )}
+          <div role="tabpanel" id="s6panel-items" aria-labelledby="s6tab-items" hidden={!props.step6Simple && step6Tab !== "items"}>
           <ReceivedItemsGrid
             packageId={packageId}
             items={items}
@@ -710,12 +720,31 @@ export function IntakeForm(props: Props) {
             onPatchMany={patchMany}
             onRemoveMany={removeItems}
             recallStates={recallStates}
-            onScanRow={editable ? setScanItemId : undefined}
-            onNumbersRow={editable ? (id) => { setNumbersItemId(id); setStep6Tab("numbers"); } : undefined}
+            onScanRow={editable && !props.step6Simple ? setScanItemId : undefined}
+            onNumbersRow={editable && !props.step6Simple ? (id) => { setNumbersItemId(id); setStep6Tab("numbers"); } : undefined}
             numberCounts={Object.fromEntries(items.map((i) => { const n = numbersFor(serials, i.id); return [i.id, { lots: n.lots.length, serials: n.serials.length }]; }))}
           />
 
           </div>
+          {props.step6Simple ? (
+            <Step6Simple
+              packageId={packageId}
+              editable={editable}
+              items={items}
+              isAdminUser={props.isAdminUser}
+              recalls={recalls}
+              onRecalls={setRecalls}
+              checks={recallChecks}
+              serials={serials}
+              photos={photos}
+              storageOk={storageOk}
+              onSerials={setSerials}
+              onChecks={setRecallChecks}
+              onPatchMany={patchMany}
+              onError={setError}
+            />
+          ) : (
+          <>
           <div role="tabpanel" id="s6panel-numbers" aria-labelledby="s6tab-numbers" hidden={step6Tab !== "numbers"}>
             <NumbersTab
               packageId={packageId}
@@ -779,7 +808,9 @@ export function IntakeForm(props: Props) {
             />
           )}
           </div>
-          {scanItemId && items.find((i) => i.id === scanItemId) && (
+          </>
+          )}
+          {!props.step6Simple && scanItemId && items.find((i) => i.id === scanItemId) && (
             <RowScanDialog
               packageId={packageId}
               item={items.find((i) => i.id === scanItemId)!}

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { CLEARED_NOTE } from "../src/lib/receiving-recall";
-import { rowCheckStatus } from "../src/lib/receiving-recall-status";
+import { rowCheckStatus, summaryRecallState } from "../src/lib/receiving-recall-status";
 
 const listed = { id: "r1", numberCount: 11, prefixCount: 0 };
 const unlisted = { id: "r2", numberCount: 0, prefixCount: 0 };
@@ -18,4 +18,14 @@ assert.equal(k(rowCheckStatus([listed], [{ result: "NOT_ON_LIST", note: "NEAR: P
 const hit = { result: "ON_LIST", recallId: "r1", enteredNumber: "ABCD1234" };
 const clr = { result: "CONFIRMED_OK", recallId: "r1", enteredNumber: "ABCD1234", note: `${CLEARED_NOTE}: x` };
 assert.equal(k(rowCheckStatus([listed], [hit, clr])), "cleared");
+// the table tag / summary: "Checked" only when the check is really finished
+const sm = (recalls: typeof listed[], checks: Parameters<typeof rowCheckStatus>[1]) => summaryRecallState(rowCheckStatus(recalls, checks).key);
+assert.equal(sm([unlisted], [{ result: "NOT_ON_LIST" }]), "NONE", "no list and no manufacturer answer: not 'Checked'");
+assert.equal(sm([unlisted], [{ result: "CONFIRMED_OK", recallId: "r2" }]), "CHECKED");
+assert.equal(sm([listed], [{ result: "NOT_ON_LIST" }]), "CHECKED");
+assert.equal(sm([listed], []), "NONE");
+assert.equal(sm([listed], [{ result: "NOT_ON_LIST", note: "NEAR: PH1U0103 (x)" }]), "NONE", "close match still to look at");
+assert.equal(sm([listed], [hit]), "RECALLED");
+assert.equal(sm([listed], [hit, clr]), "CHECKED", "cleared by an owner/admin");
+assert.equal(sm([], []), "NONE", "nothing to check");
 console.log("receiving-recall-status: ok");
