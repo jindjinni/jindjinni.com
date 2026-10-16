@@ -97,6 +97,7 @@ export function CsList({ mode, orders }: { mode: "waiting" | "emailed"; orders: 
                       <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${chipClass(o.customerName)}`}>{TEMPLATE_LABEL[o.template] ?? o.template}</span>
                       <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-medium tabular-nums text-blue-900 dark:bg-blue-900/40 dark:text-blue-100">{MONEY.format(o.amount)}</span>
                       {o.adjusted && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-900 dark:bg-amber-900/40 dark:text-amber-100">Adjusted</span>}
+                      {o.facebook && <span data-testid="tag-facebook" className="rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-medium text-sky-900 dark:bg-sky-900/40 dark:text-sky-100">Contacted on Facebook</span>}
                       {waiting ? (
                         <>
                           <span className="text-xs text-slate-500">Paid {localDayOfUtc(o.paidAt) === today ? "today " : ""}{localTimeOfUtc(o.paidAt)}</span>

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { OrderTagsFor } from "@/components/order-tags-for";
 import { IntakeFormFor } from "../../../receiving/intake/[id]/intake-loader";
 
 export const dynamic = "force-dynamic";
@@ -9,6 +10,7 @@ export default async function PaidOrderPage({ params }: { params: Promise<{ id: 
   return (
     <div>
       <Link href="/dashboard/accounts/paid" className="text-sm text-emerald-800 underline dark:text-emerald-300">‹ Paid Orders</Link>
+      <OrderTagsFor packageId={id} />
       <div className="mt-3">
         <IntakeFormFor id={id} focus="accounts" />
       </div>

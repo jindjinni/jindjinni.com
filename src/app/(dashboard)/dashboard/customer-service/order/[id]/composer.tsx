@@ -3,7 +3,9 @@
 import { useState, useSyncExternalStore, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { saveCustomerNote, sendPackagingWarningEmail, sendPaymentEmail } from "@/app/actions/customer-service";
+import { previewEmailTemplate, saveCustomerNote, sendPackagingWarningEmail, sendPaymentEmail } from "@/app/actions/customer-service";
+import { OrderTags } from "@/components/order-tags";
+import { textToHtml } from "@/lib/receiving-emails";
 import type { EmailDraft, SentEmail } from "@/lib/customer-service-queries";
 import { TEMPLATE_LABEL } from "@/lib/customer-service-rules";
 import { MONEY } from "@/lib/receiving-ui";
@@ -54,7 +56,9 @@ function SentCard({ e }: { e: SentEmail }) {
   );
 }
 
-export function Composer({ draft }: { draft: EmailDraft }) {
+type Att = { id: string; filename: string; kind: string };
+
+export function Composer({ draft, canSetTag = false }: { draft: EmailDraft; canSetTag?: boolean }) {
   const router = useRouter();
   const ready = useSyncExternalStore(subscribe, () => true, () => false);
   const [note, setNote] = useState(draft.note);
@@ -64,6 +68,37 @@ export function Composer({ draft }: { draft: EmailDraft }) {
   const [confirming, setConfirming] = useState<"resend" | "warning" | null>(null);
   const dirty = note.trim() !== draft.note.trim();
   const sent = draft.alreadyEmailed;
+  // Feature `cs-email-edit`: the agent picks the template and can change the subject and the words before sending.
+  const editable = draft.editable;
+  const [template, setTemplate] = useState(draft.template);
+  const [subject, setSubject] = useState(draft.subject);
+  const [body, setBody] = useState(draft.body);
+  const [base, setBase] = useState({ subject: draft.subject, body: draft.body });
+  const [atts, setAtts] = useState<{ files: Att[]; pdf: EmailDraft["adjustmentPdf"] }>({ files: draft.attachments, pdf: draft.adjustmentPdf });
+  const [switchTo, setSwitchTo] = useState<string | null>(null);
+  const [wSubject, setWSubject] = useState(draft.warning.subject);
+  const [wBody, setWBody] = useState(draft.warning.body);
+  const edited = subject !== base.subject || body !== base.body;
+  const edit = () => ({ template, subject, body });
+
+  function applyTemplate(key: string) {
+    setSwitchTo(null);
+    setError("");
+    startTransition(async () => {
+      const r = await previewEmailTemplate(draft.packageId, key);
+      if (r.error || r.subject == null || r.body == null) return setError(r.error ?? "Could not load that template.");
+      setTemplate(key);
+      setSubject(r.subject);
+      setBody(r.body);
+      setBase({ subject: r.subject, body: r.body });
+      setAtts({ files: (r.attachments ?? []).map((a) => ({ ...a })), pdf: r.adjustmentPdf ?? null });
+    });
+  }
+  const pickTemplate = (key: string) => {
+    if (key === template) return;
+    if (edited) setSwitchTo(key);
+    else applyTemplate(key);
+  };
 
   function run(fn: () => Promise<{ ok?: boolean; error?: string; notice?: string }>) {
     setError("");
@@ -87,7 +122,7 @@ export function Composer({ draft }: { draft: EmailDraft }) {
         const s = await saveCustomerNote(draft.packageId, note);
         if (s.error) return s;
       }
-      return sendPaymentEmail(draft.packageId, false);
+      return sendPaymentEmail(draft.packageId, false, editable ? edit() : undefined);
     });
 
   const blocked = !draft.ready;
@@ -102,6 +137,8 @@ export function Composer({ draft }: { draft: EmailDraft }) {
           {sent ? "Emailed" : draft.ready ? "Ready to send" : "Needs attention"}
         </span>
       </header>
+
+      {draft.tags && <OrderTags packageId={draft.packageId} tags={draft.tags} canSet={canSetTag} />}
 
       <section className="rounded-xl border border-slate-200 bg-white p-4 text-sm dark:border-slate-800 dark:bg-slate-900" aria-label="Payment">
         <h2 className="font-semibold text-slate-900 dark:text-slate-50">Payment</h2>
@@ -131,6 +168,52 @@ export function Composer({ draft }: { draft: EmailDraft }) {
         </section>
       )}
 
+      {editable ? (
+        <section aria-label="The email" className="space-y-3">
+          <h2 className="font-semibold text-slate-900 dark:text-slate-50">The email</h2>
+          <div>
+            <label htmlFor="cs-template" className="text-sm font-medium text-slate-900 dark:text-slate-50">Template</label>
+            <select
+              id="cs-template"
+              value={template}
+              onChange={(e) => pickTemplate(e.target.value)}
+              disabled={pending}
+              className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+              data-testid="cs-template-select"
+            >
+              {draft.templates.map((t) => (
+                <option key={t.key} value={t.key}>{t.label}{t.key === draft.recommended ? " (recommended for this order)" : ""}</option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-slate-500" data-testid="cs-template-hint">{draft.templates.find((t) => t.key === template)?.usedWhen}</p>
+            {switchTo && (
+              <p className="mt-2 flex flex-wrap items-center gap-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:bg-amber-950/40 dark:text-amber-100" role="alert" data-testid="cs-switch-confirm">
+                Switching template replaces the words you changed.
+                <button type="button" onClick={() => applyTemplate(switchTo)} className="rounded-lg bg-amber-600 px-3 py-1 font-semibold text-white" data-testid="cs-switch-yes">Switch</button>
+                <button type="button" onClick={() => setSwitchTo(null)} className="rounded-lg border border-slate-300 px-3 py-1 dark:border-slate-700">Keep mine</button>
+              </p>
+            )}
+          </div>
+          <p className="text-xs text-slate-500" data-testid="cs-from">From: {draft.from.address ? `${draft.from.name} <${draft.from.address}>` : `${draft.from.name} (the platform's sending address)`} · To: {draft.to ?? "—"}{draft.bcc.length > 0 && ` · hidden copy to ${draft.bcc.join(", ")}`}</p>
+          <div>
+            <label htmlFor="cs-subject" className="text-sm font-medium text-slate-900 dark:text-slate-50">Subject</label>
+            <input id="cs-subject" value={subject} onChange={(e) => setSubject(e.target.value)} maxLength={200} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900" data-testid="cs-subject-input" />
+          </div>
+          <div>
+            <label htmlFor="cs-body" className="text-sm font-medium text-slate-900 dark:text-slate-50">What the customer will read</label>
+            <p className="text-xs text-slate-500">Change anything you need. A link is written like [words](https://...). **Two stars** make bold.</p>
+            <textarea id="cs-body" value={body} onChange={(e) => setBody(e.target.value)} maxLength={8000} rows={14} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-mono text-sm dark:border-slate-700 dark:bg-slate-900" data-testid="cs-body-input" />
+            <div className="mt-1 flex flex-wrap items-center gap-3 text-xs">
+              {edited ? <span className="font-medium text-amber-800 dark:text-amber-300" data-testid="cs-edited">You changed the wording</span> : <span className="text-slate-500">Standard wording</span>}
+              {edited && <button type="button" onClick={() => { setSubject(base.subject); setBody(base.body); }} className="text-emerald-800 underline dark:text-emerald-300" data-testid="cs-reset">Put the standard wording back</button>}
+            </div>
+          </div>
+          <div>
+            <p className="text-sm font-medium text-slate-900 dark:text-slate-50">Preview</p>
+            <div className="mt-1">{ready ? <EmailFrame html={textToHtml(body)} title="Email preview" /> : <p className="text-sm text-slate-500">Loading the preview…</p>}</div>
+          </div>
+        </section>
+      ) : (
       <section aria-label="The email">
         <div className="flex flex-wrap items-center gap-2">
           <h2 className="font-semibold text-slate-900 dark:text-slate-50">The email</h2>
@@ -141,7 +224,9 @@ export function Composer({ draft }: { draft: EmailDraft }) {
         <p className="text-xs text-slate-500">To: {draft.to ?? "—"}{draft.bcc.length > 0 && ` · hidden copy to ${draft.bcc.join(", ")}`}</p>
         <div className="mt-2">{ready ? <EmailFrame html={draft.bodyHtml} title="Email preview" /> : <p className="text-sm text-slate-500">Loading the preview…</p>}</div>
       </section>
+      )}
 
+      {!editable && (
       <section aria-label="Note to the customer">
         <label htmlFor="cs-note" className="font-semibold text-slate-900 dark:text-slate-50">Note to the customer</label>
         <p className="text-xs text-slate-500">This is the only part you can change. The rest of the email is fixed wording.</p>
@@ -161,22 +246,23 @@ export function Composer({ draft }: { draft: EmailDraft }) {
           </button>
         )}
       </section>
+      )}
 
       <section aria-label="Attachments" className="rounded-xl border border-slate-200 bg-white p-4 text-sm dark:border-slate-800 dark:bg-slate-900">
         <h2 className="font-semibold text-slate-900 dark:text-slate-50">Attachments</h2>
-        {draft.attachments.length === 0 && !draft.adjustmentPdf ? (
+        {(editable ? atts.files : draft.attachments).length === 0 && !(editable ? atts.pdf : draft.adjustmentPdf) ? (
           <p className="mt-1 text-slate-500">Nothing will be attached.</p>
         ) : (
           <ul className="mt-2 space-y-1" data-testid="cs-attachments">
-            {draft.attachments.map((a) => (
+            {(editable ? atts.files : draft.attachments).map((a) => (
               <li key={a.id}>
                 <a href={`/api/receiving/photos/${a.id}`} target="_blank" rel="noreferrer" className="text-emerald-800 underline dark:text-emerald-300">{a.filename}</a>
                 <span className="ml-2 text-xs text-slate-500">{KIND_LABEL[a.kind] ?? "Photo"}</span>
               </li>
             ))}
-            {draft.adjustmentPdf && (
+            {(editable ? atts.pdf : draft.adjustmentPdf) && (
               <li>
-                <a href={`/api/receiving/adjustments/${draft.adjustmentPdf.id}/pdf`} target="_blank" rel="noreferrer" className="text-emerald-800 underline dark:text-emerald-300">Adjusted quotation {draft.adjustmentPdf.number} (PDF)</a>
+                <a href={`/api/receiving/adjustments/${(editable ? atts.pdf : draft.adjustmentPdf)!.id}/pdf`} target="_blank" rel="noreferrer" className="text-emerald-800 underline dark:text-emerald-300">Adjusted quotation {(editable ? atts.pdf : draft.adjustmentPdf)!.number} (PDF)</a>
                 <span className="ml-2 text-xs text-slate-500">Adjustment documentation</span>
               </li>
             )}
@@ -195,7 +281,7 @@ export function Composer({ draft }: { draft: EmailDraft }) {
         ) : confirming === "resend" ? (
           <span className="flex flex-wrap items-center gap-2 text-sm">
             <span>Send this email to {draft.to} again?</span>
-            <button type="button" onClick={() => run(() => sendPaymentEmail(draft.packageId, true))} disabled={pending} className="rounded-lg bg-emerald-700 px-3 py-1.5 font-semibold text-white disabled:opacity-50" data-testid="cs-resend-confirm">Yes, resend</button>
+            <button type="button" onClick={() => run(() => sendPaymentEmail(draft.packageId, true, editable ? edit() : undefined))} disabled={pending} className="rounded-lg bg-emerald-700 px-3 py-1.5 font-semibold text-white disabled:opacity-50" data-testid="cs-resend-confirm">Yes, resend</button>
             <button type="button" onClick={() => setConfirming(null)} className="rounded-lg border border-slate-300 px-3 py-1.5 dark:border-slate-700">Cancel</button>
           </span>
         ) : (
@@ -206,8 +292,16 @@ export function Composer({ draft }: { draft: EmailDraft }) {
 
         {draft.packagingNotAcceptable && (confirming === "warning" ? (
           <span className="flex flex-wrap items-center gap-2 text-sm">
+            {editable && (
+              <span className="block w-full space-y-2 basis-full">
+                <label htmlFor="cs-w-subject" className="block text-sm font-medium">Warning subject</label>
+                <input id="cs-w-subject" value={wSubject} onChange={(e) => setWSubject(e.target.value)} maxLength={200} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900" data-testid="cs-w-subject" />
+                <label htmlFor="cs-w-body" className="block text-sm font-medium">Warning text</label>
+                <textarea id="cs-w-body" value={wBody} onChange={(e) => setWBody(e.target.value)} maxLength={8000} rows={10} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-mono text-sm dark:border-slate-700 dark:bg-slate-900" data-testid="cs-w-body" />
+              </span>
+            )}
             <span>Send the packaging warning to {draft.to}?</span>
-            <button type="button" onClick={() => run(() => sendPackagingWarningEmail(draft.packageId))} disabled={pending} className="rounded-lg bg-amber-600 px-3 py-1.5 font-semibold text-white disabled:opacity-50" data-testid="cs-warning-confirm">Yes, send</button>
+            <button type="button" onClick={() => run(() => sendPackagingWarningEmail(draft.packageId, editable ? { subject: wSubject, body: wBody } : undefined))} disabled={pending} className="rounded-lg bg-amber-600 px-3 py-1.5 font-semibold text-white disabled:opacity-50" data-testid="cs-warning-confirm">Yes, send</button>
             <button type="button" onClick={() => setConfirming(null)} className="rounded-lg border border-slate-300 px-3 py-1.5 dark:border-slate-700">Cancel</button>
           </span>
         ) : (

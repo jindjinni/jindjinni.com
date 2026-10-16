@@ -26,6 +26,10 @@ export type AccountsOrder = {
   /** The day the payment clock started: the delivered day, or the received day when no delivered day is on file. */
   dueStartDay?: string | null;
   dueBasis?: "DELIVERED" | "RECEIVED" | null;
+  /** Feature `order-tags`: the customer email went out. Undefined when the tags are off for the company. */
+  emailSent?: boolean;
+  /** Feature `order-tags`: someone messaged the customer on Facebook. Undefined when the tags are off. */
+  facebook?: boolean;
 };
 
 export type DayGroup = { day: string; orders: AccountsOrder[]; total: number; receipts: number };

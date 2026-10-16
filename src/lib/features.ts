@@ -127,6 +127,18 @@ export const FEATURES: FeatureDef[] = [
     defaultStage: "mothership",
   },
   {
+    key: "cs-email-edit",
+    label: "Customer Service: choose and edit the email",
+    blurb: "Customer Service -> an order -> The email: pick which template to send (Standard, Packaging notice, Adjustment, Adjustment + packaging, or the Packaging warning), and edit the subject and the whole text before pressing Send. What you write is exactly what the customer gets and is kept in the order's email history. Off = the recommended template and only the note box can be changed.",
+    defaultStage: "mothership",
+  },
+  {
+    key: "order-tags",
+    label: "Accounts: Email sent and Facebook tags",
+    blurb: "Need to Be Paid and Paid orders (and the order pages) get small tags: 'Email sent' shows by itself once Customer Service has emailed the customer, and 'Contacted on Facebook' is ticked by an Accounts or Customer Service person who messaged the customer through Facebook Business Manager, so nobody does it twice. Untick removes the tag; who and when are kept in the order's history.",
+    defaultStage: "mothership",
+  },
+  {
     key: "receiving-hide-item-adjust",
     label: "Receiving: hide the per-product adjustment boxes",
     blurb: "Receiving -> intake form -> Step 7 Adjustments: the row of boxes for each product (Adjustment Required, Management Review, Return Required, Quotation Adjusted, Proposed Revised Amount, Reason, Notes) is hidden, so only Adjustment Needed / Details and the real Adjustment Quotation remain. Anything already saved in those boxes is kept (nothing is deleted). Off = the boxes show as before.",

@@ -23,6 +23,8 @@ export type ReadinessInput = {
   adjustmentAmountEmail: number | null;
   /** A revised invoice photo, or a finalized adjustment quotation. */
   hasRevisedInvoice: boolean;
+  /** The agent can write the whole email themselves (feature `cs-email-edit`), so a missing note is not a reason to stop. */
+  emailEditable?: boolean;
 };
 
 export type Readiness = {
@@ -45,7 +47,7 @@ export function emailReadiness(i: ReadinessInput): Readiness {
   if (!isEmailAddress(i.toEmail)) blockers.push("This customer has no valid email address on the order.");
   if (!i.hasPaymentReceipt) blockers.push("Accounts hasn't attached the payment receipt yet.");
   if (i.adjustmentNeeded === "YES") {
-    if (!(i.customerNote ?? "").trim() && !(i.adjustmentDetails ?? "").trim()) {
+    if (!i.emailEditable && !(i.customerNote ?? "").trim() && !(i.adjustmentDetails ?? "").trim()) {
       blockers.push("Write what the adjustment is for in the note to the customer.");
     }
     if (i.adjustedOrderTotal == null && i.adjustmentAmountEmail == null) {
@@ -76,7 +78,12 @@ export type CsOrder = {
   /** Ready to send, or what is still missing (only for To Be Emailed). */
   blockers: string[];
   emailCount: number;
+  /** Feature `order-tags`: someone messaged the customer on Facebook. Undefined when the tags are off. */
+  facebook?: boolean;
 };
+
+/** The four "package received & processed" emails an agent can choose between (the packaging warning is sent on its own). */
+export const STATUS_TEMPLATE_KEYS = ["STANDARD", "STANDARD_PACKAGING_NOTICE", "ADJUSTMENT_ONLY", "ADJUSTMENT_PACKAGING"] as const;
 
 export const TEMPLATE_LABEL: Record<string, string> = {
   STANDARD: "Standard",

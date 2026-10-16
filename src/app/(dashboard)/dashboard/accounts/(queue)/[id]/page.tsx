@@ -12,6 +12,7 @@ import { featureOn } from "@/lib/features";
 import { receivedSummaryForPackage } from "@/lib/payout-link-service";
 import { maskedPayoutLine } from "@/lib/payout-link-rules";
 import { PayoutLinkBox } from "./payout-link-box";
+import { OrderTagsFor } from "@/components/order-tags-for";
 
 export const dynamic = "force-dynamic";
 
@@ -57,6 +58,7 @@ export default async function AccountsOrderPage({ params }: { params: Promise<{ 
           <PayoutLinkBox quotationId={linkPay.quotationId} line={maskedPayoutLine(linkPay.method, linkPay.accountType, linkPay.accountLast4)} canReveal={canReveal} erased={linkPay.state === "erased"} />
         </section>
       )}
+      <OrderTagsFor packageId={id} />
       <div className="mt-3">
         <IntakeFormFor id={id} focus="accounts" />
       </div>

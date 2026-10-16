@@ -12,7 +12,10 @@ import {
 import { finalPayout, pickEmailTemplate } from "@/lib/receiving-rules";
 import { getEmailTemplates, getReceivingPackage, getReceivingSettings } from "@/lib/receiving-queries";
 import { planCustomerEmail } from "@/lib/receiving-service";
-import { emailReadiness, type CsOrder } from "@/lib/customer-service-rules";
+import { emailReadiness, STATUS_TEMPLATE_KEYS, TEMPLATE_LABEL, type CsOrder } from "@/lib/customer-service-rules";
+import { TEMPLATE_BY_KEY } from "@/lib/email-templates";
+import { featureOn } from "@/lib/features";
+import type { EmailTemplateKey } from "@/lib/receiving-rules";
 import { getConnection } from "@/lib/email-connector";
 
 // What the Customer Service department reads. Every query is limited to the signed-in company.
@@ -31,6 +34,7 @@ const select = {
   adjustedTotal: receivingPackages.adjustedOrderTotal,
   adjustmentAmountEmail: receivingPackages.adjustmentAmountEmail,
   notifiedAt: receivingPackages.customerNotifiedAt,
+  facebookAt: receivingPackages.facebookContactedAt,
   quotationNumber: purchasingQuotations.quotationNumber,
   nameSnap: purchasingQuotations.customerNameSnapshot,
   emailSnap: purchasingQuotations.customerEmailSnapshot,
@@ -52,6 +56,7 @@ type Row = {
   adjustedTotal: number | null;
   adjustmentAmountEmail: number | null;
   notifiedAt: string | null;
+  facebookAt: string | null;
   quotationNumber: string;
   nameSnap: string;
   emailSnap: string | null;
@@ -98,7 +103,7 @@ async function finalAdjustments(organizationId: string, packageIds: string[]) {
   return out;
 }
 
-function toOrder(r: Row, o: { emailsEnabled: boolean; hasWebsiteLink: boolean; senderProblem: string | null; photos: Map<string, { receipt: number; revised: number }>; finals: Set<string>; emailedAt: string | null; count: number }): CsOrder {
+function toOrder(r: Row, o: { emailsEnabled: boolean; hasWebsiteLink: boolean; senderProblem: string | null; photos: Map<string, { receipt: number; revised: number }>; finals: Set<string>; emailedAt: string | null; count: number; tags?: boolean }): CsOrder {
   const p = o.photos.get(r.id);
   const readiness = emailReadiness({
     emailsEnabled: o.emailsEnabled,
@@ -127,6 +132,7 @@ function toOrder(r: Row, o: { emailsEnabled: boolean; hasWebsiteLink: boolean; s
     adjusted: r.adjustedTotal != null && r.adjustedTotal !== r.grandTotal,
     blockers: readiness.blockers,
     emailCount: o.count,
+    ...(o.tags ? { facebook: !!r.facebookAt } : {}),
   };
 }
 
@@ -149,7 +155,8 @@ export async function getToBeEmailed(organizationId: string): Promise<CsOrder[]>
     .limit(CS_LIMIT);
   const ids = rows.map((r) => r.id);
   const [settings, photos, finals, conn] = await Promise.all([getReceivingSettings(organizationId), photoKindCounts(organizationId, ids), finalAdjustments(organizationId, ids), getConnection(organizationId)]);
-  return rows.map((r) => toOrder(r, { emailsEnabled: settings.emailsEnabled, hasWebsiteLink: !!settings.quoteLinkUrl.trim(), senderProblem: senderProblemOf(conn), photos, finals, emailedAt: null, count: 0 }));
+  const tags = await featureOn("order-tags", organizationId);
+  return rows.map((r) => toOrder(r, { emailsEnabled: settings.emailsEnabled, hasWebsiteLink: !!settings.quoteLinkUrl.trim(), senderProblem: senderProblemOf(conn), photos, finals, emailedAt: null, count: 0, tags }));
 }
 
 /** Orders the customer was emailed about (the payment email), the most recently emailed first. */
@@ -174,11 +181,12 @@ export async function getEmailed(organizationId: string): Promise<CsOrder[]> {
     .where(and(eq(receivingPackages.organizationId, organizationId), inArray(receivingPackages.id, sent.map((s) => s.packageId))));
   const by = new Map(rows.map((r) => [r.id, r]));
   const empty = { emailsEnabled: true, hasWebsiteLink: true, senderProblem: null, photos: new Map<string, { receipt: number; revised: number }>(), finals: new Set<string>() };
+  const tags = await featureOn("order-tags", organizationId);
   const out: CsOrder[] = [];
   for (const s of sent) {
     const r = by.get(s.packageId);
     if (!r) continue;
-    out.push({ ...toOrder(r, { ...empty, emailedAt: s.last, count: Number(s.n) }), blockers: [] });
+    out.push({ ...toOrder(r, { ...empty, emailedAt: s.last, count: Number(s.n), tags }), blockers: [] });
   }
   return out;
 }
@@ -260,15 +268,34 @@ export type EmailDraft = {
   /** Who the customer will see as the sender: the connected mailbox, or the platform's address. */
   from: { name: string; address: string | null };
   history: SentEmail[];
+  /** The email as written (links as [words](https://...)), the starting point for editing. */
+  body: string;
+  /** The template the system recommends for this order (the one `template` is, unless the agent picked another). */
+  recommended: string;
+  /** Feature `cs-email-edit`: the agent may pick a template and edit the subject and text. */
+  editable: boolean;
+  /** The templates to choose from, with when each one fits. */
+  templates: { key: string; label: string; usedWhen: string }[];
+  /** The stand-alone packaging warning, ready to edit. */
+  warning: { subject: string; body: string };
+  /** Feature `order-tags`. */
+  tags: OrderTagInfo | null;
 };
 
+/** The two small tags on an order: the email went out (automatic) and a person messaged the customer on Facebook. */
+export type OrderTagInfo = { emailSentAt: string | null; facebookAt: string | null; facebookBy: string | null };
+
 /** Everything the composer screen shows for one order: the exact email, what is attached, and what (if anything) blocks sending. */
-export async function getEmailDraft(org: { organizationId: string; organizationName: string }, packageId: string): Promise<EmailDraft | null> {
+export async function getEmailDraft(org: { organizationId: string; organizationName: string }, packageId: string, forceTemplate?: EmailTemplateKey): Promise<EmailDraft | null> {
   const data = await getReceivingPackage(org.organizationId, packageId);
   if (!data) return null;
   const conn = await getConnection(org.organizationId);
   const { pkg, brief, settings } = data;
-  const plan = planCustomerEmail(org.organizationName, data, "STATUS", await getEmailTemplates(org.organizationId));
+  const templates = await getEmailTemplates(org.organizationId);
+  const editable = await featureOn("cs-email-edit", org.organizationId);
+  const tagsOn = await featureOn("order-tags", org.organizationId);
+  const plan = planCustomerEmail(org.organizationName, data, "STATUS", templates, editable ? forceTemplate : undefined);
+  const warningPlan = planCustomerEmail(org.organizationName, data, "WARNING", templates);
   const receipts = data.photos.filter((p) => !p.itemId && p.kind === "PAYMENT_CONFIRMATION");
   const adjFinal = data.adjustment?.status === "FINAL" ? data.adjustment : null;
   const readiness = emailReadiness({
@@ -285,6 +312,7 @@ export async function getEmailDraft(org: { organizationId: string; organizationN
     adjustedOrderTotal: pkg.adjustedOrderTotal,
     adjustmentAmountEmail: pkg.adjustmentAmountEmail,
     hasRevisedInvoice: data.photos.some((p) => !p.itemId && p.kind === "REVISED_INVOICE") || !!adjFinal,
+    emailEditable: editable,
   });
   const history = await getSentEmails(org.organizationId, packageId);
   const fromName = settings.fromName.trim() || org.organizationName;
@@ -314,7 +342,23 @@ export async function getEmailDraft(org: { organizationId: string; organizationN
     emailsEnabled: settings.emailsEnabled,
     from: { name: fromName, address: conn?.accountEmail ?? null },
     history,
+    body: plan.built.body,
+    recommended: pickEmailTemplate(pkg),
+    editable,
+    templates: STATUS_TEMPLATE_KEYS.map((k) => ({ key: k, label: TEMPLATE_LABEL[k], usedWhen: TEMPLATE_BY_KEY[k].usedWhen })),
+    warning: { subject: warningPlan.built.subject, body: warningPlan.built.body },
+    tags: tagsOn ? await orderTagInfo(pkg) : null,
   };
+}
+
+/** Who ticked "Contacted on Facebook" and when, with the email-sent time that is already on the order. */
+export async function orderTagInfo(pkg: { customerNotifiedAt: string | null; facebookContactedAt: string | null; facebookContactedByUserId: string | null }): Promise<OrderTagInfo> {
+  let by: string | null = null;
+  if (pkg.facebookContactedAt && pkg.facebookContactedByUserId) {
+    const [u] = await db.select({ name: users.name, email: users.email }).from(users).where(eq(users.id, pkg.facebookContactedByUserId)).limit(1);
+    by = u?.name || u?.email || null;
+  }
+  return { emailSentAt: pkg.customerNotifiedAt, facebookAt: pkg.facebookContactedAt, facebookBy: by };
 }
 
 export { getReceivingSettings };

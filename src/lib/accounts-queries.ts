@@ -3,6 +3,7 @@ import { db } from "@/db/client";
 import { accountsClosureDays, accountsSettings, purchasingCustomers, purchasingQuotations, purchasingQuotedItems, receivingPackagePhotos, receivingPackages } from "@/db/schema";
 import { finalPayout } from "@/lib/receiving-rules";
 import type { AccountsOrder, ReportOrder } from "@/lib/accounts-rules";
+import { featureOn } from "@/lib/features";
 import { DEFAULT_TERMS, paymentDue, type PaymentTerms } from "@/lib/payment-due";
 
 // What the Accounts department reads. Every query is limited to the signed-in company.
@@ -21,6 +22,8 @@ const select = {
   grandTotal: purchasingQuotations.grandTotal,
   adjustedTotal: receivingPackages.adjustedOrderTotal,
   deliveredAt: purchasingQuotations.deliveredAt,
+  notifiedAt: receivingPackages.customerNotifiedAt,
+  facebookAt: receivingPackages.facebookContactedAt,
 };
 
 async function receiptsFor(organizationId: string, packageIds: string[]) {
@@ -52,6 +55,8 @@ type Row = {
   grandTotal: number;
   adjustedTotal: number | null;
   deliveredAt: string | null;
+  notifiedAt: string | null;
+  facebookAt: string | null;
 };
 
 async function coversFor(organizationId: string, packageIds: string[]) {
@@ -80,7 +85,7 @@ export async function getPaymentTerms(organizationId: string): Promise<PaymentTe
   };
 }
 
-function toOrder(r: Row, receipts: Map<string, { count: number; first: string }>, covers: Map<string, string>, terms?: PaymentTerms): AccountsOrder {
+function toOrder(r: Row, receipts: Map<string, { count: number; first: string }>, covers: Map<string, string>, terms?: PaymentTerms, tags = false): AccountsOrder {
   const rc = receipts.get(r.id);
   const due = terms ? paymentDue({ deliveredAt: r.deliveredAt, receivedAt: r.receivedAt ?? r.createdAt }, terms) : null;
   return {
@@ -98,6 +103,7 @@ function toOrder(r: Row, receipts: Map<string, { count: number; first: string }>
     dueDay: due?.dueDay ?? null,
     dueStartDay: due?.startDay ?? null,
     dueBasis: due?.basis ?? null,
+    ...(tags ? { emailSent: !!r.notifiedAt, facebook: !!r.facebookAt } : {}),
   };
 }
 
@@ -119,8 +125,8 @@ export async function getToBePaid(organizationId: string, terms?: PaymentTerms):
     )
     .orderBy(receivingPackages.receivedAt, receivingPackages.createdAt);
   const ids = rows.map((r) => r.id);
-  const [receipts, covers] = await Promise.all([receiptsFor(organizationId, ids), coversFor(organizationId, ids)]);
-  return rows.map((r) => toOrder(r, receipts, covers, t));
+  const [receipts, covers, tags] = await Promise.all([receiptsFor(organizationId, ids), coversFor(organizationId, ids), featureOn("order-tags", organizationId)]);
+  return rows.map((r) => toOrder(r, receipts, covers, t, tags));
 }
 
 export const PAID_LIMIT = 5000;
@@ -136,8 +142,8 @@ export async function getPaidOrders(organizationId: string): Promise<AccountsOrd
     .orderBy(desc(receivingPackages.paidAt))
     .limit(PAID_LIMIT);
   const ids = rows.map((r) => r.id);
-  const [receipts, covers] = await Promise.all([receiptsFor(organizationId, ids), coversFor(organizationId, ids)]);
-  return rows.map((r) => toOrder(r, receipts, covers));
+  const [receipts, covers, tags] = await Promise.all([receiptsFor(organizationId, ids), coversFor(organizationId, ids), featureOn("order-tags", organizationId)]);
+  return rows.map((r) => toOrder(r, receipts, covers, undefined, tags));
 }
 
 /**

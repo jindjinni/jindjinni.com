@@ -189,6 +189,22 @@ export function validateTemplate(key: TemplateKey, t: TemplateText): string[] {
   return errors;
 }
 
+/**
+ * The reasons an email an agent edited just before sending can't go out. Unlike a saved template this is the finished
+ * wording, so there are no placeholders to check: only that it is not empty, not too long, and no {placeholder} was left unfilled.
+ */
+export function validateEditedEmail(subject: string, body: string): string[] {
+  const errors: string[] = [];
+  if (!subject.trim()) errors.push("The subject can't be empty.");
+  if (/[\r\n]/.test(subject)) errors.push("The subject must be a single line.");
+  if (subject.trim().length > SUBJECT_MAX) errors.push(`The subject is too long (up to ${SUBJECT_MAX} characters).`);
+  if (!body.trim()) errors.push("The email text can't be empty.");
+  if (body.trim().length > BODY_MAX) errors.push(`The email text is too long (up to ${BODY_MAX} characters).`);
+  const left = [...new Set([...subject.matchAll(/\{(\w+)\}/g), ...body.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).filter((n) => PLACEHOLDER_NAMES.has(n)))];
+  if (left.length) errors.push(`This still has ${left.map((n) => `{${n}}`).join(", ")} in it. Replace it with the real words before sending.`);
+  return errors;
+}
+
 export type TemplateValues = {
   customerName: string;
   company: string;

@@ -23,7 +23,7 @@ export type EmailContext = {
   packagingGuideUrl: string | null;
 };
 
-export type BuiltEmail = { subject: string; text: string; html: string; attachKinds: ("PAYMENT_CONFIRMATION" | "REVISED_INVOICE" | "CUSTOMER_NOTE")[] };
+export type BuiltEmail = { subject: string; /** The wording as written (links as [words](https://...)), before it is turned into plain text or HTML. */ body: string; text: string; html: string; attachKinds: ("PAYMENT_CONFIRMATION" | "REVISED_INVOICE" | "CUSTOMER_NOTE")[] };
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
@@ -36,7 +36,7 @@ export function textToHtml(text: string): string {
   return `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#111">${body}</div>`;
 }
 /** Markdown-ish text -> plain text (links become "label: url"). */
-function plain(text: string): string {
+export function plain(text: string): string {
   return text.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, "$1: $2").replace(/\*\*([^*]+)\*\*/g, "$1");
 }
 
@@ -62,7 +62,7 @@ export function buildCustomerEmail(key: EmailTemplateKey, ctx: EmailContext, ove
     websiteUrl: ctx.quoteLinkUrl,
     packagingGuideUrl: ctx.packagingGuideUrl,
   });
-  return { subject, text: plain(text), html: textToHtml(text), attachKinds: def.attachKinds };
+  return { subject, body: text, text: plain(text), html: textToHtml(text), attachKinds: def.attachKinds };
 }
 
 /** The manual "packaging requirements" warning (sent on its own, e.g. before payment). */
@@ -83,5 +83,5 @@ export function buildPackagingWarning(
     websiteUrl: ctx.quoteLinkUrl ?? null,
     packagingGuideUrl: ctx.packagingGuideUrl,
   });
-  return { subject, text: plain(text), html: textToHtml(text), attachKinds: [] };
+  return { subject, body: text, text: plain(text), html: textToHtml(text), attachKinds: [] };
 }

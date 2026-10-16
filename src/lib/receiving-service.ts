@@ -21,9 +21,9 @@ import { newId } from "@/lib/ids";
 import type { EmailAttachment } from "@/lib/email";
 import { sendDeptEmail } from "@/lib/mail-system";
 import { getEmailTemplates, getReceivingPackage } from "@/lib/receiving-queries";
-import { buildCustomerEmail, buildPackagingWarning } from "@/lib/receiving-emails";
+import { buildCustomerEmail, buildPackagingWarning, plain, textToHtml } from "@/lib/receiving-emails";
 import { activeRecallHits, rowRecallState } from "@/lib/receiving-recall";
-import { buildDbLines, finalPayout, pickEmailTemplate, weekOf } from "@/lib/receiving-rules";
+import { buildDbLines, finalPayout, pickEmailTemplate, weekOf, type EmailTemplateKey } from "@/lib/receiving-rules";
 import { storage } from "@/lib/receiving-storage";
 
 export type OrgRef = { organizationId: string; userId: string; organizationName: string };
@@ -167,7 +167,7 @@ export type EmailPlan = {
  * Nothing is read from storage and nothing is sent, so the Customer Service screen can show exactly what the
  * customer will get, and deliverCustomerEmail sends the very same thing.
  */
-export function planCustomerEmail(orgName: string, data: PackageData, kind: "STATUS" | "WARNING", templates: Partial<Record<TemplateKey, TemplateText>> = {}): EmailPlan {
+export function planCustomerEmail(orgName: string, data: PackageData, kind: "STATUS" | "WARNING", templates: Partial<Record<TemplateKey, TemplateText>> = {}, forceTemplate?: EmailTemplateKey): EmailPlan {
   const { pkg, brief, settings } = data;
   const companyName = settings.fromName.trim() || orgName;
   const orderLabel = [brief.quotationNumber, pkg.trackingNumber ?? brief.trackingNumber].filter(Boolean).join(" — ");
@@ -176,7 +176,7 @@ export function planCustomerEmail(orgName: string, data: PackageData, kind: "STA
     const built = buildPackagingWarning({ companyName, customerName: brief.customerName, orderLabel, packagingGuideUrl: settings.packagingGuideUrl || null, quoteLinkUrl: settings.quoteLinkUrl || null }, templates.PACKAGING_WARNING);
     return { template: "PACKAGING_WARNING", built, to, isAdjustment: false, wanted: [] };
   }
-  const template = pickEmailTemplate(pkg);
+  const template = forceTemplate ?? pickEmailTemplate(pkg);
   const built = buildCustomerEmail(template, {
     companyName,
     customerName: brief.customerName,
@@ -203,20 +203,27 @@ export function planCustomerEmail(orgName: string, data: PackageData, kind: "STA
  *  - "WARNING": the stand-alone packaging requirements warning.
  * Stamps customerNotifiedAt / packagingWarningSentAt and writes the email log only when the send worked.
  */
-export async function deliverCustomerEmail(org: OrgRef, packageId: string, kind: "STATUS" | "WARNING"): Promise<DeliverResult> {
+export type EmailEdit = { template?: EmailTemplateKey; subject?: string; body?: string };
+
+export async function deliverCustomerEmail(org: OrgRef, packageId: string, kind: "STATUS" | "WARNING", edit?: EmailEdit): Promise<DeliverResult> {
   const data = await getReceivingPackage(org.organizationId, packageId);
   if (!data) return { ok: false, error: "That shipment wasn't found." };
   if (!data.settings.emailsEnabled) return { ok: false, error: "Customer emails are turned off. An admin can turn them on under Email Settings." };
   const { pkg, settings } = data;
   if (!settings.quoteLinkUrl.trim()) return { ok: false, error: "Add your website link in Email Settings first. Every email tells customers where to submit new orders." };
-  const plan = planCustomerEmail(org.organizationName, data, kind, await getEmailTemplates(org.organizationId));
+  const plan = planCustomerEmail(org.organizationName, data, kind, await getEmailTemplates(org.organizationId), kind === "STATUS" ? edit?.template : undefined);
   const to = plan.to;
   if (!to || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) return { ok: false, error: "This customer has no valid email address on the order." };
   if (kind === "STATUS") {
     if (pkg.status === "IN_PROGRESS") return { ok: false, error: "Submit receiving first. The customer isn't told anything until the package is processed." };
     if (pkg.accountsStatus !== "PAID") return { ok: false, error: "Accounts Status must be Paid before the customer is notified." };
   }
-  const { template, built, isAdjustment, wanted } = plan;
+  const { template, isAdjustment, wanted } = plan;
+  // An agent's own wording for this one send (feature `cs-email-edit`): exactly what they wrote goes out, in the same layout.
+  const built =
+    edit?.subject != null && edit?.body != null
+      ? { ...plan.built, subject: edit.subject.replace(/\s+/g, " ").trim(), body: edit.body, text: plain(edit.body), html: textToHtml(edit.body) }
+      : plan.built;
 
   // Attachments: the payment confirmation, revised invoice and note photos that apply to this email.
   const attachments: EmailAttachment[] = [];

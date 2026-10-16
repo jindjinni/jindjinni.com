@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireOrg } from "@/lib/tenant";
+import { canSendCustomerEmails, canWriteAccounts } from "@/lib/permissions";
 import { getEmailDraft } from "@/lib/customer-service-queries";
 import { Composer } from "./composer";
 
@@ -17,7 +18,7 @@ export default async function CustomerServiceOrderPage({ params }: { params: Pro
       <Link href={draft.alreadyEmailed ? "/dashboard/customer-service/emailed" : "/dashboard/customer-service"} className="text-sm text-emerald-800 underline dark:text-emerald-300">
         ‹ {draft.alreadyEmailed ? "Emailed" : "To Be Emailed"}
       </Link>
-      <Composer draft={draft} />
+      <Composer draft={draft} canSetTag={canSendCustomerEmails(org.role, org.access) || canWriteAccounts(org.role, org.access)} />
     </div>
   );
 }

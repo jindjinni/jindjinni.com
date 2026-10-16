@@ -1192,6 +1192,9 @@ export const receivingPackages = sqliteTable(
     // Customer notification (set by the app when the email goes out)
     customerNotifiedAt: text("customer_notified_at"),
     packagingWarningSentAt: text("packaging_warning_sent_at"),
+    // Order tags (feature `order-tags`): a person ticked "Contacted on Facebook" for this order. Cleared by unticking; the history stays in the audit log.
+    facebookContactedAt: text("facebook_contacted_at"),
+    facebookContactedByUserId: text("facebook_contacted_by_user_id").references(() => users.id),
     customerTexted: integer("customer_texted", { mode: "boolean" }),
     ...timestamps,
   },

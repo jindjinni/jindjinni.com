@@ -124,6 +124,12 @@ export function PaidList({ orders }: { orders: AccountsOrder[] }) {
                             ) : (
                               <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-medium text-slate-800 dark:bg-slate-800 dark:text-slate-100">No receipt</span>
                             )}
+                            {o.emailSent !== undefined && (
+                              <span data-testid="tag-email" className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${o.emailSent ? "bg-green-100 text-green-900 dark:bg-green-900/40 dark:text-green-100" : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"}`}>
+                                {o.emailSent ? "Email sent" : "Email not sent"}
+                              </span>
+                            )}
+                            {o.facebook && <span data-testid="tag-facebook" className="rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-medium text-sky-900 dark:bg-sky-900/40 dark:text-sky-100">Contacted on Facebook</span>}
                           </div>
                         </div>
                       </Link>

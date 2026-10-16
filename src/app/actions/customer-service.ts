@@ -12,7 +12,10 @@ import { canSendCustomerEmails, isAdmin } from "@/lib/permissions";
 import { deliverCustomerEmail, auditReceiving } from "@/lib/receiving-service";
 import { getEmailDraft } from "@/lib/customer-service-queries";
 import { isEmailAddress } from "@/lib/customer-service-rules";
-import { isTemplateKey, validateTemplate } from "@/lib/email-templates";
+import { isTemplateKey, validateEditedEmail, validateTemplate, BODY_MAX, SUBJECT_MAX } from "@/lib/email-templates";
+import { featureOn } from "@/lib/features";
+import { STATUS_TEMPLATE_KEYS } from "@/lib/customer-service-rules";
+import type { EmailEdit } from "@/lib/receiving-service";
 import { removeConnection, saveConnection, sendOrgEmail } from "@/lib/email-connector";
 import { checkSmtpTarget, detectMail, verifySmtp, type Detected } from "@/lib/email-smtp";
 import { textToHtml } from "@/lib/receiving-emails";
@@ -64,16 +67,52 @@ export async function saveCustomerNote(packageId: string, note: string): Promise
 }
 
 /**
+ * What an agent changed just before sending (feature `cs-email-edit`): which template, and the finished subject and text.
+ * Nothing here is trusted: the flag is checked on the server, the template must be one of the real ones, and the wording
+ * must pass the same checks as a saved template (not empty, not too long, no placeholder left unfilled).
+ */
+async function checkEdit(org: CurrentOrg, edit: { template?: string; subject?: string; body?: string } | undefined, warning: boolean): Promise<{ edit: EmailEdit | undefined } | { error: string }> {
+  if (!edit || (edit.template == null && edit.subject == null && edit.body == null)) return { edit: undefined };
+  if (!(await featureOn("cs-email-edit", org.organizationId))) return { error: "Choosing or editing the email isn't switched on for your company yet." };
+  const out: EmailEdit = {};
+  if (edit.template != null) {
+    if (!warning && !(STATUS_TEMPLATE_KEYS as readonly string[]).includes(edit.template)) return { error: "Choose one of the email templates in the list." };
+    if (!warning) out.template = edit.template as EmailEdit["template"];
+  }
+  if (edit.subject != null || edit.body != null) {
+    const subject = String(edit.subject ?? "").slice(0, SUBJECT_MAX + 50);
+    const body = String(edit.body ?? "").replace(/\r\n/g, "\n").slice(0, BODY_MAX + 50);
+    const problems = validateEditedEmail(subject, body);
+    if (problems.length) return { error: problems[0] };
+    out.subject = subject;
+    out.body = body;
+  }
+  return { edit: out };
+}
+
+/** The email for this order under another template, so the agent can switch and see (and edit) its wording. Sends nothing. */
+export async function previewEmailTemplate(packageId: string, template: string): Promise<{ error?: string; template?: string; subject?: string; body?: string; attachments?: { id: string; filename: string; kind: string }[]; adjustmentPdf?: { id: string; number: string } | null }> {
+  const org = await requireAgent();
+  if (!(await featureOn("cs-email-edit", org.organizationId))) return { error: "Choosing the email isn't switched on for your company yet." };
+  if (!(STATUS_TEMPLATE_KEYS as readonly string[]).includes(template)) return { error: "Choose one of the email templates in the list." };
+  const draft = await getEmailDraft(org, packageId, template as EmailEdit["template"]);
+  if (!draft) return { error: "That order wasn't found." };
+  return { template: draft.template, subject: draft.subject, body: draft.body, attachments: draft.attachments.map((a) => ({ id: a.id, filename: a.filename, kind: a.kind })), adjustmentPdf: draft.adjustmentPdf };
+}
+
+/**
  * Sends the payment email: the payment receipt, plus the adjustment and its documents when there is one.
  * `resend` must be true to send again after it already went out.
  */
-export async function sendPaymentEmail(packageId: string, resend = false): Promise<CsActionState> {
+export async function sendPaymentEmail(packageId: string, resend = false, edit?: { template?: string; subject?: string; body?: string }): Promise<CsActionState> {
   const org = await requireAgent();
+  const checked = await checkEdit(org, edit, false);
+  if ("error" in checked) return { error: checked.error };
   const draft = await getEmailDraft(org, packageId);
   if (!draft) return { error: "That order wasn't found." };
   if (draft.alreadyEmailed && !resend) return { error: "This customer was already emailed. Use Resend if you need to send it again." };
   if (!draft.ready) return { error: `Not ready to send: ${draft.blockers[0]}` };
-  const r = await deliverCustomerEmail(org, packageId, "STATUS");
+  const r = await deliverCustomerEmail(org, packageId, "STATUS", checked.edit);
   if (!r.ok) return { error: r.error };
   refresh(packageId);
   return {
@@ -83,11 +122,13 @@ export async function sendPaymentEmail(packageId: string, resend = false): Promi
 }
 
 /** The separate, manual packaging requirements warning (for packages that arrived in unacceptable packaging). */
-export async function sendPackagingWarningEmail(packageId: string): Promise<CsActionState> {
+export async function sendPackagingWarningEmail(packageId: string, edit?: { subject?: string; body?: string }): Promise<CsActionState> {
   const org = await requireAgent();
+  const checked = await checkEdit(org, edit, true);
+  if ("error" in checked) return { error: checked.error };
   const p = await ownPackage(org.organizationId, packageId);
   if (!p) return { error: "That order wasn't found." };
-  const r = await deliverCustomerEmail(org, packageId, "WARNING");
+  const r = await deliverCustomerEmail(org, packageId, "WARNING", checked.edit);
   if (!r.ok) return { error: r.error };
   refresh(packageId);
   return { ok: true, notice: "Packaging warning sent to the customer." };
