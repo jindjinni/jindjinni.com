@@ -12,6 +12,10 @@ assert.match(paidBlocker({ ...ok, recalledLines: 1 }) ?? "", /recall/);
 assert.match(paidBlocker({ ...ok, recalledLines: 3 }) ?? "", /3 received products/);
 assert.match(paidBlocker({ ...ok, draftAdjustment: true }) ?? "", /draft/);
 assert.match(paidBlocker({ ...ok, pendingReturnLines: 2 }) ?? "", /return decision/);
+// an adjustment marked but never entered: can't be paid at the old amount
+assert.match(paidBlocker({ ...ok, adjustmentUnentered: true }) ?? "", /adjusted payout/);
+assert.equal(paidBlocker({ ...ok, adjustmentUnentered: false }), null);
+assert.equal(paidBlocker({ ...ok, adjustmentUnentered: true, decision: "PAID" }), null, "already Paid is never blocked again");
 // a recall hold wins over everything else, so it is the first thing the person sees
 assert.match(paidBlocker({ ...ok, recalledLines: 1, hasReceipt: false, decision: null }) ?? "", /recall/);
 // already Paid is never blocked again

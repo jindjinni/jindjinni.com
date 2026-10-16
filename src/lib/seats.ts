@@ -8,7 +8,7 @@ import { and, eq, isNull, gt, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { memberships, organizations, teamInvitations } from "@/db/schema";
 
-export const DEFAULT_SEAT_LIMIT = 5;
+export const DEFAULT_SEAT_LIMIT = 100;
 export const UNLIMITED = -1;
 
 /** Companies that run on their own platform with no team cap. Extend with the UNLIMITED_SEAT_ORG_SLUGS env var (comma separated). */

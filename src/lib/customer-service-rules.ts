@@ -25,6 +25,8 @@ export type ReadinessInput = {
   hasRevisedInvoice: boolean;
   /** The agent can write the whole email themselves (feature `cs-email-edit`), so a missing note is not a reason to stop. */
   emailEditable?: boolean;
+  /** The template the agent chose (feature `cs-email-edit`). The adjustment checks follow the template that will be sent. */
+  template?: string;
 };
 
 export type Readiness = {
@@ -46,7 +48,9 @@ export function emailReadiness(i: ReadinessInput): Readiness {
   if (i.accountsStatus !== "PAID") blockers.push("This order isn't marked Paid yet.");
   if (!isEmailAddress(i.toEmail)) blockers.push("This customer has no valid email address on the order.");
   if (!i.hasPaymentReceipt) blockers.push("Accounts hasn't attached the payment receipt yet.");
-  if (i.adjustmentNeeded === "YES") {
+  // With no template chosen the order's own answer decides (as always); a chosen template decides for itself.
+  const adjustmentEmail = i.template ? isAdjustmentTemplate(i.template) : i.adjustmentNeeded === "YES";
+  if (adjustmentEmail) {
     if (!i.emailEditable && !(i.customerNote ?? "").trim() && !(i.adjustmentDetails ?? "").trim()) {
       blockers.push("Write what the adjustment is for in the note to the customer.");
     }
@@ -56,6 +60,22 @@ export function emailReadiness(i: ReadinessInput): Readiness {
     if (!i.hasRevisedInvoice) blockers.push("The revised invoice (adjusted quotation) isn't attached yet.");
   }
   return { blockers, ready: blockers.length === 0 };
+}
+
+/**
+ * Things worth a second look when the agent picks a template other than the one the order calls for. They never stop
+ * a send (the agent may mean it); they are shown next to the picker so the choice is deliberate.
+ */
+export function templateWarnings(i: { template: string; recommended: string; adjustmentNeeded: "YES" | "NO" | null; packagingNotAcceptable: boolean }): string[] {
+  const out: string[] = [];
+  const adjustmentEmail = isAdjustmentTemplate(i.template);
+  const packagingEmail = i.template === "STANDARD_PACKAGING_NOTICE" || i.template === "ADJUSTMENT_PACKAGING";
+  if (i.template !== i.recommended) out.push(`This isn't the template the order calls for (${TEMPLATE_LABEL[i.recommended] ?? i.recommended}). Check the wording before you send.`);
+  if (i.adjustmentNeeded === "YES" && !adjustmentEmail) out.push("Receiving marked an adjustment on this order, but this email tells the customer nothing was adjusted.");
+  if (i.adjustmentNeeded !== "YES" && adjustmentEmail) out.push("Receiving didn't mark an adjustment on this order, but this email tells the customer one was made.");
+  if (i.packagingNotAcceptable && !packagingEmail) out.push("The packaging was marked not acceptable, but this email doesn't mention it.");
+  if (!i.packagingNotAcceptable && packagingEmail) out.push("The packaging was acceptable, but this email tells the customer it wasn't.");
+  return out;
 }
 
 // ---- the two lists ----------------------------------------------------------
@@ -84,6 +104,8 @@ export type CsOrder = {
 
 /** The four "package received & processed" emails an agent can choose between (the packaging warning is sent on its own). */
 export const STATUS_TEMPLATE_KEYS = ["STANDARD", "STANDARD_PACKAGING_NOTICE", "ADJUSTMENT_ONLY", "ADJUSTMENT_PACKAGING"] as const;
+
+export const isAdjustmentTemplate = (key: string) => key === "ADJUSTMENT_ONLY" || key === "ADJUSTMENT_PACKAGING";
 
 export const TEMPLATE_LABEL: Record<string, string> = {
   STANDARD: "Standard",

@@ -37,7 +37,7 @@ export function OrderTags({ packageId, tags, canSet }: { packageId: string; tags
             Email sent · <LocalTime value={t.emailSentAt} />
           </span>
         ) : (
-          <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300" data-tag="email-not-sent">Email not sent yet</span>
+          <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300" data-tag="email-not-sent">Email not sent</span>
         )}
         {t.facebookAt ? (
           <span className="rounded-full bg-sky-100 px-2.5 py-0.5 text-xs font-semibold text-sky-900 dark:bg-sky-900/40 dark:text-sky-100" data-tag="facebook">

@@ -3,7 +3,7 @@
 // Nothing here checks the signed-in user -- callers (the actions) do that and
 // pass the company in.
 
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import type { TemplateKey, TemplateText } from "@/lib/email-templates";
 import {
@@ -203,9 +203,20 @@ export function planCustomerEmail(orgName: string, data: PackageData, kind: "STA
  *  - "WARNING": the stand-alone packaging requirements warning.
  * Stamps customerNotifiedAt / packagingWarningSentAt and writes the email log only when the send worked.
  */
-export type EmailEdit = { template?: EmailTemplateKey; subject?: string; body?: string };
+export type EmailEdit = {
+  template?: EmailTemplateKey;
+  subject?: string;
+  body?: string;
+  /** The wording the page showed before any editing. If the order has changed since, the send is refused so no old amount goes out. */
+  baseSubject?: string;
+  baseBody?: string;
+};
 
-export async function deliverCustomerEmail(org: OrgRef, packageId: string, kind: "STATUS" | "WARNING", edit?: EmailEdit): Promise<DeliverResult> {
+/**
+ * `first` (default): the customer has not been told yet; it is claimed in one step before sending so two people (or two
+ * tabs) pressing Send together can't both send it. `resend`: an agent chose to send it again.
+ */
+export async function deliverCustomerEmail(org: OrgRef, packageId: string, kind: "STATUS" | "WARNING", edit?: EmailEdit, mode: "first" | "resend" = "first"): Promise<DeliverResult> {
   const data = await getReceivingPackage(org.organizationId, packageId);
   if (!data) return { ok: false, error: "That shipment wasn't found." };
   if (!data.settings.emailsEnabled) return { ok: false, error: "Customer emails are turned off. An admin can turn them on under Email Settings." };
@@ -219,6 +230,10 @@ export async function deliverCustomerEmail(org: OrgRef, packageId: string, kind:
     if (pkg.accountsStatus !== "PAID") return { ok: false, error: "Accounts Status must be Paid before the customer is notified." };
   }
   const { template, isAdjustment, wanted } = plan;
+  // The page showed one wording and the order has since changed (an amount, the receipt, the template text): don't send the old one.
+  if (edit?.baseBody != null && (plan.built.body !== edit.baseBody || plan.built.subject !== (edit.baseSubject ?? plan.built.subject))) {
+    return { ok: false, error: "This order changed after you opened the page (for example the amount or a saved template). Reload the page so the email shows the latest details, then send." };
+  }
   // An agent's own wording for this one send (feature `cs-email-edit`): exactly what they wrote goes out, in the same layout.
   const built =
     edit?.subject != null && edit?.body != null
@@ -259,6 +274,18 @@ export async function deliverCustomerEmail(org: OrgRef, packageId: string, kind:
   }
 
   const bcc = splitEmails(settings.bccEmails);
+  // First email to this customer: claim it now, so a second press (another person, another tab) finds it taken.
+  let claimed = false;
+  if (kind === "STATUS" && mode === "first") {
+    const got = await db
+      .update(receivingPackages)
+      .set({ customerNotifiedAt: sql`(current_timestamp)`, updatedAt: sql`(current_timestamp)` })
+      .where(and(eq(receivingPackages.id, packageId), eq(receivingPackages.organizationId, org.organizationId), isNull(receivingPackages.customerNotifiedAt)))
+      .returning({ id: receivingPackages.id });
+    if (got.length === 0) return { ok: false, error: "This customer was already emailed. Use Resend if you need to send it again." };
+    claimed = true;
+  }
+  const release = () => db.update(receivingPackages).set({ customerNotifiedAt: null }).where(and(eq(receivingPackages.id, packageId), eq(receivingPackages.organizationId, org.organizationId)));
   const sent = await sendDeptEmail(org.organizationId, { dept: "receiving", relatedKind: "receiving_package", relatedId: packageId, by: org.userId ? { userId: org.userId, name: null } : null }, {
     to,
     subject: built.subject,
@@ -268,8 +295,15 @@ export async function deliverCustomerEmail(org: OrgRef, packageId: string, kind:
     replyTo: settings.replyTo.trim() || null,
     bcc,
     attachments,
+  }).catch(async (e: unknown) => {
+    if (claimed) await release();
+    throw e;
   });
-  if (!sent.ok) return { ok: false, error: sent.error };
+  if (!sent.ok) {
+    // It did not go out: give the claim back so the agent can fix the problem and send.
+    if (claimed) await release();
+    return { ok: false, error: sent.error };
+  }
 
   if (kind === "WARNING") {
     await db.update(receivingPackages).set({ packagingWarningSentAt: sql`(current_timestamp)`, updatedAt: sql`(current_timestamp)` }).where(eq(receivingPackages.id, packageId));

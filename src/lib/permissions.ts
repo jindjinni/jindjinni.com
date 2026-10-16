@@ -205,6 +205,11 @@ export function canViewCustomerService(role: string, access?: Access): boolean {
   return role === "customer_service" || isAdmin(role) || sees(access, "customer-service");
 }
 
+/** May tick the order tags (Contacted on Facebook): the Accounts and Customer Service people, Admins and the Owner. Receiving staff only see them. */
+export function canTagOrders(role: string, access?: Access): boolean {
+  return isAdmin(role) || role === "accountant" || role === "customer_service" || works(access, "accounts") || works(access, "customer-service");
+}
+
 /** May send the customer emails. Same people who can open the department. */
 export function canSendCustomerEmails(role: string, access?: Access): boolean {
   return role === "customer_service" || isAdmin(role) || works(access, "customer-service");

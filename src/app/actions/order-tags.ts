@@ -10,7 +10,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { receivingPackages } from "@/db/schema";
 import { requireOrg } from "@/lib/tenant";
-import { canSendCustomerEmails, canWriteAccounts } from "@/lib/permissions";
+import { canTagOrders } from "@/lib/permissions";
 import { featureOn } from "@/lib/features";
 import { auditReceiving } from "@/lib/receiving-service";
 import { orderTagInfo, type OrderTagInfo } from "@/lib/customer-service-queries";
@@ -21,7 +21,7 @@ export type TagState = { ok?: boolean; error?: string; tags?: OrderTagInfo };
 export async function setFacebookContacted(packageId: string, on: boolean): Promise<TagState> {
   const org = await requireOrg();
   if (!(await featureOn("order-tags", org.organizationId))) return { error: "The order tags aren't switched on for your company yet." };
-  if (!canWriteAccounts(org.role, org.access) && !canSendCustomerEmails(org.role, org.access)) return { error: "Your role can see this tag but can't change it." };
+  if (!canTagOrders(org.role, org.access)) return { error: "Your role can see this tag but can't change it." };
   const [p] = await db
     .select()
     .from(receivingPackages)

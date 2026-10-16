@@ -13,6 +13,7 @@ import { deliverCustomerEmail, auditReceiving } from "@/lib/receiving-service";
 import { getEmailDraft } from "@/lib/customer-service-queries";
 import { isEmailAddress } from "@/lib/customer-service-rules";
 import { isTemplateKey, validateEditedEmail, validateTemplate, BODY_MAX, SUBJECT_MAX } from "@/lib/email-templates";
+import { logActivity } from "@/lib/hr-service";
 import { featureOn } from "@/lib/features";
 import { STATUS_TEMPLATE_KEYS } from "@/lib/customer-service-rules";
 import type { EmailEdit } from "@/lib/receiving-service";
@@ -71,7 +72,9 @@ export async function saveCustomerNote(packageId: string, note: string): Promise
  * Nothing here is trusted: the flag is checked on the server, the template must be one of the real ones, and the wording
  * must pass the same checks as a saved template (not empty, not too long, no placeholder left unfilled).
  */
-async function checkEdit(org: CurrentOrg, edit: { template?: string; subject?: string; body?: string } | undefined, warning: boolean): Promise<{ edit: EmailEdit | undefined } | { error: string }> {
+type EditInput = { template?: string; subject?: string; body?: string; baseSubject?: string; baseBody?: string };
+
+async function checkEdit(org: CurrentOrg, edit: EditInput | undefined, warning: boolean): Promise<{ edit: EmailEdit | undefined } | { error: string }> {
   if (!edit || (edit.template == null && edit.subject == null && edit.body == null)) return { edit: undefined };
   if (!(await featureOn("cs-email-edit", org.organizationId))) return { error: "Choosing or editing the email isn't switched on for your company yet." };
   const out: EmailEdit = {};
@@ -86,33 +89,38 @@ async function checkEdit(org: CurrentOrg, edit: { template?: string; subject?: s
     if (problems.length) return { error: problems[0] };
     out.subject = subject;
     out.body = body;
+    if (edit.baseBody != null) {
+      out.baseSubject = String(edit.baseSubject ?? "").slice(0, SUBJECT_MAX + 50);
+      out.baseBody = String(edit.baseBody).replace(/\r\n/g, "\n").slice(0, BODY_MAX + 50);
+    }
   }
   return { edit: out };
 }
 
 /** The email for this order under another template, so the agent can switch and see (and edit) its wording. Sends nothing. */
-export async function previewEmailTemplate(packageId: string, template: string): Promise<{ error?: string; template?: string; subject?: string; body?: string; attachments?: { id: string; filename: string; kind: string }[]; adjustmentPdf?: { id: string; number: string } | null }> {
+export async function previewEmailTemplate(packageId: string, template: string): Promise<{ error?: string; template?: string; subject?: string; body?: string; attachments?: { id: string; filename: string; kind: string }[]; adjustmentPdf?: { id: string; number: string } | null; blockers?: string[]; ready?: boolean; warnings?: string[] }> {
   const org = await requireAgent();
   if (!(await featureOn("cs-email-edit", org.organizationId))) return { error: "Choosing the email isn't switched on for your company yet." };
   if (!(STATUS_TEMPLATE_KEYS as readonly string[]).includes(template)) return { error: "Choose one of the email templates in the list." };
   const draft = await getEmailDraft(org, packageId, template as EmailEdit["template"]);
   if (!draft) return { error: "That order wasn't found." };
-  return { template: draft.template, subject: draft.subject, body: draft.body, attachments: draft.attachments.map((a) => ({ id: a.id, filename: a.filename, kind: a.kind })), adjustmentPdf: draft.adjustmentPdf };
+  return { template: draft.template, subject: draft.subject, body: draft.body, attachments: draft.attachments.map((a) => ({ id: a.id, filename: a.filename, kind: a.kind })), adjustmentPdf: draft.adjustmentPdf, blockers: draft.blockers, ready: draft.ready, warnings: draft.warnings };
 }
 
 /**
  * Sends the payment email: the payment receipt, plus the adjustment and its documents when there is one.
  * `resend` must be true to send again after it already went out.
  */
-export async function sendPaymentEmail(packageId: string, resend = false, edit?: { template?: string; subject?: string; body?: string }): Promise<CsActionState> {
+export async function sendPaymentEmail(packageId: string, resend = false, edit?: EditInput): Promise<CsActionState> {
   const org = await requireAgent();
   const checked = await checkEdit(org, edit, false);
   if ("error" in checked) return { error: checked.error };
-  const draft = await getEmailDraft(org, packageId);
+  // The checks follow the template that will really be sent, not only the one the order calls for.
+  const draft = await getEmailDraft(org, packageId, checked.edit?.template);
   if (!draft) return { error: "That order wasn't found." };
   if (draft.alreadyEmailed && !resend) return { error: "This customer was already emailed. Use Resend if you need to send it again." };
   if (!draft.ready) return { error: `Not ready to send: ${draft.blockers[0]}` };
-  const r = await deliverCustomerEmail(org, packageId, "STATUS", checked.edit);
+  const r = await deliverCustomerEmail(org, packageId, "STATUS", checked.edit, resend ? "resend" : "first");
   if (!r.ok) return { error: r.error };
   refresh(packageId);
   return {
@@ -122,12 +130,13 @@ export async function sendPaymentEmail(packageId: string, resend = false, edit?:
 }
 
 /** The separate, manual packaging requirements warning (for packages that arrived in unacceptable packaging). */
-export async function sendPackagingWarningEmail(packageId: string, edit?: { subject?: string; body?: string }): Promise<CsActionState> {
+export async function sendPackagingWarningEmail(packageId: string, edit?: EditInput): Promise<CsActionState> {
   const org = await requireAgent();
   const checked = await checkEdit(org, edit, true);
   if ("error" in checked) return { error: checked.error };
   const p = await ownPackage(org.organizationId, packageId);
   if (!p) return { error: "That order wasn't found." };
+  if (p.overallPackaging !== "NOT_ACCEPTABLE") return { error: "The packaging on this order wasn't marked not acceptable, so there is no packaging warning to send." };
   const r = await deliverCustomerEmail(org, packageId, "WARNING", checked.edit);
   if (!r.ok) return { error: r.error };
   refresh(packageId);
@@ -172,6 +181,7 @@ export async function saveEmailSettings(formData: FormData): Promise<CsActionSta
     .insert(receivingSettings)
     .values({ organizationId: org.organizationId, ...values })
     .onConflictDoUpdate({ target: receivingSettings.organizationId, set: { ...values, updatedAt: sql`(current_timestamp)` } });
+  await logActivity(org, "OTHER", `Changed the customer email settings (emails ${emailsEnabled ? "on" : "off"})`, { type: "organization", id: org.organizationId });
   revalidatePath("/dashboard/customer-service", "layout");
   revalidatePath("/dashboard/receiving", "layout");
   return { ok: true };
@@ -193,6 +203,7 @@ export async function saveEmailTemplate(key: string, subject: string, body: stri
       target: [receivingEmailTemplates.organizationId, receivingEmailTemplates.templateKey],
       set: { ...values, updatedByUserId: org.userId, updatedAt: sql`(current_timestamp)` },
     });
+  await logActivity(org, "OTHER", `Edited the wording of the "${key}" customer email template`, { type: "organization", id: org.organizationId });
   revalidatePath("/dashboard/customer-service", "layout");
   return { ok: true };
 }
@@ -203,6 +214,7 @@ export async function resetEmailTemplate(key: string): Promise<CsActionState> {
   if (!isAdmin(org.role)) return { error: "Only an owner or admin can edit the email templates." };
   if (!isTemplateKey(key)) return { error: "Unknown template." };
   await db.delete(receivingEmailTemplates).where(and(eq(receivingEmailTemplates.organizationId, org.organizationId), eq(receivingEmailTemplates.templateKey, key)));
+  await logActivity(org, "OTHER", `Put the "${key}" customer email template back to the original wording`, { type: "organization", id: org.organizationId });
   revalidatePath("/dashboard/customer-service", "layout");
   return { ok: true };
 }

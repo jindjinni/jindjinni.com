@@ -15,6 +15,8 @@ export type PaidFacts = {
   draftAdjustment: boolean;
   /** Received rows whose return decision is still "Pending Review". */
   pendingReturnLines: number;
+  /** Receiving marked "Adjustment Needed: Yes" but no adjusted payout was entered and no adjustment quotation was finalised. */
+  adjustmentUnentered?: boolean;
 };
 
 /** Why the order can't be marked Paid yet, in plain words, or null when it can. */
@@ -24,6 +26,7 @@ export function paidBlocker(f: PaidFacts): string | null {
   if (f.recalledLines > 0) return `${f.recalledLines === 1 ? "A received product is" : `${f.recalledLines} received products are`} on hold for a recall. Resolve that before paying.`;
   if (f.draftAdjustment) return "An adjustment quotation is still a draft. Finish or delete it so the payout is final.";
   if (f.pendingReturnLines > 0) return "Some products are still waiting for a return decision.";
+  if (f.adjustmentUnentered) return "Receiving marked an adjustment on this order, but the adjusted payout isn't entered yet. Finish the adjustment in Receiving (Step 7) so the right amount is paid.";
   if (f.decision !== "NEED_TO_BE_PAID") return "This order isn't waiting to be paid. Move it to Need to Be Paid first.";
   if (!f.hasReceipt) return "Attach the payment receipt first, then mark the order Paid.";
   return null;

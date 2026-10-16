@@ -78,8 +78,10 @@ export function Composer({ draft, canSetTag = false }: { draft: EmailDraft; canS
   const [switchTo, setSwitchTo] = useState<string | null>(null);
   const [wSubject, setWSubject] = useState(draft.warning.subject);
   const [wBody, setWBody] = useState(draft.warning.body);
+  const [check, setCheck] = useState({ blockers: draft.blockers, ready: draft.ready, warnings: draft.warnings });
   const edited = subject !== base.subject || body !== base.body;
-  const edit = () => ({ template, subject, body });
+  // What goes to the server: the wording on screen, plus the wording the page started from, so a stale page is caught.
+  const edit = () => ({ template, subject, body, baseSubject: base.subject, baseBody: base.body });
 
   function applyTemplate(key: string) {
     setSwitchTo(null);
@@ -92,6 +94,7 @@ export function Composer({ draft, canSetTag = false }: { draft: EmailDraft; canS
       setBody(r.body);
       setBase({ subject: r.subject, body: r.body });
       setAtts({ files: (r.attachments ?? []).map((a) => ({ ...a })), pdf: r.adjustmentPdf ?? null });
+      setCheck({ blockers: r.blockers ?? [], ready: !!r.ready, warnings: r.warnings ?? [] });
     });
   }
   const pickTemplate = (key: string) => {
@@ -125,7 +128,8 @@ export function Composer({ draft, canSetTag = false }: { draft: EmailDraft; canS
       return sendPaymentEmail(draft.packageId, false, editable ? edit() : undefined);
     });
 
-  const blocked = !draft.ready;
+  const blocked = editable ? !check.ready : !draft.ready;
+  const blockers = editable ? check.blockers : draft.blockers;
   return (
     <div className="mt-3 space-y-5">
       <header className="flex flex-wrap items-start justify-between gap-3">
@@ -133,8 +137,8 @@ export function Composer({ draft, canSetTag = false }: { draft: EmailDraft; canS
           <h1 className="text-xl font-bold text-slate-900 dark:text-slate-50">{draft.customerName} — {draft.quotationNumber}</h1>
           <p className="text-sm text-slate-600 dark:text-slate-400">{draft.to ?? "No email address on the order"}</p>
         </div>
-        <span className={`rounded-full px-3 py-1 text-xs font-bold ${sent ? "bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-100" : draft.ready ? "bg-green-100 text-green-900 dark:bg-green-900/40 dark:text-green-100" : "bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-100"}`} data-testid="cs-status">
-          {sent ? "Emailed" : draft.ready ? "Ready to send" : "Needs attention"}
+        <span className={`rounded-full px-3 py-1 text-xs font-bold ${sent ? "bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-100" : !blocked ? "bg-green-100 text-green-900 dark:bg-green-900/40 dark:text-green-100" : "bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-100"}`} data-testid="cs-status">
+          {sent ? "Emailed" : !blocked ? "Ready to send" : "Needs attention"}
         </span>
       </header>
 
@@ -163,7 +167,7 @@ export function Composer({ draft, canSetTag = false }: { draft: EmailDraft; canS
         <section role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100" data-testid="cs-blockers">
           <p className="font-semibold">This email can&apos;t be sent yet:</p>
           <ul className="mt-1 list-disc space-y-0.5 pl-5">
-            {draft.blockers.map((b) => <li key={b}>{b}</li>)}
+            {blockers.map((b) => <li key={b}>{b}</li>)}
           </ul>
         </section>
       )}
@@ -186,6 +190,11 @@ export function Composer({ draft, canSetTag = false }: { draft: EmailDraft; canS
               ))}
             </select>
             <p className="mt-1 text-xs text-slate-500" data-testid="cs-template-hint">{draft.templates.find((t) => t.key === template)?.usedWhen}</p>
+            {check.warnings.length > 0 && (
+              <ul className="mt-2 list-disc space-y-0.5 rounded-lg bg-amber-50 px-3 py-2 pl-7 text-sm text-amber-950 dark:bg-amber-950/40 dark:text-amber-100" data-testid="cs-warnings">
+                {check.warnings.map((w) => <li key={w}>{w}</li>)}
+              </ul>
+            )}
             {switchTo && (
               <p className="mt-2 flex flex-wrap items-center gap-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:bg-amber-950/40 dark:text-amber-100" role="alert" data-testid="cs-switch-confirm">
                 Switching template replaces the words you changed.
@@ -301,7 +310,7 @@ export function Composer({ draft, canSetTag = false }: { draft: EmailDraft; canS
               </span>
             )}
             <span>Send the packaging warning to {draft.to}?</span>
-            <button type="button" onClick={() => run(() => sendPackagingWarningEmail(draft.packageId, editable ? { subject: wSubject, body: wBody } : undefined))} disabled={pending} className="rounded-lg bg-amber-600 px-3 py-1.5 font-semibold text-white disabled:opacity-50" data-testid="cs-warning-confirm">Yes, send</button>
+            <button type="button" onClick={() => run(() => sendPackagingWarningEmail(draft.packageId, editable ? { subject: wSubject, body: wBody, baseSubject: draft.warning.subject, baseBody: draft.warning.body } : undefined))} disabled={pending} className="rounded-lg bg-amber-600 px-3 py-1.5 font-semibold text-white disabled:opacity-50" data-testid="cs-warning-confirm">Yes, send</button>
             <button type="button" onClick={() => setConfirming(null)} className="rounded-lg border border-slate-300 px-3 py-1.5 dark:border-slate-700">Cancel</button>
           </span>
         ) : (

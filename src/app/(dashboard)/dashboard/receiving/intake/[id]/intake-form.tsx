@@ -838,7 +838,7 @@ export function IntakeForm(props: Props) {
               {[
                 ["Total Product Lines", String(summary.lines)],
                 ["Total Quantity", String(summary.quantityReceived)],
-                ["Discrepancy Status", summary.anyDiscrepancy ? "Discrepancy" : "None"],
+                ["Discrepancy Status", finalStatus === "RECEIVING_COMPLETE_WITH_DISCREPANCY" ? "Discrepancy" : "None"],
                 ["Total Quantity To Be Returned", String(summary.quantityToReturn)],
                 ["Recall Check", recalledNames.length ? `RECALLED: ${recalledNames.join(", ")}` : checkedCount ? `${checkedCount} product${checkedCount === 1 ? "" : "s"} checked, none on the lists we have` : "Not checked"],
                 ["Units Scanned", serials.length ? `${serials.length} scanned${scanFlagged ? `, ${scanFlagged} flagged (repeated, made-up or wrong serial, recalled or expired)` : ", none flagged"}` : "None scanned"],
@@ -846,7 +846,7 @@ export function IntakeForm(props: Props) {
               ].map(([label, value]) => (
                 <div key={label} className="grid grid-cols-[minmax(0,15rem)_1fr] gap-4 border-b border-slate-100 py-2.5 dark:border-slate-800/70">
                   <dt className="text-slate-700 dark:text-slate-200">{label}</dt>
-                  <dd className={`font-medium tabular-nums ${label === "Discrepancy Status" ? (summary.anyDiscrepancy ? "text-orange-700 dark:text-orange-300" : "text-green-700 dark:text-green-400") : (label === "Recall Check" && recalledNames.length) || (label === "Units Scanned" && scanFlagged) ? "text-red-700 dark:text-red-300" : ""}`}>{value}</dd>
+                  <dd className={`font-medium tabular-nums ${label === "Discrepancy Status" ? (finalStatus === "RECEIVING_COMPLETE_WITH_DISCREPANCY" ? "text-orange-700 dark:text-orange-300" : "text-green-700 dark:text-green-400") : (label === "Recall Check" && recalledNames.length) || (label === "Units Scanned" && scanFlagged) ? "text-red-700 dark:text-red-300" : ""}`}>{value}</dd>
                 </div>
               ))}
             </dl>

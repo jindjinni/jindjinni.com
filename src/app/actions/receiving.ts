@@ -660,6 +660,11 @@ export async function reopenReceiving(packageId: string): Promise<ReceivingActio
   const org = await requireWriter();
   const p = await ownPackage(org.organizationId, packageId);
   if (!p) return { error: "That shipment wasn't found." };
+  // A Paid order is final until Accounts takes it out of Paid: reopening it would pull its units out of Inventory
+  // and drop it off the Accounts and Customer Service lists while it still reads Paid.
+  if (p.accountsDecision === "PAID" || p.accountsStatus === "PAID") {
+    return { error: "This shipment is marked Paid, so it can't be reopened. Accounts must take it out of Paid first." };
+  }
   await db
     .update(receivingPackages)
     .set({ status: "IN_PROGRESS", submittedAt: null, submittedByUserId: null, updatedAt: sql`(current_timestamp)` })

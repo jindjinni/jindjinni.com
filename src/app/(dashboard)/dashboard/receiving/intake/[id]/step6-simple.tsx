@@ -133,6 +133,12 @@ function ProductCard({ n, row, ...p }: Shared & { n: number; row: ItemState }) {
     }
     setSaving(false);
     setSaved(all);
+    // Inventory reads the product row's own Lot Number. When it is still empty and this product has exactly one lot,
+    // fill it in (typed in the Lot Number column like any other change); never replace something already there.
+    if (!row.lotNumber.trim() && done >= entries.length) {
+      const oneLot = [...new Set([...nums.lots, ...lots].map((l) => l.trim()).filter(Boolean))];
+      if (oneLot.length === 1) onPatchMany({ [row.id]: { lotNumber: oneLot[0] } });
+    }
     if (done >= entries.length) {
       setLotsText("");
       setSerialsText("");

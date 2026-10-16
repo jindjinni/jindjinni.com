@@ -129,7 +129,7 @@ export const FEATURES: FeatureDef[] = [
   {
     key: "cs-email-edit",
     label: "Customer Service: choose and edit the email",
-    blurb: "Customer Service -> an order -> The email: pick which template to send (Standard, Packaging notice, Adjustment, Adjustment + packaging, or the Packaging warning), and edit the subject and the whole text before pressing Send. What you write is exactly what the customer gets and is kept in the order's email history. Off = the recommended template and only the note box can be changed.",
+    blurb: "Customer Service -> an order -> The email: pick which template to send (Standard, Packaging notice, Adjustment, Adjustment + packaging), and edit the subject and the whole text before pressing Send (the separate Packaging warning can be edited too). What you write is exactly what the customer gets and is kept in the order's email history. Off = the recommended template and only the note box can be changed.",
     defaultStage: "mothership",
   },
   {

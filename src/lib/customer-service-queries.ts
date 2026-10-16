@@ -12,7 +12,7 @@ import {
 import { finalPayout, pickEmailTemplate } from "@/lib/receiving-rules";
 import { getEmailTemplates, getReceivingPackage, getReceivingSettings } from "@/lib/receiving-queries";
 import { planCustomerEmail } from "@/lib/receiving-service";
-import { emailReadiness, STATUS_TEMPLATE_KEYS, TEMPLATE_LABEL, type CsOrder } from "@/lib/customer-service-rules";
+import { emailReadiness, STATUS_TEMPLATE_KEYS, TEMPLATE_LABEL, templateWarnings, type CsOrder } from "@/lib/customer-service-rules";
 import { TEMPLATE_BY_KEY } from "@/lib/email-templates";
 import { featureOn } from "@/lib/features";
 import type { EmailTemplateKey } from "@/lib/receiving-rules";
@@ -67,7 +67,8 @@ type Row = {
 };
 
 const customerName = (r: Row) => (r.firstName ? [r.firstName, r.lastName].filter(Boolean).join(" ") : r.nameSnap);
-const customerEmail = (r: Row) => r.email?.trim() || null;
+/** The same address the order page and the send use: the customer record, else the address typed on the quotation. */
+const customerEmail = (r: Row) => (r.email ?? r.emailSnap)?.trim() || null;
 
 async function photoKindCounts(organizationId: string, packageIds: string[]) {
   const out = new Map<string, { receipt: number; revised: number }>();
@@ -103,7 +104,7 @@ async function finalAdjustments(organizationId: string, packageIds: string[]) {
   return out;
 }
 
-function toOrder(r: Row, o: { emailsEnabled: boolean; hasWebsiteLink: boolean; senderProblem: string | null; photos: Map<string, { receipt: number; revised: number }>; finals: Set<string>; emailedAt: string | null; count: number; tags?: boolean }): CsOrder {
+function toOrder(r: Row, o: { emailsEnabled: boolean; hasWebsiteLink: boolean; senderProblem: string | null; photos: Map<string, { receipt: number; revised: number }>; finals: Set<string>; emailedAt: string | null; count: number; tags?: boolean; editable?: boolean }): CsOrder {
   const p = o.photos.get(r.id);
   const readiness = emailReadiness({
     emailsEnabled: o.emailsEnabled,
@@ -119,6 +120,7 @@ function toOrder(r: Row, o: { emailsEnabled: boolean; hasWebsiteLink: boolean; s
     adjustedOrderTotal: r.adjustedTotal,
     adjustmentAmountEmail: r.adjustmentAmountEmail,
     hasRevisedInvoice: (p?.revised ?? 0) > 0 || o.finals.has(r.id),
+    emailEditable: o.editable,
   });
   return {
     id: r.id,
@@ -156,7 +158,8 @@ export async function getToBeEmailed(organizationId: string): Promise<CsOrder[]>
   const ids = rows.map((r) => r.id);
   const [settings, photos, finals, conn] = await Promise.all([getReceivingSettings(organizationId), photoKindCounts(organizationId, ids), finalAdjustments(organizationId, ids), getConnection(organizationId)]);
   const tags = await featureOn("order-tags", organizationId);
-  return rows.map((r) => toOrder(r, { emailsEnabled: settings.emailsEnabled, hasWebsiteLink: !!settings.quoteLinkUrl.trim(), senderProblem: senderProblemOf(conn), photos, finals, emailedAt: null, count: 0, tags }));
+  const editable = await featureOn("cs-email-edit", organizationId);
+  return rows.map((r) => toOrder(r, { emailsEnabled: settings.emailsEnabled, hasWebsiteLink: !!settings.quoteLinkUrl.trim(), senderProblem: senderProblemOf(conn), photos, finals, emailedAt: null, count: 0, tags, editable }));
 }
 
 /** Orders the customer was emailed about (the payment email), the most recently emailed first. */
@@ -280,6 +283,8 @@ export type EmailDraft = {
   warning: { subject: string; body: string };
   /** Feature `order-tags`. */
   tags: OrderTagInfo | null;
+  /** Feature `cs-email-edit`: things to double-check about the chosen template (never stop a send). */
+  warnings: string[];
 };
 
 /** The two small tags on an order: the email went out (automatic) and a person messaged the customer on Facebook. */
@@ -313,6 +318,7 @@ export async function getEmailDraft(org: { organizationId: string; organizationN
     adjustmentAmountEmail: pkg.adjustmentAmountEmail,
     hasRevisedInvoice: data.photos.some((p) => !p.itemId && p.kind === "REVISED_INVOICE") || !!adjFinal,
     emailEditable: editable,
+    template: editable ? plan.template : undefined,
   });
   const history = await getSentEmails(org.organizationId, packageId);
   const fromName = settings.fromName.trim() || org.organizationName;
@@ -348,6 +354,9 @@ export async function getEmailDraft(org: { organizationId: string; organizationN
     templates: STATUS_TEMPLATE_KEYS.map((k) => ({ key: k, label: TEMPLATE_LABEL[k], usedWhen: TEMPLATE_BY_KEY[k].usedWhen })),
     warning: { subject: warningPlan.built.subject, body: warningPlan.built.body },
     tags: tagsOn ? await orderTagInfo(pkg) : null,
+    warnings: editable
+      ? templateWarnings({ template: plan.template, recommended: pickEmailTemplate(pkg), adjustmentNeeded: pkg.adjustmentNeeded === "YES" ? "YES" : pkg.adjustmentNeeded === "NO" ? "NO" : null, packagingNotAcceptable: pkg.overallPackaging === "NOT_ACCEPTABLE" })
+      : [],
   };
 }
 

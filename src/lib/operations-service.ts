@@ -5,7 +5,7 @@ import { getOrganization } from "@/lib/queries";
 import { purchasingReceiveAddress, shippingAddressOf } from "@/lib/org-addresses";
 import { and, count, eq, inArray, isNotNull, or } from "drizzle-orm";
 import { db } from "@/db/client";
-import { documentTemplates, mailboxes, organizations, purchasingProducts, purchasingPurchaseOrders, purchasingQuotations, purchasingSuppliers, salesBuyers, shippoConnections } from "@/db/schema";
+import { documentTemplates, mailboxes, organizations, receivingSettings, purchasingProducts, purchasingPurchaseOrders, purchasingQuotations, purchasingSuppliers, salesBuyers, shippoConnections } from "@/db/schema";
 import { featureOn } from "@/lib/features";
 import { logActivity } from "@/lib/hr-service";
 import { type OperationType } from "@/lib/operation-type";
@@ -159,7 +159,7 @@ export async function stepProgressOf(organizationId: string): Promise<StepProgre
     const [r] = await db.select({ c: count() }).from(table).where(eq(table.organizationId, organizationId));
     return Number(r?.c ?? 0) > 0;
   };
-  const [shippo, products, quotation, supplier, buyers, po, poTemplate, emails] = await Promise.all([
+  const [shippo, products, quotation, supplier, buyers, po, poTemplate, emails, customerEmails] = await Promise.all([
     n(shippoConnections),
     n(purchasingProducts),
     n(purchasingQuotations),
@@ -168,7 +168,9 @@ export async function stepProgressOf(organizationId: string): Promise<StepProgre
     n(purchasingPurchaseOrders),
     db.select({ c: count() }).from(documentTemplates).where(and(eq(documentTemplates.organizationId, organizationId), eq(documentTemplates.docType, "PURCHASE_ORDER"), eq(documentTemplates.department, "purchasing"))).then((r) => Number(r[0]?.c ?? 0) > 0),
     db.select({ c: count() }).from(mailboxes).where(and(eq(mailboxes.organizationId, organizationId), or(isNotNull(mailboxes.plannedEmail), isNotNull(mailboxes.accountEmail)))).then((r) => Number(r[0]?.c ?? 0) > 0),
+    // Customer emails are on and the website link every email carries is set (Customer Service -> Email Settings).
+    db.select({ on: receivingSettings.emailsEnabled, link: receivingSettings.quoteLinkUrl }).from(receivingSettings).where(eq(receivingSettings.organizationId, organizationId)).limit(1).then((r) => !!r[0]?.on && !!(r[0]?.link ?? "").trim()),
   ]);
   const orgRow = await getOrganization(organizationId);
-  return { shippo, products, quotation, supplier, buyers, po, "po-look": poTemplate, emails, address: !!shippingAddressOf(orgRow), "receive-address": !!purchasingReceiveAddress(orgRow) };
+  return { shippo, products, quotation, supplier, buyers, po, "po-look": poTemplate, emails, "customer-emails": customerEmails, address: !!shippingAddressOf(orgRow), "receive-address": !!purchasingReceiveAddress(orgRow) };
 }

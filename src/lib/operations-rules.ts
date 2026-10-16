@@ -122,6 +122,7 @@ export const SIDE_INFO: Record<Side, SideInfo> = {
       { id: "address", text: "Check the address your Shipping labels go out from", href: "/dashboard/settings/business" },
       { id: "emails", text: "Set up your department email addresses", href: "/dashboard/settings/emails" },
       { id: "email-flow", text: "Read how your emails work, step by step", href: "/dashboard/settings/email-flow" },
+      { id: "customer-emails", text: "Turn on customer emails and add your website link (Customer Service -> Email Settings), or payment emails can't be sent", href: "/dashboard/customer-service/email-settings" },
       { id: "products", text: "Add your products and prices", href: "/dashboard/purchasing/products" },
       { id: "quotation", text: "Make your first quotation", href: "/dashboard/purchasing/quotations" },
     ],
