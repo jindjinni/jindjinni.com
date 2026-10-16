@@ -228,3 +228,11 @@ An approved pharmacy sees only the products on ITS OWN price sheet (Sales -> Buy
 - **Double submit.** The same key (a hidden field per page load, or the website's `idempotencyKey` / `Idempotency-Key` header) returns the first order (`created: false`) instead of making a second, including when five requests arrive at once. A pharmacy may place 30 orders a day.
 - **API (secret key only; a public key gets `not_allowed_for_key`):** `GET /pharmacies?email=` (finds the approved pharmacy; the website signs its own pharmacies in), `GET /pharmacies/{id}/catalog`, `GET`/`POST /pharmacies/{id}/orders`, `GET /pharmacies/{id}/orders/{reference}`. A pharmacy that belongs to another company, is pending, suspended or hidden is "not found". `GET /api/storefront/v1` reports `accepting.pharmacyOrders`. Out-of-stock answers are `409 items_unavailable` with the item ids and names.
 - Not built yet (Phase 4): paying for the order online. Orders are invoiced and paid the usual way until then.
+
+### Public website: not tied to one industry (2026-10-16)
+
+The home page, page title, search description, `llms.txt` and sign-up intro now describe jindjinni as operations software for any business that
+buys, sells and stores goods, aimed at small and family businesses still on pen and paper as well as growing teams. A new "Choose your industry"
+section (words in `INDUSTRIES`, `src/lib/landing-content.ts`) shows Medical supplies as available now and one "More industries, coming soon" card.
+It names no other industry on purpose: none is promised until it ships. When a second industry ships, add its card there (live: true, with a link),
+and the Wholesale / Distribution / Both pages stay as the medical supply layouts. The legal pages and the sign-up operation choices are unchanged.

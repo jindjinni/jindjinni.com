@@ -72,7 +72,7 @@ export function SignupForm({ needsVerification, book, referred = false, askSecon
         </p>
         <h1 className="mt-4 text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">Create your account</h1>
         <p className="mt-3 max-w-2xl text-base text-muted">
-          Set up your own company on jindjinni enterprise software. You become the Owner, your data stays separate from
+          Set up your own company on jindjinni. You become the Owner, your data stays separate from
           every other company, and you get a ready-made starting layout for every department. We&rsquo;ll also set up
           your Business Profile now, since it appears on your quotations, receipts and reports. Most of it is required,
           and a few fields are optional.

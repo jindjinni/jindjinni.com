@@ -11,9 +11,9 @@ import { OPERATOR_NAME } from "@/lib/legal";
 // SPEC.md.
 
 export const metadata: Metadata = {
-  title: "jindjinni | Enterprise software for your entire business",
+  title: "jindjinni | Software that runs the operations of your business",
   description:
-    "jindjinni is enterprise software for wholesalers and distributors of medical supplies. It connects purchasing, receiving, accounts, customer service, inventory, sales, shipping, marketing, HR and team chat on one platform, with recall and counterfeit checks on every item received, for growing companies of up to 100 people.",
+    "jindjinni is operations software for businesses that buy, sell and store goods. Choose your industry and get a ready-made layout for purchasing, receiving, accounts, customer service, inventory, sales, shipping, marketing, HR and team chat on one platform, so you can leave pen, paper and scattered spreadsheets behind. Available today for medical supply wholesalers and distributors, with more industries on the way. Built for teams of up to 100 people.",
   creator: OPERATOR_NAME,
   // Read by crawlers and AI agents that look at a page's metadata.
   other: { "ai-notice": NOTICE_SHORT, copyright: `${OPERATOR_NAME}. All rights reserved.` },

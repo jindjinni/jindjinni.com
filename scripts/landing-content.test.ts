@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { AUDIENCES, BANNED_WORDS, BOTH, BOTH_POINTS, DIRECT_SOURCING, DISTRIBUTION, OPERATIONS, SAFETY_CHECKS, SAFETY_LIMITS, WHOLESALE } from "../src/lib/landing-content";
+import { AUDIENCES, BANNED_WORDS, BOTH, BOTH_POINTS, DIRECT_SOURCING, DISTRIBUTION, HOW_SECTION, INDUSTRIES, OPERATIONS, SAFETY_CHECKS, SAFETY_LIMITS, WHOLESALE } from "../src/lib/landing-content";
 import { DEPARTMENT_MENUS } from "../src/lib/sidebar-menu";
 import { AFFILIATE_MONTHLY_PERCENT, AFFILIATE_MONTHS, AFFILIATE_PROGRAM, AFFILIATE_YEARLY_PERCENT, REFERRED_DISCOUNT_PERCENT, affiliateExample } from "../src/lib/affiliate-program";
 import { OPERATION_OPTIONS, readSignupChoice, signupHref } from "../src/lib/operation-type";
@@ -15,6 +15,8 @@ const all = (): string[] => {
   for (const k of SAFETY_CHECKS) out.push(k.title, k.body);
   out.push(DIRECT_SOURCING.title, DIRECT_SOURCING.body, ...DIRECT_SOURCING.steps.flatMap((x) => [x.title, x.body]));
   out.push(SAFETY_LIMITS);
+  out.push(INDUSTRIES.title, INDUSTRIES.body, ...INDUSTRIES.steps.flatMap((x) => [x.title, x.body]), ...INDUSTRIES.cards.flatMap((c) => [c.name, c.status, c.body]));
+  out.push(HOW_SECTION.title, HOW_SECTION.body);
   return out;
 };
 
@@ -102,3 +104,12 @@ const exText = affiliateExample({ monthlyCents: 97700, yearlyCents: 1049900, mon
 assert.ok(/\$390\.80/.test(exText) && /\$1574\.85/.test(exText) && /\$97\.70/.test(exText) && /\$1049\.90/.test(exText), "the example is worked out from the numbers it is given");
 
 console.log("landing-content: ok");
+
+// "Choose your industry": medical supplies is the only layout open today and the page must say so, without naming industries that don't exist yet
+assert.equal(INDUSTRIES.steps.length, 3);
+assert.equal(INDUSTRIES.cards.filter((c) => c.live).length, 1, "only one industry is live");
+assert.equal(INDUSTRIES.cards.find((c) => c.live)!.name, "Medical supplies");
+assert.ok(INDUSTRIES.cards.filter((c) => !c.live).every((c) => /coming soon/i.test(c.status) && !c.href), "an industry that is not open has no link");
+assert.ok(AUDIENCES.some((a) => /pen and paper/i.test(a.body)), "small businesses on pen and paper are named");
+assert.ok(!/enterprise/i.test(all().join(" ")), "the public words do not call it enterprise software");
+console.log("industries ok");

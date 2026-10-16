@@ -12,7 +12,7 @@ import { Icon, LogoMark, Sparkle, type IconName } from "@/components/landing/ico
 import { AffiliateProgramSection, AudienceSection, DirectSourcingSection, Eyebrow, SafetySection, SiteFooter, SiteHeader, btnPrimary, btnSecondary } from "@/components/landing/site-shell";
 import { affiliateExample } from "@/lib/affiliate-program";
 import { affiliateExampleNumbers } from "@/lib/pricing-rules";
-import { AUDIENCES, BOTH, DISTRIBUTION, HOW_SECTION, WHOLESALE } from "@/lib/landing-content";
+import { AUDIENCES, BOTH, DISTRIBUTION, HOW_SECTION, INDUSTRIES, WHOLESALE } from "@/lib/landing-content";
 import { HeroDashboard } from "@/components/landing/mocks";
 
 const departments: { icon: IconName; title: string; body: string }[] = [
@@ -101,7 +101,7 @@ export default async function Home() {
             <div>
               <p className="inline-flex items-center gap-2 rounded-full bg-mint px-3.5 py-1.5 text-xs font-bold text-brand-deep ring-1 ring-inset ring-mint-line">
                 <span className="h-1.5 w-1.5 rounded-full bg-brand" />
-                Premium enterprise software
+                Operations software for growing businesses
               </p>
               <h1 className="relative mt-6 text-balance text-5xl font-extrabold leading-[1.02] tracking-tight sm:text-6xl lg:text-[4.25rem]">
                 Your Entire Business,{" "}
@@ -113,7 +113,7 @@ export default async function Home() {
                 Purchasing. Receiving. Accounts. Customer Service. Inventory. Sales. Shipping. Marketing. HR. Chat.
               </p>
               <p className="mt-4 max-w-xl text-lg text-muted">
-                jindjinni is enterprise software for companies that buy and sell medical supplies. Every department on one connected record, with safety checks built in. Enter it once, and everyone sees it.
+                jindjinni is operations software for businesses that buy, sell and store goods. Choose your industry and get a ready-made layout for how your business runs, with every department on one connected record. Enter it once, and everyone sees it. Made for owners leaving pen and paper behind, and for growing teams.
               </p>
               <div className="mt-9 flex flex-wrap gap-3">
                 <Link href="/signup" className={btnPrimary}>
@@ -125,7 +125,7 @@ export default async function Home() {
                 </Link>
               </div>
               <p className="mt-5 text-sm font-bold text-ink" data-testid="hero-sides">
-                See how it works for{" "}
+                Available today for medical supplies. See how it works for{" "}
                 <Link href="/wholesale" className="underline decoration-brand decoration-2 underline-offset-4 hover:decoration-ink">Wholesale</Link>,{" "}
                 <Link href="/distribution" className="underline decoration-brand decoration-2 underline-offset-4 hover:decoration-ink">Distribution</Link> or{" "}
                 <Link href="/both" className="underline decoration-brand decoration-2 underline-offset-4 hover:decoration-ink">both together</Link>.
@@ -150,8 +150,48 @@ export default async function Home() {
           </dl>
         </section>
 
+        {/* ---------- Choose your industry ---------- */}
+        <section id="industries" className="scroll-mt-20 bg-white py-20 sm:py-28" data-testid="industries-section">
+          <div className="mx-auto max-w-6xl px-4 sm:px-6">
+            <div className="max-w-3xl">
+              <Eyebrow>{INDUSTRIES.eyebrow}</Eyebrow>
+              <h2 className="mt-3 text-balance text-4xl font-extrabold tracking-tight sm:text-5xl">{INDUSTRIES.title}</h2>
+              <p className="mt-5 text-lg text-muted">{INDUSTRIES.body}</p>
+            </div>
+            {/* A real sequence: order matters, so it is numbered. */}
+            <ol className="mt-10 grid gap-4 md:grid-cols-3" data-testid="industry-steps">
+              {INDUSTRIES.steps.map((st, i) => (
+                <li key={st.title} className="rounded-3xl border border-line bg-white p-5">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand text-sm font-extrabold text-ink">{i + 1}</span>
+                  <h3 className="mt-3 text-lg font-extrabold tracking-tight">{st.title}</h3>
+                  <p className="mt-2 text-[15px] leading-relaxed text-muted">{st.body}</p>
+                </li>
+              ))}
+            </ol>
+            <div className="mt-4 grid gap-4 md:grid-cols-2" data-testid="industry-cards">
+              {INDUSTRIES.cards.map((c) => (
+                <article
+                  key={c.name}
+                  data-testid={`industry-${c.live ? "live" : "soon"}`}
+                  className={`flex flex-col rounded-3xl p-7 ${c.live ? "border-2 border-brand bg-mint" : "border border-dashed border-line bg-slate-50"}`}
+                >
+                  <p className={`inline-flex w-fit rounded-full px-3 py-1 text-xs font-extrabold ${c.live ? "bg-brand text-ink" : "bg-white text-muted ring-1 ring-inset ring-line"}`}>{c.status}</p>
+                  <h3 className="mt-3 text-2xl font-extrabold tracking-tight">{c.name}</h3>
+                  <p className="mt-2 flex-1 text-[15px] leading-relaxed text-muted">{c.body}</p>
+                  {c.href && (
+                    <a href={c.href} className="mt-5 inline-flex items-center gap-2 text-sm font-extrabold text-ink underline decoration-brand decoration-2 underline-offset-4">
+                      {c.cta}
+                      <Icon name="arrow" className="h-4 w-4" />
+                    </a>
+                  )}
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
+
         {/* ---------- How you work: Wholesale, Distribution, Both ---------- */}
-        <section id="how" className="scroll-mt-20 bg-white py-20 sm:py-28" data-testid="how-section">
+        <section id="how" className="scroll-mt-20 bg-slate-50 py-20 sm:py-28" data-testid="how-section">
           <div className="mx-auto max-w-6xl px-4 sm:px-6">
             <div className="max-w-3xl">
               <Eyebrow>{HOW_SECTION.eyebrow}</Eyebrow>
@@ -262,7 +302,7 @@ export default async function Home() {
                 {TRIAL_DAYS} days free. Then one simple price.
               </h2>
               <p className="mt-5 text-lg text-muted" data-testid="home-both-note">
-                Choose what you run. One operation, Wholesale or Distribution, has one price. Running both costs {book.bothPercent}% more, and each keeps its own customers, suppliers, products, orders and payments.
+                Choose the layout that fits how you run. Today that means medical supplies, as Wholesale or Distribution, and one operation has one price. Running both costs {book.bothPercent}% more, and each keeps its own customers, suppliers, products, orders and payments.
               </p>
               <p className="mt-5 text-lg text-muted" data-testid="home-trial">
                 Every new company gets a {TRIAL_DAYS}-day free trial that starts the day we approve it. Nothing is charged during the trial, and you can cancel before it ends.

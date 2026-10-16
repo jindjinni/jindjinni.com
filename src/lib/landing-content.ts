@@ -300,23 +300,28 @@ export type Audience = { icon: IconName; title: string; body: string };
 
 export const AUDIENCES: Audience[] = [
   {
+    icon: "home",
+    title: "Small and family businesses",
+    body: "Still running on pen and paper? Start with a layout made for your industry. There is nothing to design and nothing to set up from scratch.",
+  },
+  {
     icon: "building",
     title: "Owners who want everything in one place",
     body: "Stop switching between tools. One record for the whole company.",
   },
   {
     icon: "shield",
-    title: "Companies that can't afford a recalled or counterfeit item",
-    body: "One bad lot can cost you a customer or a license. jindjinni checks every item and holds anything that looks wrong.",
+    title: "Medical supply companies that can't afford a bad item",
+    body: "One bad lot can cost you a customer or a license. In the medical supply layout, jindjinni checks every item and holds anything that looks wrong.",
   },
   {
     icon: "receiving",
-    title: "Wholesalers who source directly",
+    title: "Medical wholesalers who source directly",
     body: "Packages from strangers are where problems start. Every one is checked before you pay the seller.",
   },
   {
     icon: "distribution",
-    title: "Distributors who sell to pharmacies",
+    title: "Medical distributors who sell to pharmacies",
     body: "Pharmacies, PBMs and regulators ask questions. Keep the answers in one place.",
   },
   {
@@ -359,7 +364,40 @@ export const SAFETY_LIMITS =
 export const BANNED_WORDS = ["guarantee", "100%", "never miss", "catch every", "foolproof", "risk-free", "risk free", "bulletproof"];
 
 export const HOW_SECTION = {
-  eyebrow: "How you work",
+  eyebrow: "Medical supplies, available now",
   title: "Pick your side. See exactly what you get.",
-  body: "Wholesale and Distribution work differently, so each sees only what fits. Choose yours, or see how running both works.",
+  body: "Medical supply companies work in different ways, so each sees only what fits. Choose yours, or see how running both works.",
+};
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Choose your industry (home page). Only medical supplies is open today; the second card says so plainly and names no other industry,
+// because none is promised until it ships.
+
+export type Industry = { name: string; status: string; live: boolean; body: string; href?: string; cta?: string };
+
+export const INDUSTRIES = {
+  eyebrow: "Choose your industry",
+  title: "Software that fits the way your business really runs.",
+  body: "Every business buys, sells, stores and tracks something. Pick your industry and jindjinni sets up the departments, steps and checks that industry actually uses, so you start with a working layout instead of a blank page.",
+  steps: [
+    { title: "Choose your industry", body: "Tell us what kind of business you run." },
+    { title: "Get a layout built for it", body: "Your departments, menus and steps are ready on day one." },
+    { title: "Run your day in one place", body: "Enter it once, and everyone on your team sees it." },
+  ],
+  cards: [
+    {
+      name: "Medical supplies",
+      status: "Available now",
+      live: true,
+      body: "Buy, check, store and sell medical supplies, as a Wholesale company, a Distribution company or both. Recall and counterfeit checks are built in.",
+      href: "#how",
+      cta: "See the medical supply layouts",
+    },
+    {
+      name: "More industries",
+      status: "Coming soon",
+      live: false,
+      body: "We are building layouts for other businesses that buy, sell and store goods. Each one will start with the departments that industry uses.",
+    },
+  ] satisfies Industry[],
 };

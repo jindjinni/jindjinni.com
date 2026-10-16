@@ -30,7 +30,7 @@ export function CheckList({ items, columns = false }: { items: string[]; columns
 }
 
 const NAV: { href: string; label: string }[] = [
-  { href: "/#platform", label: "Departments" },
+  { href: "/#industries", label: "Industries" },
   { href: "/wholesale", label: "Wholesale" },
   { href: "/distribution", label: "Distribution" },
   { href: "/#who", label: "Who it's for" },
@@ -55,7 +55,7 @@ export function SiteHeader() {
         <Link href="/" className="flex items-center" aria-label="jindjinni home">
           <BrandLogo markClass="h-12 w-auto" wordClass="h-5 w-auto sm:h-7" priority />
         </Link>
-        <nav className="hidden items-center gap-6 text-sm font-semibold text-muted lg:flex" aria-label="Sections">
+        <nav className="hidden items-center gap-5 whitespace-nowrap text-sm font-semibold text-muted lg:flex xl:gap-6" aria-label="Sections">
           {NAV.map((n) => (
             <Link key={n.href} href={n.href} className="hover:text-ink">
               {n.label}
@@ -208,11 +208,12 @@ export function AudienceSection({ items }: { items: Audience[] }) {
         <div className="max-w-3xl">
           <Eyebrow>Who it&rsquo;s for</Eyebrow>
           <h2 className="mt-3 text-balance text-4xl font-extrabold tracking-tight sm:text-5xl">
-            Built for companies that buy and sell medical supplies.
+            Built for businesses that buy, sell and store goods.
           </h2>
           <p className="mt-5 text-lg text-muted">
-            If you want the whole company in one place, and you can&rsquo;t afford a recalled or counterfeit item getting into your
-            stock, jindjinni was made for you.
+            If you still run your business on pen and paper, spreadsheets or sticky notes, jindjinni gives you a ready-made layout
+            for your industry, with nothing to design yourself. If you are a growing company that wants everything in one place,
+            it was made for you too.
           </p>
         </div>
         <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -231,7 +232,7 @@ export function SafetySection({ id = "safety", checks = SAFETY_CHECKS }: { id?: 
     <section id={id} className="scroll-mt-20 bg-mint py-20 sm:py-28" data-testid="safety-section">
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
         <div className="max-w-3xl">
-          <Eyebrow>Recall and counterfeit protection</Eyebrow>
+          <Eyebrow>Medical supplies: recall and counterfeit protection</Eyebrow>
           <h2 className="mt-3 text-balance text-4xl font-extrabold tracking-tight sm:text-5xl">
             Strict checks, so the wrong product never gets into your business.
           </h2>

@@ -7,7 +7,7 @@ export function GET() {
   const body = [
     "# jindjinni",
     "",
-    "> Proprietary business software (purchasing, receiving, accounts, customer service, inventory, sales, shipping, marketing, HR, chat) for Wholesale and Distribution companies. The signed-in product is private. Nothing here is offered for AI training, copying or reproduction.",
+    "> Proprietary operations software (purchasing, receiving, accounts, customer service, inventory, sales, shipping, marketing, HR, chat) that gives a business a ready-made layout for its industry. Available today for medical supply Wholesale and Distribution companies, with more industries planned. The signed-in product is private. Nothing here is offered for AI training, copying or reproduction.",
     "",
     aiPolicyText(),
   ].join("\n");
