@@ -16,7 +16,8 @@ export default async function EmailSettingsPage() {
   const org = await requireOrg();
   if (!isAdmin(org.role)) notFound();
   const [initial, stored] = await Promise.all([getReceivingSettings(org.organizationId), getEmailTemplates(org.organizationId)]);
-  const rows: TemplateRow[] = TEMPLATE_DEFS.map((d) => ({
+  const splitOn = await featureOn("separate-packaging-email", org.organizationId);
+  const rows: TemplateRow[] = TEMPLATE_DEFS.filter((d) => splitOn || d.key !== "ADJUSTMENT_SEPARATE").map((d) => ({
     key: d.key,
     label: d.label,
     usedWhen: d.usedWhen,

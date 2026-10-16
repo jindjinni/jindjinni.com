@@ -43,6 +43,16 @@ export async function autoSendPaymentEmail(org: OrgRef, packageId: string): Prom
       return { status: "held", message: `Marked Paid. The customer email was not sent automatically: ${sent.error} It is waiting in Customer Service, To Be Emailed.` };
     }
     if (pkg) await auditReceiving(org, pkg.quotationId, "customer-service", `Payment email sent automatically when the order was marked Paid (${sent.template})`);
+    // Adjusted AND bad packaging (feature `separate-packaging-email`): the packaging warning goes as its own second email.
+    if (sent.template === "ADJUSTMENT_SEPARATE" && !draft.packagingWarningSentAt) {
+      const warned = await deliverCustomerEmail(org, packageId, "WARNING");
+      if (!warned.ok) {
+        if (pkg) await auditReceiving(org, pkg.quotationId, "customer-service", `Packaging warning not sent automatically: ${warned.error}`);
+        return { status: "sent", message: `Marked Paid. The customer was emailed automatically. The separate packaging warning was not sent: ${warned.error} Send it from the order in Customer Service.` };
+      }
+      if (pkg) await auditReceiving(org, pkg.quotationId, "customer-service", "Packaging warning sent automatically as a separate email when the order was marked Paid");
+      return { status: "sent", message: "Marked Paid. The customer was emailed automatically: the adjustment email and the packaging warning, as two separate emails." };
+    }
     return { status: "sent", message: "Marked Paid. The customer was emailed automatically." };
   } catch (e) {
     console.error("[auto-payment-email]", e);

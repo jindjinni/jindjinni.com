@@ -298,11 +298,15 @@ export function formatMoney(n: number): string {
   return `${n < 0 ? "-" : ""}$${abs}`;
 }
 
-export type EmailTemplateKey = "STANDARD" | "STANDARD_PACKAGING_NOTICE" | "ADJUSTMENT_PACKAGING" | "ADJUSTMENT_ONLY";
-/** Which customer email applies to a shipment. */
-export function pickEmailTemplate(s: { adjustmentNeeded?: string | null; overallPackaging?: string | null }): EmailTemplateKey {
+export type EmailTemplateKey = "STANDARD" | "STANDARD_PACKAGING_NOTICE" | "ADJUSTMENT_PACKAGING" | "ADJUSTMENT_ONLY" | "ADJUSTMENT_SEPARATE";
+/**
+ * Which customer email applies to a shipment. With `splitPackaging` (feature `separate-packaging-email`) an adjusted shipment whose
+ * packaging was not acceptable gets the payment and adjustment email on its own (ADJUSTMENT_SEPARATE) and the packaging warning goes
+ * as a second, separate email, instead of one email carrying both.
+ */
+export function pickEmailTemplate(s: { adjustmentNeeded?: string | null; overallPackaging?: string | null }, splitPackaging = false): EmailTemplateKey {
   const notAcceptable = s.overallPackaging === "NOT_ACCEPTABLE";
-  if (s.adjustmentNeeded === "YES") return notAcceptable ? "ADJUSTMENT_PACKAGING" : "ADJUSTMENT_ONLY";
+  if (s.adjustmentNeeded === "YES") return notAcceptable ? (splitPackaging ? "ADJUSTMENT_SEPARATE" : "ADJUSTMENT_PACKAGING") : "ADJUSTMENT_ONLY";
   return notAcceptable ? "STANDARD_PACKAGING_NOTICE" : "STANDARD";
 }
 

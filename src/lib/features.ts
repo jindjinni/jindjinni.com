@@ -145,6 +145,12 @@ export const FEATURES: FeatureDef[] = [
     defaultStage: "mothership",
   },
   {
+    key: "separate-packaging-email",
+    label: "Customer emails: adjusted orders with bad packaging get two emails",
+    blurb: "When an order was adjusted AND its packaging was not acceptable, the customer gets two separate emails instead of one mixed one: the payment and adjustment email (amounts, adjustment details, receipt and revised invoice), and the packaging warning on its own. With the automatic payment email on, both go out the moment Accounts marks the order Paid. Off = one combined 'Adjustment + packaging' email, and the packaging warning is only sent by hand, as before.",
+    defaultStage: "mothership",
+  },
+  {
     key: "receiving-hide-item-adjust",
     label: "Receiving: hide the per-product adjustment boxes",
     blurb: "Receiving -> intake form -> Step 7 Adjustments: the row of boxes for each product (Adjustment Required, Management Review, Return Required, Quotation Adjusted, Proposed Revised Amount, Reason, Notes) is hidden, so only Adjustment Needed / Details and the real Adjustment Quotation remain. Anything already saved in those boxes is kept (nothing is deleted). Off = the boxes show as before.",

@@ -249,3 +249,13 @@ email log are shared and nobody can send it twice. Anything that blocks it leave
 and Accounts sees a short note under the button. Marking Paid is never blocked or undone by the email. Orders with an adjustment and bad packaging go out
 as the one "Adjustment + packaging" email; the separate packaging warning is still sent from Customer Service as its own email. The "How our emails work"
 page (`email-flow-rules.ts`, `triggerAuto`) describes the paid email as automatic while the flag and the switch are on.
+
+### Two separate emails for an adjusted order with bad packaging (flag `separate-packaging-email`)
+
+With the flag on, an order that was adjusted AND had packaging marked not acceptable gets two emails instead of one mixed one: the payment and
+adjustment email (new template `ADJUSTMENT_SEPARATE`, "Adjustment (packaging sent separately)": note, amounts, receipt and revised invoice, a line saying a
+separate packaging email follows) and the stand-alone packaging warning (`PACKAGING_WARNING`). `pickEmailTemplate(s, splitPackaging)` in
+`receiving-rules.ts` is the one place that chooses; it changes nothing for any other combination. With the automatic payment email on, `autoSendPaymentEmail`
+sends the warning right after the adjustment email and the history says both were automatic; a failure of the second never undoes the first or the Paid.
+Done by hand, the agent sends the adjustment email and then "Send a packaging warning" (the warning's sent time is kept separately). Off = the old single
+"Adjustment + packaging" email and a warning sent only by hand. The new template appears in Email Settings and the template picker only while the flag is on.

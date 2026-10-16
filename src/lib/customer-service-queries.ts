@@ -104,7 +104,7 @@ async function finalAdjustments(organizationId: string, packageIds: string[]) {
   return out;
 }
 
-function toOrder(r: Row, o: { emailsEnabled: boolean; hasWebsiteLink: boolean; senderProblem: string | null; photos: Map<string, { receipt: number; revised: number }>; finals: Set<string>; emailedAt: string | null; count: number; tags?: boolean; editable?: boolean }): CsOrder {
+function toOrder(r: Row, o: { split?: boolean; emailsEnabled: boolean; hasWebsiteLink: boolean; senderProblem: string | null; photos: Map<string, { receipt: number; revised: number }>; finals: Set<string>; emailedAt: string | null; count: number; tags?: boolean; editable?: boolean }): CsOrder {
   const p = o.photos.get(r.id);
   const readiness = emailReadiness({
     emailsEnabled: o.emailsEnabled,
@@ -129,7 +129,7 @@ function toOrder(r: Row, o: { emailsEnabled: boolean; hasWebsiteLink: boolean; s
     email: customerEmail(r),
     paidAt: r.paidAt,
     emailedAt: o.emailedAt,
-    template: pickEmailTemplate(r),
+    template: pickEmailTemplate(r, o.split),
     amount: finalPayout(r.grandTotal, r.adjustedTotal),
     adjusted: r.adjustedTotal != null && r.adjustedTotal !== r.grandTotal,
     blockers: readiness.blockers,
@@ -159,7 +159,8 @@ export async function getToBeEmailed(organizationId: string): Promise<CsOrder[]>
   const [settings, photos, finals, conn] = await Promise.all([getReceivingSettings(organizationId), photoKindCounts(organizationId, ids), finalAdjustments(organizationId, ids), getConnection(organizationId)]);
   const tags = await featureOn("order-tags", organizationId);
   const editable = await featureOn("cs-email-edit", organizationId);
-  return rows.map((r) => toOrder(r, { emailsEnabled: settings.emailsEnabled, hasWebsiteLink: !!settings.quoteLinkUrl.trim(), senderProblem: senderProblemOf(conn), photos, finals, emailedAt: null, count: 0, tags, editable }));
+  const split = await featureOn("separate-packaging-email", organizationId);
+  return rows.map((r) => toOrder(r, { split, emailsEnabled: settings.emailsEnabled, hasWebsiteLink: !!settings.quoteLinkUrl.trim(), senderProblem: senderProblemOf(conn), photos, finals, emailedAt: null, count: 0, tags, editable }));
 }
 
 /** Orders the customer was emailed about (the payment email), the most recently emailed first. */
@@ -185,11 +186,12 @@ export async function getEmailed(organizationId: string): Promise<CsOrder[]> {
   const by = new Map(rows.map((r) => [r.id, r]));
   const empty = { emailsEnabled: true, hasWebsiteLink: true, senderProblem: null, photos: new Map<string, { receipt: number; revised: number }>(), finals: new Set<string>() };
   const tags = await featureOn("order-tags", organizationId);
+  const split = await featureOn("separate-packaging-email", organizationId);
   const out: CsOrder[] = [];
   for (const s of sent) {
     const r = by.get(s.packageId);
     if (!r) continue;
-    out.push({ ...toOrder(r, { ...empty, emailedAt: s.last, count: Number(s.n), tags }), blockers: [] });
+    out.push({ ...toOrder(r, { ...empty, split, emailedAt: s.last, count: Number(s.n), tags }), blockers: [] });
   }
   return out;
 }
@@ -299,7 +301,8 @@ export async function getEmailDraft(org: { organizationId: string; organizationN
   const templates = await getEmailTemplates(org.organizationId);
   const editable = await featureOn("cs-email-edit", org.organizationId);
   const tagsOn = await featureOn("order-tags", org.organizationId);
-  const plan = planCustomerEmail(org.organizationName, data, "STATUS", templates, editable ? forceTemplate : undefined);
+  const split = await featureOn("separate-packaging-email", org.organizationId);
+  const plan = planCustomerEmail(org.organizationName, data, "STATUS", templates, editable ? forceTemplate : undefined, split);
   const warningPlan = planCustomerEmail(org.organizationName, data, "WARNING", templates);
   const receipts = data.photos.filter((p) => !p.itemId && p.kind === "PAYMENT_CONFIRMATION");
   const adjFinal = data.adjustment?.status === "FINAL" ? data.adjustment : null;
@@ -349,13 +352,13 @@ export async function getEmailDraft(org: { organizationId: string; organizationN
     from: { name: fromName, address: conn?.accountEmail ?? null },
     history,
     body: plan.built.body,
-    recommended: pickEmailTemplate(pkg),
+    recommended: pickEmailTemplate(pkg, split),
     editable,
-    templates: STATUS_TEMPLATE_KEYS.map((k) => ({ key: k, label: TEMPLATE_LABEL[k], usedWhen: TEMPLATE_BY_KEY[k].usedWhen })),
+    templates: STATUS_TEMPLATE_KEYS.filter((k) => split || k !== "ADJUSTMENT_SEPARATE").map((k) => ({ key: k, label: TEMPLATE_LABEL[k], usedWhen: TEMPLATE_BY_KEY[k].usedWhen })),
     warning: { subject: warningPlan.built.subject, body: warningPlan.built.body },
     tags: tagsOn ? await orderTagInfo(pkg) : null,
     warnings: editable
-      ? templateWarnings({ template: plan.template, recommended: pickEmailTemplate(pkg), adjustmentNeeded: pkg.adjustmentNeeded === "YES" ? "YES" : pkg.adjustmentNeeded === "NO" ? "NO" : null, packagingNotAcceptable: pkg.overallPackaging === "NOT_ACCEPTABLE" })
+      ? templateWarnings({ template: plan.template, recommended: pickEmailTemplate(pkg, split), adjustmentNeeded: pkg.adjustmentNeeded === "YES" ? "YES" : pkg.adjustmentNeeded === "NO" ? "NO" : null, packagingNotAcceptable: pkg.overallPackaging === "NOT_ACCEPTABLE" })
       : [],
   };
 }

@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { autoSendDecision, emailReadiness, templateWarnings, csMatches, groupOrdersByDay, isEmailAddress, type ReadinessInput } from "../src/lib/customer-service-rules";
+import { pickEmailTemplate } from "../src/lib/receiving-rules";
+import { TEMPLATE_BY_KEY } from "../src/lib/email-templates";
+import { autoSendDecision, isAdjustmentTemplate, emailReadiness, templateWarnings, csMatches, groupOrdersByDay, isEmailAddress, type ReadinessInput } from "../src/lib/customer-service-rules";
 let n = 0; const t = (name: string, f: () => void) => { f(); n++; console.log("PASS", name); };
 const base: ReadinessInput = { emailsEnabled: true, hasWebsiteLink: true, senderProblem: null, toEmail: "a@b.co", status: "RECEIVING_COMPLETE", accountsStatus: "PAID", hasPaymentReceipt: true, adjustmentNeeded: "NO", customerNote: null, adjustmentDetails: null, adjustedOrderTotal: null, adjustmentAmountEmail: null, hasRevisedInvoice: false };
 t("a standard paid order with a receipt is ready", () => assert.deepEqual(emailReadiness(base), { blockers: [], ready: true }));
@@ -55,4 +57,18 @@ t("auto: something missing -> holds and says what and where it waits", () => {
 t("auto: never sends when the manual send would be blocked", () => {
   for (const r of [notReady, { blockers: ["x", "y"], ready: false }]) assert.equal(autoSendDecision({ featureOn: true, settingOn: true, alreadyEmailed: false, readiness: r }).action, "hold");
 });
+// ---- two emails for an adjusted order with bad packaging (feature separate-packaging-email) ----
+t("split off: adjusted + bad packaging is still the one combined email", () => assert.equal(pickEmailTemplate({ adjustmentNeeded: "YES", overallPackaging: "NOT_ACCEPTABLE" }), "ADJUSTMENT_PACKAGING"));
+t("split on: adjusted + bad packaging gets the adjustment email on its own", () => assert.equal(pickEmailTemplate({ adjustmentNeeded: "YES", overallPackaging: "NOT_ACCEPTABLE" }, true), "ADJUSTMENT_SEPARATE"));
+t("split on changes nothing else", () => {
+  for (const [a, p] of [["YES", "ACCEPTABLE"], ["NO", "NOT_ACCEPTABLE"], ["NO", "ACCEPTABLE"], [null, null]] as const) assert.equal(pickEmailTemplate({ adjustmentNeeded: a, overallPackaging: p }, true), pickEmailTemplate({ adjustmentNeeded: a, overallPackaging: p }));
+});
+t("the separate adjustment email counts as an adjustment email", () => assert.ok(isAdjustmentTemplate("ADJUSTMENT_SEPARATE")));
+t("its wording says nothing is wrong with the packaging, and points to the separate email", () => {
+  const d = TEMPLATE_BY_KEY.ADJUSTMENT_SEPARATE;
+  assert.ok(!/packaging was acceptable/i.test(d.defaultBody) && !/bubble wrap/i.test(d.defaultBody));
+  assert.match(d.defaultBody, /separate email about the packaging/);
+  for (const r of d.required) assert.ok(r.any.some((k) => d.defaultBody.includes("{" + k + "}")), r.label);
+});
+t("warnings: the separate email is not flagged for leaving the packaging out", () => assert.deepEqual(templateWarnings({ template: "ADJUSTMENT_SEPARATE", recommended: "ADJUSTMENT_SEPARATE", adjustmentNeeded: "YES", packagingNotAcceptable: true }), []));
 console.log(n + " passed");

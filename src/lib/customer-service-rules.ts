@@ -73,7 +73,7 @@ export function templateWarnings(i: { template: string; recommended: string; adj
   if (i.template !== i.recommended) out.push(`This isn't the template the order calls for (${TEMPLATE_LABEL[i.recommended] ?? i.recommended}). Check the wording before you send.`);
   if (i.adjustmentNeeded === "YES" && !adjustmentEmail) out.push("Receiving marked an adjustment on this order, but this email tells the customer nothing was adjusted.");
   if (i.adjustmentNeeded !== "YES" && adjustmentEmail) out.push("Receiving didn't mark an adjustment on this order, but this email tells the customer one was made.");
-  if (i.packagingNotAcceptable && !packagingEmail) out.push("The packaging was marked not acceptable, but this email doesn't mention it.");
+  if (i.packagingNotAcceptable && !packagingEmail && i.template !== "ADJUSTMENT_SEPARATE") out.push("The packaging was marked not acceptable, but this email doesn't mention it.");
   if (!i.packagingNotAcceptable && packagingEmail) out.push("The packaging was acceptable, but this email tells the customer it wasn't.");
   return out;
 }
@@ -135,15 +135,16 @@ export type CsOrder = {
 };
 
 /** The four "package received & processed" emails an agent can choose between (the packaging warning is sent on its own). */
-export const STATUS_TEMPLATE_KEYS = ["STANDARD", "STANDARD_PACKAGING_NOTICE", "ADJUSTMENT_ONLY", "ADJUSTMENT_PACKAGING"] as const;
+export const STATUS_TEMPLATE_KEYS = ["STANDARD", "STANDARD_PACKAGING_NOTICE", "ADJUSTMENT_ONLY", "ADJUSTMENT_PACKAGING", "ADJUSTMENT_SEPARATE"] as const;
 
-export const isAdjustmentTemplate = (key: string) => key === "ADJUSTMENT_ONLY" || key === "ADJUSTMENT_PACKAGING";
+export const isAdjustmentTemplate = (key: string) => key === "ADJUSTMENT_ONLY" || key === "ADJUSTMENT_PACKAGING" || key === "ADJUSTMENT_SEPARATE";
 
 export const TEMPLATE_LABEL: Record<string, string> = {
   STANDARD: "Standard",
   STANDARD_PACKAGING_NOTICE: "Packaging notice",
   ADJUSTMENT_ONLY: "Adjustment",
   ADJUSTMENT_PACKAGING: "Adjustment + packaging",
+  ADJUSTMENT_SEPARATE: "Adjustment (packaging sent separately)",
   PACKAGING_WARNING: "Packaging warning",
 };
 

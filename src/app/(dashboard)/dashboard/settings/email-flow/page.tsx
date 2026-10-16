@@ -15,6 +15,7 @@ export default async function EmailFlowPage() {
   const org = await requireOrg();
   const admin = isAdmin(org.role);
   // The "paid" email starts by itself only for a company that has the feature on and has not turned the switch off.
+  const split = await featureOn("separate-packaging-email", org.organizationId);
   const autoPaid = (await featureOn("auto-payment-email", org.organizationId)) && (await getReceivingSettings(org.organizationId)).autoSendPaymentEmail;
   const [conn, ...senders] = await Promise.all([getConnection(org.organizationId), ...MAIL_DEPTS.map((d) => deptSenderFor(org.organizationId, d))]);
   const rows = MAIL_DEPTS.map((d, i) => {
@@ -71,7 +72,7 @@ export default async function EmailFlowPage() {
                 <dt className="text-slate-500 dark:text-slate-400">Goes to</dt><dd className="text-slate-800 dark:text-slate-200">{e.to}</dd>
                 <dt className="text-slate-500 dark:text-slate-400">Comes from</dt><dd className="text-slate-800 dark:text-slate-200">{DEPT_LABEL[e.dept]}</dd>
                 <dt className="text-slate-500 dark:text-slate-400">Starts when</dt><dd className="text-slate-800 dark:text-slate-200">{autoPaid && e.triggerAuto ? e.triggerAuto : e.trigger}</dd>
-                <dt className="text-slate-500 dark:text-slate-400">What it says</dt><dd className="text-slate-800 dark:text-slate-200">{e.what}</dd>
+                <dt className="text-slate-500 dark:text-slate-400">What it says</dt><dd className="text-slate-800 dark:text-slate-200">{split && e.whatSplit ? e.whatSplit : e.what}</dd>
                 {e.edit && (
                   <>
                     <dt className="text-slate-500 dark:text-slate-400">Change it</dt>

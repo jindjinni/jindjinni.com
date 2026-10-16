@@ -23,6 +23,7 @@ import { sendDeptEmail } from "@/lib/mail-system";
 import { getEmailTemplates, getReceivingPackage } from "@/lib/receiving-queries";
 import { buildCustomerEmail, buildPackagingWarning, plain, textToHtml } from "@/lib/receiving-emails";
 import { activeRecallHits, rowRecallState } from "@/lib/receiving-recall";
+import { featureOn } from "@/lib/features";
 import { buildDbLines, finalPayout, pickEmailTemplate, weekOf, type EmailTemplateKey } from "@/lib/receiving-rules";
 import { storage } from "@/lib/receiving-storage";
 
@@ -167,7 +168,7 @@ export type EmailPlan = {
  * Nothing is read from storage and nothing is sent, so the Customer Service screen can show exactly what the
  * customer will get, and deliverCustomerEmail sends the very same thing.
  */
-export function planCustomerEmail(orgName: string, data: PackageData, kind: "STATUS" | "WARNING", templates: Partial<Record<TemplateKey, TemplateText>> = {}, forceTemplate?: EmailTemplateKey): EmailPlan {
+export function planCustomerEmail(orgName: string, data: PackageData, kind: "STATUS" | "WARNING", templates: Partial<Record<TemplateKey, TemplateText>> = {}, forceTemplate?: EmailTemplateKey, splitPackaging = false): EmailPlan {
   const { pkg, brief, settings } = data;
   const companyName = settings.fromName.trim() || orgName;
   const orderLabel = [brief.quotationNumber, pkg.trackingNumber ?? brief.trackingNumber].filter(Boolean).join(" — ");
@@ -176,7 +177,7 @@ export function planCustomerEmail(orgName: string, data: PackageData, kind: "STA
     const built = buildPackagingWarning({ companyName, customerName: brief.customerName, orderLabel, packagingGuideUrl: settings.packagingGuideUrl || null, quoteLinkUrl: settings.quoteLinkUrl || null }, templates.PACKAGING_WARNING);
     return { template: "PACKAGING_WARNING", built, to, isAdjustment: false, wanted: [] };
   }
-  const template = forceTemplate ?? pickEmailTemplate(pkg);
+  const template = forceTemplate ?? pickEmailTemplate(pkg, splitPackaging);
   const built = buildCustomerEmail(template, {
     companyName,
     customerName: brief.customerName,
@@ -190,7 +191,7 @@ export function planCustomerEmail(orgName: string, data: PackageData, kind: "STA
     packagingGuideUrl: settings.packagingGuideUrl || null,
   }, templates[template]);
   // Adjustment emails also carry the inspection photos (damage / discrepancy / packaging issue) the email refers to.
-  const isAdjustment = template === "ADJUSTMENT_ONLY" || template === "ADJUSTMENT_PACKAGING";
+  const isAdjustment = template === "ADJUSTMENT_ONLY" || template === "ADJUSTMENT_PACKAGING" || template === "ADJUSTMENT_SEPARATE";
   const wanted = data.photos
     .filter((p) => (!p.itemId && (built.attachKinds as string[]).includes(p.kind)) || (isAdjustment && INSPECTION_KINDS.includes(p.kind)))
     .slice(0, MAX_ATTACH_FILES);
@@ -222,7 +223,7 @@ export async function deliverCustomerEmail(org: OrgRef, packageId: string, kind:
   if (!data.settings.emailsEnabled) return { ok: false, error: "Customer emails are turned off. An admin can turn them on under Email Settings." };
   const { pkg, settings } = data;
   if (!settings.quoteLinkUrl.trim()) return { ok: false, error: "Add your website link in Email Settings first. Every email tells customers where to submit new orders." };
-  const plan = planCustomerEmail(org.organizationName, data, kind, await getEmailTemplates(org.organizationId), kind === "STATUS" ? edit?.template : undefined);
+  const plan = planCustomerEmail(org.organizationName, data, kind, await getEmailTemplates(org.organizationId), kind === "STATUS" ? edit?.template : undefined, await featureOn("separate-packaging-email", org.organizationId));
   const to = plan.to;
   if (!to || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) return { ok: false, error: "This customer has no valid email address on the order." };
   if (kind === "STATUS") {
