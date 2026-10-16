@@ -79,11 +79,11 @@ export function SiteHeader() {
 export function SiteFooter() {
   return (
     <footer className="border-t border-line">
-      <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-4 py-8 text-sm text-muted sm:flex-row sm:px-6">
+      <div className="mx-auto flex max-w-6xl flex-col items-center gap-5 px-4 py-8 text-sm text-muted sm:px-6">
         <Link href="/" aria-label="jindjinni home" className="shrink-0">
           <BrandLogo markClass="h-11 w-auto" wordClass="h-6 w-auto" />
         </Link>
-        <p className="min-w-0 max-w-md text-center sm:flex-1">
+        <p className="order-last min-w-0 max-w-3xl text-center">
           Your business wishes, our command.
           <span className="block text-xs">© 2026 Plantarz Property Solutions LLC. All rights reserved. jindjinni, its software, design and content are proprietary and may not be copied, scraped or used to train AI. jindjinni is business software. It does not provide legal, tax, accounting or medical advice.</span>
         </p>
