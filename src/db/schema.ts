@@ -1194,7 +1194,8 @@ export const receivingPackages = sqliteTable(
     packagingWarningSentAt: text("packaging_warning_sent_at"),
     // Order tags (feature `order-tags`): a person ticked "Contacted on Facebook" for this order. Cleared by unticking; the history stays in the audit log.
     facebookContactedAt: text("facebook_contacted_at"),
-    facebookContactedByUserId: text("facebook_contacted_by_user_id").references(() => users.id),
+    // No .references() on purpose: an FK on a column added to an existing table makes every later deploy plan a table rebuild, which safe-push stops.
+    facebookContactedByUserId: text("facebook_contacted_by_user_id"),
     customerTexted: integer("customer_texted", { mode: "boolean" }),
     ...timestamps,
   },
