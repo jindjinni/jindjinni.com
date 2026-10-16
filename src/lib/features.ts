@@ -139,6 +139,12 @@ export const FEATURES: FeatureDef[] = [
     defaultStage: "mothership",
   },
   {
+    key: "auto-payment-email",
+    label: "Accounts: send the payment email automatically",
+    blurb: "The moment Accounts presses Mark as Paid, the customer is emailed by itself (the same email Customer Service sends today, with the notes Receiving wrote and the payment receipt and any revised invoice attached), as long as the customer has an email on the order, customer emails are on and nothing is missing. If anything is missing the order stays in To Be Emailed and says why. An Owner or Admin can turn it off for the company in Customer Service -> Email Settings. Off = a person presses Send in To Be Emailed, as before.",
+    defaultStage: "mothership",
+  },
+  {
     key: "receiving-hide-item-adjust",
     label: "Receiving: hide the per-product adjustment boxes",
     blurb: "Receiving -> intake form -> Step 7 Adjustments: the row of boxes for each product (Adjustment Required, Management Review, Return Required, Quotation Adjusted, Proposed Revised Amount, Reason, Notes) is hidden, so only Adjustment Needed / Details and the real Adjustment Quotation remain. Anything already saved in those boxes is kept (nothing is deleted). Off = the boxes show as before.",

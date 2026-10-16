@@ -11,14 +11,16 @@ import { newId } from "@/lib/ids";
 import { auditReceiving } from "@/lib/receiving-service";
 import { paidBlockerFor } from "@/lib/paid-gate";
 import { eraseDetailsWhenPaid } from "@/lib/payout-link-service";
+import { autoSendPaymentEmail } from "@/lib/auto-payment-email";
 
-export type AccountsActionState = { ok?: boolean; error?: string };
+export type AccountsActionState = { ok?: boolean; error?: string; /** A short note for the person who pressed the button (for example, that the customer was emailed). */ info?: string };
 
 /**
  * Accounts marks an order Paid. The order must be one Receiving sent to Accounts ("Need to Be Paid") and must have
  * its payment receipt attached. The app stamps the date and time (never typed), and the order moves to Paid in the
  * Receiving record too -- it is the same Accounts Decision / Accounts Status that Receiving's Step 10 shows.
- * The customer email is not sent from here: that belongs to the Customer Service department.
+ * The customer email belongs to Customer Service. With the feature `auto-payment-email` on, it goes out by itself right after this (when nothing
+ * is missing); otherwise, or if anything is missing, it waits in Customer Service -> To Be Emailed for a person to send.
  */
 export async function markOrderPaid(packageId: string): Promise<AccountsActionState> {
   const org = await requireOrg();
@@ -54,7 +56,12 @@ export async function markOrderPaid(packageId: string): Promise<AccountsActionSt
   revalidatePath("/dashboard/accounts", "layout");
   revalidatePath("/dashboard/receiving", "layout");
   revalidatePath("/dashboard/purchasing/quotations");
-  return { ok: true };
+  // Never part of the Paid decision: it can only add a note, never undo or block the payment.
+  const auto = await autoSendPaymentEmail(org, packageId);
+  if (auto.status !== "off") {
+    revalidatePath("/dashboard/customer-service", "layout");
+  }
+  return { ok: true, ...(auto.message ? { info: auto.message } : {}) };
 }
 
 /** Payment Terms (Accounts -> Payment Terms): how many business days after delivery a customer is paid. Owner or admin only. */

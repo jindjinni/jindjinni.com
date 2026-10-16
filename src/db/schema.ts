@@ -1194,7 +1194,6 @@ export const receivingPackages = sqliteTable(
     packagingWarningSentAt: text("packaging_warning_sent_at"),
     // Order tags (feature `order-tags`): a person ticked "Contacted on Facebook" for this order. Cleared by unticking; the history stays in the audit log.
     facebookContactedAt: text("facebook_contacted_at"),
-    // No .references() on purpose: an FK on a column added to an existing table makes every later deploy plan a table rebuild, which safe-push stops.
     facebookContactedByUserId: text("facebook_contacted_by_user_id"),
     customerTexted: integer("customer_texted", { mode: "boolean" }),
     ...timestamps,
@@ -1953,6 +1952,8 @@ export const receivingSettings = sqliteTable("receiving_settings", {
   bccEmails: text("bcc_emails"), // comma separated
   quoteLinkUrl: text("quote_link_url"),
   packagingGuideUrl: text("packaging_guide_url"),
+  /** Feature `auto-payment-email`: send the payment email by itself the moment Accounts marks an order Paid. On unless a company turns it off. */
+  autoSendPaymentEmail: integer("auto_send_payment_email", { mode: "boolean" }).notNull().default(true),
   ...timestamps,
 });
 

@@ -5,6 +5,7 @@ import { isAdmin } from "@/lib/permissions";
 import { getEmailTemplates, getReceivingSettings } from "@/lib/receiving-queries";
 import { TEMPLATE_DEFS } from "@/lib/email-templates";
 import { EmailSettingsForm } from "./email-settings-form";
+import { featureOn } from "@/lib/features";
 import { getConnection } from "@/lib/email-connector";
 import { EmailTemplatesEditor, type TemplateRow } from "./email-templates-editor";
 
@@ -39,7 +40,7 @@ export default async function EmailSettingsPage() {
         <Link href="/dashboard/settings/connectors" className="font-medium text-emerald-700 underline dark:text-emerald-400">Manage the mailbox in Settings → Connectors</Link>.
       </p>
       <div className="max-w-2xl">
-        <EmailSettingsForm initial={initial} companyName={org.organizationName} />
+        <EmailSettingsForm initial={initial} companyName={org.organizationName} autoAvailable={await featureOn("auto-payment-email", org.organizationId)} />
       </div>
       <EmailTemplatesEditor rows={rows} company={initial.fromName.trim() || org.organizationName} websiteUrl={initial.quoteLinkUrl} guideUrl={initial.packagingGuideUrl} />
     </div>

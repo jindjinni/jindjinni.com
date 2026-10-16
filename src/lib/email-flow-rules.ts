@@ -13,6 +13,8 @@ export type FlowEmail = {
   dept: MailDept;
   /** What starts it: automatic, or a person presses Send. */
   trigger: string;
+  /** Used instead of `trigger` when the company has the automatic payment email on (feature `auto-payment-email`). */
+  triggerAuto?: string;
   what: string;
   /** Where its wording is changed (a link label and an href), or null when the wording is built in. */
   edit: { label: string; href: string; adminOnly?: boolean } | null;
@@ -56,6 +58,7 @@ export const WHOLESALE_EMAILS: FlowEmail[] = [
     to: "The customer",
     dept: "receiving",
     trigger: "A person presses Send in Customer Service → To Be Emailed after Accounts marks the order Paid. Nothing is sent by itself.",
+    triggerAuto: "Automatic: the moment Accounts marks the order Paid, if the customer has an email on the order and nothing is missing. If something is missing, the order waits in Customer Service → To Be Emailed and says why, and a person presses Send. An Owner or Admin can turn the automatic send off in Customer Service → Email Settings.",
     what: "Tells the customer the final amount and that it was paid, with the payment receipt attached. There are five wordings: Standard, Packaging notice, Adjustment, Adjustment + packaging, and a stand-alone Packaging warning. Receiving's answers pick which one fits.",
     edit: { label: "Customer Service → Email Settings", href: "/dashboard/customer-service/email-settings", adminOnly: true },
   },

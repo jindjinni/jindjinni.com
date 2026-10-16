@@ -236,3 +236,16 @@ buys, sells and stores goods, aimed at small and family businesses still on pen 
 section (words in `INDUSTRIES`, `src/lib/landing-content.ts`) shows Medical supplies as available now and one "More industries, coming soon" card.
 It names no other industry on purpose: none is promised until it ships. When a second industry ships, add its card there (live: true, with a link),
 and the Wholesale / Distribution / Both pages stay as the medical supply layouts. The legal pages and the sign-up operation choices are unchanged.
+
+## Automatic "you got paid" email (Accounts → Customer Service)
+
+When Accounts presses Mark as Paid, the customer is emailed straight away, with no one picking the order in Customer Service. It is gated by the
+feature flag `auto-payment-email` (default stage: mothership; raise it in Lamp → Features). When the flag is on, every company has it ON by default:
+the setting `receiving_settings.auto_send_payment_email` (default true) is a switch in Customer Service → Email Settings, and the saved choice is left
+alone while the flag is off. The code is `src/lib/auto-payment-email.ts` (the decision is the pure `autoSendDecision` in `customer-service-rules.ts`).
+It sends only when the manual Send would be allowed (emails turned on, a valid email on file, receipt in, etc.) and it uses the same template, subject,
+body and attachments as the manual email through `deliverCustomerEmail(…, "STATUS", undefined, "first")`, so the claim on `customerNotifiedAt` and the
+email log are shared and nobody can send it twice. Anything that blocks it leaves the order waiting in Customer Service, To Be Emailed, with the reason,
+and Accounts sees a short note under the button. Marking Paid is never blocked or undone by the email. Orders with an adjustment and bad packaging go out
+as the one "Adjustment + packaging" email; the separate packaging warning is still sent from Customer Service as its own email. The "How our emails work"
+page (`email-flow-rules.ts`, `triggerAuto`) describes the paid email as automatic while the flag and the switch are on.

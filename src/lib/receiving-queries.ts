@@ -292,6 +292,7 @@ export async function getReceivingSettings(organizationId: string) {
     bccEmails: row?.bccEmails ?? "",
     quoteLinkUrl: row?.quoteLinkUrl ?? "",
     packagingGuideUrl: row?.packagingGuideUrl ?? "",
+    autoSendPaymentEmail: row?.autoSendPaymentEmail ?? true,
   };
 }
 

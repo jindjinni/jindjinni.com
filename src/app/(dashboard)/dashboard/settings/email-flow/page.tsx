@@ -3,6 +3,8 @@ import { requireOrg } from "@/lib/tenant";
 import { isAdmin } from "@/lib/permissions";
 import { getConnection } from "@/lib/email-connector";
 import { deptSenderFor } from "@/lib/mail-system";
+import { featureOn } from "@/lib/features";
+import { getReceivingSettings } from "@/lib/receiving-queries";
 import { DEPT_LABEL, MAIL_DEPTS } from "@/lib/mail-rules";
 import { PLATFORM_EMAILS, RECONNECT_NOTE, SENDER_ORDER, WHOLESALE_EMAILS } from "@/lib/email-flow-rules";
 
@@ -12,6 +14,8 @@ export const dynamic = "force-dynamic";
 export default async function EmailFlowPage() {
   const org = await requireOrg();
   const admin = isAdmin(org.role);
+  // The "paid" email starts by itself only for a company that has the feature on and has not turned the switch off.
+  const autoPaid = (await featureOn("auto-payment-email", org.organizationId)) && (await getReceivingSettings(org.organizationId)).autoSendPaymentEmail;
   const [conn, ...senders] = await Promise.all([getConnection(org.organizationId), ...MAIL_DEPTS.map((d) => deptSenderFor(org.organizationId, d))]);
   const rows = MAIL_DEPTS.map((d, i) => {
     const s = senders[i];
@@ -66,7 +70,7 @@ export default async function EmailFlowPage() {
               <dl className="mt-2 grid gap-x-4 gap-y-1 sm:grid-cols-[7rem_1fr]">
                 <dt className="text-slate-500 dark:text-slate-400">Goes to</dt><dd className="text-slate-800 dark:text-slate-200">{e.to}</dd>
                 <dt className="text-slate-500 dark:text-slate-400">Comes from</dt><dd className="text-slate-800 dark:text-slate-200">{DEPT_LABEL[e.dept]}</dd>
-                <dt className="text-slate-500 dark:text-slate-400">Starts when</dt><dd className="text-slate-800 dark:text-slate-200">{e.trigger}</dd>
+                <dt className="text-slate-500 dark:text-slate-400">Starts when</dt><dd className="text-slate-800 dark:text-slate-200">{autoPaid && e.triggerAuto ? e.triggerAuto : e.trigger}</dd>
                 <dt className="text-slate-500 dark:text-slate-400">What it says</dt><dd className="text-slate-800 dark:text-slate-200">{e.what}</dd>
                 {e.edit && (
                   <>

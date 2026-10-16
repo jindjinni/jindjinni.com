@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { emailReadiness, templateWarnings, csMatches, groupOrdersByDay, isEmailAddress, type ReadinessInput } from "../src/lib/customer-service-rules";
+import { autoSendDecision, emailReadiness, templateWarnings, csMatches, groupOrdersByDay, isEmailAddress, type ReadinessInput } from "../src/lib/customer-service-rules";
 let n = 0; const t = (name: string, f: () => void) => { f(); n++; console.log("PASS", name); };
 const base: ReadinessInput = { emailsEnabled: true, hasWebsiteLink: true, senderProblem: null, toEmail: "a@b.co", status: "RECEIVING_COMPLETE", accountsStatus: "PAID", hasPaymentReceipt: true, adjustmentNeeded: "NO", customerNote: null, adjustmentDetails: null, adjustedOrderTotal: null, adjustmentAmountEmail: null, hasRevisedInvoice: false };
 t("a standard paid order with a receipt is ready", () => assert.deepEqual(emailReadiness(base), { blockers: [], ready: true }));
@@ -40,5 +40,19 @@ t("warnings: Standard on an adjusted order is called out", () => {
 t("warnings: a packaging notice on acceptable packaging, and a missing one on bad packaging", () => {
   assert.ok(templateWarnings({ template: "STANDARD_PACKAGING_NOTICE", recommended: "STANDARD", adjustmentNeeded: "NO", packagingNotAcceptable: false }).some((x) => /packaging was acceptable/i.test(x)));
   assert.ok(templateWarnings({ template: "STANDARD", recommended: "STANDARD_PACKAGING_NOTICE", adjustmentNeeded: "NO", packagingNotAcceptable: true }).some((x) => /doesn't mention it/.test(x)));
+});
+// ---- automatic payment email ----
+const okReady = { blockers: [], ready: true };
+const notReady = { blockers: ["This customer has no valid email address on the order."], ready: false };
+t("auto: everything ready, feature and switch on -> send", () => assert.deepEqual(autoSendDecision({ featureOn: true, settingOn: true, alreadyEmailed: false, readiness: okReady }), { action: "send" }));
+t("auto: feature off -> quiet hold, nothing said", () => assert.deepEqual(autoSendDecision({ featureOn: false, settingOn: true, alreadyEmailed: false, readiness: okReady }), { action: "hold", quiet: true, message: "" }));
+t("auto: the company's switch off -> quiet hold", () => assert.equal((autoSendDecision({ featureOn: true, settingOn: false, alreadyEmailed: false, readiness: okReady }) as { quiet: boolean }).quiet, true));
+t("auto: already emailed -> never again", () => assert.equal(autoSendDecision({ featureOn: true, settingOn: true, alreadyEmailed: true, readiness: okReady }).action, "hold"));
+t("auto: something missing -> holds and says what and where it waits", () => {
+  const d = autoSendDecision({ featureOn: true, settingOn: true, alreadyEmailed: false, readiness: notReady });
+  assert.ok(d.action === "hold" && !d.quiet && /no valid email/.test(d.message) && /To Be Emailed/.test(d.message));
+});
+t("auto: never sends when the manual send would be blocked", () => {
+  for (const r of [notReady, { blockers: ["x", "y"], ready: false }]) assert.equal(autoSendDecision({ featureOn: true, settingOn: true, alreadyEmailed: false, readiness: r }).action, "hold");
 });
 console.log(n + " passed");

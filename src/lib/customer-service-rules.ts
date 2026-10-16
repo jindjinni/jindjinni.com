@@ -78,6 +78,38 @@ export function templateWarnings(i: { template: string; recommended: string; adj
   return out;
 }
 
+// ---- sending the payment email by itself (feature `auto-payment-email`) -----
+
+export type AutoSendInput = {
+  /** The feature is on for this company. */
+  featureOn: boolean;
+  /** The company's own switch in Email Settings (on unless an admin turned it off). */
+  settingOn: boolean;
+  /** The customer has already been told about this order. */
+  alreadyEmailed: boolean;
+  /** The same readiness check the manual Send uses, worked out right after the order was marked Paid. */
+  readiness: Readiness;
+};
+
+export type AutoSendDecision =
+  | { action: "send" }
+  /** `quiet` = nothing to tell Accounts (the feature or the switch is off, or the customer was already emailed). */
+  | { action: "hold"; quiet: boolean; message: string };
+
+/**
+ * Whether the payment email goes out by itself the moment Accounts marks an order Paid. It sends only when everything the manual Send needs is
+ * already true, so an automatic email is never different from one an agent would have been allowed to send. Anything else waits in
+ * Customer Service -> To Be Emailed, with the reason.
+ */
+export function autoSendDecision(i: AutoSendInput): AutoSendDecision {
+  if (!i.featureOn || !i.settingOn) return { action: "hold", quiet: true, message: "" };
+  if (i.alreadyEmailed) return { action: "hold", quiet: true, message: "" };
+  if (!i.readiness.ready) {
+    return { action: "hold", quiet: false, message: `Marked Paid. The customer email was not sent automatically: ${i.readiness.blockers.join(" ")} It is waiting in Customer Service, To Be Emailed.` };
+  }
+  return { action: "send" };
+}
+
 // ---- the two lists ----------------------------------------------------------
 
 /** One order in either list. */

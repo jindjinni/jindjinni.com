@@ -84,14 +84,14 @@ async function checkEdit(org: CurrentOrg, edit: EditInput | undefined, warning: 
   }
   if (edit.subject != null || edit.body != null) {
     const subject = String(edit.subject ?? "").slice(0, SUBJECT_MAX + 50);
-    const body = String(edit.body ?? "").replace(/\r\n/g, "\n").slice(0, BODY_MAX + 50);
+    const body = String(edit.body ?? "").replace(/\r\n?/g, "\n").slice(0, BODY_MAX + 50);
     const problems = validateEditedEmail(subject, body);
     if (problems.length) return { error: problems[0] };
     out.subject = subject;
     out.body = body;
     if (edit.baseBody != null) {
       out.baseSubject = String(edit.baseSubject ?? "").slice(0, SUBJECT_MAX + 50);
-      out.baseBody = String(edit.baseBody).replace(/\r\n/g, "\n").slice(0, BODY_MAX + 50);
+      out.baseBody = String(edit.baseBody).replace(/\r\n?/g, "\n").slice(0, BODY_MAX + 50);
     }
   }
   return { edit: out };
@@ -169,8 +169,12 @@ export async function saveEmailSettings(formData: FormData): Promise<CsActionSta
   const emailsEnabled = formData.get("emailsEnabled") === "on" || formData.get("emailsEnabled") === "true";
   if (emailsEnabled && !quote) return { error: "Add your website link before turning emails on. Every email tells customers where to submit new orders." };
 
+  // Only present when the page showed the switch (feature `auto-payment-email`); absent leaves the saved choice alone.
+  const autoRaw = formData.get("autoSendPaymentEmail");
+  const auto = autoRaw == null ? undefined : autoRaw === "on" || autoRaw === "true";
   const values = {
     emailsEnabled,
+    ...(auto === undefined ? {} : { autoSendPaymentEmail: auto }),
     fromName: t(formData.get("fromName"), 80),
     replyTo,
     bccEmails: bccList.length ? bccList.join(", ") : null,
@@ -181,7 +185,7 @@ export async function saveEmailSettings(formData: FormData): Promise<CsActionSta
     .insert(receivingSettings)
     .values({ organizationId: org.organizationId, ...values })
     .onConflictDoUpdate({ target: receivingSettings.organizationId, set: { ...values, updatedAt: sql`(current_timestamp)` } });
-  await logActivity(org, "OTHER", `Changed the customer email settings (emails ${emailsEnabled ? "on" : "off"})`, { type: "organization", id: org.organizationId });
+  await logActivity(org, "OTHER", `Changed the customer email settings (emails ${emailsEnabled ? "on" : "off"}${auto === undefined ? "" : `, automatic payment email ${auto ? "on" : "off"}`})`, { type: "organization", id: org.organizationId });
   revalidatePath("/dashboard/customer-service", "layout");
   revalidatePath("/dashboard/receiving", "layout");
   return { ok: true };

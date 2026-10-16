@@ -3,11 +3,12 @@
 import { useState, useTransition } from "react";
 import { saveEmailSettings } from "@/app/actions/customer-service";
 
-type Initial = { emailsEnabled: boolean; fromName: string; replyTo: string; bccEmails: string; quoteLinkUrl: string; packagingGuideUrl: string };
+type Initial = { emailsEnabled: boolean; fromName: string; replyTo: string; bccEmails: string; quoteLinkUrl: string; packagingGuideUrl: string; autoSendPaymentEmail: boolean };
 
 const field = "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900";
 
-export function EmailSettingsForm({ initial, companyName }: { initial: Initial; companyName: string }) {
+/** `autoAvailable`: the feature `auto-payment-email` is on for this company, so the automatic-send switch is shown. */
+export function EmailSettingsForm({ initial, companyName, autoAvailable = false }: { initial: Initial; companyName: string; autoAvailable?: boolean }) {
   const [v, setV] = useState<Initial>(initial);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
@@ -24,6 +25,7 @@ export function EmailSettingsForm({ initial, companyName }: { initial: Initial; 
     fd.set("bccEmails", v.bccEmails);
     fd.set("quoteLinkUrl", v.quoteLinkUrl);
     fd.set("packagingGuideUrl", v.packagingGuideUrl);
+    if (autoAvailable) fd.set("autoSendPaymentEmail", String(v.autoSendPaymentEmail));
     startTransition(async () => {
       const res = await saveEmailSettings(fd);
       if (res.error) setError(res.error);
@@ -38,10 +40,24 @@ export function EmailSettingsForm({ initial, companyName }: { initial: Initial; 
         <span>
           <span className="block text-sm font-semibold">Send customer emails</span>
           <span className="block text-xs text-slate-500">
-            When on, Customer Service can send payment emails to customers. Nothing is sent automatically: an agent checks each email and presses Send. Emails only reach customers once your sending domain is verified.
+            {autoAvailable
+              ? "When on, customers can be emailed about their payment, either automatically (the switch below) or by Customer Service pressing Send. Emails only reach customers once your sending domain is verified."
+              : "When on, Customer Service can send payment emails to customers. Nothing is sent automatically: an agent checks each email and presses Send. Emails only reach customers once your sending domain is verified."}
           </span>
         </span>
       </label>
+
+      {autoAvailable && (
+        <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900" data-testid="auto-payment-switch">
+          <input type="checkbox" className="mt-0.5 h-5 w-5 accent-amber-600" checked={v.autoSendPaymentEmail} onChange={(e) => set("autoSendPaymentEmail", e.target.checked)} />
+          <span>
+            <span className="block text-sm font-semibold">Email the customer automatically when Accounts marks an order Paid</span>
+            <span className="block text-xs text-slate-500">
+              The customer gets the payment email the moment the order is marked Paid, with the notes Receiving wrote and the payment receipt (and revised invoice, if there is one) attached. It only goes out when the customer has an email on the order and nothing is missing. If anything is missing, the order waits in To Be Emailed and says why. Turn this off if you would rather check each email and press Send yourself.
+            </span>
+          </span>
+        </label>
+      )}
 
       <div>
         <label htmlFor="fromName" className="mb-1 block text-sm font-medium">Sender name</label>
