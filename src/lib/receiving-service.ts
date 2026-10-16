@@ -231,7 +231,10 @@ export async function deliverCustomerEmail(org: OrgRef, packageId: string, kind:
   }
   const { template, isAdjustment, wanted } = plan;
   // The page showed one wording and the order has since changed (an amount, the receipt, the template text): don't send the old one.
-  if (edit?.baseBody != null && (plan.built.body !== edit.baseBody || plan.built.subject !== (edit.baseSubject ?? plan.built.subject))) {
+  // Line breaks are compared as one kind: a note typed in a browser box is stored with Windows-style breaks (CRLF), and the page's copy of
+  // the wording reaches us with plain ones, so comparing them as typed would call every order with a multi-line note "changed".
+  const lf = (t: string) => t.replace(/\r\n?/g, "\n");
+  if (edit?.baseBody != null && (lf(plan.built.body) !== lf(edit.baseBody) || lf(plan.built.subject) !== lf(edit.baseSubject ?? plan.built.subject))) {
     return { ok: false, error: "This order changed after you opened the page (for example the amount or a saved template). Reload the page so the email shows the latest details, then send." };
   }
   // An agent's own wording for this one send (feature `cs-email-edit`): exactly what they wrote goes out, in the same layout.

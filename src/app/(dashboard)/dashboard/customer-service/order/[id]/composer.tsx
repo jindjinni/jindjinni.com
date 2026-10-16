@@ -80,6 +80,26 @@ export function Composer({ draft, canSetTag = false }: { draft: EmailDraft; canS
   const [wBody, setWBody] = useState(draft.warning.body);
   const [check, setCheck] = useState({ blockers: draft.blockers, ready: draft.ready, warnings: draft.warnings });
   const edited = subject !== base.subject || body !== base.body;
+  // The page is refreshed after a note is saved or an email is sent. The screen must follow what the server now says the email is (the saved
+  // note is part of it), or the "order changed" check would refuse a perfectly good send with a stale copy of the wording.
+  const draftSig = [draft.template, draft.subject, draft.body, draft.attachments.map((a) => a.id).join(","), draft.adjustmentPdf?.id ?? "", draft.warning.subject, draft.warning.body].join("\u0001");
+  const [seenSig, setSeenSig] = useState(draftSig);
+  const [seenNote, setSeenNote] = useState(draft.note);
+  if (seenSig !== draftSig) {
+    setSeenSig(draftSig);
+    setTemplate(draft.template);
+    setSubject(draft.subject);
+    setBody(draft.body);
+    setBase({ subject: draft.subject, body: draft.body });
+    setAtts({ files: draft.attachments, pdf: draft.adjustmentPdf });
+    setWSubject(draft.warning.subject);
+    setWBody(draft.warning.body);
+    setCheck({ blockers: draft.blockers, ready: draft.ready, warnings: draft.warnings });
+  }
+  if (seenNote !== draft.note) {
+    setSeenNote(draft.note);
+    setNote(draft.note);
+  }
   // What goes to the server: the wording on screen, plus the wording the page started from, so a stale page is caught.
   const edit = () => ({ template, subject, body, baseSubject: base.subject, baseBody: base.body });
 
